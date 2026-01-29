@@ -87,10 +87,11 @@ jobs:
           game_endpoint: wow
           file_path: .release/LariasWeeklyMidnightChecklist-${{ steps.commitstep.outputs.tag }}.zip
           release_type: release
-          game_versions: Retail
+          game_versions: "1"
           changelog: "Automated release ${{ steps.commitstep.outputs.tag }}"
           changelog_type: text
           display_name: "Larias Weekly Midnight Checklist ${{ steps.commitstep.outputs.tag }}"
+
 
 
       # Upload to Wago SECOND
