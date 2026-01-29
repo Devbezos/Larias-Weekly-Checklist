@@ -1,85 +1,58 @@
-#!/usr/bin/env python3
-import csv
-import re
-import sys
-from pathlib import Path
+name: Update Sheet Data -> Lua (daily)
 
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1iK2SZUcz_ljnkdTG7KW6pqfzaUDuSgnlh1HupcLrkus/edit?gid=53744607"
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "10 5 * * *"
 
-HEADER_RE = re.compile(
-    r"^(Early Access|Pre-Season|Season\b|Week\s*\d+\b)",
-    re.IGNORECASE
-)
+permissions:
+  contents: write
 
-def slug(s: str) -> str:
-    s = s.strip().lower()
-    s = re.sub(r"[^a-z0-9]+", "_", s)
-    s = s.strip("_")
-    return s or "section"
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-def lua_escape(s: str) -> str:
-    s = s.replace("\\", "\\\\").replace('"', '\\"')
-    s = s.replace("\r\n", "\n").replace("\r", "\n")
-    return s
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
-def is_section_header(text: str, row_index: int) -> bool:
-    # The very first row is always a header in your sheet export
-    if row_index == 0:
-        return True
-    return bool(HEADER_RE.match(text.strip()))
+      - name: Download Google Sheet tab as CSV
+        run: |
+          set -euo pipefail
+          SHEET_ID="1iK2SZUcz_ljnkdTG7KW6pqfzaUDuSgnlh1HupcLrkus"
+          GID="53744607"
+          CSV_OUT="data/spreadsheet.csv"
 
-def main(csv_in: str, lua_out: str) -> None:
-    csv_path = Path(csv_in)
-    out_path = Path(lua_out)
+          mkdir -p "$(dirname "$CSV_OUT")"
+          URL="https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}"
 
-    with csv_path.open("r", encoding="utf-8", newline="") as f:
-        rows = list(csv.reader(f))
+          curl -L --fail --silent --show-error "$URL" -o "$CSV_OUT"
 
-    sections = []
-    current = None
+          if head -n 5 "$CSV_OUT" | grep -qi "<html"; then
+            echo "ERROR: Downloaded HTML instead of CSV (sheet likely not shared publicly)."
+            exit 1
+          fi
 
-    for i, row in enumerate(rows):
-        a = (row[0] if len(row) > 0 else "").strip()
-        if not a:
-            continue
+      - name: Convert CSV -> Lua
+        run: |
+          set -euo pipefail
+          python scripts/sheet_to_lua.py data/spreadsheet.csv LariasWeeklyMidnightChecklist_Data.lua
 
-        if is_section_header(a, i):
-            current = {"id": slug(a), "title": a, "items": []}
-            sections.append(current)
-        else:
-            # ignore items before first header (shouldn't happen, but safe)
-            if current is None:
-                continue
-            current["items"].append({"id": slug(a), "text": a})
+      - name: Commit only if Lua changed
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- LariasWeeklyMidnightChecklist_Data.lua; then
+            echo "No changes in Lua output. Skipping commit."
+            exit 0
+          fi
 
-    lines = []
-    lines.append("-- Data file for Larias Weekly Midnight Checklist")
-    lines.append("-- AUTO-GENERATED. DO NOT EDIT MANUALLY.")
-    lines.append(f"-- Source: {SHEET_URL}")
-    lines.append("")
-    lines.append("local addonName = ...")
-    lines.append("")
-    lines.append('_G[addonName .. "_LIST_DATA"] = {')
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-    for s in sections:
-        lines.append("    {")
-        lines.append(f'        id = "{lua_escape(s["id"])}",')
-        lines.append(f'        title = "{lua_escape(s["title"])}",')
-        lines.append("        items = {")
-        for it in s["items"]:
-            lines.append(
-                f'            {{ id = "{lua_escape(it["id"])}", text = "{lua_escape(it["text"])}" }},'
-            )
-        lines.append("        },")
-        lines.append("    },")
-    lines.append("}")
-    lines.append("")
-
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text("\n".join(lines), encoding="utf-8")
-
-if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Usage: sheet_to_lua.py <input.csv> <output.lua>")
-        sys.exit(2)
-    main(sys.argv[1], sys.argv[2])
+          git add LariasWeeklyMidnightChecklist_Data.lua
+          git commit -m "chore: update checklist data from sheet"
+          git push
