@@ -163,6 +163,9 @@ function Addon:Refresh()
 
     local db = DB()
 
+    -- Fixed wrap width for the fixed-size window.
+    local itemTextWidth = 420
+
     ClearChildren(scrollChild)
 
     local sectionFrames = {}
@@ -192,7 +195,7 @@ function Addon:Refresh()
                 local isComplete = IsSectionComplete(section)
                 if isComplete then
                     title:SetText("[Done] " .. tostring(section.title or section.id))
-                    status:SetText(db.hideCompletedSections and "(hidden)" or "(collapsed)")
+                    status:SetText("")
                 else
                     title:SetText(tostring(section.title or section.id))
                     status:SetText("")
@@ -249,10 +252,27 @@ function Addon:Refresh()
                 anyItems = true
                 local cb = CreateFrame("CheckButton", nil, sf, "UICheckButtonTemplate")
                 cb:SetPoint("TOPLEFT", sf, "TOPLEFT", 0, itemY)
-                cb.text:SetText(tostring(item.text or item.id))
-                if cb.text and cb.text.SetTextColor then
-                    cb.text:SetTextColor(THEME.text.r, THEME.text.g, THEME.text.b, THEME.text.a)
+                local itemText = tostring(item.text or item.id)
+                cb.text:SetText(itemText)
+                if cb.text then
+                    if cb.text.SetTextColor then
+                        cb.text:SetTextColor(THEME.text.r, THEME.text.g, THEME.text.b, THEME.text.a)
+                    end
+
+                    -- Allow long lines to wrap and resize the row accordingly.
+                    cb.text:SetJustifyH("LEFT")
+                    if cb.text.SetWordWrap then cb.text:SetWordWrap(true) end
+
+                    -- Wrap to the current window width.
+                    cb.text:SetWidth(itemTextWidth)
                 end
+
+                local textHeight = 0
+                if cb.text and cb.text.GetStringHeight then
+                    textHeight = cb.text:GetStringHeight() or 0
+                end
+                local rowHeight = math.max(24, textHeight + 8)
+                cb:SetHeight(rowHeight)
 
                 local savedKey = Key(section.id, item.id)
                 local saved = db.checked[savedKey]
@@ -266,7 +286,7 @@ function Addon:Refresh()
                 end)
 
                 table.insert(sf._checkboxes, cb)
-                itemY = itemY - 24
+                itemY = itemY - rowHeight
             end
 
             if anyItems then
@@ -299,6 +319,7 @@ function Addon:CreateFrame()
     end
 
     frame:SetSize(520, 650)
+    frame:SetClampedToScreen(true)
     frame:SetPoint("CENTER")
     frame:SetMovable(true)
     frame:EnableMouse(true)
