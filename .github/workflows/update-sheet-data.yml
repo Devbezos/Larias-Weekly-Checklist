@@ -26,7 +26,7 @@ jobs:
       - name: Download Google Sheet
         run: |
           set -euo pipefail
-          SHEET_ID="1iK2SZUcz_ljnkdTG7KW6pqfzaUDuSgnlh1HupcLrkus"
+          SHEET_ID="1h_o2voYh-oAl4tpZOuX3A5aWRPgQvMAK7tLsPVD-5lw"
           GID="53744607"
           mkdir -p data
           curl -L "https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}" -o data/spreadsheet.csv
