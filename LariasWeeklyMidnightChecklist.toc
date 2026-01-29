@@ -4,6 +4,8 @@
 ## Author: Larias
 ## Version: 1.0.0
 ## SavedVariables: LariasWeeklyMidnightChecklistDB
+## X-Wago-ID: mKOD5RGx
 
 LariasWeeklyMidnightChecklist_Data.lua
 LariasWeeklyMidnightChecklist.lua
+
