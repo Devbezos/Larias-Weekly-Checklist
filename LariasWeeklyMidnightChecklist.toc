@@ -2,7 +2,7 @@
 ## Title: Larias Weekly Midnight Checklist
 ## Notes: Weekly checklist with collapsible weeks
 ## Author: Larias
-## Version: 1.0.18
+## Version: 1.0.19
 ## SavedVariables: LariasWeeklyMidnightChecklistDB
 ## X-Wago-ID: mKOD5RGx
 ## X-Curse-Project-ID: 1448023
