@@ -163,8 +163,11 @@ function Addon:Refresh()
 
     local db = DB()
 
-    -- Fixed wrap width for the fixed-size window.
+    -- Fixed wrap widths for the fixed-size window.
     local itemTextWidth = 420
+    local headerTextWidth = itemTextWidth + 28
+    local headerMinHeight = 22
+    local headerBottomPad = 4
 
     ClearChildren(scrollChild)
 
@@ -181,15 +184,30 @@ function Addon:Refresh()
             local header = CreateFrame("Button", nil, sf)
             header:SetPoint("TOPLEFT", sf, "TOPLEFT", 0, 0)
             header:SetPoint("TOPRIGHT", sf, "TOPRIGHT", 0, 0)
-            header:SetHeight(22)
+            header:SetHeight(headerMinHeight)
 
             local title = header:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
             title:SetPoint("LEFT", header, "LEFT", 0, 0)
             title:SetTextColor(THEME.header.r, THEME.header.g, THEME.header.b, THEME.header.a)
 
+            title:SetJustifyH("LEFT")
+            if title.SetWordWrap then title:SetWordWrap(true) end
+            title:SetWidth(headerTextWidth)
+
             local status = header:CreateFontString(nil, "OVERLAY", "GameFontNormal")
             status:SetPoint("RIGHT", header, "RIGHT", 0, 0)
             status:SetTextColor(THEME.textDim.r, THEME.textDim.g, THEME.textDim.b, THEME.textDim.a)
+
+            local function UpdateHeaderLayout()
+                title:SetWidth(headerTextWidth)
+                local th = 0
+                if title.GetStringHeight then
+                    th = title:GetStringHeight() or 0
+                end
+                local hh = math.max(headerMinHeight, th + 6)
+                header:SetHeight(hh)
+                sf._headerBlockHeight = hh + headerBottomPad
+            end
 
             local function UpdateHeaderText()
                 local isComplete = IsSectionComplete(section)
@@ -200,6 +218,8 @@ function Addon:Refresh()
                     title:SetText(tostring(section.title or section.id))
                     status:SetText("")
                 end
+
+                UpdateHeaderLayout()
             end
 
             local collapsed = IsSectionCollapsed(section.id)
@@ -210,7 +230,20 @@ function Addon:Refresh()
 
             UpdateHeaderText()
 
-            local itemY = -26
+            local function RelayoutItems()
+                local y = -(sf._headerBlockHeight or (headerMinHeight + headerBottomPad))
+                local total = 0
+                for _, cb in ipairs(sf._checkboxes or {}) do
+                    cb:ClearAllPoints()
+                    cb:SetPoint("TOPLEFT", sf, "TOPLEFT", 0, y)
+                    local rh = cb.GetHeight and cb:GetHeight() or 24
+                    y = y - rh
+                    total = total + rh
+                end
+                sf._itemsHeight = total
+            end
+
+            local itemY = -(sf._headerBlockHeight or (headerMinHeight + headerBottomPad))
             local anyItems = false
 
             local function RecomputeCompletion()
@@ -220,6 +253,8 @@ function Addon:Refresh()
                     collapsed = true
                 end
                 UpdateHeaderText()
+
+                RelayoutItems()
 
                 if isCompleteNow and db.hideCompletedSections then
                     sf:Hide()
@@ -231,7 +266,7 @@ function Addon:Refresh()
                     cb:SetShown(not collapsed)
                 end
 
-                local h = 26
+                local h = (sf._headerBlockHeight or (headerMinHeight + headerBottomPad))
                 if not collapsed then
                     h = h + (sf._itemsHeight or 0)
                 end
@@ -290,14 +325,14 @@ function Addon:Refresh()
             end
 
             if anyItems then
-                sf._itemsHeight = (-itemY) - 26
+                sf._itemsHeight = (-itemY) - (sf._headerBlockHeight or (headerMinHeight + headerBottomPad))
             end
 
             for _, cb in ipairs(sf._checkboxes) do
                 cb:SetShown(not collapsed)
             end
 
-            local initialH = 26
+            local initialH = (sf._headerBlockHeight or (headerMinHeight + headerBottomPad))
             if not collapsed then
                 initialH = initialH + (sf._itemsHeight or 0)
             end
