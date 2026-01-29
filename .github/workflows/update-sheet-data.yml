@@ -87,4 +87,4 @@ jobs:
           game_endpoint: wow
           file_path: .release/LariasWeeklyMidnightChecklist-${{ steps.commitstep.outputs.tag }}.zip
           release_type: release
-          changelog: "Automated release ${{ steps.commitstep.outputs.tag }}"
+          game_versions: "World of Warcraft"
