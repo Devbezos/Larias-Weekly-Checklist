@@ -3,10 +3,8 @@ name: Update Sheet Data + Upload to Wago & CurseForge
 on:
   workflow_dispatch:
   schedule:
-    # 10:00 AM EST = 15:00 UTC
-    - cron: "0 15 * * *"
-    # 6:00 PM EST = 23:00 UTC
-    - cron: "0 23 * * *"
+    - cron: "0 15 * * *"  # 10:00 AM EST
+    - cron: "0 23 * * *"  # 6:00 PM EST
 
 permissions:
   contents: write
@@ -34,10 +32,8 @@ jobs:
           mkdir -p data
           curl -L "https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}" \
             -o data/spreadsheet.csv
-
-          # Sanity check: don't commit an HTML login page
           if head -n 5 data/spreadsheet.csv | grep -qi "<html"; then
-            echo "ERROR: Downloaded HTML instead of CSV (sheet not public or auth required)."
+            echo "ERROR: Sheet not public or auth required."
             exit 1
           fi
 
@@ -59,7 +55,6 @@ jobs:
 
           TOC="LariasWeeklyMidnightChecklist.toc"
 
-          # Read current version (fallback to 1.0.0)
           CURRENT_VERSION=$(python -c "import re; t=open('$TOC','r',encoding='utf-8',errors='ignore').read().replace('\r',''); m=re.search(r'^##\\s*Version:\\s*(\\d+)\\.(\\d+)\\.(\\d+)', t, re.M); print('.'.join(m.groups()) if m else '1.0.0')")
           MAJOR=$(echo "$CURRENT_VERSION" | cut -d. -f1)
           MINOR=$(echo "$CURRENT_VERSION" | cut -d. -f2)
@@ -68,9 +63,6 @@ jobs:
           NEW_VERSION="$MAJOR.$MINOR.$((PATCH+1))"
           TAG="v$NEW_VERSION"
 
-          echo "Bumping version: $CURRENT_VERSION -> $NEW_VERSION"
-
-          # Update the .toc Version line (normalize CRLF -> LF)
           python -c "import re; p='$TOC'; t=open(p,'r',encoding='utf-8',errors='ignore').read().replace('\r',''); t=re.sub(r'^##\\s*Version:.*$', '## Version: $NEW_VERSION', t, flags=re.M); open(p,'w',encoding='utf-8',newline='\\n').write(t)"
 
           git config user.name "github-actions[bot]"
@@ -80,7 +72,6 @@ jobs:
           git commit -m "Auto-update checklist data (v$NEW_VERSION)"
           git push
 
-          # Create annotated tag (no hyphen => stable release)
           if git rev-parse "$TAG" >/dev/null 2>&1; then
             echo "Tag $TAG already exists, skipping."
           else
@@ -92,7 +83,8 @@ jobs:
 
       - name: Package & Upload to Wago + CurseForge
         if: steps.commitstep.outputs.changed == 'true'
-        uses: BigWigsMods/packager@v2
+        continue-on-error: true
+        uses: BigWigsMods/packager@v2.4.3
         env:
           WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
