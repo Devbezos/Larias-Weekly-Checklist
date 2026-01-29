@@ -1,16 +1,18 @@
 package-as: LariasWeeklyMidnightChecklist
 
+curse-project-id: 1448023
+wago-id: mKOD5RGx
+
+manual-changelog: CHANGELOG.md
+
+# Explicit game versions (Retail)
+# Pick the ones you actually want shown on CF.
+game-versions:
+  - 12.0.1
+  - 12.0.0
+  - 11.2.7
+
 ignore:
   - .github
   - scripts
-
-  # explicitly exclude these two files
-  - CHANGELOG.md
-  - changelog.md
-  - LICENSE
-  - license
-
-  # optional: exclude common variants too
-  - LICENSE.*
-  - COPYING*
-  - CHANGELOG*
+  - data
