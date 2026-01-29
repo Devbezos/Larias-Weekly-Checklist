@@ -1,4 +1,4 @@
-name: Update Sheet Data + Upload to Wago & CurseForge
+name: Update Sheet Data + Upload to CurseForge & Wago
 
 on:
   workflow_dispatch:
@@ -32,6 +32,7 @@ jobs:
           mkdir -p data
           curl -L "https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}" \
             -o data/spreadsheet.csv
+
           if head -n 5 data/spreadsheet.csv | grep -qi "<html"; then
             echo "ERROR: Sheet not public or auth required."
             exit 1
@@ -72,12 +73,12 @@ jobs:
           echo "changed=true" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
-      - name: Package & Upload to Wago
+      # Build zip only (no upload)
+      - name: Build addon package
         if: steps.commitstep.outputs.changed == 'true'
         uses: BigWigsMods/packager@v2.4.3
-        env:
-          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
 
+      # Upload to CurseForge FIRST
       - name: Upload to CurseForge
         if: steps.commitstep.outputs.changed == 'true'
         uses: itsmeow/curseforge-upload@v1
@@ -88,3 +89,13 @@ jobs:
           file_path: .release/LariasWeeklyMidnightChecklist-${{ steps.commitstep.outputs.tag }}.zip
           release_type: release
           game_versions: "World of Warcraft"
+          changelog: "Automated release ${{ steps.commitstep.outputs.tag }}"
+          changelog_type: text
+          display_name: "Larias Weekly Midnight Checklist ${{ steps.commitstep.outputs.tag }}"
+
+      # Upload to Wago SECOND
+      - name: Upload to Wago
+        if: steps.commitstep.outputs.changed == 'true'
+        uses: BigWigsMods/packager@v2.4.3
+        env:
+          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
