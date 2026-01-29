@@ -1,0 +1,14 @@
+## Interface: 120001, 120000, 110207
+## Title: Larias Weekly Midnight Checklist
+## Notes: Weekly checklist with collapsible weeks
+## Author: Larias
+## Version: 1.0.1
+## SavedVariables: LariasWeeklyMidnightChecklistDB
+## X-Wago-ID: mKOD5RGx
+## X-Curse-Project-ID: 1448023
+
+LariasWeeklyMidnightChecklist_Data.lua
+LariasWeeklyMidnightChecklist.lua
+
+
+

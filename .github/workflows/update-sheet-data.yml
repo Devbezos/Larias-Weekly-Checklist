@@ -1,0 +1,93 @@
+name: Update Sheet Data + Upload to CurseForge & Wago
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 15 * * *"  # 10 AM EST
+    - cron: "0 23 * * *"  # 6 PM EST
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Download Google Sheet
+        run: |
+          set -euo pipefail
+          SHEET_ID="1iK2SZUcz_ljnkdTG7KW6pqfzaUDuSgnlh1HupcLrkus"
+          GID="53744607"
+          mkdir -p data
+          curl -L "https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}" \
+            -o data/spreadsheet.csv
+
+      - name: Convert CSV to Lua
+        run: |
+          python scripts/sheet_to_lua.py data/spreadsheet.csv LariasWeeklyMidnightChecklist_Data.lua
+
+      - name: Commit + bump version + tag (only if Lua changed)
+        id: commitstep
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet -- LariasWeeklyMidnightChecklist_Data.lua; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          TOC="LariasWeeklyMidnightChecklist.toc"
+          CURRENT_VERSION=$(python -c "import re; t=open('$TOC').read(); m=re.search(r'Version:\\s*(\\d+)\\.(\\d+)\\.(\\d+)', t); print('.'.join(m.groups()))")
+          IFS='.' read MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+          NEW_VERSION="$MAJOR.$MINOR.$((PATCH+1))"
+          TAG="v$NEW_VERSION"
+
+          python -c "import re; p='$TOC'; t=open(p).read(); t=re.sub(r'Version:.*', 'Version: $NEW_VERSION', t); open(p,'w').write(t)"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add LariasWeeklyMidnightChecklist_Data.lua "$TOC"
+          git commit -m "Auto-update checklist data ($TAG)"
+          git push
+
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Build addon package
+        if: steps.commitstep.outputs.changed == 'true'
+        uses: BigWigsMods/packager@v2.4.3
+
+      - name: Upload to CurseForge
+        if: steps.commitstep.outputs.changed == 'true'
+        uses: itsmeow/curseforge-upload@v1
+        with:
+          token: ${{ secrets.CF_API_KEY }}
+          project_id: 1448023
+          game_endpoint: wow
+          file_path: .release/LariasWeeklyMidnightChecklist-${{ steps.commitstep.outputs.tag }}.zip
+          release_type: release
+          game_versions: "1"
+          changelog: "Automated release ${{ steps.commitstep.outputs.tag }}"
+          changelog_type: text
+          display_name: "Larias Weekly Midnight Checklist ${{ steps.commitstep.outputs.tag }}"
+
+      - name: Upload to Wago
+        if: steps.commitstep.outputs.changed == 'true'
+        uses: BigWigsMods/packager@v2.4.3
+        env:
+          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
