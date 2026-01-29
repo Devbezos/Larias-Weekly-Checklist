@@ -1,0 +1,9 @@
+## Interface: 110002 110000 120000
+## Title: Larias Weekly Midnight Checklist
+## Notes: Weekly checklist with collapsible weeks
+## Author: Larias
+## Version: 1.0.0
+## SavedVariables: LariasWeeklyMidnightChecklistDB
+
+LariasWeeklyMidnightChecklist_Data.lua
+LariasWeeklyMidnightChecklist.lua
