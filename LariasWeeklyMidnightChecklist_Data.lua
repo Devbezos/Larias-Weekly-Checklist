@@ -10,8 +10,7 @@ _G[addonName .. "_LIST_DATA"] = {
         title = "Early Access - Feb 27 through Mar 2",
         items = {
             { id = "level_all_the_characters_you_re_wanting_to_use_for_professions_splits_etc", text = "Level all the characters you're wanting to use for professions, splits etc." },
-            { id = "do_not_do_side_quests_until_sunday_get_darkmoon_faire_buff", text = "Do not do side quests until Sunday - get Darkmoon Faire buff" },
-            { id = "farm_gold_and_do_random_ass_world_quests_and_stuff", text = "Farm gold and do random ass world quests and stuff" },
+            { id = "do_not_do_side_quests_until_sunday_get_darkmoon_faire_buff", text = "Do not do side quests until Sunday - get Darkmoon Faire buff" }
         },
     },
     {
