@@ -1,4 +1,4 @@
-name: Update Sheet Data and Upload to Wago
+name: Update Sheet Data + Release to Wago
 
 on:
   workflow_dispatch:
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  update:
+  update_and_release:
     runs-on: ubuntu-latest
 
     steps:
@@ -25,6 +25,7 @@ jobs:
 
       - name: Download Google Sheet
         run: |
+          set -euo pipefail
           SHEET_ID="1iK2SZUcz_ljnkdTG7KW6pqfzaUDuSgnlh1HupcLrkus"
           GID="53744607"
           mkdir -p data
@@ -38,34 +39,51 @@ jobs:
 
       - name: Convert CSV to Lua
         run: |
+          set -euo pipefail
           python scripts/sheet_to_lua.py data/spreadsheet.csv LariasWeeklyMidnightChecklist_Data.lua
 
       - name: Commit, bump version, tag, and upload
         env:
           WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
         run: |
+          set -euo pipefail
+
           if git diff --quiet -- LariasWeeklyMidnightChecklist_Data.lua; then
-            echo "No data changes."
+            echo "No data changes. Nothing to release."
             exit 0
           fi
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Bump patch version in .toc
-          VERSION_LINE=$(grep "^## Version:" LariasWeeklyMidnightChecklist.toc)
-          CURRENT_VERSION=${VERSION_LINE##*: }
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+          TOC="LariasWeeklyMidnightChecklist.toc"
+
+          # Read current version (fallback to 1.0.0)
+          CURRENT_VERSION=$(python -c "import re; t=open('$TOC','r',encoding='utf-8',errors='ignore').read().replace('\r',''); m=re.search(r'^##\\s*Version:\\s*(\\d+)\\.(\\d+)\\.(\\d+)', t, re.M); print('.'.join(m.groups()) if m else '1.0.0')")
+
+          MAJOR=$(echo "$CURRENT_VERSION" | cut -d. -f1)
+          MINOR=$(echo "$CURRENT_VERSION" | cut -d. -f2)
+          PATCH=$(echo "$CURRENT_VERSION" | cut -d. -f3)
+
           NEW_VERSION="$MAJOR.$MINOR.$((PATCH+1))"
+          TAG="v$NEW_VERSION"
 
-          sed -i "s/^## Version:.*/## Version: $NEW_VERSION/" LariasWeeklyMidnightChecklist.toc
+          echo "Bumping version: $CURRENT_VERSION -> $NEW_VERSION"
 
-          git add LariasWeeklyMidnightChecklist_Data.lua LariasWeeklyMidnightChecklist.toc
+          # Update the .toc
+          python -c "import re; p='$TOC'; t=open(p,'r',encoding='utf-8',errors='ignore').read().replace('\r',''); t=re.sub(r'^##\\s*Version:.*$', '## Version: $NEW_VERSION', t, flags=re.M); open(p,'w',encoding='utf-8',newline='\\n').write(t)"
+
+          git add LariasWeeklyMidnightChecklist_Data.lua "$TOC"
           git commit -m "Auto-update checklist data (v$NEW_VERSION)"
           git push
 
-          git tag "v$NEW_VERSION"
-          git push origin "v$NEW_VERSION"
+          # Create tag (no hyphen => Release channel)
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists, skipping."
+          else
+            git tag -a "$TAG" -m "Release $TAG"
+            git push origin "$TAG"
+          fi
 
-          # Package & upload to Wago (stable because tag has no hyphen)
+          # Package & upload to Wago (runs on this tagged commit)
           npx --yes @bigwigs/packager
