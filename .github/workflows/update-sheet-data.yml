@@ -92,54 +92,14 @@ jobs:
           WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
 
       # 2) Upload the created zip to CurseForge via API (bypasses packager CF game version lookup)
-      - name: Upload to CurseForge (direct API)
+      - name: Upload to CurseForge
         if: steps.commitstep.outputs.changed == 'true'
-        env:
-          CF_API_KEY: ${{ secrets.CF_API_KEY }}
-          CF_PROJECT_ID: "1448023"
-        run: |
-          set -euo pipefail
-
-          ZIP_PATH="$(ls -1 .release/*.zip | head -n 1)"
-          echo "Using zip: $ZIP_PATH"
-
-          # Fetch game versions
-          VERSIONS_JSON=$(curl -fsSL -H "X-Api-Token: $CF_API_KEY" https://legacy.curseforge.com/api/game/versions)
-
-          # Map your interface versions to CurseForge IDs
-          WANT=("12.0.1" "12.0.0" "11.2.7")
-          IDS=()
-
-          for v in "${WANT[@]}"; do
-            id=$(echo "$VERSIONS_JSON" | jq -r --arg v "$v" '.[] | select(.name==$v) | .id' | head -n1)
-            if [ -z "$id" ] || [ "$id" = "null" ]; then
-              echo "Could not find CurseForge game version ID for $v"
-              exit 1
-            fi
-            IDS+=("$id")
-          done
-
-          TAG="${{ steps.commitstep.outputs.tag }}"
-          [ -z "$TAG" ] && TAG="v$(date +%Y.%m.%d)"
-
-          META=$(jq -n \
-            --arg displayName "Larias Weekly Midnight Checklist $TAG" \
-            --arg changelog "Automated release $TAG" \
-            --argjson gameVersions "$(printf '%s\n' "${IDS[@]}" | jq -R . | jq -s .)" \
-            '{
-              displayName: $displayName,
-              changelog: $changelog,
-              changelogType: "text",
-              gameVersions: $gameVersions,
-              releaseType: "release"
-            }')
-
-          echo "Uploading to CurseForge project $CF_PROJECT_ID..."
-
-          curl -f \
-            -H "X-Api-Token: $CF_API_KEY" \
-            -F "metadata=$META;type=application/json" \
-            -F "file=@$ZIP_PATH" \
-            "https://legacy.curseforge.com/api/projects/$CF_PROJECT_ID/upload-file"
-
-          echo "CurseForge upload complete."
+        uses: curseforge/upload-to-curseforge@v1
+        with:
+          token: ${{ secrets.CF_API_KEY }}
+          project_id: 1448023
+          game_endpoint: wow
+          file_path: .release/LariasWeeklyMidnightChecklist-v${{ steps.commitstep.outputs.tag }}.zip
+          release_type: release
+          game_versions: "12.0.1,12.0.0,11.2.7"
+          changelog: "Automated release ${{ steps.commitstep.outputs.tag }}"
