@@ -156,12 +156,46 @@ local function LayoutSections(sectionFrames)
     scrollChild:SetHeight(height)
 end
 
+local function GetItemTextWidth()
+    -- Compute the available width for a checkbox label based on the current UI size.
+    -- This intentionally uses a small safety margin to avoid hitting the scrollbar.
+    local fallback = 420
+    if not frame then return fallback end
+
+    local scrollW
+    if scrollFrame and scrollFrame.GetWidth then
+        scrollW = scrollFrame:GetWidth()
+    end
+    if not scrollW or scrollW <= 0 then
+        scrollW = (frame.GetWidth and frame:GetWidth() or 0) - 44
+    end
+    if not scrollW or scrollW <= 0 then return fallback end
+
+    -- scrollFrame has left/right padding (14 and 30). Inside it, sections have paddingX on both sides.
+    -- Subtract checkbox/button chrome and a small buffer.
+    local paddingX = 14
+    local checkboxChrome = 34
+    local buffer = 16
+    local w = scrollW - (paddingX * 2) - checkboxChrome - buffer
+    if w < 200 then w = 200 end
+    return w
+end
+
 function Addon:Refresh()
     if not frame then return end
     TryMigrateFromRefinedVibes()
     EnsureDB()
 
     local db = DB()
+
+    if scrollChild and scrollFrame and scrollFrame.GetWidth then
+        local w = scrollFrame:GetWidth()
+        if w and w > 0 then
+            scrollChild:SetWidth(w)
+        end
+    end
+
+    local itemTextWidth = GetItemTextWidth()
 
     ClearChildren(scrollChild)
 
@@ -249,10 +283,27 @@ function Addon:Refresh()
                 anyItems = true
                 local cb = CreateFrame("CheckButton", nil, sf, "UICheckButtonTemplate")
                 cb:SetPoint("TOPLEFT", sf, "TOPLEFT", 0, itemY)
-                cb.text:SetText(tostring(item.text or item.id))
-                if cb.text and cb.text.SetTextColor then
-                    cb.text:SetTextColor(THEME.text.r, THEME.text.g, THEME.text.b, THEME.text.a)
+                local itemText = tostring(item.text or item.id)
+                cb.text:SetText(itemText)
+                if cb.text then
+                    if cb.text.SetTextColor then
+                        cb.text:SetTextColor(THEME.text.r, THEME.text.g, THEME.text.b, THEME.text.a)
+                    end
+
+                    -- Allow long lines to wrap and resize the row accordingly.
+                    cb.text:SetJustifyH("LEFT")
+                    if cb.text.SetWordWrap then cb.text:SetWordWrap(true) end
+
+                    -- Wrap to the current window width.
+                    cb.text:SetWidth(itemTextWidth)
                 end
+
+                local textHeight = 0
+                if cb.text and cb.text.GetStringHeight then
+                    textHeight = cb.text:GetStringHeight() or 0
+                end
+                local rowHeight = math.max(24, textHeight + 8)
+                cb:SetHeight(rowHeight)
 
                 local savedKey = Key(section.id, item.id)
                 local saved = db.checked[savedKey]
@@ -266,7 +317,7 @@ function Addon:Refresh()
                 end)
 
                 table.insert(sf._checkboxes, cb)
-                itemY = itemY - 24
+                itemY = itemY - rowHeight
             end
 
             if anyItems then
@@ -299,6 +350,10 @@ function Addon:CreateFrame()
     end
 
     frame:SetSize(520, 650)
+    frame:SetResizable(true)
+    frame:SetMinResize(420, 320)
+    frame:SetMaxResize(960, 960)
+    frame:SetClampedToScreen(true)
     frame:SetPoint("CENTER")
     frame:SetMovable(true)
     frame:EnableMouse(true)
@@ -306,6 +361,14 @@ function Addon:CreateFrame()
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
     frame:Hide()
+
+    EnsureDB()
+    do
+        local db = DB()
+        if type(db.frameSize) == "table" and type(db.frameSize.w) == "number" and type(db.frameSize.h) == "number" then
+            frame:SetSize(db.frameSize.w, db.frameSize.h)
+        end
+    end
 
     ApplyTheme(frame)
 
@@ -353,6 +416,29 @@ function Addon:CreateFrame()
     scrollChild = CreateFrame("Frame", nil, scrollFrame)
     scrollChild:SetSize(1, 1)
     scrollFrame:SetScrollChild(scrollChild)
+
+    local resizeButton = CreateFrame("Button", nil, frame, "UIPanelResizeButtonTemplate")
+    resizeButton:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
+    resizeButton:SetScript("OnMouseDown", function() frame:StartSizing("BOTTOMRIGHT") end)
+    resizeButton:SetScript("OnMouseUp", function() frame:StopMovingOrSizing() end)
+
+    frame:SetScript("OnSizeChanged", function()
+        -- Debounce refresh while the user is actively resizing.
+        Addon._resizeToken = (Addon._resizeToken or 0) + 1
+        local token = Addon._resizeToken
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0.05, function()
+                if token ~= Addon._resizeToken then return end
+                EnsureDB()
+                DB().frameSize = { w = frame:GetWidth(), h = frame:GetHeight() }
+                Addon:Refresh()
+            end)
+        else
+            EnsureDB()
+            DB().frameSize = { w = frame:GetWidth(), h = frame:GetHeight() }
+            Addon:Refresh()
+        end
+    end)
 
     self:Refresh()
 end
