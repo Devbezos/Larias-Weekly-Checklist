@@ -97,60 +97,49 @@ jobs:
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
           CF_PROJECT_ID: "1448023"
-          CURSEFORGE_PAGE: "https://legacy.curseforge.com/wow/addons/larias-weekly-midnight-checklist"
         run: |
           set -euo pipefail
 
-          # Find the zip the packager produced
           ZIP_PATH="$(ls -1 .release/*.zip | head -n 1)"
-          if [ -z "${ZIP_PATH}" ]; then
-            echo "ERROR: Could not find .release/*.zip"
-            ls -la .release || true
-            exit 1
-          fi
-          echo "Using zip: ${ZIP_PATH}"
+          echo "Using zip: $ZIP_PATH"
 
-          # These must be CurseForge "game version IDs".
-          # We'll fetch them from the legacy CF Upload API and map by version name.
-          # API documented here: /api/game/versions :contentReference[oaicite:1]{index=1}
-          VERSIONS_JSON="$(curl -fsSL -H "X-Api-Token: ${CF_API_KEY}" "https://legacy.curseforge.com/api/game/versions")"
+          # Fetch game versions
+          VERSIONS_JSON=$(curl -fsSL -H "X-Api-Token: $CF_API_KEY" https://legacy.curseforge.com/api/game/versions)
 
-          # The versions you want tagged on CurseForge:
+          # Map your interface versions to CurseForge IDs
           WANT=("12.0.1" "12.0.0" "11.2.7")
-
           IDS=()
+
           for v in "${WANT[@]}"; do
-            id="$(echo "$VERSIONS_JSON" | jq -r --arg name "$v" '.[] | select(.name==$name) | .id' | head -n 1)"
+            id=$(echo "$VERSIONS_JSON" | jq -r --arg v "$v" '.[] | select(.name==$v) | .id' | head -n1)
             if [ -z "$id" ] || [ "$id" = "null" ]; then
-              echo "ERROR: Could not map game version '$v' to a CurseForge ID."
+              echo "Could not find CurseForge game version ID for $v"
               exit 1
             fi
             IDS+=("$id")
           done
 
-          echo "CurseForge gameVersion IDs: ${IDS[*]}"
-
           TAG="${{ steps.commitstep.outputs.tag }}"
-          if [ -z "${TAG}" ]; then
-            TAG="release"
-          fi
+          [ -z "$TAG" ] && TAG="v$(date +%Y.%m.%d)"
 
-          # Build metadata for upload-file
-          META="$(jq -n \
-            --arg changelog "Automated release ${TAG}" \
-            --arg displayName "LariasWeeklyMidnightChecklist ${TAG}" \
-            --arg releaseType "release" \
+          META=$(jq -n \
+            --arg displayName "Larias Weekly Midnight Checklist $TAG" \
+            --arg changelog "Automated release $TAG" \
             --argjson gameVersions "$(printf '%s\n' "${IDS[@]}" | jq -R . | jq -s .)" \
-            '{changelog:$changelog, changelogType:"text", displayName:$displayName, gameVersions:$gameVersions, releaseType:$releaseType}')"
+            '{
+              displayName: $displayName,
+              changelog: $changelog,
+              changelogType: "text",
+              gameVersions: $gameVersions,
+              releaseType: "release"
+            }')
 
-          echo "Uploading to CurseForge project ${CF_PROJECT_ID}..."
-          # Upload endpoint documented here: /api/projects/{projectId}/upload-file :contentReference[oaicite:2]{index=2}
-          curl -fsSL \
-            -H "X-Api-Token: ${CF_API_KEY}" \
-            -F "metadata=${META};type=application/json" \
-            -F "file=@${ZIP_PATH}" \
-            "https://legacy.curseforge.com/api/projects/${CF_PROJECT_ID}/upload-file"
+          echo "Uploading to CurseForge project $CF_PROJECT_ID..."
 
-          echo ""
-          echo "CurseForge upload request sent."
-          echo "CurseForge page: ${CURSEFORGE_PAGE}"
+          curl -f \
+            -H "X-Api-Token: $CF_API_KEY" \
+            -F "metadata=$META;type=application/json" \
+            -F "file=@$ZIP_PATH" \
+            "https://legacy.curseforge.com/api/projects/$CF_PROJECT_ID/upload-file"
+
+          echo "CurseForge upload complete."
