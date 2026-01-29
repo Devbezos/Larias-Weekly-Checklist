@@ -3,7 +3,8 @@ name: Update Sheet Data + Upload to Wago
 on:
   workflow_dispatch:
   schedule:
-    - cron: "10 5 * * *"
+     - cron: "0 15 * * *"  # 10:00 AM EST
+     - cron: "0 23 * * *"  # 6:00 PM EST
 
 permissions:
   contents: write
