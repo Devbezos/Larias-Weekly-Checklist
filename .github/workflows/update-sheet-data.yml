@@ -15,6 +15,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # required so tags work
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -56,8 +58,15 @@ jobs:
           git commit -m "Auto-update checklist from Google Sheets"
           git push
 
+      - name: Tag release (stable)
+        if: steps.commitstep.outputs.changed == 'true'
+        run: |
+          VERSION="v1.0.0-$(date -u +%Y.%m.%d)"
+          git tag -a "$VERSION" -m "Automated release $VERSION"
+          git push origin "$VERSION"
+
       - name: Package & Upload to Wago
         if: steps.commitstep.outputs.changed == 'true'
-        uses: BigWigsMods/packager@master
+        uses: BigWigsMods/packager@v2
         env:
           WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
