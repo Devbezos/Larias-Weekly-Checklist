@@ -28,7 +28,7 @@ _G[addonName .. "_LIST_DATA"] = {
     },
     {
         id = "season_1_week_1_mar_17_heroic_week",
-        title = "Season 1 Week 1 – Mar 17 – Heroic Week",
+        title = "Season 1 Week 1 - Mar 17 - Heroic Week",
         items = {
             { id = "do_not_spend_heroic_or_mythic_crests", text = "Do NOT spend Heroic or Mythic crests" },
             { id = "do_lfr_for_tier_pieces_check_guide_for_why", text = "Do LFR for tier pieces (check guide for why)" },
@@ -46,7 +46,7 @@ _G[addonName .. "_LIST_DATA"] = {
     },
     {
         id = "week_2_mar_24_mythic_week_m_opens_take_off_work_giganerds",
-        title = "Week 2 – Mar 24 – Mythic Week, M+ Opens, take off work giganerds",
+        title = "Week 2 - Mar 24 - Mythic Week, M+ Opens, take off work giganerds",
         items = {
             { id = "do_not_spend_heroic_or_mythic_crests", text = "Do NOT spend Heroic or Mythic Crests" },
             { id = "do_lfr_for_tier_pieces_check_guide_for_why", text = "Do LFR for tier pieces (check guide for why)" },
@@ -63,7 +63,7 @@ _G[addonName .. "_LIST_DATA"] = {
     },
     {
         id = "week_3_mar_31_final_raid_opens",
-        title = "Week 3 – Mar 31 – Final Raid Opens",
+        title = "Week 3 - Mar 31 - Final Raid Opens",
         items = {
             { id = "do_not_spend_heroic_crests_until_after_reclear", text = "Do NOT spend Heroic crests until after reclear" },
             { id = "open_vault_272_myth_item_upgrade_after_crafting", text = "Open vault (272+ myth item) - upgrade after crafting" },
@@ -79,12 +79,12 @@ _G[addonName .. "_LIST_DATA"] = {
     },
     {
         id = "week_4_apr_7",
-        title = "Week 4 – Apr 7",
+        title = "Week 4 - Apr 7",
         items = {
             { id = "open_vault_272_myth_item", text = "Open vault (272+ myth item)" },
             { id = "farm_12s_for_vault_crests", text = "Farm +12s for vault + crests" },
-            { id = "upgrade_266_269_60_crests", text = "Upgrade 266→269 (60 crests)" },
-            { id = "upgrade_269_272_40_crests", text = "Upgrade 269→272 (40 crests)" },
+            { id = "upgrade_266_269_60_crests", text = "Upgrade 266->269 (60 crests)" },
+            { id = "upgrade_269_272_40_crests", text = "Upgrade 269->272 (40 crests)" },
             { id = "upgrade_myth_items_to_4_6_282", text = "Upgrade myth items to 4/6 282" },
             { id = "track_crests_400_400_heroic_270_300_gilded", text = "Track crests: 400/400 Heroic, 270/300 Gilded" },
             { id = "ending_item_level_1x266_10x_269_3x_282_1x285_crafted", text = "Ending item level: 1x266, 10x 269, 3x 282, 1x285(crafted)" },
@@ -92,12 +92,12 @@ _G[addonName .. "_LIST_DATA"] = {
     },
     {
         id = "week_5_apr_14",
-        title = "Week 5 – Apr 14",
+        title = "Week 5 - Apr 14",
         items = {
             { id = "open_vault_272_myth_item", text = "Open vault (272+ myth item)" },
             { id = "farm_12s_for_vault_crests", text = "Farm +12s for vault + crests" },
             { id = "craft_second_mythic_item_5_6_285", text = "Craft second mythic item (5/6 285)" },
-            { id = "upgrade_269_272_80_crests", text = "Upgrade 269→272 (80 crests)" },
+            { id = "upgrade_269_272_80_crests", text = "Upgrade 269->272 (80 crests)" },
             { id = "upgrade_myth_item_to_3_6_279", text = "Upgrade myth item to 3/6 279" },
             { id = "track_crests_480_500_heroic_400_400_gilded", text = "Track crests: 480/500 Heroic, 400/400 Gilded" },
             { id = "ending_item_level_7x_269_2x_272h_1x_279_3x_282_2x285_crafted", text = "Ending item level:  7x 269, 2x 272h, 1x 279, 3x 282, 2x285(crafted)" },
@@ -105,11 +105,11 @@ _G[addonName .. "_LIST_DATA"] = {
     },
     {
         id = "week_6_apr_21",
-        title = "Week 6 – Apr 21",
+        title = "Week 6 - Apr 21",
         items = {
             { id = "open_vault_272_myth_item", text = "Open vault (272+ myth item)" },
             { id = "farm_12s_for_vault_crests", text = "Farm +12s for vault + crests" },
-            { id = "upgrade_269_272_120_crests", text = "Upgrade 269→272 (120 crests)" },
+            { id = "upgrade_269_272_120_crests", text = "Upgrade 269->272 (120 crests)" },
             { id = "upgrade_myth_items_to_279_282", text = "Upgrade myth items to 279 / 282" },
             { id = "track_crests_600_600_heroic_490_500_gilded", text = "Track crests: 600/600 Heroic, 490/500 Gilded" },
             { id = "ending_item_level_2x_269_5x_272h_1x_279_5x_282_2x285_crafted", text = "Ending item level:  2x 269, 5x 272h, 1x 279, 5x 282, 2x285(crafted)" },
@@ -117,7 +117,7 @@ _G[addonName .. "_LIST_DATA"] = {
     },
     {
         id = "week_7_apr_28",
-        title = "Week 7 – Apr 28",
+        title = "Week 7 - Apr 28",
         items = {
             { id = "open_vault_272_myth_item", text = "Open vault (272+ myth item)" },
             { id = "farm_12s_for_vault_crests", text = "Farm +12s for vault + crests" },
@@ -129,7 +129,7 @@ _G[addonName .. "_LIST_DATA"] = {
     },
     {
         id = "week_8_may_5_done_with_heroic_crests",
-        title = "Week 8 – May 5 – Done with Heroic Crests",
+        title = "Week 8 - May 5 - Done with Heroic Crests",
         items = {
             { id = "open_vault_272_myth_item", text = "Open vault (272+ myth item)" },
             { id = "farm_12s_for_vault_crests", text = "Farm +12s for vault + crests" },
@@ -137,7 +137,12 @@ _G[addonName .. "_LIST_DATA"] = {
             { id = "upgrade_multiple_myth_track_items", text = "Upgrade multiple myth track items" },
             { id = "track_crests_780_800_heroic_done_700_700_gilded", text = "Track crests: 780/800 Heroic (Done), 700/700 Gilded" },
             { id = "ending_item_level_2x_276h_4x_279_6x_282_3x285_crafted", text = "Ending item level:  2x 276h, 4x 279, 6x 282, 3x285(crafted)" },
-            { id = "weeks_9_may_12", text = "Weeks 9+ – May 12+" },
+        },
+    },
+    {
+        id = "weeks_9_may_12",
+        title = "Weeks 9+ - May 12+",
+        items = {
             { id = "get_all_items_to_4_6_282", text = "Get all items to 4/6 282" },
             { id = "upgrade_2_items_per_week_to_6_6_289", text = "Upgrade 2 items per week to 6/6 289" },
             { id = "sim_weekly_before_spending_crests", text = "Sim weekly before spending crests" },
