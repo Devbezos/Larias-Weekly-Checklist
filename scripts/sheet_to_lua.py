@@ -6,10 +6,31 @@ from pathlib import Path
 
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1iK2SZUcz_ljnkdTG7KW6pqfzaUDuSgnlh1HupcLrkus/edit?gid=53744607"
 
-HEADER_PREFIX_RE = re.compile(r"^\s*(Early Access|Pre-Season|Season|Week)\b", re.IGNORECASE)
+HEADER_PREFIX_RE = re.compile(r"^\s*(Early Access|Pre-Season|Season|Week(?:s)?)\b", re.IGNORECASE)
 
 MONTHS = r"(Jan|January|Feb|February|Mar|March|Apr|April|May|Jun|June|Jul|July|Aug|August|Sep|Sept|September|Oct|October|Nov|November|Dec|December)"
 MONTH_DAY_RE = re.compile(rf"\b{MONTHS}\s+\d{{1,2}}\b", re.IGNORECASE)
+
+def wow_safe_text(s: str) -> str:
+    # common replacements for WoW-safe output
+    repl = {
+        "\u2192": "->",  # →
+        "\u21d2": "=>",  # ⇒
+        "\u27a1": "->",  # ➡
+        "\u2013": "-",   # –
+        "\u2014": "-",   # —
+        "\u2212": "-",   # −
+        "\u2026": "...", # …
+        "\u00a0": " ",   # nbsp
+        "\u2018": "'", "\u2019": "'",  # ‘ ’
+        "\u201c": '"', "\u201d": '"',  # “ ”
+    }
+    for k, v in repl.items():
+        s = s.replace(k, v)
+
+    # strip any remaining non-ascii chars
+    s = s.encode("ascii", "ignore").decode("ascii")
+    return s
 
 def slug(s: str) -> str:
     s = s.strip().lower()
@@ -38,7 +59,7 @@ def main(csv_in: str, lua_out: str) -> None:
     for row in rows:
         if not row:
             continue
-        text = (row[0] or "").strip()
+        text = wow_safe_text((row[0] or "").strip())
         if not text:
             continue
 
@@ -78,3 +99,5 @@ if __name__ == "__main__":
         print("Usage: sheet_to_lua.py <input.csv> <output.lua>")
         sys.exit(2)
     main(sys.argv[1], sys.argv[2])
+
+
