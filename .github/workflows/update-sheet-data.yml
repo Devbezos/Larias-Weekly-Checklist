@@ -3,8 +3,8 @@ name: Update Sheet Data + Upload to Wago & CurseForge
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 15 * * *"  # 10:00 AM EST
-    - cron: "0 23 * * *"  # 6:00 PM EST
+    - cron: "0 15 * * *"  # 10:00 AM EST (15:00 UTC)
+    - cron: "0 23 * * *"  # 6:00 PM EST  (23:00 UTC)
 
 permissions:
   contents: write
@@ -32,8 +32,9 @@ jobs:
           mkdir -p data
           curl -L "https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}" \
             -o data/spreadsheet.csv
+
           if head -n 5 data/spreadsheet.csv | grep -qi "<html"; then
-            echo "ERROR: Sheet not public or auth required."
+            echo "ERROR: Downloaded HTML instead of CSV (sheet not public or auth required)."
             exit 1
           fi
 
@@ -80,11 +81,76 @@ jobs:
           fi
 
           echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
-      - name: Package & Upload to Wago + CurseForge
+      # 1) Build zip + upload to Wago (works)
+      - name: Package & Upload to Wago (packager)
         if: steps.commitstep.outputs.changed == 'true'
         continue-on-error: true
         uses: BigWigsMods/packager@v2.4.3
         env:
           WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+
+      # 2) Upload the created zip to CurseForge via API (bypasses packager CF game version lookup)
+      - name: Upload to CurseForge (direct API)
+        if: steps.commitstep.outputs.changed == 'true'
+        env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          CF_PROJECT_ID: "1448023"
+          CURSEFORGE_PAGE: "https://legacy.curseforge.com/wow/addons/larias-weekly-midnight-checklist"
+        run: |
+          set -euo pipefail
+
+          # Find the zip the packager produced
+          ZIP_PATH="$(ls -1 .release/*.zip | head -n 1)"
+          if [ -z "${ZIP_PATH}" ]; then
+            echo "ERROR: Could not find .release/*.zip"
+            ls -la .release || true
+            exit 1
+          fi
+          echo "Using zip: ${ZIP_PATH}"
+
+          # These must be CurseForge "game version IDs".
+          # We'll fetch them from the legacy CF Upload API and map by version name.
+          # API documented here: /api/game/versions :contentReference[oaicite:1]{index=1}
+          VERSIONS_JSON="$(curl -fsSL -H "X-Api-Token: ${CF_API_KEY}" "https://legacy.curseforge.com/api/game/versions")"
+
+          # The versions you want tagged on CurseForge:
+          WANT=("12.0.1" "12.0.0" "11.2.7")
+
+          IDS=()
+          for v in "${WANT[@]}"; do
+            id="$(echo "$VERSIONS_JSON" | jq -r --arg name "$v" '.[] | select(.name==$name) | .id' | head -n 1)"
+            if [ -z "$id" ] || [ "$id" = "null" ]; then
+              echo "ERROR: Could not map game version '$v' to a CurseForge ID."
+              exit 1
+            fi
+            IDS+=("$id")
+          done
+
+          echo "CurseForge gameVersion IDs: ${IDS[*]}"
+
+          TAG="${{ steps.commitstep.outputs.tag }}"
+          if [ -z "${TAG}" ]; then
+            TAG="release"
+          fi
+
+          # Build metadata for upload-file
+          META="$(jq -n \
+            --arg changelog "Automated release ${TAG}" \
+            --arg displayName "LariasWeeklyMidnightChecklist ${TAG}" \
+            --arg releaseType "release" \
+            --argjson gameVersions "$(printf '%s\n' "${IDS[@]}" | jq -R . | jq -s .)" \
+            '{changelog:$changelog, changelogType:"text", displayName:$displayName, gameVersions:$gameVersions, releaseType:$releaseType}')"
+
+          echo "Uploading to CurseForge project ${CF_PROJECT_ID}..."
+          # Upload endpoint documented here: /api/projects/{projectId}/upload-file :contentReference[oaicite:2]{index=2}
+          curl -fsSL \
+            -H "X-Api-Token: ${CF_API_KEY}" \
+            -F "metadata=${META};type=application/json" \
+            -F "file=@${ZIP_PATH}" \
+            "https://legacy.curseforge.com/api/projects/${CF_PROJECT_ID}/upload-file"
+
+          echo ""
+          echo "CurseForge upload request sent."
+          echo "CurseForge page: ${CURSEFORGE_PAGE}"
