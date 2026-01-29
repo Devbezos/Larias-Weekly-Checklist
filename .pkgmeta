@@ -1,0 +1,19 @@
+package-as: LariasWeeklyMidnightChecklist
+
+ignore:
+  - .github
+  - scripts
+  - data
+  - "*.csv"
+  - "*.py"
+  - "*.ps1"
+  - "*.bat"
+  - "*.sh"
+  - "*.png"
+  - "*.jpg"
+  - "*.webp"
+  - "*.md"
+  - ".gitignore"
+  - ".gitattributes"
+  - "README*"
+  - "docs"
