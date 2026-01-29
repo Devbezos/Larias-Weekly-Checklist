@@ -1,91 +1,43 @@
-#!/usr/bin/env python3
-import csv
-import re
-import sys
-from pathlib import Path
+name: Update Sheet Data
 
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1iK2SZUcz_ljnkdTG7KW6pqfzaUDuSgnlh1HupcLrkus/edit?gid=53744607"
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "10 5 * * *"
 
-# "Season ..." anywhere at start
-SEASON_RE = re.compile(r"^\s*Season\b", re.IGNORECASE)
+permissions:
+  contents: write
 
-# "Week" must be a whole word at the start (won't match "Weekly")
-WEEK_RE = re.compile(r"^\s*Week\b", re.IGNORECASE)
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-# Date detection:
-# - Month name + day: "Mar 17", "March 17", optionally with comma/year
-# - Numeric dates: "03/17", "3/17/2026", "2026-03-17"
-MONTHS = r"(Jan|January|Feb|February|Mar|March|Apr|April|May|Jun|June|Jul|July|Aug|August|Sep|Sept|September|Oct|October|Nov|November|Dec|December)"
-DATE_TEXT_RE = re.compile(rf"\b{MONTHS}\s+\d{{1,2}}\b", re.IGNORECASE)
-DATE_NUM_RE = re.compile(r"\b(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}([-/]\d{2,4})?)\b")
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
-def slug(s: str) -> str:
-    s = s.strip().lower()
-    s = re.sub(r"[^a-z0-9]+", "_", s)
-    s = s.strip("_")
-    return s or "section"
+      - name: Download Google Sheet
+        run: |
+          SHEET_ID="1iK2SZUcz_ljnkdTG7KW6pqfzaUDuSgnlh1HupcLrkus"
+          GID="53744607"
+          mkdir -p data
+          curl -L "https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}" \
+            -o data/spreadsheet.csv
 
-def lua_escape(s: str) -> str:
-    s = s.replace("\\", "\\\\").replace('"', '\\"')
-    s = s.replace("\r\n", "\n").replace("\r", "\n")
-    return s
+      - name: Convert to Lua
+        run: |
+          python scripts/sheet_to_lua.py data/spreadsheet.csv LariasWeeklyMidnightChecklist_Data.lua
 
-def is_section_header(text: str) -> bool:
-    t = text.strip()
-    if not t:
-        return False
-    return bool(SEASON_RE.match(t) or WEEK_RE.match(t) or DATE_TEXT_RE.search(t) or DATE_NUM_RE.search(t))
-
-def main(csv_in: str, lua_out: str) -> None:
-    csv_path = Path(csv_in)
-    out_path = Path(lua_out)
-
-    with csv_path.open("r", encoding="utf-8", newline="") as f:
-        rows = list(csv.reader(f))
-
-    sections = []
-    current = None
-
-    for row in rows:
-        a = (row[0] if len(row) > 0 else "").strip()
-        if not a:
-            continue
-
-        if is_section_header(a):
-            current = {"id": slug(a), "title": a, "items": []}
-            sections.append(current)
-        else:
-            if current is None:
-                # ignore orphan items before the first header
-                continue
-            current["items"].append({"id": slug(a), "text": a})
-
-    lines = []
-    lines.append("-- Data file for Larias Weekly Midnight Checklist")
-    lines.append("-- AUTO-GENERATED. DO NOT EDIT MANUALLY.")
-    lines.append(f"-- Source: {SHEET_URL}")
-    lines.append("")
-    lines.append("local addonName = ...")
-    lines.append("")
-    lines.append('_G[addonName .. "_LIST_DATA"] = {')
-
-    for s in sections:
-        lines.append("    {")
-        lines.append(f'        id = "{lua_escape(s["id"])}",')
-        lines.append(f'        title = "{lua_escape(s["title"])}",')
-        lines.append("        items = {")
-        for it in s["items"]:
-            lines.append(f'            {{ id = "{lua_escape(it["id"])}", text = "{lua_escape(it["text"])}" }},')
-        lines.append("        },")
-        lines.append("    },")
-    lines.append("}")
-    lines.append("")
-
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text("\n".join(lines), encoding="utf-8")
-
-if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Usage: sheet_to_lua.py <input.csv> <output.lua>")
-        sys.exit(2)
-    main(sys.argv[1], sys.argv[2])
+      - name: Commit if changed
+        run: |
+          if git diff --quiet -- LariasWeeklyMidnightChecklist_Data.lua; then
+            echo "No changes"
+            exit 0
+          fi
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add LariasWeeklyMidnightChecklist_Data.lua
+          git commit -m "Auto-update checklist from Google Sheets"
+          git push
