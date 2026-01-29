@@ -3,12 +3,14 @@ package-as: LariasWeeklyMidnightChecklist
 ignore:
   - .github
   - scripts
-  - "*.csv"
-  - "*.py"
-  - "*.png"
-  - "*.jpg"
-  - "*.webp"
-  - "*.md"
-  - "CHANGELOG*"
-  - ".gitignore"
-  - ".gitattributes"
+
+  # explicitly exclude these two files
+  - CHANGELOG.md
+  - changelog.md
+  - LICENSE
+  - license
+
+  # optional: exclude common variants too
+  - LICENSE.*
+  - COPYING*
+  - CHANGELOG*
