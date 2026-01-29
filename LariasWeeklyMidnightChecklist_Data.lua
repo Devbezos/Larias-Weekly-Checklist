@@ -10,7 +10,8 @@ _G[addonName .. "_LIST_DATA"] = {
         title = "Early Access - Feb 27 through Mar 2",
         items = {
             { id = "level_all_the_characters_you_re_wanting_to_use_for_professions_splits_etc", text = "Level all the characters you're wanting to use for professions, splits etc." },
-            { id = "do_not_do_side_quests_until_sunday_get_darkmoon_faire_buff", text = "Do not do side quests until Sunday - get Darkmoon Faire buff" }
+            { id = "do_not_do_side_quests_until_sunday_get_darkmoon_faire_buff", text = "Do not do side quests until Sunday - get Darkmoon Faire buff" },
+            { id = "farm_gold_and_do_random_ass_world_quests_and_stuff", text = "Farm gold and do random ass world quests and stuff" },
         },
     },
     {
@@ -22,7 +23,7 @@ _G[addonName .. "_LIST_DATA"] = {
             { id = "unlock_delves_through_tier_8_11_if_available", text = "Unlock Delves through tier 8 (11 if available)" },
             { id = "do_world_quests_that_give_gear_upgrades", text = "Do world quests that give gear upgrades" },
             { id = "progress_vault_details_to_come_wowhead_says_it_ll_be_available", text = "Progress Vault (details to come, wowhead says it'll be available)" },
-            { id = "queue_for_heroic_dungeons_for_remaining_slots", text = "Queue for Heroic Dungeons for remaining slots" },
+            { id = "queue_for_heroic_dungeons_for_remaining_slot", text = "Queue for Heroic Dungeons for remaining slot" },
         },
     },
     {
