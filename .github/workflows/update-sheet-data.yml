@@ -1,4 +1,4 @@
-name: Update Sheet Data
+name: Update Sheet Data and Upload to Wago
 
 on:
   workflow_dispatch:
@@ -11,10 +11,13 @@ permissions:
 jobs:
   update:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
@@ -26,18 +29,35 @@ jobs:
           curl -L "https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}" \
             -o data/spreadsheet.csv
 
-      - name: Convert to Lua
+          if head -n 5 data/spreadsheet.csv | grep -qi "<html"; then
+            echo "ERROR: Sheet not public or auth required."
+            exit 1
+          fi
+
+      - name: Convert CSV to Lua
         run: |
           python scripts/sheet_to_lua.py data/spreadsheet.csv LariasWeeklyMidnightChecklist_Data.lua
 
-      - name: Commit if changed
+      - name: Commit if Lua changed
+        id: commitstep
         run: |
           if git diff --quiet -- LariasWeeklyMidnightChecklist_Data.lua; then
-            echo "No changes"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No data changes."
             exit 0
           fi
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
+
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
           git add LariasWeeklyMidnightChecklist_Data.lua
           git commit -m "Auto-update checklist from Google Sheets"
           git push
+
+      - name: Package & Upload to Wago
+        if: steps.commitstep.outputs.changed == 'true'
+        uses: BigWigsMods/packager@master
+        env:
+          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
