@@ -3,8 +3,8 @@ name: Update Sheet Data + Upload to CurseForge & Wago
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 15 * * *"  # 10:00 AM EST
-    - cron: "0 23 * * *"  # 6:00 PM EST
+    - cron: "0 15 * * *"  # 10 AM EST
+    - cron: "0 23 * * *"  # 6 PM EST
 
 permissions:
   contents: write
@@ -32,11 +32,6 @@ jobs:
           mkdir -p data
           curl -L "https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}" \
             -o data/spreadsheet.csv
-
-          if head -n 5 data/spreadsheet.csv | grep -qi "<html"; then
-            echo "ERROR: Sheet not public or auth required."
-            exit 1
-          fi
 
       - name: Convert CSV to Lua
         run: |
@@ -73,7 +68,6 @@ jobs:
           echo "changed=true" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
-      # Build zip only (no upload)
       - name: Build addon package
         if: steps.commitstep.outputs.changed == 'true'
         uses: BigWigsMods/packager@v2.4.3
@@ -92,9 +86,6 @@ jobs:
           changelog_type: text
           display_name: "Larias Weekly Midnight Checklist ${{ steps.commitstep.outputs.tag }}"
 
-
-
-      # Upload to Wago SECOND
       - name: Upload to Wago
         if: steps.commitstep.outputs.changed == 'true'
         uses: BigWigsMods/packager@v2.4.3
