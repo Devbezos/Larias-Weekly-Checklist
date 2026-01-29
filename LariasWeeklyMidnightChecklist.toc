@@ -1,4 +1,4 @@
-## Interface: ## Interface: 1200000
+## Interface: 1200000
 ## Title: Larias Weekly Midnight Checklist
 ## Notes: Weekly checklist with collapsible weeks
 ## Author: Larias
@@ -8,5 +8,6 @@
 
 LariasWeeklyMidnightChecklist_Data.lua
 LariasWeeklyMidnightChecklist.lua
+
 
 
