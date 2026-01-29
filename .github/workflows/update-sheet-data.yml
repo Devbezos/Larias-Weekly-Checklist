@@ -32,7 +32,6 @@ jobs:
           mkdir -p data
           curl -L "https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}" \
             -o data/spreadsheet.csv
-
           if head -n 5 data/spreadsheet.csv | grep -qi "<html"; then
             echo "ERROR: Sheet not public or auth required."
             exit 1
@@ -83,10 +82,10 @@ jobs:
         if: steps.commitstep.outputs.changed == 'true'
         uses: itsmeow/curseforge-upload@v1
         with:
-          api-key: ${{ secrets.CF_API_KEY }}
-          project-id: 1448023
-          game-endpoint: wow
-          file-path: .release/LariasWeeklyMidnightChecklist-${{ steps.commitstep.outputs.tag }}.zip
-          release-type: release
-          game-versions: "12.0.1,12.0.0,11.2.7"
+          token: ${{ secrets.CF_API_KEY }}
+          project_id: 1448023
+          game_endpoint: wow
+          file_path: .release/LariasWeeklyMidnightChecklist-${{ steps.commitstep.outputs.tag }}.zip
+          release_type: release
+          game_versions: "12.0.1,12.0.0,11.2.7"
           changelog: "Automated release ${{ steps.commitstep.outputs.tag }}"
