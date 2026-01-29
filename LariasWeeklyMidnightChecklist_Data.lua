@@ -1,5 +1,9 @@
--- AUTO-GENERATED. DO NOT EDIT.
+-- Data file for Larias Weekly Midnight Checklist
+-- AUTO-GENERATED. DO NOT EDIT MANUALLY.
+-- Source: https://docs.google.com/spreadsheets/d/1iK2SZUcz_ljnkdTG7KW6pqfzaUDuSgnlh1HupcLrkus/edit?gid=53744607
+
 local addonName = ...
+
 _G[addonName .. "_LIST_DATA"] = {
     {
         id = "early_access_feb_27_through_mar_2",
@@ -63,27 +67,12 @@ _G[addonName .. "_LIST_DATA"] = {
         items = {
             { id = "do_not_spend_heroic_crests_until_after_reclear", text = "Do NOT spend Heroic crests until after reclear" },
             { id = "open_vault_272_myth_item_upgrade_after_crafting", text = "Open vault (272+ myth item) - upgrade after crafting" },
-        },
-    },
-    {
-        id = "craft_2h_mythic_weapon_5_6_285_see_note_in_text_guide",
-        title = "Craft 2H mythic weapon (5/6 285) - see note in text guide",
-        items = {
+            { id = "craft_2h_mythic_weapon_5_6_285_see_note_in_text_guide", text = "Craft 2H mythic weapon (5/6 285) - see note in text guide" },
             { id = "if_no_4p_do_lfr_for_tier_pieces_check_guide_for_why", text = "If no 4p, do LFR for tier pieces (check guide for why)" },
             { id = "farm_12s_for_vault_crests", text = "Farm +12s for vault + crests" },
             { id = "do_full_reclear", text = "Do full Reclear" },
-        },
-    },
-    {
-        id = "before_mythic_progression_upgrade_heroic_items_to_4_6_269_300_heroic_crests",
-        title = "Before Mythic Progression, upgrade heroic items to 4/6 269 (300 Heroic crests)",
-        items = {
-        },
-    },
-    {
-        id = "upgrade_vault_item_to_4_6_282_60_mythic_crests",
-        title = "Upgrade vault item to 4/6 282 (60 Mythic crests)",
-        items = {
+            { id = "before_mythic_progression_upgrade_heroic_items_to_4_6_269_300_heroic_crests", text = "Before Mythic Progression, upgrade heroic items to 4/6 269 (300 Heroic crests)" },
+            { id = "upgrade_vault_item_to_4_6_282_60_mythic_crests", text = "Upgrade vault item to 4/6 282 (60 Mythic crests)" },
             { id = "track_crests_300_300_heroic_160_200_gilded", text = "Track crests: 300/300 Heroic, 160/200 Gilded" },
             { id = "ending_item_level_3x266_10x_269_1x_282_1x285_crafted", text = "Ending item level: 3x266, 10x 269, 1x 282, 1x285(crafted)" },
         },
@@ -96,12 +85,7 @@ _G[addonName .. "_LIST_DATA"] = {
             { id = "farm_12s_for_vault_crests", text = "Farm +12s for vault + crests" },
             { id = "upgrade_266_269_60_crests", text = "Upgrade 266→269 (60 crests)" },
             { id = "upgrade_269_272_40_crests", text = "Upgrade 269→272 (40 crests)" },
-        },
-    },
-    {
-        id = "upgrade_myth_items_to_4_6_282",
-        title = "Upgrade myth items to 4/6 282",
-        items = {
+            { id = "upgrade_myth_items_to_4_6_282", text = "Upgrade myth items to 4/6 282" },
             { id = "track_crests_400_400_heroic_270_300_gilded", text = "Track crests: 400/400 Heroic, 270/300 Gilded" },
             { id = "ending_item_level_1x266_10x_269_3x_282_1x285_crafted", text = "Ending item level: 1x266, 10x 269, 3x 282, 1x285(crafted)" },
         },
@@ -112,19 +96,9 @@ _G[addonName .. "_LIST_DATA"] = {
         items = {
             { id = "open_vault_272_myth_item", text = "Open vault (272+ myth item)" },
             { id = "farm_12s_for_vault_crests", text = "Farm +12s for vault + crests" },
-        },
-    },
-    {
-        id = "craft_second_mythic_item_5_6_285",
-        title = "Craft second mythic item (5/6 285)",
-        items = {
+            { id = "craft_second_mythic_item_5_6_285", text = "Craft second mythic item (5/6 285)" },
             { id = "upgrade_269_272_80_crests", text = "Upgrade 269→272 (80 crests)" },
-        },
-    },
-    {
-        id = "upgrade_myth_item_to_3_6_279",
-        title = "Upgrade myth item to 3/6 279",
-        items = {
+            { id = "upgrade_myth_item_to_3_6_279", text = "Upgrade myth item to 3/6 279" },
             { id = "track_crests_480_500_heroic_400_400_gilded", text = "Track crests: 480/500 Heroic, 400/400 Gilded" },
             { id = "ending_item_level_7x_269_2x_272h_1x_279_3x_282_2x285_crafted", text = "Ending item level:  7x 269, 2x 272h, 1x 279, 3x 282, 2x285(crafted)" },
         },
@@ -163,32 +137,12 @@ _G[addonName .. "_LIST_DATA"] = {
             { id = "upgrade_multiple_myth_track_items", text = "Upgrade multiple myth track items" },
             { id = "track_crests_780_800_heroic_done_700_700_gilded", text = "Track crests: 780/800 Heroic (Done), 700/700 Gilded" },
             { id = "ending_item_level_2x_276h_4x_279_6x_282_3x285_crafted", text = "Ending item level:  2x 276h, 4x 279, 6x 282, 3x285(crafted)" },
-        },
-    },
-    {
-        id = "weeks_9_may_12",
-        title = "Weeks 9+ – May 12+",
-        items = {
-        },
-    },
-    {
-        id = "get_all_items_to_4_6_282",
-        title = "Get all items to 4/6 282",
-        items = {
-        },
-    },
-    {
-        id = "upgrade_2_items_per_week_to_6_6_289",
-        title = "Upgrade 2 items per week to 6/6 289",
-        items = {
+            { id = "weeks_9_may_12", text = "Weeks 9+ – May 12+" },
+            { id = "get_all_items_to_4_6_282", text = "Get all items to 4/6 282" },
+            { id = "upgrade_2_items_per_week_to_6_6_289", text = "Upgrade 2 items per week to 6/6 289" },
             { id = "sim_weekly_before_spending_crests", text = "Sim weekly before spending crests" },
             { id = "plan_for_possible_1h_crafted_oh_swap", text = "Plan for possible 1H + crafted OH swap" },
-        },
-    },
-    {
-        id = "prepare_for_7_8_and_8_8_upgrades_if_turbo_exists",
-        title = "Prepare for 7/8 and 8/8 upgrades if turbo exists",
-        items = {
+            { id = "prepare_for_7_8_and_8_8_upgrades_if_turbo_exists", text = "Prepare for 7/8 and 8/8 upgrades if turbo exists" },
         },
     },
 }
