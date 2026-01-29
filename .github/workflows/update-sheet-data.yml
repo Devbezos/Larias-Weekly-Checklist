@@ -78,7 +78,6 @@ jobs:
         if: steps.commitstep.outputs.changed == 'true'
         uses: BigWigsMods/packager@v2.4.3
 
-      # Upload to CurseForge FIRST
       - name: Upload to CurseForge
         if: steps.commitstep.outputs.changed == 'true'
         uses: itsmeow/curseforge-upload@v1
@@ -88,10 +87,11 @@ jobs:
           game_endpoint: wow
           file_path: .release/LariasWeeklyMidnightChecklist-${{ steps.commitstep.outputs.tag }}.zip
           release_type: release
-          game_versions: "World of Warcraft"
+          game_versions: Retail
           changelog: "Automated release ${{ steps.commitstep.outputs.tag }}"
           changelog_type: text
           display_name: "Larias Weekly Midnight Checklist ${{ steps.commitstep.outputs.tag }}"
+
 
       # Upload to Wago SECOND
       - name: Upload to Wago
