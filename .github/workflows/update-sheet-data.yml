@@ -2,9 +2,8 @@ name: Update Sheet Data + Upload to CurseForge & Wago
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "0 15 * * *"  # 10 AM EST
-    - cron: "0 23 * * *"  # 6 PM EST
+  schedule:    
+    - cron: "0 * * * *"   # runs every hour on the hour (UTC)
 
 permissions:
   contents: write

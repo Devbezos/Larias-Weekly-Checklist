@@ -424,6 +424,8 @@ function Addon:Toggle()
 end
 
 SLASH_LARIASWEEKLYMIDNIGHTCHECKLIST1 = "/larias"
+SLASH_LARIASWEEKLYMIDNIGHTCHECKLIST2 = "/lcl"
 SlashCmdList["LARIASWEEKLYMIDNIGHTCHECKLIST"] = function()
     Addon:Toggle()
 end
+
