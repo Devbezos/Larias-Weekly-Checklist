@@ -6,8 +6,8 @@ local addonName = ...
 
 _G[addonName .. "_LIST_DATA"] = {
     {
-        id = "early_access_feb_27_through_mar_2",
-        title = "Early Access - Feb 27 through Mar 2",
+        id = "early_access_feb_26_through_mar_2",
+        title = "Early Access - Feb 26 through Mar 2",
         items = {
             { id = "level_all_the_characters_you_re_wanting_to_use_for_professions_splits_etc", text = "Level all the characters you're wanting to use for professions, splits etc." },
             { id = "do_not_do_side_quests_until_sunday_get_darkmoon_faire_buff", text = "Do not do side quests until Sunday - get Darkmoon Faire buff" },
@@ -23,7 +23,8 @@ _G[addonName .. "_LIST_DATA"] = {
             { id = "unlock_delves_through_tier_8_11_if_available", text = "Unlock Delves through tier 8 (11 if available)" },
             { id = "do_world_quests_that_give_gear_upgrades", text = "Do world quests that give gear upgrades" },
             { id = "progress_vault_details_to_come_wowhead_says_it_ll_be_available", text = "Progress Vault (details to come, wowhead says it'll be available)" },
-            { id = "queue_for_heroic_dungeons_for_remaining_slot", text = "Queue for Heroic Dungeons for remaining slot" },
+            { id = "level_prey_system_in_case_it_has_something_useful_on_heroic_week", text = "Level Prey system in case it has something useful on heroic week" },
+            { id = "queue_for_heroic_dungeons_for_remaining_slots", text = "Queue for Heroic Dungeons for remaining slots" },
         },
     },
     {
@@ -32,9 +33,9 @@ _G[addonName .. "_LIST_DATA"] = {
         items = {
             { id = "do_not_spend_heroic_or_mythic_crests", text = "Do NOT spend Heroic or Mythic crests" },
             { id = "do_lfr_for_tier_pieces_check_guide_for_why", text = "Do LFR for tier pieces (check guide for why)" },
-            { id = "complete_a_world_tour_of_mythic_0_s", text = "Complete a world tour of mythic 0's" },
+            { id = "complete_a_world_tour_of_mythic_0_s_weekly_lockout", text = "Complete a world tour of mythic 0's - weekly lockout" },
             { id = "kill_world_boss", text = "Kill World Boss" },
-            { id = "complete_weekly_prey_quest_for_1x_heroic_piece_tentative", text = "Complete weekly prey quest for 1x heroic piece (tentative)" },
+            { id = "complete_weekly_prey_quest_for_1x_heroic_piece_tentative_might_share_map_with_delve", text = "Complete weekly prey quest for 1x heroic piece (tentative, might share map with delve)" },
             { id = "complete_pvp_quest_for_guaranteed_hero_neck_ring", text = "Complete pvp quest for guaranteed hero neck/ring" },
             { id = "do_high_level_bountiful_delves_with_coffer_keys_use_map_if_possible", text = "Do high level bountiful delves with coffer keys, use map if possible" },
             { id = "before_raid_craft_a_ton_of_246_ilvl_pieces_include_2x_embellishments_on_weak_slots", text = "Before raid, craft a ton of 246 ilvl pieces, include 2x embellishments on weak slots" },
@@ -51,11 +52,11 @@ _G[addonName .. "_LIST_DATA"] = {
             { id = "do_not_spend_heroic_or_mythic_crests", text = "Do NOT spend Heroic or Mythic Crests" },
             { id = "do_lfr_for_tier_pieces_check_guide_for_why", text = "Do LFR for tier pieces (check guide for why)" },
             { id = "kill_world_boss", text = "Kill World Boss" },
-            { id = "complete_weekly_prey_quest_for_1x_heroic_piece_tentative", text = "Complete weekly prey quest for 1x heroic piece (tentative)" },
+            { id = "complete_weekly_prey_quest_for_1x_heroic_piece_tentative_might_share_map_with_delve", text = "Complete weekly prey quest for 1x heroic piece (tentative, might share map with delve)" },
             { id = "do_high_level_bountiful_delves_with_coffer_keys_if_they_award_heroic_pieces_will_update", text = "Do high level bountiful delves with coffer keys (if they award heroic pieces, will update)" },
             { id = "spend_normal_and_below_crests_on_temporary_upgrades_prefer_trinkets", text = "Spend Normal and below crests on temporary upgrades, prefer trinkets" },
             { id = "farm_10s_for_266_gear_in_every_slot", text = "Farm +10s for 266 gear in every slot" },
-            { id = "mythic_raid_time_baby_and_also_you_know_full_clear_normal_and_heroic_for_tier_and_trinkets", text = "Mythic raid time baby! And also, you know, full clear normal and heroic for tier and trinkets" },
+            { id = "full_clear_normal_heroic_and_do_as_much_of_mythic_as_you_can", text = "Full Clear Normal, Heroic, and do as much of Mythic as you can" },
             { id = "if_lucky_upgrade_mythic_item_twice_adjust_the_advice_below_until_it_sorts_out_again", text = "If lucky, upgrade mythic item twice. Adjust the advice below until it sorts out again." },
             { id = "track_crests_0_200_heroic_0_100_gilded", text = "Track crests: 0/200 Heroic, 0/100 Gilded" },
             { id = "ending_item_level_15x266_finished_farming_heroic_pieces", text = "Ending item level: 15x266, finished farming heroic pieces" },
