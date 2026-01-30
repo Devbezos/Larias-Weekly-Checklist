@@ -1,11 +1,9 @@
--- Larias Weekly Midnight Checklist
 local addonName = ...
 
 local Addon = {}
 _G[addonName] = Addon
 
 local DB_NAME = "LariasWeeklyMidnightChecklistDB"
-
 local LIST_DATA_KEY = addonName .. "_LIST_DATA"
 
 local frame
@@ -13,15 +11,38 @@ local scrollFrame
 local scrollChild
 
 local THEME = {
-    bg = { r = 0.10, g = 0.10, b = 0.10, a = 0.65 },
-    border = { r = 0.30, g = 0.30, b = 0.30, a = 0.90 },
-    header = { r = 1.00, g = 0.82, b = 0.00, a = 1.00 },
-    text = { r = 1.00, g = 1.00, b = 1.00, a = 1.00 },
+    bg      = { r = 0.10, g = 0.10, b = 0.10, a = 0.65 },
+    border  = { r = 0.30, g = 0.30, b = 0.30, a = 0.90 },
+    header  = { r = 1.00, g = 0.82, b = 0.00, a = 1.00 },
+    text    = { r = 1.00, g = 1.00, b = 1.00, a = 1.00 },
     textDim = { r = 1.00, g = 1.00, b = 1.00, a = 0.85 },
 }
 
--- Checklist data (weeks as sections)
+local UI = {
+    frameW = 520,
+    frameH = 650,
+    padOuterX = 14,
+    padOuterTop = 10,
+    closeInset = 4,
+    topRowH = 26,
+    topRowRightInset = 34,
+    scrollTop = 44,
+    scrollBottom = 16,
+    scrollRight = 30,
+    sectionGap = 10,
+    sectionTopPad = 10,
+    headerMinH = 22,
+    headerBottomPad = 4,
+    headerTextExtraW = 28,
+    itemMinH = 24,
+    itemTextPad = 8,
+    itemTextWidth = 420,
+    sectionInsetX = 14,
+}
 
+Addon._sectionPool = Addon._sectionPool or {}
+Addon._checkboxPool = Addon._checkboxPool or {}
+Addon._activeSections = Addon._activeSections or {}
 
 local function DB()
     return _G[DB_NAME]
@@ -31,45 +52,10 @@ local function EnsureDB()
     if not DB() then
         _G[DB_NAME] = {}
     end
-
     local db = DB()
     db.checked = db.checked or {}
     db.collapsedSections = db.collapsedSections or {}
     if db.hideCompletedSections == nil then db.hideCompletedSections = false end
-    if db.didMigrateFromRefinedVibes == nil then db.didMigrateFromRefinedVibes = false end
-end
-
-local function TryMigrateFromRefinedVibes()
-    EnsureDB()
-    local db = DB()
-    if db.didMigrateFromRefinedVibes then return end
-
-    local old = _G.RefinedVibesDB
-    if type(old) ~= "table" or type(old.piglist) ~= "table" then
-        db.didMigrateFromRefinedVibes = true
-        return
-    end
-
-    local oldChecked = old.piglist.checked
-    local oldCollapsed = old.piglist.collapsedSections
-
-    if type(oldChecked) == "table" and next(db.checked) == nil then
-        for k, v in pairs(oldChecked) do
-            if v then db.checked[k] = true end
-        end
-    end
-
-    if type(oldCollapsed) == "table" and next(db.collapsedSections) == nil then
-        for k, v in pairs(oldCollapsed) do
-            if v then db.collapsedSections[k] = true end
-        end
-    end
-
-    if type(old.piglist.hideCompletedSections) == "boolean" then
-        db.hideCompletedSections = old.piglist.hideCompletedSections
-    end
-
-    db.didMigrateFromRefinedVibes = true
 end
 
 local function GetListData()
@@ -99,14 +85,12 @@ end
 
 local function IsItemChecked(sectionId, itemId)
     EnsureDB()
-    local db = DB()
-    return db.checked[Key(sectionId, itemId)] and true or false
+    return DB().checked[Key(sectionId, itemId)] and true or false
 end
 
 local function SetItemChecked(sectionId, itemId, checked)
     EnsureDB()
-    local db = DB()
-    db.checked[Key(sectionId, itemId)] = checked and true or nil
+    DB().checked[Key(sectionId, itemId)] = checked and true or nil
 end
 
 local function IsSectionComplete(section)
@@ -120,107 +104,168 @@ end
 
 local function IsSectionCollapsed(sectionId)
     EnsureDB()
-    local db = DB()
-    return db.collapsedSections[sectionId] or false
+    return DB().collapsedSections[sectionId] or false
 end
 
 local function SetSectionCollapsed(sectionId, collapsed)
     EnsureDB()
-    local db = DB()
-    db.collapsedSections[sectionId] = collapsed and true or nil
+    DB().collapsedSections[sectionId] = collapsed and true or nil
 end
 
-local function ClearChildren(parent)
-    if not parent or not parent.GetChildren then return end
-    local children = { parent:GetChildren() }
-    for _, child in ipairs(children) do
-        child:Hide()
-        child:SetParent(nil)
+local function AcquireSectionFrame()
+    local sf = table.remove(Addon._sectionPool)
+    if sf then
+        sf:Show()
+        sf._inUse = true
+        return sf
     end
+
+    sf = CreateFrame("Frame", nil, scrollChild)
+    sf:SetWidth(1)
+    sf._checkboxes = {}
+    sf._inUse = true
+
+    local header = CreateFrame("Button", nil, sf)
+    header:SetPoint("TOPLEFT", sf, "TOPLEFT", 0, 0)
+    header:SetPoint("TOPRIGHT", sf, "TOPRIGHT", 0, 0)
+    header:SetHeight(UI.headerMinH)
+    sf._header = header
+
+    local title = header:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    title:SetPoint("LEFT", header, "LEFT", 0, 0)
+    title:SetTextColor(THEME.header.r, THEME.header.g, THEME.header.b, THEME.header.a)
+    title:SetJustifyH("LEFT")
+    if title.SetWordWrap then title:SetWordWrap(true) end
+    sf._title = title
+
+    local status = header:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    status:SetPoint("RIGHT", header, "RIGHT", 0, 0)
+    status:SetTextColor(THEME.textDim.r, THEME.textDim.g, THEME.textDim.b, THEME.textDim.a)
+    sf._status = status
+
+    return sf
+end
+
+local function ReleaseSectionFrame(sf)
+    if not sf then return end
+    sf._inUse = false
+    sf:Hide()
+    sf:ClearAllPoints()
+
+    if sf._checkboxes then
+        for i = 1, #sf._checkboxes do
+            local cb = sf._checkboxes[i]
+            cb:Hide()
+            cb:ClearAllPoints()
+            cb._inUse = false
+            table.insert(Addon._checkboxPool, cb)
+            sf._checkboxes[i] = nil
+        end
+    end
+
+    table.insert(Addon._sectionPool, sf)
+end
+
+local function AcquireCheckbox(sf)
+    local cb = table.remove(Addon._checkboxPool)
+    if cb then
+        cb:SetParent(sf)
+        cb:Show()
+        cb._inUse = true
+        return cb
+    end
+
+    cb = CreateFrame("CheckButton", nil, sf, "UICheckButtonTemplate")
+    cb._inUse = true
+
+    if cb.text then
+        cb.text:SetJustifyH("LEFT")
+        if cb.text.SetWordWrap then cb.text:SetWordWrap(true) end
+        cb.text:SetTextColor(THEME.text.r, THEME.text.g, THEME.text.b, THEME.text.a)
+    end
+
+    return cb
 end
 
 local function LayoutSections(sectionFrames)
-    local y = -10
-    local paddingX = 14
+    local y = -UI.sectionTopPad
+    local paddingX = UI.sectionInsetX
 
     for _, sf in ipairs(sectionFrames) do
         if sf:IsShown() then
             sf:ClearAllPoints()
             sf:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", paddingX, y)
             sf:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", -paddingX, y)
-            y = y - sf:GetHeight() - 10
+            y = y - sf:GetHeight() - UI.sectionGap
         end
     end
 
-    local height = math.max(1, -y + 10)
+    local height = math.max(1, -y + UI.sectionGap)
     scrollChild:SetHeight(height)
+end
+
+local function ComputeHeaderHeight(sf, headerTextWidth)
+    local title = sf._title
+    title:SetWidth(headerTextWidth)
+
+    local th = 0
+    if title and title.GetStringHeight then
+        th = title:GetStringHeight() or 0
+    end
+
+    local hh = math.max(UI.headerMinH, th + 6)
+    sf._header:SetHeight(hh)
+    sf._headerBlockHeight = hh + UI.headerBottomPad
+end
+
+local function LayoutItems(sf, collapsed)
+    local y = -(sf._headerBlockHeight or (UI.headerMinH + UI.headerBottomPad))
+    local total = 0
+
+    for _, cb in ipairs(sf._checkboxes) do
+        cb:ClearAllPoints()
+        cb:SetPoint("TOPLEFT", sf, "TOPLEFT", 0, y)
+        local rh = cb:GetHeight() or UI.itemMinH
+        y = y - rh
+        total = total + rh
+        cb:SetShown(not collapsed)
+    end
+
+    sf._itemsHeight = total
+end
+
+local function UpdateSectionHeight(sf, collapsed)
+    local h = (sf._headerBlockHeight or (UI.headerMinH + UI.headerBottomPad))
+    if not collapsed then
+        h = h + (sf._itemsHeight or 0)
+    end
+    sf:SetHeight(h)
 end
 
 function Addon:Refresh()
     if not frame then return end
-    TryMigrateFromRefinedVibes()
     EnsureDB()
 
     local db = DB()
 
-    -- Fixed wrap widths for the fixed-size window.
-    local itemTextWidth = 420
-    local headerTextWidth = itemTextWidth + 28
-    local headerMinHeight = 22
-    local headerBottomPad = 4
+    if self._activeSections then
+        for _, old in ipairs(self._activeSections) do
+            ReleaseSectionFrame(old)
+        end
+    end
+    self._activeSections = {}
 
-    ClearChildren(scrollChild)
+    local itemTextWidth = UI.itemTextWidth
+    local headerTextWidth = itemTextWidth + UI.headerTextExtraW
 
     local sectionFrames = {}
 
     for _, section in ipairs(GetListData()) do
         local complete = IsSectionComplete(section)
-        if complete and db.hideCompletedSections then
-            -- hide completed sections entirely
-        else
-            local sf = CreateFrame("Frame", nil, scrollChild)
-            sf:SetWidth(1)
-
-            local header = CreateFrame("Button", nil, sf)
-            header:SetPoint("TOPLEFT", sf, "TOPLEFT", 0, 0)
-            header:SetPoint("TOPRIGHT", sf, "TOPRIGHT", 0, 0)
-            header:SetHeight(headerMinHeight)
-
-            local title = header:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-            title:SetPoint("LEFT", header, "LEFT", 0, 0)
-            title:SetTextColor(THEME.header.r, THEME.header.g, THEME.header.b, THEME.header.a)
-
-            title:SetJustifyH("LEFT")
-            if title.SetWordWrap then title:SetWordWrap(true) end
-            title:SetWidth(headerTextWidth)
-
-            local status = header:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-            status:SetPoint("RIGHT", header, "RIGHT", 0, 0)
-            status:SetTextColor(THEME.textDim.r, THEME.textDim.g, THEME.textDim.b, THEME.textDim.a)
-
-            local function UpdateHeaderLayout()
-                title:SetWidth(headerTextWidth)
-                local th = 0
-                if title.GetStringHeight then
-                    th = title:GetStringHeight() or 0
-                end
-                local hh = math.max(headerMinHeight, th + 6)
-                header:SetHeight(hh)
-                sf._headerBlockHeight = hh + headerBottomPad
-            end
-
-            local function UpdateHeaderText()
-                local isComplete = IsSectionComplete(section)
-                if isComplete then
-                    title:SetText("[Done] " .. tostring(section.title or section.id))
-                    status:SetText("")
-                else
-                    title:SetText(tostring(section.title or section.id))
-                    status:SetText("")
-                end
-
-                UpdateHeaderLayout()
-            end
+        if not (complete and db.hideCompletedSections) then
+            local sf = AcquireSectionFrame()
+            sf:SetParent(scrollChild)
+            sf:Show()
 
             local collapsed = IsSectionCollapsed(section.id)
             if complete then
@@ -228,117 +273,69 @@ function Addon:Refresh()
                 SetSectionCollapsed(section.id, true)
             end
 
-            UpdateHeaderText()
-
-            local function RelayoutItems()
-                local y = -(sf._headerBlockHeight or (headerMinHeight + headerBottomPad))
-                local total = 0
-                for _, cb in ipairs(sf._checkboxes or {}) do
-                    cb:ClearAllPoints()
-                    cb:SetPoint("TOPLEFT", sf, "TOPLEFT", 0, y)
-                    local rh = cb.GetHeight and cb:GetHeight() or 24
-                    y = y - rh
-                    total = total + rh
-                end
-                sf._itemsHeight = total
+            local titleText = tostring(section.title or section.id)
+            if complete then
+                titleText = "[Done] " .. titleText
             end
+            sf._title:SetText(titleText)
+            sf._status:SetText("")
 
-            local itemY = -(sf._headerBlockHeight or (headerMinHeight + headerBottomPad))
-            local anyItems = false
+            ComputeHeaderHeight(sf, headerTextWidth)
 
-            local function RecomputeCompletion()
-                local isCompleteNow = IsSectionComplete(section)
-                if isCompleteNow then
-                    SetSectionCollapsed(section.id, true)
-                    collapsed = true
+            if sf._checkboxes and #sf._checkboxes > 0 then
+                for i = 1, #sf._checkboxes do
+                    local oldcb = sf._checkboxes[i]
+                    oldcb:Hide()
+                    oldcb:ClearAllPoints()
+                    oldcb._inUse = false
+                    table.insert(self._checkboxPool, oldcb)
+                    sf._checkboxes[i] = nil
                 end
-                UpdateHeaderText()
-
-                RelayoutItems()
-
-                if isCompleteNow and db.hideCompletedSections then
-                    sf:Hide()
-                    LayoutSections(sectionFrames)
-                    return
-                end
-
-                for _, cb in ipairs(sf._checkboxes or {}) do
-                    cb:SetShown(not collapsed)
-                end
-
-                local h = (sf._headerBlockHeight or (headerMinHeight + headerBottomPad))
-                if not collapsed then
-                    h = h + (sf._itemsHeight or 0)
-                end
-                sf:SetHeight(h)
             end
-
-            header:SetScript("OnClick", function()
-                collapsed = not collapsed
-                SetSectionCollapsed(section.id, collapsed)
-                RecomputeCompletion()
-                LayoutSections(sectionFrames)
-            end)
-
-            sf._checkboxes = {}
-            sf._itemsHeight = 0
 
             for _, item in ipairs(section.items or {}) do
-                anyItems = true
-                local cb = CreateFrame("CheckButton", nil, sf, "UICheckButtonTemplate")
-                cb:SetPoint("TOPLEFT", sf, "TOPLEFT", 0, itemY)
+                local cb = AcquireCheckbox(sf)
+
                 local itemText = tostring(item.text or item.id)
-                cb.text:SetText(itemText)
                 if cb.text then
-                    if cb.text.SetTextColor then
-                        cb.text:SetTextColor(THEME.text.r, THEME.text.g, THEME.text.b, THEME.text.a)
-                    end
-
-                    -- Allow long lines to wrap and resize the row accordingly.
-                    cb.text:SetJustifyH("LEFT")
-                    if cb.text.SetWordWrap then cb.text:SetWordWrap(true) end
-
-                    -- Wrap to the current window width.
                     cb.text:SetWidth(itemTextWidth)
-                end
+                    cb.text:SetText(itemText)
 
-                local textHeight = 0
-                if cb.text and cb.text.GetStringHeight then
-                    textHeight = cb.text:GetStringHeight() or 0
+                    local textHeight = 0
+                    if cb.text.GetStringHeight then
+                        textHeight = cb.text:GetStringHeight() or 0
+                    end
+                    local rowHeight = math.max(UI.itemMinH, textHeight + UI.itemTextPad)
+                    cb:SetHeight(rowHeight)
+                else
+                    cb:SetHeight(UI.itemMinH)
                 end
-                local rowHeight = math.max(24, textHeight + 8)
-                cb:SetHeight(rowHeight)
-
-                local savedKey = Key(section.id, item.id)
-                local saved = db.checked[savedKey]
-                -- By default, items are unchecked unless saved in the DB.
 
                 cb:SetChecked(IsItemChecked(section.id, item.id))
+                cb._sectionId = section.id
+                cb._itemId = item.id
+
                 cb:SetScript("OnClick", function(selfBtn)
-                    SetItemChecked(section.id, item.id, selfBtn:GetChecked())
-                    RecomputeCompletion()
-                    LayoutSections(sectionFrames)
+                    SetItemChecked(selfBtn._sectionId, selfBtn._itemId, selfBtn:GetChecked())
+                    if IsSectionComplete(section) then
+                        SetSectionCollapsed(section.id, true)
+                    end
+                    Addon:Refresh()
                 end)
 
                 table.insert(sf._checkboxes, cb)
-                itemY = itemY - rowHeight
             end
 
-            if anyItems then
-                sf._itemsHeight = (-itemY) - (sf._headerBlockHeight or (headerMinHeight + headerBottomPad))
-            end
+            sf._header:SetScript("OnClick", function()
+                SetSectionCollapsed(section.id, not IsSectionCollapsed(section.id))
+                Addon:Refresh()
+            end)
 
-            for _, cb in ipairs(sf._checkboxes) do
-                cb:SetShown(not collapsed)
-            end
-
-            local initialH = (sf._headerBlockHeight or (headerMinHeight + headerBottomPad))
-            if not collapsed then
-                initialH = initialH + (sf._itemsHeight or 0)
-            end
-            sf:SetHeight(initialH)
+            LayoutItems(sf, collapsed)
+            UpdateSectionHeight(sf, collapsed)
 
             table.insert(sectionFrames, sf)
+            table.insert(self._activeSections, sf)
         end
     end
 
@@ -353,7 +350,7 @@ function Addon:CreateFrame()
         Mixin(frame, BackdropTemplateMixin)
     end
 
-    frame:SetSize(520, 650)
+    frame:SetSize(UI.frameW, UI.frameH)
     frame:SetClampedToScreen(true)
     frame:SetPoint("CENTER")
     frame:SetMovable(true)
@@ -366,16 +363,16 @@ function Addon:CreateFrame()
     ApplyTheme(frame)
 
     local closeBtn = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
-    closeBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -4)
+    closeBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -UI.closeInset, -UI.closeInset)
     closeBtn:SetScript("OnClick", function() frame:Hide() end)
 
     local topRow = CreateFrame("Frame", nil, frame)
-    topRow:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -10)
-    topRow:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -34, -10)
-    topRow:SetHeight(26)
+    topRow:SetPoint("TOPLEFT", frame, "TOPLEFT", UI.padOuterX, -UI.padOuterTop)
+    topRow:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -UI.topRowRightInset, -UI.padOuterTop)
+    topRow:SetHeight(UI.topRowH)
 
     local hideDoneCheck = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
-    hideDoneCheck:SetPoint("LEFT", topRow, "LEFT", 14, 0)
+    hideDoneCheck:SetPoint("LEFT", topRow, "LEFT", UI.padOuterX, 0)
     hideDoneCheck.text:SetText("Hide completed weeks")
     if hideDoneCheck.text and hideDoneCheck.text.SetTextColor then
         hideDoneCheck.text:SetTextColor(THEME.text.r, THEME.text.g, THEME.text.b, THEME.text.a)
@@ -391,7 +388,7 @@ function Addon:CreateFrame()
 
     local resetBtn = CreateFrame("Button", nil, frame, "GameMenuButtonTemplate")
     resetBtn:SetPoint("RIGHT", topRow, "RIGHT", 0, 0)
-    resetBtn:SetSize(90, 26)
+    resetBtn:SetSize(90, UI.topRowH)
     resetBtn:SetText("Reset")
     resetBtn:SetScript("OnClick", function()
         EnsureDB()
@@ -403,8 +400,8 @@ function Addon:CreateFrame()
     end)
 
     scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -44)
-    scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -30, 16)
+    scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", UI.padOuterX, -UI.scrollTop)
+    scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -UI.scrollRight, UI.scrollBottom)
 
     scrollChild = CreateFrame("Frame", nil, scrollFrame)
     scrollChild:SetSize(1, 1)
@@ -428,4 +425,3 @@ SLASH_LARIASWEEKLYMIDNIGHTCHECKLIST2 = "/lcl"
 SlashCmdList["LARIASWEEKLYMIDNIGHTCHECKLIST"] = function()
     Addon:Toggle()
 end
-
