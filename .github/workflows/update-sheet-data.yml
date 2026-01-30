@@ -2,7 +2,7 @@ name: Update Sheet Data + Upload to CurseForge & Wago
 
 on:
   workflow_dispatch:
-  schedule:    
+  schedule:
     - cron: "0 * * * *"   # runs every hour on the hour (UTC)
 
 permissions:
@@ -90,3 +90,27 @@ jobs:
         uses: BigWigsMods/packager@v2.4.3
         env:
           WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+
+      - name: Notify Discord (release posted)
+        if: steps.commitstep.outputs.changed == 'true'
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          TAG: ${{ steps.commitstep.outputs.tag }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          RELEASE_URL="https://github.com/${REPO}/releases/tag/${TAG}"
+          CURSE_URL="https://www.curseforge.com/wow/addons/larias-weekly-midnight-checklist"
+
+          payload=$(cat <<EOF
+          {
+            "content": "🚀 **Larias Weekly Midnight Checklist ${TAG}** is live!\n\n📦 GitHub: ${RELEASE_URL}\n🔥 CurseForge: ${CURSE_URL}\n🛠 Workflow: ${RUN_URL}"
+          }
+          EOF
+          )
+
+          curl -sS -H "Content-Type: application/json" \
+            -d "$payload" \
+            "$DISCORD_WEBHOOK_URL"
