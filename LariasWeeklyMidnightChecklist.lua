@@ -10,7 +10,6 @@ end
 local frame
 local scrollFrame
 local scrollChild
-
 local THEME = Addon.THEME
 local UI = Addon.UI
 
@@ -391,6 +390,7 @@ local function SyncCheckboxesForSection(sf, sectionId)
         cb._dbKey = Key(sectionId, item.id)
 
         local txt = cb.text or cb.Text
+        local minRowH = math.max(32, UI.itemMinH or 0)
         if txt then
             txt:SetWidth(UI.itemTextWidth)
             txt:SetText(tostring(item.text or item.id))
@@ -399,9 +399,9 @@ local function SyncCheckboxesForSection(sf, sectionId)
             if txt.GetStringHeight then
                 textHeight = txt:GetStringHeight() or 0
             end
-            cb:SetHeight(math.max(UI.itemMinH, textHeight + UI.itemTextPad))
+            cb:SetHeight(math.max(minRowH, textHeight + (UI.itemTextPad or 0)))
         else
-            cb:SetHeight(UI.itemMinH)
+            cb:SetHeight(minRowH)
         end
 
         cb:SetChecked(IsItemChecked(sectionId, item.id))
@@ -546,6 +546,23 @@ function Addon:CreateFrame()
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
     frame:Hide()
+
+    -- Allow closing the window with Escape.
+    if UISpecialFrames and frame.GetName then
+        local n = frame:GetName()
+        if n and n ~= "" then
+            local exists = false
+            for i = 1, #UISpecialFrames do
+                if UISpecialFrames[i] == n then
+                    exists = true
+                    break
+                end
+            end
+            if not exists then
+                table.insert(UISpecialFrames, n)
+            end
+        end
+    end
 
     self:ApplyTheme(frame)
 
