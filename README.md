@@ -1,3 +1,5 @@
+flowchart TD
+
 ```mermaid
     A((Start)):::start
     B[Schedule Triggered<br/>Hourly or Manual]:::process
