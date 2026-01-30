@@ -5,13 +5,13 @@ flowchart TD
     B[Schedule Triggered<br/>Hourly or Manual]:::process
     C[Checkout Repository]:::process
     D[Setup Python 3.11]:::process
-    E[Download Google Sheet (CSV)]:::process
-    F[Convert CSV → Lua File]:::process
+    E[Download Google Sheet - CSV]:::process
+    F[Convert CSV to Lua File]:::process
     G{Did Lua File Change?}:::decision
 
     H((End - No Changes)):::end
     I[Bump Version in .toc]:::process
-    J[Commit & Push Changes]:::process
+    J[Commit and Push Changes]:::process
     K[Create Git Tag]:::process
     L[Build Addon Package]:::process
     M[Upload to CurseForge]:::process
