@@ -1,4 +1,4 @@
-flowchart TD
+```mermaid
 
     A((Start)):::start
     B[Schedule Triggered<br/>Hourly or Manual]:::process
@@ -26,3 +26,4 @@ flowchart TD
     classDef end fill:#E53935,color:#fff,stroke:#B71C1C,stroke-width:2px;
     classDef process fill:#2196F3,color:#fff,stroke:#0D47A1,stroke-width:1px;
     classDef decision fill:#FFC107,color:#000,stroke:#FF8F00,stroke-width:2px;
+```
