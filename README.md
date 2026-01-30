@@ -21,8 +21,10 @@ flowchart TD
     G -- No --> H
     G -- Yes --> I --> J --> K --> L --> M --> N --> O --> P
 
-    classDef start fill:#4CAF50,color:#fff,stroke:#2E7D32,stroke-width:2px;
-    classDef finish fill:#E53935,color:#fff,stroke:#B71C1C,stroke-width:2px;
-    classDef process fill:#2196F3,color:#fff,stroke:#0D47A1,stroke-width:1px;
-    classDef decision fill:#FFC107,color:#000,stroke:#FF8F00,stroke-width:2px;
+classDef start fill:#1E8449,color:#FFFFFF,stroke:#0B3D1F,stroke-width:2px;
+classDef process fill:#27AE60,color:#FFFFFF,stroke:#145A32,stroke-width:1.5px;
+classDef decision fill:#F4D03F,color:#1B2631,stroke:#B7950B,stroke-width:2px;
+classDef finish fill:#2C3E50,color:#FFFFFF,stroke:#1B2631,stroke-width:2px;
+
+
 ```
