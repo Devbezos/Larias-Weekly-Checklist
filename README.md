@@ -9,7 +9,7 @@ flowchart TD
     F[Convert CSV to Lua File]:::process
     G{Did Lua File Change?}:::decision
 
-    H((End - No Changes)):::end
+    H((finish - No Changes)):::finish
     I[Bump Version in .toc]:::process
     J[Commit and Push Changes]:::process
     K[Create Git Tag]:::process
@@ -17,7 +17,7 @@ flowchart TD
     M[Upload to CurseForge]:::process
     N[Upload to Wago]:::process
     O[Post Discord Webhook]:::process
-    P((End - Release Complete)):::end
+    P((finish - Release Complete)):::finish
 
     A --> B --> C --> D --> E --> F --> G
     G -- No --> H
