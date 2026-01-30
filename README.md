@@ -17,7 +17,7 @@ flowchart TD
     O[Post Discord Webhook]:::process
     P((Release Complete)):::finish
 
-    A --> B --> C --> D --> E --> F --> G
+    A --> B --> E --> F --> G
     G -- No --> H
     G -- Yes --> I --> J --> K --> L --> M --> N --> O --> P
 
