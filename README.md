@@ -7,7 +7,7 @@ flowchart TD
     F[Convert CSV to LUA]:::process
     G{Did LUA File Change?}:::decision
 
-    H((No Changes)):::finish
+    H((Do nothing)):::finish
     I[Bump Version in .toc]:::process
     J[Push Changes]:::process
     L[Build Addon Package]:::process
@@ -17,7 +17,7 @@ flowchart TD
 
     A --> B --> E --> F --> G
     G -- No --> H
-    G -- Yes --> I --> J --> K --> L --> M --> N --> O --> P
+    G -- Yes --> I --> J --> L --> M --> O --> P
 
 classDef start fill:#1E8449,color:#FFFFFF,stroke:#0B3D1F,stroke-width:2px;
 classDef process fill:#27AE60,color:#FFFFFF,stroke:#145A32,stroke-width:1.5px;
