@@ -2,18 +2,16 @@
 flowchart TD
 
     A((Start)):::start
-    B[Schedule Triggered<br/>Hourly or Manual]:::process
-    E[Download Google Sheet - CSV]:::process
-    F[Convert CSV to Lua File]:::process
-    G{Did Lua File Change?}:::decision
+    B[Hourly schedule triggered]:::process
+    E[Download Larias Sheet as CSV]:::process
+    F[Convert CSV to LUA]:::process
+    G{Did LUA File Change?}:::decision
 
     H((No Changes)):::finish
     I[Bump Version in .toc]:::process
-    J[Commit and Push Changes]:::process
-    K[Create Git Tag]:::process
+    J[Push Changes]:::process
     L[Build Addon Package]:::process
-    M[Upload to CurseForge]:::process
-    N[Upload to Wago]:::process
+    M[Upload to CurseForge & Wago]:::process
     O[Post Discord Webhook]:::process
     P((Release Complete)):::finish
 
