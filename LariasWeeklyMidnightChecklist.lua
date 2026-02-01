@@ -1,4 +1,3 @@
--- Checklist.lua
 local addonName = ...
 local Addon = _G[addonName] or {}
 _G[addonName] = Addon
@@ -10,11 +9,25 @@ end
 local frame
 local scrollFrame
 local scrollChild
-
 local THEME = Addon.THEME
 local UI = Addon.UI
+local type, tostring = type, tostring
+local pairs, ipairs, next = pairs, ipairs, next
+local max = math.max
+local tinsert, tremove, tconcat = table.insert, table.remove, table.concat
+local CreateFrame = CreateFrame
 
--- Pools/state
+local function Wipe(t)
+    if not t then return end
+    if wipe then
+        wipe(t)
+        return
+    end
+    for k in pairs(t) do
+        t[k] = nil
+    end
+end
+
 Addon._sectionPool = Addon._sectionPool or {}
 Addon._checkboxPool = Addon._checkboxPool or {}
 Addon._activeSections = Addon._activeSections or {}
@@ -24,9 +37,6 @@ Addon._sectionsById = Addon._sectionsById or {}
 Addon._order = Addon._order or {}
 Addon._sectionsIndexById = Addon._sectionsIndexById or {}
 
--- =========================
--- Shared helpers
--- =========================
 function Addon:DB()
     return _G[self._DB_NAME]
 end
@@ -51,20 +61,20 @@ end
 function Addon:EnsureDB()
     if not self:DB() then _G[self._DB_NAME] = {} end
     local db = self:DB()
-
-    -- One-time migration: copy legacy account-wide data into this character's DB.
-    -- (Keeps existing checkmarks, but characters can diverge afterwards.)
     if db._migratedFromAccountDB ~= true then
         local legacyName = self._ACCOUNT_DB_NAME
         local legacy = legacyName and _G[legacyName] or nil
         if type(legacy) == "table" then
-            -- Only migrate into an empty/new per-character DB.
             local hasAnyChecks = (type(db.checked) == "table") and (next(db.checked) ~= nil)
             if not hasAnyChecks then
                 if type(legacy.checked) == "table" then db.checked = CopyTableShallow(legacy.checked) end
                 if type(legacy.collapsedSections) == "table" then db.collapsedSections = CopyTableShallow(legacy.collapsedSections) end
                 if legacy.hideCompletedSections ~= nil then db.hideCompletedSections = legacy.hideCompletedSections and true or false end
-                if legacy.showCurrency ~= nil then db.showCurrency = legacy.showCurrency and true or false end
+                if legacy.showCurrency ~= nil then
+                    local show = legacy.showCurrency and true or false
+                    db.showGreatVault = show
+                    db.showCurrency = show
+                end
             end
         end
         db._migratedFromAccountDB = true
@@ -73,8 +83,80 @@ function Addon:EnsureDB()
     db.checked = db.checked or {}
     db.collapsedSections = db.collapsedSections or {}
     if db.hideCompletedSections == nil then db.hideCompletedSections = false end
+    if db.showGreatVault == nil then db.showGreatVault = true end
     if db.showCurrency == nil then db.showCurrency = true end
     return db
+end
+
+function Addon:EnsureOptionsPanel()
+    if self._optionsPanel then return self._optionsPanel end
+
+    local displayName = (Addon.DISPLAY_NAME or addonName)
+
+    local panel = CreateFrame("Frame")
+    panel.name = displayName
+
+    local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+    title:SetPoint("TOPLEFT", 16, -16)
+    title:SetText(displayName)
+
+    local function MakeCheck(y, labelText)
+        local cb = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
+        cb:SetPoint("TOPLEFT", 16, y)
+        local t = cb.text or cb.Text
+        if t then
+            t:SetText(labelText)
+        end
+        return cb
+    end
+
+    local gvCheck = MakeCheck(-50, "Show Great Vault")
+    local currencyCheck = MakeCheck(-78, "Show Currency")
+
+    panel:SetScript("OnShow", function()
+        local db = Addon:EnsureDB()
+        gvCheck:SetChecked(db.showGreatVault and true or false)
+        currencyCheck:SetChecked(db.showCurrency and true or false)
+    end)
+
+    gvCheck:SetScript("OnClick", function(selfBtn)
+        local db = Addon:EnsureDB()
+        db.showGreatVault = selfBtn:GetChecked() and true or false
+        if Addon.UpdateTracking then Addon:UpdateTracking() end
+        Addon:ApplyScrollLayout()
+        Addon:Refresh()
+    end)
+
+    currencyCheck:SetScript("OnClick", function(selfBtn)
+        local db = Addon:EnsureDB()
+        db.showCurrency = selfBtn:GetChecked() and true or false
+        if Addon.UpdateTracking then Addon:UpdateTracking() end
+        Addon:ApplyScrollLayout()
+        Addon:Refresh()
+    end)
+
+    if Settings and Settings.RegisterCanvasLayoutCategory and Settings.RegisterAddOnCategory then
+        local category = Settings.RegisterCanvasLayoutCategory(panel, panel.name)
+        Settings.RegisterAddOnCategory(category)
+        self._settingsCategory = category
+    elseif InterfaceOptions_AddCategory then
+        InterfaceOptions_AddCategory(panel)
+    end
+
+    self._optionsPanel = panel
+    return panel
+end
+
+function Addon:OpenOptions()
+    local panel = self:EnsureOptionsPanel()
+    if Settings and Settings.OpenToCategory and self._settingsCategory and self._settingsCategory.GetID then
+        Settings.OpenToCategory(self._settingsCategory:GetID())
+        return
+    end
+    if InterfaceOptionsFrame_OpenToCategory then
+        InterfaceOptionsFrame_OpenToCategory(panel)
+        InterfaceOptionsFrame_OpenToCategory(panel)
+    end
 end
 
 function Addon:GetListData()
@@ -95,8 +177,6 @@ function Addon:ApplyTheme(f)
     f:SetBackdropColor(THEME.bg.r, THEME.bg.g, THEME.bg.b, THEME.bg.a)
     f:SetBackdropBorderColor(THEME.border.r, THEME.border.g, THEME.border.b, THEME.border.a)
 end
-
--- Reserves/reclaims space for tracking panel (Currency.lua sets Addon._trackingFrame)
 function Addon:ApplyScrollLayout()
     if not (frame and scrollFrame) then return end
     local db = self:EnsureDB()
@@ -105,45 +185,51 @@ function Addon:ApplyScrollLayout()
     scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", UI.padOuterX, -UI.scrollTop)
 
     local extra = 0
-    if db.showCurrency and self._trackingFrame then
-        extra = UI.trackH + UI.trackTopPad
+    if (db.showGreatVault or db.showCurrency) and self._trackingFrame and self._trackingFrame.IsShown and self._trackingFrame:IsShown() then
+        local h = (self._trackingFrame.GetHeight and self._trackingFrame:GetHeight()) or UI.trackH
+        h = tonumber(h) or UI.trackH
+        extra = h + UI.trackTopPad
     end
 
     scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -UI.scrollRight, UI.scrollBottom + extra)
 end
 
--- =========================
--- Checklist logic
--- =========================
 local function Key(sectionId, itemId)
+    if type(sectionId) == "string" and type(itemId) == "string" then
+        return sectionId .. ":" .. itemId
+    end
     return tostring(sectionId) .. ":" .. tostring(itemId)
 end
 
-local function IsItemChecked(sectionId, itemId)
-    local db = Addon:EnsureDB()
+local function IsItemChecked(sectionId, itemId, db)
+    db = db or Addon:EnsureDB()
     return db.checked[Key(sectionId, itemId)] and true or false
 end
 
-local function SetItemChecked(sectionId, itemId, checked)
-    local db = Addon:EnsureDB()
+local function SetItemChecked(sectionId, itemId, checked, db)
+    db = db or Addon:EnsureDB()
     db.checked[Key(sectionId, itemId)] = checked and true or nil
 end
 
-local function IsSectionCollapsed(sectionId)
-    local db = Addon:EnsureDB()
+local function IsSectionCollapsed(sectionId, db)
+    db = db or Addon:EnsureDB()
     return db.collapsedSections[sectionId] or false
 end
 
-local function SetSectionCollapsed(sectionId, collapsed)
-    local db = Addon:EnsureDB()
+local function SetSectionCollapsed(sectionId, collapsed, db)
+    db = db or Addon:EnsureDB()
     db.collapsedSections[sectionId] = collapsed and true or nil
 end
 
-local function IsSectionCompleteById(sectionId)
+local function IsSectionCompleteById(sectionId, db)
     local section = Addon._sectionsById[sectionId]
     if not section then return false end
-    for _, item in ipairs(section.items or {}) do
-        if not IsItemChecked(sectionId, item.id) then
+
+    db = db or Addon:EnsureDB()
+    local checked = db.checked
+    local items = section.items or {}
+    for i = 1, #items do
+        if not checked[Key(sectionId, items[i].id)] then
             return false
         end
     end
@@ -151,7 +237,7 @@ local function IsSectionCompleteById(sectionId)
 end
 
 local function AcquireSectionFrame()
-    local sf = table.remove(Addon._sectionPool)
+    local sf = tremove(Addon._sectionPool)
     if sf then
         sf:Show()
         return sf
@@ -198,17 +284,17 @@ local function ReleaseSectionFrame(sf)
             cb._itemId = nil
             cb._dbKey = nil
             cb:SetScript("OnClick", nil)
-            table.insert(Addon._checkboxPool, cb)
+            tinsert(Addon._checkboxPool, cb)
             sf._checkboxes[i] = nil
         end
     end
 
     sf._header:SetScript("OnClick", nil)
-    table.insert(Addon._sectionPool, sf)
+    tinsert(Addon._sectionPool, sf)
 end
 
 local function AcquireCheckbox(sf)
-    local cb = table.remove(Addon._checkboxPool)
+    local cb = tremove(Addon._checkboxPool)
     if cb then
         cb:SetParent(sf)
         cb:Show()
@@ -226,6 +312,7 @@ local function AcquireCheckbox(sf)
     end
     return cb
 end
+local UpdateSectionVisuals
 
 local function ComputeHeaderHeight(sf, headerTextWidth)
     sf._title:SetWidth(headerTextWidth)
@@ -233,7 +320,7 @@ local function ComputeHeaderHeight(sf, headerTextWidth)
     if sf._title.GetStringHeight then
         th = sf._title:GetStringHeight() or 0
     end
-    local hh = math.max(UI.headerMinH, th + 6)
+    local hh = max(UI.headerMinH, th + 6)
     sf._header:SetHeight(hh)
     sf._headerBlockHeight = hh + UI.headerBottomPad
 end
@@ -241,7 +328,9 @@ end
 local function LayoutItems(sf, collapsed)
     local y = -(sf._headerBlockHeight or (UI.headerMinH + UI.headerBottomPad))
     local total = 0
-    for _, cb in ipairs(sf._checkboxes) do
+    local boxes = sf._checkboxes
+    for i = 1, #boxes do
+        local cb = boxes[i]
         cb:ClearAllPoints()
         cb:SetPoint("TOPLEFT", sf, "TOPLEFT", 0, y)
         local rh = cb:GetHeight() or UI.itemMinH
@@ -278,14 +367,12 @@ local function LayoutFrom(startIndex)
         end
     end
 
-    local height = math.max(1, -y + UI.sectionGap)
+    local height = max(1, -y + UI.sectionGap)
     scrollChild:SetHeight(height)
 end
 
 local function CalcDataSig(data)
     if type(data) ~= "table" then return "" end
-    -- List data is static for the session; cache the computed signature on the table
-    -- to avoid rebuilding the signature string on every Refresh().
     if data.__lariasSig and data.__lariasSigN == #data then
         return data.__lariasSig
     end
@@ -300,15 +387,17 @@ local function CalcDataSig(data)
             parts[#parts + 1] = tostring(items[j].id)
         end
     end
-    local sig = table.concat(parts, "|")
+    local sig = tconcat(parts, "|")
     data.__lariasSig = sig
     data.__lariasSigN = #data
     return sig
 end
 
-local function SetHeaderText(sf, sectionId)
+local function SetHeaderText(sf, sectionId, complete)
     local section = Addon._sectionsById[sectionId]
-    local complete = IsSectionCompleteById(sectionId)
+    if complete == nil then
+        complete = IsSectionCompleteById(sectionId)
+    end
     local titleText = tostring((section and section.title) or sectionId)
     if complete then titleText = "[Done] " .. titleText end
     sf._title:SetText(titleText)
@@ -321,20 +410,20 @@ local function OnCheckboxClick(selfBtn)
     db.checked[selfBtn._dbKey or Key(selfBtn._sectionId, selfBtn._itemId)] = checked
 
     local sid = selfBtn._sectionId
-    local secCompleteNow = IsSectionCompleteById(sid)
+    local secCompleteNow = IsSectionCompleteById(sid, db)
     if secCompleteNow then
-        SetSectionCollapsed(sid, true)
+        SetSectionCollapsed(sid, true, db)
     end
 
     local sframe = Addon._activeSections[Addon._sectionsIndexById[sid]]
     if not sframe then return end
 
-    local hideDone = Addon:EnsureDB().hideCompletedSections and true or false
+    local hideDone = db.hideCompletedSections and true or false
 
-    SetHeaderText(sframe, sid)
+    SetHeaderText(sframe, sid, secCompleteNow)
     ComputeHeaderHeight(sframe, UI.itemTextWidth + UI.headerTextExtraW)
 
-    local collapsed = IsSectionCollapsed(sid) or false
+    local collapsed = IsSectionCollapsed(sid, db) or false
     if secCompleteNow then collapsed = true end
 
     LayoutItems(sframe, collapsed)
@@ -354,11 +443,13 @@ local function OnHeaderClick(header)
     if not sf then return end
     local sid = sf._sectionId
     SetSectionCollapsed(sid, not IsSectionCollapsed(sid))
-    UpdateSectionVisuals(sf, sid)
+    if UpdateSectionVisuals then
+        UpdateSectionVisuals(sf, sid)
+    end
     LayoutFrom(sf._index or 1)
 end
 
-local function SyncCheckboxesForSection(sf, sectionId)
+local function SyncCheckboxesForSection(sf, sectionId, db)
     local section = Addon._sectionsById[sectionId]
     local items = (section and section.items) or {}
 
@@ -373,7 +464,7 @@ local function SyncCheckboxesForSection(sf, sectionId)
             cb._sectionId = nil
             cb._itemId = nil
             cb:SetScript("OnClick", nil)
-            table.insert(Addon._checkboxPool, cb)
+            tinsert(Addon._checkboxPool, cb)
             sf._checkboxes[i] = nil
         end
     elseif have < want then
@@ -391,6 +482,7 @@ local function SyncCheckboxesForSection(sf, sectionId)
         cb._dbKey = Key(sectionId, item.id)
 
         local txt = cb.text or cb.Text
+        local minRowH = max(32, UI.itemMinH or 0)
         if txt then
             txt:SetWidth(UI.itemTextWidth)
             txt:SetText(tostring(item.text or item.id))
@@ -399,21 +491,22 @@ local function SyncCheckboxesForSection(sf, sectionId)
             if txt.GetStringHeight then
                 textHeight = txt:GetStringHeight() or 0
             end
-            cb:SetHeight(math.max(UI.itemMinH, textHeight + UI.itemTextPad))
+            cb:SetHeight(max(minRowH, textHeight + (UI.itemTextPad or 0)))
         else
-            cb:SetHeight(UI.itemMinH)
+            cb:SetHeight(minRowH)
         end
 
-        cb:SetChecked(IsItemChecked(sectionId, item.id))
+        cb:SetChecked(IsItemChecked(sectionId, item.id, db))
 
         cb:SetScript("OnClick", OnCheckboxClick)
     end
 end
 
-local function UpdateSectionVisuals(sf, sectionId)
-    local complete = IsSectionCompleteById(sectionId)
+UpdateSectionVisuals = function(sf, sectionId)
+    local db = Addon:EnsureDB()
+    local complete = IsSectionCompleteById(sectionId, db)
 
-    local hideDone = Addon:EnsureDB().hideCompletedSections and true or false
+    local hideDone = db.hideCompletedSections and true or false
     if hideDone and complete then
         sf:Hide()
         return
@@ -422,19 +515,19 @@ local function UpdateSectionVisuals(sf, sectionId)
     sf:Show()
 
     if complete then
-        SetSectionCollapsed(sectionId, true)
+        SetSectionCollapsed(sectionId, true, db)
     end
 
-    SetHeaderText(sf, sectionId)
+    SetHeaderText(sf, sectionId, complete)
     ComputeHeaderHeight(sf, UI.itemTextWidth + UI.headerTextExtraW)
 
-    local collapsed = IsSectionCollapsed(sectionId) or false
+    local collapsed = IsSectionCollapsed(sectionId, db) or false
     if complete then collapsed = true end
 
     for i = 1, #sf._checkboxes do
         local cb = sf._checkboxes[i]
         if cb and cb._itemId ~= nil then
-            cb:SetChecked(IsItemChecked(sectionId, cb._itemId))
+            cb:SetChecked(IsItemChecked(sectionId, cb._itemId, db))
         end
     end
 
@@ -443,12 +536,11 @@ local function UpdateSectionVisuals(sf, sectionId)
 end
 
 local function SyncAllDataAndFrames()
-    Addon:EnsureDB()
+    local db = Addon:EnsureDB()
 
     local data = Addon:GetListData()
     local sig = CalcDataSig(data)
 
-    -- Only rebuild section indices if the underlying list data changed.
     if Addon._dataSig ~= sig or not Addon._sectionsById or not next(Addon._sectionsById) then
         Addon._sectionsById = {}
         Addon._order = {}
@@ -465,11 +557,7 @@ local function SyncAllDataAndFrames()
         Addon._dataSig = sig
     end
 
-    if wipe then
-        wipe(Addon._sectionsIndexById)
-    else
-        Addon._sectionsIndexById = {}
-    end
+    Wipe(Addon._sectionsIndexById)
 
     local want = #Addon._order
     local have = #Addon._activeSections
@@ -493,18 +581,16 @@ local function SyncAllDataAndFrames()
         sf._index = i
         Addon._sectionsIndexById[sectionId] = i
 
-        SyncCheckboxesForSection(sf, sectionId)
+        SyncCheckboxesForSection(sf, sectionId, db)
 
         sf._header._sectionFrame = sf
         sf._header:SetScript("OnClick", OnHeaderClick)
 
         UpdateSectionVisuals(sf, sectionId)
+
     end
 end
 
--- =========================
--- Public API
--- =========================
 function Addon:Refresh()
     if not frame then return end
     SyncAllDataAndFrames()
@@ -522,7 +608,7 @@ function Addon:Refresh()
         end
     end
 
-    scrollChild:SetHeight(math.max(1, -y + UI.sectionGap))
+    scrollChild:SetHeight(max(1, -y + UI.sectionGap))
 
     if self.UpdateTracking then
         self:UpdateTracking()
@@ -546,6 +632,22 @@ function Addon:CreateFrame()
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
     frame:Hide()
+
+    if UISpecialFrames and frame.GetName then
+        local n = frame:GetName()
+        if n and n ~= "" then
+            local exists = false
+            for i = 1, #UISpecialFrames do
+                if UISpecialFrames[i] == n then
+                    exists = true
+                    break
+                end
+            end
+            if not exists then
+                tinsert(UISpecialFrames, n)
+            end
+        end
+    end
 
     self:ApplyTheme(frame)
 
@@ -576,37 +678,16 @@ function Addon:CreateFrame()
         Addon:Refresh()
     end)
 
-    local showCurrencyCheck = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
-    showCurrencyCheck:SetPoint("LEFT", hideDoneCheck, "RIGHT", 170, 0)
-    local ctxt = showCurrencyCheck.text or showCurrencyCheck.Text
-    if ctxt then
-        ctxt:SetText("Show weeklies")
-        if ctxt.SetTextColor then
-            ctxt:SetTextColor(THEME.text.r, THEME.text.g, THEME.text.b, THEME.text.a)
-        end
-    end
-
-    showCurrencyCheck:SetChecked(db.showCurrency)
-    showCurrencyCheck:SetScript("OnClick", function(selfBtn)
-    local wantShow = selfBtn:GetChecked() and true or false
-
-    -- If Currency.lua is loaded, this will also create the panel when turning ON.
-    if Addon.SetTrackingVisible then
-        Addon:SetTrackingVisible(wantShow)
-        return
-    end
-
-    -- Fallback (Currency.lua not loaded)
-    local d = Addon:EnsureDB()
-    d.showCurrency = wantShow
-    Addon:ApplyScrollLayout()
-    Addon:Refresh()
-end)
-
-    Addon._showCurrencyCheck = showCurrencyCheck
+    local optionsBtn = CreateFrame("Button", nil, frame, "GameMenuButtonTemplate")
+    optionsBtn:SetPoint("RIGHT", topRow, "RIGHT", 0, 0)
+    optionsBtn:SetSize(90, UI.topRowH)
+    optionsBtn:SetText("Options")
+    optionsBtn:SetScript("OnClick", function()
+        Addon:OpenOptions()
+    end)
 
     local resetBtn = CreateFrame("Button", nil, frame, "GameMenuButtonTemplate")
-    resetBtn:SetPoint("RIGHT", topRow, "RIGHT", 0, 0)
+    resetBtn:SetPoint("RIGHT", optionsBtn, "LEFT", -8, 0)
     resetBtn:SetSize(90, UI.topRowH)
     resetBtn:SetText("Reset")
     resetBtn:SetScript("OnClick", function()
@@ -621,7 +702,6 @@ end)
         d.hideCompletedSections = false
         hideDoneCheck:SetChecked(false)
 
-        -- do not force currency on/off; keep user pref
         Addon:ApplyScrollLayout()
         Addon:Refresh()
     end)
@@ -633,13 +713,10 @@ end)
     scrollChild:SetSize(1, 1)
     scrollFrame:SetScrollChild(scrollChild)
 
-    -- If currency tracking is enabled, create the tracking panel now (Currency.lua)
-    -- so layout can reserve space immediately.
-    if db.showCurrency and self.CreateTrackingPanel and not self._trackingFrame then
+    if (db.showGreatVault or db.showCurrency) and self.CreateTrackingPanel and not self._trackingFrame then
         self:CreateTrackingPanel(frame)
     end
 
-    -- Currency.lua will update the tracking frame; we just apply layout
     self:ApplyScrollLayout()
     self:Refresh()
 end
