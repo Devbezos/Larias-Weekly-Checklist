@@ -163,6 +163,125 @@ local function FirstWord(s)
     return nil
 end
 
+local function SplitWords(s)
+    if not s then return {} end
+    s = tostring(s)
+    local out = {}
+    for w in s:gmatch("%S+") do
+        out[#out + 1] = w
+    end
+    return out
+end
+
+local function CommonPrefixLen(wordsList)
+    local minLen
+    for i = 1, #wordsList do
+        local w = wordsList[i]
+        local n = type(w) == "table" and #w or 0
+        if n > 0 then
+            if not minLen or n < minLen then minLen = n end
+        end
+    end
+    if not minLen or minLen <= 0 then return 0 end
+
+    local prefix = 0
+    for idx = 1, minLen do
+        local base
+        for i = 1, #wordsList do
+            local w = wordsList[i]
+            if type(w) == "table" and #w > 0 then
+                local cur = tostring(w[idx] or "")
+                if cur == "" then return prefix end
+                cur = cur:lower()
+                if base == nil then
+                    base = cur
+                elseif base ~= cur then
+                    return prefix
+                end
+            end
+        end
+        prefix = idx
+    end
+    return prefix
+end
+
+local function CommonSuffixLen(wordsList)
+    local minLen
+    for i = 1, #wordsList do
+        local w = wordsList[i]
+        local n = type(w) == "table" and #w or 0
+        if n > 0 then
+            if not minLen or n < minLen then minLen = n end
+        end
+    end
+    if not minLen or minLen <= 0 then return 0 end
+
+    local suffix = 0
+    for back = 1, minLen do
+        local base
+        for i = 1, #wordsList do
+            local w = wordsList[i]
+            if type(w) == "table" and #w > 0 then
+                local idx = (#w - back) + 1
+                local cur = tostring(w[idx] or "")
+                if cur == "" then return suffix end
+                cur = cur:lower()
+                if base == nil then
+                    base = cur
+                elseif base ~= cur then
+                    return suffix
+                end
+            end
+        end
+        suffix = back
+    end
+    return suffix
+end
+
+local function BuildUniqueWordDisplayNames(names, count)
+    local function CapitalizeWords(s)
+        if type(s) ~= "string" or s == "" then return s end
+        return (s:gsub("(%S)(%S*)", function(a, b)
+            return a:upper() .. b
+        end))
+    end
+
+    local wordsList = {}
+    local out = {}
+    count = tonumber(count) or 0
+    for i = 1, count do
+        local name = names and names[i]
+        if type(name) == "string" and name ~= "" then
+            wordsList[#wordsList + 1] = SplitWords(name)
+        end
+    end
+
+    local prefixLen = CommonPrefixLen(wordsList)
+    local suffixLen = CommonSuffixLen(wordsList)
+
+    for i = 1, count do
+        local name = names and names[i]
+        if type(name) == "string" and name ~= "" then
+            local words = SplitWords(name)
+            local startIdx = prefixLen + 1
+            local endIdx = #words - suffixLen
+
+            local unique
+            if startIdx <= endIdx then
+                unique = table.concat(words, " ", startIdx, endIdx)
+            end
+
+            if not unique or unique == "" then
+                unique = FirstWord(name) or name
+            end
+            out[i] = CapitalizeWords(unique)
+        else
+            out[i] = nil
+        end
+    end
+    return out
+end
+
 local function FormatCurrencyProgressParts(currencyID)
     if not currencyID or not C_CurrencyInfo or not C_CurrencyInfo.GetCurrencyInfo then return nil end
     local info = C_CurrencyInfo.GetCurrencyInfo(currencyID)
@@ -693,7 +812,33 @@ local function GetCrestLines()
         if id then
             local name = crest.name[i]
             if name then
-                local displayName = FirstWord(name) or name
+                local displayNames = crest._displayNames
+                if type(displayNames) ~= "table" or displayNames._count ~= crestCount then
+                    displayNames = { _count = crestCount }
+                    crest._displayNames = displayNames
+                end
+
+                local sigParts = crest._displaySigParts
+                if type(sigParts) ~= "table" then
+                    sigParts = {}
+                    crest._displaySigParts = sigParts
+                end
+                local sig = ""
+                for si = 1, crestCount do
+                    local n = crest.name[si] or ""
+                    sigParts[si] = n
+                end
+                sig = table.concat(sigParts, "|")
+
+                if crest._displaySig ~= sig then
+                    local computed = BuildUniqueWordDisplayNames(crest.name, crestCount)
+                    for di = 1, crestCount do
+                        displayNames[di] = computed[di]
+                    end
+                    crest._displaySig = sig
+                end
+
+                local displayName = displayNames[i] or name
                 local cur = crest.cur[i]
                 local cap = crest.cap[i]
 
