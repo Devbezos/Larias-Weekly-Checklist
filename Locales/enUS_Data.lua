@@ -13,13 +13,13 @@ Common locale codes: enUS, enGB, frFR, deDE, esES, esMX, itIT, ptBR, ruRU, koKR,
 ]]
 
 local addonName = ...
-
 local locale = (GetLocale and GetLocale()) or nil
 local LOCALE = "enUS"
 local listKey = addonName .. "_LIST_DATA"
 
 if locale == LOCALE or type(_G[listKey]) ~= "table" then
 _G[listKey] = {
+
     {
         id = "early_access_feb_26_through_mar_2",
         title = "Early Access - Feb 26 through Mar 2",
@@ -167,5 +167,4 @@ _G[listKey] = {
         },
     },
 }
-
 end
