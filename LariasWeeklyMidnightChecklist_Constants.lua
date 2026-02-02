@@ -25,12 +25,14 @@ _G[addonName] = Addon
 function Addon:InitConstants(name)
     name = name or addonName
 
+    local L = self.L or {}
+
     -- Group core constants into objects (tables) while keeping legacy fields for compatibility.
     self.CONSTANTS = self.CONSTANTS or {}
     self.CONSTANTS.names = self.CONSTANTS.names or {}
     local names = self.CONSTANTS.names
 
-    if names.displayName == nil then names.displayName = "Larias Weekly Midnight Checklist" end
+    if names.displayName == nil then names.displayName = L.DISPLAY_NAME or name end
     if names.dbName == nil then names.dbName = "LariasWeeklyMidnightChecklistDBPC" end
     if names.accountDbName == nil then names.accountDbName = "LariasWeeklyMidnightChecklistDB" end
     if names.listDataKey == nil then names.listDataKey = (name .. "_LIST_DATA") end

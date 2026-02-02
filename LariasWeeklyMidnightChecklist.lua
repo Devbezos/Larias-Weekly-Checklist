@@ -2,6 +2,8 @@ local addonName = ...
 local Addon = _G[addonName] or {}
 _G[addonName] = Addon
 
+local L = Addon.L or {}
+
 if Addon.InitConstants then
     Addon:InitConstants(addonName)
 end
@@ -110,8 +112,8 @@ function Addon:EnsureOptionsPanel()
         return cb
     end
 
-    local gvCheck = MakeCheck(-50, "Show Great Vault")
-    local currencyCheck = MakeCheck(-78, "Show Currency")
+    local gvCheck = MakeCheck(-50, L.OPTIONS_SHOW_GREAT_VAULT or "")
+    local currencyCheck = MakeCheck(-78, L.OPTIONS_SHOW_CURRENCY or "")
 
     panel:SetScript("OnShow", function()
         local db = Addon:EnsureDB()
@@ -399,7 +401,7 @@ local function SetHeaderText(sf, sectionId, complete)
         complete = IsSectionCompleteById(sectionId)
     end
     local titleText = tostring((section and section.title) or sectionId)
-    if complete then titleText = "[Done] " .. titleText end
+    if complete then titleText = (L.DONE_PREFIX or "") .. titleText end
     sf._title:SetText(titleText)
     sf._status:SetText("")
 end
@@ -664,7 +666,7 @@ function Addon:CreateFrame()
     hideDoneCheck:SetPoint("LEFT", topRow, "LEFT", UI.padOuterX, 0)
     local htxt = hideDoneCheck.text or hideDoneCheck.Text
     if htxt then
-        htxt:SetText("Hide completed weeks")
+        htxt:SetText(L.HIDE_COMPLETED_WEEKS or "")
         if htxt.SetTextColor then
             htxt:SetTextColor(THEME.text.r, THEME.text.g, THEME.text.b, THEME.text.a)
         end
@@ -681,7 +683,7 @@ function Addon:CreateFrame()
     local optionsBtn = CreateFrame("Button", nil, frame, "GameMenuButtonTemplate")
     optionsBtn:SetPoint("RIGHT", topRow, "RIGHT", 0, 0)
     optionsBtn:SetSize(90, UI.topRowH)
-    optionsBtn:SetText("Options")
+    optionsBtn:SetText(L.OPTIONS_BUTTON or "")
     optionsBtn:SetScript("OnClick", function()
         Addon:OpenOptions()
     end)
@@ -689,7 +691,7 @@ function Addon:CreateFrame()
     local resetBtn = CreateFrame("Button", nil, frame, "GameMenuButtonTemplate")
     resetBtn:SetPoint("RIGHT", optionsBtn, "LEFT", -8, 0)
     resetBtn:SetSize(90, UI.topRowH)
-    resetBtn:SetText("Reset")
+    resetBtn:SetText(L.RESET_BUTTON or "")
     resetBtn:SetScript("OnClick", function()
         local d = Addon:EnsureDB()
         if wipe then

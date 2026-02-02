@@ -2,12 +2,18 @@
 ## Title: Larias Weekly Midnight Checklist
 ## Notes: Weekly checklist with collapsible weeks
 ## Author: Larias
-## Version: 1.0.8
+## Version: 1.0.9
 ## SavedVariablesPerCharacter: LariasWeeklyMidnightChecklistDBPC
 ## X-Wago-ID: mKOD5RGx
 ## X-Curse-Project-ID: 1448023
 
+# Localization: add Locales\\<locale>.lua AFTER Locales\\enUS.lua, and Locales\\<locale>_Data.lua AFTER Locales\\enUS_Data.lua
+# Example:
+#   Locales\\deDE.lua
+#   Locales\\deDE_Data.lua
+
+Locales\\enUS.lua
+Locales\\enUS_Data.lua
 LariasWeeklyMidnightChecklist_Constants.lua
 LariasWeeklyMidnightChecklist.lua
-LariasWeeklyMidnightChecklist_Data.lua
-LariasWeeklyMidnightChecklist_Currency.Lua
+LariasWeeklyMidnightChecklist_Currency.lua
