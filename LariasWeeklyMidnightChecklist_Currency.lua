@@ -9,6 +9,8 @@ end
 local THEME = Addon.THEME
 local UI = Addon.UI
 
+local L = Addon.L or {}
+
 local trackingEventFrame
 local TrackingUI = { left = {}, right = {} }
 
@@ -111,7 +113,9 @@ local function FormatXY(cur, cap)
     cur = tonumber(cur) or 0
     cap = tonumber(cap) or 0
     if cap > 0 then return ("%d/%d"):format(cur, cap) end
-    return ("%d/INF"):format(cur)
+    local inf = L.TRACKING_INF
+    if type(inf) ~= "string" or inf == "" then inf = "∞" end
+    return ("%d/%s"):format(cur, inf)
 end
 
 local function ColorForXY(cur, cap)
@@ -164,7 +168,9 @@ local function FormatCurrencyProgressParts(currencyID)
     local info = C_CurrencyInfo.GetCurrencyInfo(currencyID)
     if not info then return nil end
 
-    local name = info.name or ("Currency " .. tostring(currencyID))
+    local prefix = L.TRACKING_CURRENCY_FALLBACK_PREFIX
+    if type(prefix) ~= "string" then prefix = "" end
+    local name = info.name or (prefix .. tostring(currencyID))
     local qty = info.quantity or 0
     local weeklyMax = info.maxWeeklyQuantity
     local maxQty = info.maxQuantity
@@ -190,7 +196,9 @@ local function DetectCrestCurrencyIDsFromList()
         local info = C_CurrencyInfo.GetCurrencyListInfo(i)
         if info and not info.isHeader then
             local name = tostring(info.name or "")
-            if name ~= "" and name:lower():find("crest", 1, true) then
+            local needle = L.TRACKING_CREST_MATCH_SUBSTRING
+            needle = type(needle) == "string" and needle:lower() or ""
+            if needle ~= "" and name ~= "" and name:lower():find(needle, 1, true) then
                 local link = C_CurrencyInfo.GetCurrencyListLink(i)
                 local id = link and tonumber(tostring(link):match("currency:(%d+)"))
                 if id then
@@ -328,7 +336,7 @@ local function MakeGVThresholdsString(complete, total, thresholds, parts)
     Wipe(parts)
 
     if total <= 0 or type(thresholds) ~= "table" or #thresholds <= 0 then
-        return ColorWrap(COLORS.red, "N/A")
+        return ColorWrap(COLORS.red, L.TRACKING_NA or "")
     end
 
     for i = 1, #thresholds do
@@ -349,7 +357,7 @@ local function MakeGVIlvlsRow(ilvls, maxPossible, parts)
             local c = (maxPossible > 0 and v == maxPossible) and COLORS.green or COLORS.red
             parts[#parts + 1] = ColorWrap(c, tostring(v))
         else
-            parts[#parts + 1] = ColorWrap(COLORS.dim, "N/A")
+            parts[#parts + 1] = ColorWrap(COLORS.dim, L.TRACKING_NA or "")
         end
     end
     return tconcat(parts, " ")
@@ -428,19 +436,19 @@ local function GetGreatVaultBlockLines()
     out[1], out[2], out[3], out[4], out[5], out[6] = "", "", "", "", "", ""
 
     if not C_WeeklyRewards or not C_WeeklyRewards.GetActivities then
-        out[1] = MakeGVHeader("Raid")
-        out[2] = ColorWrap(COLORS.red, "N/A")
-        out[4] = MakeGVHeader("Dungeons")
-        out[5] = ColorWrap(COLORS.red, "N/A")
+        out[1] = MakeGVHeader(L.TRACKING_GV_RAID or "")
+        out[2] = ColorWrap(COLORS.red, L.TRACKING_NA or "")
+        out[4] = MakeGVHeader(L.TRACKING_GV_DUNGEONS or "")
+        out[5] = ColorWrap(COLORS.red, L.TRACKING_NA or "")
         return out
     end
 
     local activities = C_WeeklyRewards.GetActivities()
     if type(activities) ~= "table" then
-        out[1] = MakeGVHeader("Raid")
-        out[2] = ColorWrap(COLORS.red, "N/A")
-        out[4] = MakeGVHeader("Dungeons")
-        out[5] = ColorWrap(COLORS.red, "N/A")
+        out[1] = MakeGVHeader(L.TRACKING_GV_RAID or "")
+        out[2] = ColorWrap(COLORS.red, L.TRACKING_NA or "")
+        out[4] = MakeGVHeader(L.TRACKING_GV_DUNGEONS or "")
+        out[5] = ColorWrap(COLORS.red, L.TRACKING_NA or "")
         return out
     end
 
@@ -466,19 +474,19 @@ local function GetGreatVaultBlockLines()
     local raidMax = (raidExampleMax > 0) and raidExampleMax or rMax
     local dungeonMax = (dungeonExampleMax > 0) and dungeonExampleMax or mMax
 
-    out[1] = MakeGVHeader("Raid")
-    out[2] = (rT > 0) and MakeGVThresholdsString(rC, rT, { 2, 4, 6 }, cache.parts) or ColorWrap(COLORS.red, "N/A")
+    out[1] = MakeGVHeader(L.TRACKING_GV_RAID or "")
+    out[2] = (rT > 0) and MakeGVThresholdsString(rC, rT, { 2, 4, 6 }, cache.parts) or ColorWrap(COLORS.red, L.TRACKING_NA or "")
     out[3] = (rT > 0) and MakeGVIlvlsRow(cache.rIlvls, raidMax, cache.parts) or ""
 
-    out[4] = MakeGVHeader("Dungeons")
-    out[5] = (mT > 0) and MakeGVThresholdsString(mC, mT, { 1, 4, 8 }, cache.parts) or ColorWrap(COLORS.red, "N/A")
+    out[4] = MakeGVHeader(L.TRACKING_GV_DUNGEONS or "")
+    out[5] = (mT > 0) and MakeGVThresholdsString(mC, mT, { 1, 4, 8 }, cache.parts) or ColorWrap(COLORS.red, L.TRACKING_NA or "")
     out[6] = (mT > 0) and MakeGVIlvlsRow(cache.mIlvls, dungeonMax, cache.parts) or ""
 
     return out
 end
 
 local function GetSparksParts()
-    local label = ColorWrap(COLORS.dim, "Sparks:")
+    local label = ColorWrap(COLORS.dim, L.TRACKING_SPARKS_LABEL or "")
     local profile = GetActiveTrackingProfile()
     local id = profile and profile.sparkCurrencyID
     if id and tonumber(id) and tonumber(id) > 0 then
@@ -492,13 +500,15 @@ local function GetSparksParts()
             xy = FormatXY(cur, c)
             color = ColorForXY(cur, c)
         else
-            xy = ("%d/INF"):format(tonumber(cur) or 0)
+            local inf = L.TRACKING_INF
+            if type(inf) ~= "string" or inf == "" then inf = "∞" end
+            xy = ("%d/%s"):format(tonumber(cur) or 0, inf)
             color = ((tonumber(cur) or 0) <= 0) and COLORS.red or COLORS.yellow
         end
         return label, ColorWrap(color, xy)
     end
 
-    return label, ColorWrap(COLORS.red, "N/A")
+    return label, ColorWrap(COLORS.red, L.TRACKING_NA or "")
 end
 
 local function GetSparksLine()
@@ -528,8 +538,8 @@ local function GetQuestDoneParts(labelText, questKey, opts)
         doneText = doneText or "1/1"
         notDoneText = notDoneText or "0/1"
     else
-        doneText = doneText or "Done"
-        notDoneText = notDoneText or "Not done"
+        doneText = doneText or (L.TRACKING_DONE or "")
+        notDoneText = notDoneText or (L.TRACKING_NOT_DONE or "")
     end
 
     if C_QuestLog and C_QuestLog.IsQuestFlaggedCompleted then
@@ -541,18 +551,18 @@ local function GetQuestDoneParts(labelText, questKey, opts)
             return label, ColorWrap(COLORS.red, notDoneText)
         end
     end
-    return label, ColorWrap(COLORS.red, "N/A")
+    return label, ColorWrap(COLORS.red, L.TRACKING_NA or "")
 end
 
 local function GetDelversBountyParts()
-    return GetQuestDoneParts("Delver's Bounty:", "delversBounty", { as01 = true })
+    return GetQuestDoneParts(L.TRACKING_QUEST_DELVERS_BOUNTY or "", "delversBounty", { as01 = true })
 end
 
 local function GetWeeklyPreyParts()
     if not GetTrackedQuestID("weeklyPrey") then
         return "", ""
     end
-    return GetQuestDoneParts("Weekly Prey:", "weeklyPrey", { as01 = true })
+    return GetQuestDoneParts(L.TRACKING_QUEST_WEEKLY_PREY or "", "weeklyPrey", { as01 = true })
 end
 
 local function GetCrestTradeBatches(profile)
@@ -695,7 +705,9 @@ local function GetCrestLines()
                     xy = FormatXY(cur, cap)
                     color = forceGreen and COLORS.green or ColorForXY(cur, cap)
                 else
-                    xy = ("%d/INF"):format(cur)
+                    local inf = L.TRACKING_INF
+                    if type(inf) ~= "string" or inf == "" then inf = "∞" end
+                    xy = ("%d/%s"):format(cur, inf)
                     color = forceGreen and COLORS.green or ((cur <= 0) and COLORS.red or COLORS.green)
                 end
 
@@ -705,7 +717,7 @@ local function GetCrestLines()
                     if n > 0 then
                         tradeUp = ColorWrap(COLORS.dim, " (")
                             .. ColorWrap("ff4da6ff", "+" .. tostring(n))
-                            .. ColorWrap(COLORS.dim, " Trade Up)")
+                            .. ColorWrap(COLORS.dim, L.TRACKING_TRADE_UP_SUFFIX or "")
                     end
                 end
 
@@ -715,15 +727,16 @@ local function GetCrestLines()
                 valueOut[i] = val
                 out[i] = lbl .. " " .. val
             else
-                local lbl = ColorWrap(COLORS.dim, ("Crest %s:"):format(tostring(id)))
-                local val = ColorWrap(COLORS.red, "N/A")
+                local fmt = L.TRACKING_CREST_ID_LABEL_FMT or "%s"
+                local lbl = ColorWrap(COLORS.dim, (fmt):format(tostring(id)))
+                local val = ColorWrap(COLORS.red, L.TRACKING_NA or "")
                 labelOut[i] = lbl
                 valueOut[i] = val
                 out[i] = lbl .. " " .. val
             end
         else
-            local lbl = ColorWrap(COLORS.dim, "Crest:")
-            local val = ColorWrap(COLORS.red, "No ID")
+            local lbl = ColorWrap(COLORS.dim, L.TRACKING_CREST_LABEL or "")
+            local val = ColorWrap(COLORS.red, L.TRACKING_NO_ID or "")
             labelOut[i] = lbl
             valueOut[i] = val
             out[i] = lbl .. " " .. val
@@ -764,17 +777,17 @@ local function GetCatalystParts()
     cur = tonumber(cur)
     cap = tonumber(cap)
     if not cur then
-        return ColorWrap(COLORS.dim, "Catalyst:"), ColorWrap(COLORS.red, "N/A")
+        return ColorWrap(COLORS.dim, L.TRACKING_CATALYST_LABEL or ""), ColorWrap(COLORS.red, L.TRACKING_NA or "")
     end
 
     if cap and cap > 0 then
         local xy = FormatXY(cur, cap)
         local color = ColorForXY(cur, cap)
-        return ColorWrap(COLORS.dim, "Catalyst:"), ColorWrap(color, xy)
+        return ColorWrap(COLORS.dim, L.TRACKING_CATALYST_LABEL or ""), ColorWrap(color, xy)
     end
 
     local color = (cur <= 0) and COLORS.red or COLORS.yellow
-    return ColorWrap(COLORS.dim, "Catalyst:"), ColorWrap(color, ("%d"):format(cur))
+    return ColorWrap(COLORS.dim, L.TRACKING_CATALYST_LABEL or ""), ColorWrap(color, ("%d"):format(cur))
 end
 
 local function GetCatalystLine()
@@ -798,7 +811,7 @@ function Addon:CreateTrackingPanel(parentFrame)
     local title = tf:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", tf, "TOPLEFT", 10, -8)
     title:SetTextColor(THEME.header.r, THEME.header.g, THEME.header.b, THEME.header.a)
-    title:SetText("Great Vault")
+    title:SetText(L.TRACKING_GREAT_VAULT_TITLE or "")
     tf._lariasLeftTitle = title
 
     local padL, padR = 10, 10
@@ -820,7 +833,7 @@ function Addon:CreateTrackingPanel(parentFrame)
     local rightTitle = tf:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     rightTitle:SetPoint("TOPLEFT", tf, "TOPLEFT", padL + colW + colGap, -8)
     rightTitle:SetTextColor(THEME.header.r, THEME.header.g, THEME.header.b, THEME.header.a)
-    rightTitle:SetText("Currency")
+    rightTitle:SetText(L.TRACKING_CURRENCY_TITLE or "")
     tf._lariasRightTitle = rightTitle
 
     title:ClearAllPoints()
