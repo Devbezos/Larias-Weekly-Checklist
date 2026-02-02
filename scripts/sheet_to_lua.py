@@ -11,6 +11,8 @@ HEADER_PREFIX_RE = re.compile(r"^\s*(Early Access|Pre-Season|Season|Week(?:s)?)\
 MONTHS = r"(Jan|January|Feb|February|Mar|March|Apr|April|May|Jun|June|Jul|July|Aug|August|Sep|Sept|September|Oct|October|Nov|November|Dec|December)"
 MONTH_DAY_RE = re.compile(rf"\b{MONTHS}\s+\d{{1,2}}\b", re.IGNORECASE)
 
+LEADING_LUA_BLOCK_COMMENT_RE = re.compile(r"\A--\[\[.*?\]\]\s*", re.DOTALL)
+
 def wow_safe_text(s: str) -> str:
     # common replacements for WoW-safe output
     repl = {
@@ -49,6 +51,17 @@ def is_section_header(text: str) -> bool:
         return False
     return bool(MONTH_DAY_RE.search(t))
 
+
+def detect_newline(text: str) -> str:
+    return "\r\n" if "\r\n" in text else "\n"
+
+
+def extract_leading_block_comment(text: str) -> str | None:
+    m = LEADING_LUA_BLOCK_COMMENT_RE.match(text)
+    if not m:
+        return None
+    return m.group(0)
+
 def main(csv_in: str, lua_out: str) -> None:
     with open(csv_in, encoding="utf-8", newline="") as f:
         rows = list(csv.reader(f))
@@ -70,28 +83,46 @@ def main(csv_in: str, lua_out: str) -> None:
             if current is None:
                 continue
             current["items"].append({"id": slug(text), "text": text})
+    out: list[str] = []
 
-    out = []
-    out.append("--[[")
-    out.append("Localization (checklist data)")
-    out.append("")
-    out.append("This file provides the default (enUS) checklist data.")
-    out.append("To add your language:")
-    out.append("1) Copy this file to Locales\\<locale>_Data.lua (example: Locales\\deDE_Data.lua)")
-    out.append("2) In the copy, change LOCALE to match your language (example: \"deDE\")")
-    out.append("3) Translate section titles and item text")
-    out.append("4) Add the new file to LariasWeeklyMidnightChecklist.toc AFTER Locales\\enUS_Data.lua")
-    out.append("")
-    out.append("Common locale codes: enUS, enGB, frFR, deDE, esES, esMX, itIT, ptBR, ruRU, koKR, zhCN, zhTW")
-    out.append("]]")
-    out.append("")
+    existing_text = None
+    out_path = Path(lua_out)
+    nl = "\n"
+    existing_header = None
+
+    if out_path.exists():
+        existing_text = out_path.read_text(encoding="utf-8")
+        nl = detect_newline(existing_text)
+        existing_header = extract_leading_block_comment(existing_text)
+
+    if existing_header:
+        header_norm = existing_header.replace("\r\n", "\n").replace("\r", "\n").rstrip("\n")
+        out.extend(header_norm.split("\n"))
+        out.append("")
+    else:
+        out.append("--[[")
+        out.append("Localization (checklist data)")
+        out.append("")
+        out.append("This file provides the default (enUS) checklist data.")
+        out.append("To add a new language:")
+        out.append("1) Copy Locales\\\\enUS.lua -> Locales\\\\<locale>.lua (example: Locales\\\\deDE.lua)")
+        out.append("2) Copy Locales\\\\enUS_Data.lua -> Locales\\\\<locale>_Data.lua (example: Locales\\\\deDE_Data.lua)")
+        out.append('3) In both copies, change the locale string ("enUS") to your locale ("deDE")')
+        out.append("4) Translate section titles and item text in the _Data file")
+        out.append("5) Add BOTH files to LariasWeeklyMidnightChecklist.toc AFTER the enUS entries")
+        out.append("")
+        out.append("Common locale codes: enUS, enGB, frFR, deDE, esES, esMX, itIT, ptBR, ruRU, koKR, zhCN, zhTW")
+        out.append("]]")
+        out.append("")
+
     out.append("local addonName = ...")
     out.append("local locale = (GetLocale and GetLocale()) or nil")
-    out.append("local LOCALE = \"enUS\"")
-    out.append("local listKey = addonName .. \"_LIST_DATA\"")
+    out.append('local LOCALE = "enUS"')
+    out.append('local listKey = addonName .. "_LIST_DATA"')
     out.append("")
-    out.append("if locale == LOCALE or type(_G[listKey]) ~= \"table\" then")
+    out.append('if locale == LOCALE or type(_G[listKey]) ~= "table" then')
     out.append("_G[listKey] = {")
+    out.append("")
 
     for s in sections:
         out.append("    {")
@@ -106,7 +137,15 @@ def main(csv_in: str, lua_out: str) -> None:
     out.append("end")
     out.append("")
 
-    Path(lua_out).write_text("\n".join(out), encoding="utf-8")
+    new_text = nl.join(out)
+    if not new_text.endswith(nl):
+        new_text += nl
+
+    if existing_text is not None:
+        if existing_text.replace("\r\n", "\n") == new_text.replace("\r\n", "\n"):
+            return
+
+    out_path.write_text(new_text, encoding="utf-8")
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
