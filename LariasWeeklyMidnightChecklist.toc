@@ -7,8 +7,15 @@
 ## X-Wago-ID: mKOD5RGx
 ## X-Curse-Project-ID: 1448023
 
-# Localization: add Locales\\<locale>.lua AFTER Locales\\enUS.lua, and Locales\\<locale>_Data.lua AFTER Locales\\enUS_Data.lua
-# Example:
+# Localization (adding a language):
+# - Create BOTH files:
+#   - Locales\\<locale>.lua (strings) by copying Locales\\enUS.lua
+#   - Locales\\<locale>_Data.lua (checklist) by copying Locales\\enUS_Data.lua
+# - In the copies, change the locale code from "enUS" to your locale (example: "deDE") and translate
+# - Add BOTH entries here AFTER the enUS files, BEFORE the addon code, so they override enUS
+# Example ordering:
+#   Locales\\enUS.lua
+#   Locales\\enUS_Data.lua
 #   Locales\\deDE.lua
 #   Locales\\deDE_Data.lua
 
