@@ -72,13 +72,26 @@ def main(csv_in: str, lua_out: str) -> None:
             current["items"].append({"id": slug(text), "text": text})
 
     out = []
-    out.append("-- Data file for Larias Weekly Midnight Checklist")
-    out.append("-- AUTO-GENERATED. DO NOT EDIT MANUALLY.")
-    out.append(f"-- Source: {SHEET_URL}")
+    out.append("--[[")
+    out.append("Localization (checklist data)")
+    out.append("")
+    out.append("This file provides the default (enUS) checklist data.")
+    out.append("To add your language:")
+    out.append("1) Copy this file to Locales\\<locale>_Data.lua (example: Locales\\deDE_Data.lua)")
+    out.append("2) In the copy, change LOCALE to match your language (example: \"deDE\")")
+    out.append("3) Translate section titles and item text")
+    out.append("4) Add the new file to LariasWeeklyMidnightChecklist.toc AFTER Locales\\enUS_Data.lua")
+    out.append("")
+    out.append("Common locale codes: enUS, enGB, frFR, deDE, esES, esMX, itIT, ptBR, ruRU, koKR, zhCN, zhTW")
+    out.append("]]")
     out.append("")
     out.append("local addonName = ...")
+    out.append("local locale = (GetLocale and GetLocale()) or nil")
+    out.append("local LOCALE = \"enUS\"")
+    out.append("local listKey = addonName .. \"_LIST_DATA\"")
     out.append("")
-    out.append('_G[addonName .. "_LIST_DATA"] = {')
+    out.append("if locale == LOCALE or type(_G[listKey]) ~= \"table\" then")
+    out.append("_G[listKey] = {")
 
     for s in sections:
         out.append("    {")
@@ -90,6 +103,7 @@ def main(csv_in: str, lua_out: str) -> None:
         out.append("        },")
         out.append("    },")
     out.append("}")
+    out.append("end")
     out.append("")
 
     Path(lua_out).write_text("\n".join(out), encoding="utf-8")

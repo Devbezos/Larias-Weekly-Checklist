@@ -2,10 +2,11 @@
 Localization (strings)
 
 To add your language:
-1) Copy this file and enUS_Data.lua to Locales\\<locale>.lua (example: Locales\\deDE.lua)
-2) In the copies, change the locale check to match your language (example: "deDE")
-3) Translate the L.* values
-4) Add the new file to LariasWeeklyMidnightChecklist.toc AFTER Locales\\enUS.lua
+1) Copy this file to Locales\\<locale>.lua (example: Locales\\deDE.lua)
+2) Copy Locales\\enUS_Data.lua to Locales\\<locale>_Data.lua (example: Locales\\deDE_Data.lua)
+3) In both copies, change the locale check to match your language (example: "deDE")
+4) Translate the L.* values
+5) Add the new file to LariasWeeklyMidnightChecklist.toc AFTER Locales\\enUS.lua
 
 Common locale codes: enUS, enGB, frFR, deDE, esES, esMX, itIT, ptBR, ruRU, koKR, zhCN, zhTW
 ]]
