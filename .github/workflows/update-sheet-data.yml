@@ -34,14 +34,14 @@ jobs:
 
       - name: Convert CSV to Lua
         run: |
-          python scripts/sheet_to_lua.py data/spreadsheet.csv LariasWeeklyMidnightChecklist_Data.lua
+          python scripts/sheet_to_lua.py data/spreadsheet.csv Locales/enUS_Data.lua
 
       - name: Commit + bump version + tag (only if Lua changed)
         id: commitstep
         run: |
           set -euo pipefail
 
-          if git diff --quiet -- LariasWeeklyMidnightChecklist_Data.lua; then
+          if git diff --quiet -- Locales/enUS_Data.lua; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -57,7 +57,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add LariasWeeklyMidnightChecklist_Data.lua "$TOC"
+          git add Locales/enUS_Data.lua "$TOC"
           git commit -m "Auto-update checklist data ($TAG)"
           git push
 
