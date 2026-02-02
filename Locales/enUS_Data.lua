@@ -1,27 +1,17 @@
---[[
-Localization (list data)
-
-To add translated checklist text:
-1) Copy this file to Locales\\<locale>_Data.lua (example: Locales\\deDE_Data.lua)
-2) In the copy, change the locale check to match your language (example: "deDE")
-3) Translate only "title" and "text" (no need to change any "id" values)
-4) Add the new file to LariasWeeklyMidnightChecklist.toc AFTER Locales\\enUS_Data.lua
-]]
+-- Data file for Larias Weekly Midnight Checklist
+-- AUTO-GENERATED. DO NOT EDIT MANUALLY.
+-- Source: https://docs.google.com/spreadsheets/d/1iK2SZUcz_ljnkdTG7KW6pqfzaUDuSgnlh1HupcLrkus/edit?gid=53744607
 
 local addonName = ...
 
-local locale = (GetLocale and GetLocale()) or nil
-
-local listKey = addonName .. "_LIST_DATA"
-
-if locale == "enUS" or type(_G[listKey]) ~= "table" then
-    _G[listKey] = {
+_G[addonName .. "_LIST_DATA"] = {
     {
         id = "early_access_feb_26_through_mar_2",
         title = "Early Access - Feb 26 through Mar 2",
         items = {
             { id = "level_all_the_characters_you_re_wanting_to_use_for_professions_splits_etc", text = "Level all the characters you're wanting to use for professions, splits etc." },
-            { id = "do_not_do_side_quests_until_sunday_get_darkmoon_faire_buff", text = "Do not do side quests until Sunday - get Darkmoon Faire buff" }
+            { id = "do_not_do_side_quests_until_sunday_get_darkmoon_faire_buff", text = "Do not do side quests until Sunday - get Darkmoon Faire buff" },
+            { id = "farm_gold_and_do_random_ass_world_quests_and_stuff", text = "Farm gold and do random ass world quests and stuff" },
         },
     },
     {
@@ -161,5 +151,4 @@ if locale == "enUS" or type(_G[listKey]) ~= "table" then
             { id = "prepare_for_7_8_and_8_8_upgrades_if_turbo_exists", text = "Prepare for 7/8 and 8/8 upgrades if turbo exists" },
         },
     },
-    }
-end
+}
