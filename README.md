@@ -7,10 +7,10 @@ flowchart TD
         B[Triggered: hourly schedule or manual dispatch]:::process
         E[Download Google Sheet CSV]:::process
         F[Convert CSV -> Locales/enUS_Data.lua]:::process
-        W[Update .toc Interface (latest 3 from Wago)]:::process
-        G{Did data or .toc change?}:::decision
+        W[Update TOC Interface - latest 3 from Wago]:::process
+        G{Did data or TOC change?}:::decision
         H((Do nothing)):::finish
-        I[Bump .toc Version]:::process
+        I[Bump TOC Version]:::process
         J[Commit + push]:::process
         K[Tag release]:::process
         L[Build addon package]:::process
