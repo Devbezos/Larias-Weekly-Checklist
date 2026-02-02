@@ -1,10 +1,25 @@
--- Data file for Larias Weekly Midnight Checklist
--- AUTO-GENERATED. DO NOT EDIT MANUALLY.
--- Source: https://docs.google.com/spreadsheets/d/1iK2SZUcz_ljnkdTG7KW6pqfzaUDuSgnlh1HupcLrkus/edit?gid=53744607
+--[[
+Localization (checklist data)
+
+This file provides the default (enUS) checklist data.
+To add a new language:
+1) Copy Locales\\enUS.lua -> Locales\\<locale>.lua (example: Locales\\deDE.lua)
+2) Copy Locales\\enUS_Data.lua -> Locales\\<locale>_Data.lua (example: Locales\\deDE_Data.lua)
+3) In both copies, change the locale string ("enUS") to your locale ("deDE")
+4) Translate section titles and item text in the _Data file
+5) Add BOTH files to LariasWeeklyMidnightChecklist.toc AFTER the enUS entries
+
+Common locale codes: enUS, enGB, frFR, deDE, esES, esMX, itIT, ptBR, ruRU, koKR, zhCN, zhTW
+]]
 
 local addonName = ...
+local locale = (GetLocale and GetLocale()) or nil
+local LOCALE = "enUS"
+local listKey = addonName .. "_LIST_DATA"
 
-_G[addonName .. "_LIST_DATA"] = {
+if locale == LOCALE or type(_G[listKey]) ~= "table" then
+_G[listKey] = {
+
     {
         id = "early_access_feb_26_through_mar_2",
         title = "Early Access - Feb 26 through Mar 2",
@@ -152,3 +167,4 @@ _G[addonName .. "_LIST_DATA"] = {
         },
     },
 }
+end
