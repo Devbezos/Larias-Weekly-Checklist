@@ -3,25 +3,23 @@ flowchart TD
 
     A((Start)):::start
 
-    subgraph MAIN[Main workflow: update-sheet-data.yml]
-        B[Triggered: hourly schedule or manual dispatch]:::process
-        E[Download Google Sheet CSV]:::process
-        F[Convert CSV -> Locales/enUS_Data.lua]:::process
-        W[Update TOC Interface - latest 3 from Wago]:::process
-        G{Did data or TOC change?}:::decision
-        H((Do nothing)):::finish
-        I[Bump TOC Version]:::process
-        J[Commit + push]:::process
-        K[Tag release]:::process
-        L[Build addon package]:::process
-        M[Upload to CurseForge & Wago]:::process
-        O[Post Discord webhook]:::process
-        P((Release complete)):::finish
+    B[Triggered: hourly schedule or manual dispatch]:::process
+    E[Download Larias Sheet as CSV]:::process
+    F[Convert CSV -> LUA]:::process
+    W[Check Wago for latest WoW version]:::process
+    G{Did WoW version or Spreadsheet change?}:::decision
+    H((Do nothing)):::finish
+    I[Bump Addon Version]:::process
+    J[Commit + push]:::process
+    K[Tag release]:::process
+    L[Build addon package]:::process
+    M[Upload to CurseForge & Wago]:::process
+    O[Post Discord webhook]:::process
+    P((Job's done)):::finish
 
-        B --> E --> F --> W --> G
-        G -- No --> H
-        G -- Yes --> I --> J --> K --> L --> M --> O --> P
-    end
+    B --> E --> F --> W --> G
+    G -- No --> H
+    G -- Yes --> I --> J --> K --> L --> M --> O --> P
 
     A --> B
 
