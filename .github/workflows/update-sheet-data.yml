@@ -125,7 +125,7 @@ jobs:
             exit 0
           fi
 
-          # Version: only bump the .toc Version line (no patch-based logic)
+          # Version: bump the 3rd number in ## Version: (MAJOR.MINOR.PATCH)
           NEW_VERSION=$(python - <<'PY'
           import re
 
@@ -136,15 +136,12 @@ jobs:
 
           nl = "\r\n" if "\r\n" in text else "\n"
 
-          m = re.search(r"^##\s*Version:\s*([0-9]+)\.([0-9]+)\.([0-9]+)(?:\.([0-9]+))?\s*$", text, flags=re.MULTILINE)
+          m = re.search(r"^##\s*Version:\s*([0-9]+)\.([0-9]+)\.([0-9]+)(?:\.[0-9]+)?\s*$", text, flags=re.MULTILINE)
           if m:
             major, minor, patch = int(m.group(1)), int(m.group(2)), int(m.group(3))
-            rev_raw = m.group(4)
-            rev = int(rev_raw) if rev_raw is not None else None
-            new_rev = (rev + 1) if rev is not None else 1
-            new_version = f"{major}.{minor}.{patch}.{new_rev}"
+            new_version = f"{major}.{minor}.{patch + 1}"
           else:
-            new_version = "0.0.0.1"
+            new_version = "0.0.1"
 
           new_line = f"## Version: {new_version}"
           updated, n = re.subn(r"^##\s*Version:.*$", new_line, text, flags=re.MULTILINE)
