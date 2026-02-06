@@ -136,10 +136,11 @@ function Addon:InitConstants(name)
     end
     if type(midnight.crestAchievementIDs) ~= "table" then
         midnight.crestAchievementIDs = {
-            0,
-            0,
-            0,
-            0,
+            61809,
+            42767,
+            72768,
+            42769,
+            42770,
         }
     end
     if midnight.sparkCurrencyID == nil then midnight.sparkCurrencyID = 0 end
