@@ -44,46 +44,93 @@ jobs:
 
           python scripts/update_toc_interface.py --toc "$TOC" --count 3
 
-      - name: Commit + bump version + tag (only if something changed)
+      - name: Commit (and release only on spreadsheet change or WoW major/minor bump)
         id: commitstep
         run: |
           set -euo pipefail
 
           TOC="LariasWeeklyMidnightChecklist.toc"
+          DATA_FILE="Locales/enUS_Data.lua"
 
-          # Only release when data or toc changed (toc can change due to Interface updates).
-          if git diff --quiet -- Locales/enUS_Data.lua "$TOC"; then
+          # Determine what changed.
+          DATA_CHANGED=false
+          TOC_CHANGED=false
+
+          if ! git diff --quiet -- "$DATA_FILE"; then
+            DATA_CHANGED=true
+          fi
+          if ! git diff --quiet -- "$TOC"; then
+            TOC_CHANGED=true
+          fi
+
+          # Nothing changed.
+          if [ "$DATA_CHANGED" = "false" ] && [ "$TOC_CHANGED" = "false" ]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "released=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          # Version: bump the 3rd number in ## Version: (MAJOR.MINOR.PATCH)
-          NEW_VERSION=$(python scripts/bump_toc_version.py --toc "$TOC")
+          # Compare WoW version (from Wago Interface) at MAJOR.MINOR granularity.
+          # If only PATCH changed, commit but do not tag/deploy.
+          WOW_MAJOR_MINOR_CHANGED=false
+          if [ "$TOC_CHANGED" = "true" ]; then
+            OLD_IFACE=$(git show HEAD:"$TOC" | sed -n 's/^## Interface:[[:space:]]*//p' | head -n 1 | cut -d',' -f1 | tr -d '[:space:]' || true)
+            NEW_IFACE=$(sed -n 's/^## Interface:[[:space:]]*//p' "$TOC" | head -n 1 | cut -d',' -f1 | tr -d '[:space:]' || true)
 
-          TAG="v$NEW_VERSION"
+            if [[ "$OLD_IFACE" =~ ^[0-9]+$ ]] && [[ "$NEW_IFACE" =~ ^[0-9]+$ ]]; then
+              OLD_MAJOR=$((OLD_IFACE / 10000))
+              OLD_MINOR=$(((OLD_IFACE / 100) % 100))
+              NEW_MAJOR=$((NEW_IFACE / 10000))
+              NEW_MINOR=$(((NEW_IFACE / 100) % 100))
+
+              if [ "$OLD_MAJOR" -ne "$NEW_MAJOR" ] || [ "$OLD_MINOR" -ne "$NEW_MINOR" ]; then
+                WOW_MAJOR_MINOR_CHANGED=true
+              fi
+            fi
+          fi
+
+          SHOULD_RELEASE=false
+          if [ "$DATA_CHANGED" = "true" ] || [ "$WOW_MAJOR_MINOR_CHANGED" = "true" ]; then
+            SHOULD_RELEASE=true
+          fi
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add Locales/enUS_Data.lua "$TOC"
-          git commit -m "Auto-update addon ($TAG)"
-          git push
+          if [ "$SHOULD_RELEASE" = "true" ]; then
+            # Version: bump the 3rd number in ## Version: (MAJOR.MINOR.PATCH)
+            NEW_VERSION=$(python scripts/bump_toc_version.py --toc "$TOC")
+            TAG="v$NEW_VERSION"
 
-          git tag -a "$TAG" -m "Release $TAG"
-          git push origin "$TAG"
+            git add "$DATA_FILE" "$TOC"
+            git commit -m "Auto-update addon ($TAG)"
+            git push
 
-          echo "changed=true" >> "$GITHUB_OUTPUT"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+            git tag -a "$TAG" -m "Release $TAG"
+            git push origin "$TAG"
+
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "released=true" >> "$GITHUB_OUTPUT"
+            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          else
+            # Patch-only WoW Interface update (or other TOC-only change): commit but do not release.
+            git add "$DATA_FILE" "$TOC"
+            git commit -m "Auto-update data/toc (no release)"
+            git push
+
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "released=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Package + Upload (CurseForge & Wago)
-        if: steps.commitstep.outputs.changed == 'true'
+        if: steps.commitstep.outputs.released == 'true'
         uses: BigWigsMods/packager@v2.4.3
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
           WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
 
       - name: Notify Discord (release posted)
-        if: steps.commitstep.outputs.changed == 'true'
+        if: steps.commitstep.outputs.released == 'true'
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           TAG: ${{ steps.commitstep.outputs.tag }}
