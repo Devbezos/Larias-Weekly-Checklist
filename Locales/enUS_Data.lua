@@ -37,7 +37,7 @@ _G[listKey] = {
             { id = "grab_darkmoon_faire_buff_while_doing_sidequests_for_renown", text = "Grab Darkmoon Faire buff while doing sidequests for Renown" },
             { id = "unlock_delves_through_tier_8_11_if_available", text = "Unlock Delves through tier 8 (11 if available)" },
             { id = "do_world_quests_that_give_gear_upgrades", text = "Do world quests that give gear upgrades" },
-            { id = "progress_vault_details_to_come_wowhead_says_it_ll_be_available", text = "Progress Vault (details to come, wowhead says it'll be available)" },
+            { id = "do_m0_s_if_they_are_available_see_guide_for_info", text = "Do M0's if they are available - see guide for info" },
             { id = "level_prey_system_in_case_it_has_something_useful_on_heroic_week", text = "Level Prey system in case it has something useful on heroic week" },
             { id = "queue_for_heroic_dungeons_for_remaining_slots", text = "Queue for Heroic Dungeons for remaining slots" },
         },
