@@ -26,7 +26,7 @@ _G[listKey] = {
         items = {
             { id = "do_not_spend_any_crests_until_told_to_do_so", text = "Do not spend any Crests until told to do so" },
             { id = "level_characters_to_90_dmf_opens_sunday_for_10_more_exp", text = "Level characters to 90 - DMF opens Sunday for 10% more exp" },
-            { id = "if_you_want_renown_wait_until_sunday_for_dmf_renown_buff", text = "If you want Renown, wait until Sunday for DMF renown buff" },
+            { id = "if_you_want_renown_wait_until_sunday_for_dmf_renown_buff_to_do_side_quests", text = "If you want Renown, wait until Sunday for DMF renown buff to do side quests" },
             { id = "complete_weekly_events_if_available_tbd_will_add_as_we_get_them", text = "Complete weekly events if available. (TBD, will add as we get them)" },
             { id = "if_prey_gives_any_useful_rewards_do_prey", text = "If Prey gives any useful rewards, do Prey" },
         },
