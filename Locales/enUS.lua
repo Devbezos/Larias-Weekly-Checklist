@@ -29,6 +29,11 @@ local function SetDefault(key, value)
 end
 SetDefault("DISPLAY_NAME", "Larias Weekly Midnight Checklist")
 
+-- UI: popup shown when a new addon version is installed (until acknowledged).
+SetDefault("UPDATE_AVAILABLE_TITLE", "New version available")
+SetDefault("UPDATE_AVAILABLE_TEXT", "New version available")
+SetDefault("UPDATE_AVAILABLE_FMT", "%s has an update available.\n\nPlease update the addon to the newest version.")
+
 SetDefault("OPTIONS_SHOW_GREAT_VAULT", "Show Great Vault")
 SetDefault("OPTIONS_SHOW_CURRENCY", "Show Currency")
 

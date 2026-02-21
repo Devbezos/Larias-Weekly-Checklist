@@ -56,6 +56,44 @@ local function SafeRegisterEvent(frame, eventName)
     return ok and true or false
 end
 
+function Addon:ConfigureTrackingEvents(parentFrame, showGreatVault, showCurrency)
+    trackingEventFrame = trackingEventFrame or CreateFrame("Frame")
+    trackingEventFrame:UnregisterAllEvents()
+
+    local shouldListen = (showGreatVault or showCurrency) and true or false
+    if not shouldListen then return end
+
+    -- Only respond while the UI is visible.
+    trackingEventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+
+    if showGreatVault then
+        trackingEventFrame:RegisterEvent("WEEKLY_REWARDS_UPDATE")
+        trackingEventFrame:RegisterEvent("ITEM_DATA_LOAD_RESULT")
+    end
+
+    if showCurrency then
+        trackingEventFrame:RegisterEvent("CURRENCY_DISPLAY_UPDATE")
+        trackingEventFrame:RegisterEvent("BAG_UPDATE_DELAYED")
+        trackingEventFrame:RegisterEvent("QUEST_TURNED_IN")
+        SafeRegisterEvent(trackingEventFrame, "QUEST_LOG_UPDATE")
+        SafeRegisterEvent(trackingEventFrame, "CATALYST_CHARGES_UPDATED")
+        SafeRegisterEvent(trackingEventFrame, "CATALYST_UPDATE")
+        SafeRegisterEvent(trackingEventFrame, "ITEM_INTERACTION_ITEM_SELECTION_UPDATED")
+        trackingEventFrame:RegisterEvent("ITEM_DATA_LOAD_RESULT")
+    end
+
+    if not trackingEventFrame._lariasOnEventSet then
+        trackingEventFrame._lariasOnEventSet = true
+        trackingEventFrame:SetScript("OnEvent", function()
+            local isMainFrameVisible = parentFrame and parentFrame.IsShown and parentFrame:IsShown()
+            local isTrackingPanelVisible = Addon._trackingFrame and Addon._trackingFrame.IsShown and Addon._trackingFrame:IsShown()
+            if isMainFrameVisible and isTrackingPanelVisible then
+                Addon:RequestTrackingUpdate()
+            end
+        end)
+    end
+end
+
 function Addon:RequestTrackingUpdate()
     if self._trackingUpdatePending then return end
     self._trackingUpdatePending = true
@@ -1056,23 +1094,20 @@ function Addon:CreateTrackingPanel(parentFrame)
     tf:SetShown((db.showGreatVault or db.showCurrency) and true or false)
     self._trackingFrame = tf
 
-    trackingEventFrame = trackingEventFrame or CreateFrame("Frame")
-    trackingEventFrame:UnregisterAllEvents()
-    trackingEventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-    trackingEventFrame:RegisterEvent("WEEKLY_REWARDS_UPDATE")
-    trackingEventFrame:RegisterEvent("CURRENCY_DISPLAY_UPDATE")
-    trackingEventFrame:RegisterEvent("BAG_UPDATE_DELAYED")
-    trackingEventFrame:RegisterEvent("ITEM_DATA_LOAD_RESULT")
-    trackingEventFrame:RegisterEvent("QUEST_TURNED_IN")
-    SafeRegisterEvent(trackingEventFrame, "QUEST_LOG_UPDATE")
-    SafeRegisterEvent(trackingEventFrame, "CATALYST_CHARGES_UPDATED")
-    SafeRegisterEvent(trackingEventFrame, "CATALYST_UPDATE")
-    SafeRegisterEvent(trackingEventFrame, "ITEM_INTERACTION_ITEM_SELECTION_UPDATED")
-    trackingEventFrame:SetScript("OnEvent", function()
-        if parentFrame and parentFrame:IsShown() then
+    if tf.SetScript then
+        tf:SetScript("OnShow", function()
+            local database = Addon:EnsureDB()
+            Addon:ConfigureTrackingEvents(parentFrame, database.showGreatVault and true or false, database.showCurrency and true or false)
             Addon:RequestTrackingUpdate()
-        end
-    end)
+        end)
+        tf:SetScript("OnHide", function()
+            if trackingEventFrame then
+                trackingEventFrame:UnregisterAllEvents()
+            end
+        end)
+    end
+
+    self:ConfigureTrackingEvents(parentFrame, db.showGreatVault and true or false, db.showCurrency and true or false)
 
 end
 
@@ -1087,9 +1122,14 @@ function Addon:ApplyTrackingPanelOptions()
 
     tf:SetShown(wantPanel)
     if not wantPanel then
+        if trackingEventFrame then
+            trackingEventFrame:UnregisterAllEvents()
+        end
         if self.ApplyScrollLayout then self:ApplyScrollLayout() end
         return
     end
+
+    self:ConfigureTrackingEvents(_G["LariasWeeklyMidnightChecklistFrame"], showGV, showCur)
 
     local leftCol = tf._lariasLeftCol
     local rightCol = tf._lariasRightCol

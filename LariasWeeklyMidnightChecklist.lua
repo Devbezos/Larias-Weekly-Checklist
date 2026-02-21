@@ -19,6 +19,250 @@ local max = math.max
 local tinsert, tremove, tconcat = table.insert, table.remove, table.concat
 local CreateFrame = CreateFrame
 
+local COMM_PREFIX = "LWMC"
+local BROADCAST_THROTTLE_SECONDS = 30
+local REPLY_THROTTLE_SECONDS = 5
+
+local function GetAddonVersion(name)
+    name = name or addonName
+    local versionString
+    if C_AddOns and C_AddOns.GetAddOnMetadata then
+        versionString = C_AddOns.GetAddOnMetadata(name, "Version")
+    elseif GetAddOnMetadata then
+        versionString = GetAddOnMetadata(name, "Version")
+    end
+    versionString = tostring(versionString or "")
+    versionString = versionString:gsub("^%s+", ""):gsub("%s+$", "")
+    return versionString
+end
+
+function Addon:GetMyVersion()
+    if self._myVersion == nil then
+        self._myVersion = GetAddonVersion(addonName)
+    end
+    return self._myVersion or ""
+end
+
+local function IsVersionNewer(a, b)
+    if a == b then return false end
+    if a == "" then return false end
+    if b == "" then return true end
+
+    local function SplitNums(s)
+        local out = {}
+        for n in tostring(s):gmatch("%d+") do
+            out[#out + 1] = tonumber(n) or 0
+        end
+        return out
+    end
+
+    local aParts = SplitNums(a)
+    local bParts = SplitNums(b)
+    local maxParts = max(#aParts, #bParts)
+    for index = 1, maxParts do
+        local aValue = aParts[index] or 0
+        local bValue = bParts[index] or 0
+        if aValue ~= bValue then
+            return aValue > bValue
+        end
+    end
+
+    return a > b
+end
+
+function Addon:ShouldShowUpdateNotice()
+    local database = self:EnsureDB()
+    local myVersion = self:GetMyVersion()
+    local newestSeenVersion = tostring(database._newestSeenRemoteVersion or "")
+    if newestSeenVersion == "" or myVersion == "" then return false end
+    if not IsVersionNewer(newestSeenVersion, myVersion) then return false end
+    if tostring(database._dismissedRemoteVersion or "") == newestSeenVersion then return false end
+    return true
+end
+
+function Addon:DismissUpdateNotice()
+    local database = self:EnsureDB()
+    database._dismissedRemoteVersion = tostring(database._newestSeenRemoteVersion or "")
+end
+
+function Addon:EnsureUpdatePopup()
+    if self._updatePopupRegistered then return end
+    self._updatePopupRegistered = true
+
+    if not StaticPopupDialogs then return end
+
+    StaticPopupDialogs["LARIASWEEKLYMIDNIGHTCHECKLIST_UPDATE"] = {
+        text = "%s",
+        button1 = (OKAY or "OK"),
+        button2 = (CANCEL or "Later"),
+        OnAccept = function()
+            Addon:DismissUpdateNotice()
+        end,
+        OnCancel = function()
+            -- Keep pending; we'll remind next time they open the list.
+        end,
+        timeout = 0,
+        whileDead = true,
+        hideOnEscape = true,
+        preferredIndex = 3,
+    }
+end
+
+function Addon:ShowUpdatePopupIfNeeded()
+    if not self:ShouldShowUpdateNotice() then return end
+    if self._updatePopupShownThisOpen then return end
+
+    self:EnsureUpdatePopup()
+    if not (StaticPopup_Show and StaticPopupDialogs) then return end
+
+    local displayName = (self.DISPLAY_NAME or (L and L.DISPLAY_NAME) or addonName)
+    local popupText
+    if type(L.UPDATE_AVAILABLE_FMT) == "string" and L.UPDATE_AVAILABLE_FMT ~= "" then
+        popupText = string.format(L.UPDATE_AVAILABLE_FMT, tostring(displayName))
+    else
+        popupText = (L.UPDATE_AVAILABLE_TEXT or L.UPDATE_AVAILABLE_TITLE or "New version available")
+    end
+
+    StaticPopup_Show("LARIASWEEKLYMIDNIGHTCHECKLIST_UPDATE", popupText)
+    self._updatePopupShownThisOpen = true
+end
+
+local function SafeRegisterPrefix(prefix)
+    if C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix then
+        pcall(C_ChatInfo.RegisterAddonMessagePrefix, prefix)
+    elseif RegisterAddonMessagePrefix then
+        pcall(RegisterAddonMessagePrefix, prefix)
+    end
+end
+
+local function SafeSendAddonMessage(prefix, msg, channel)
+    if not channel or channel == "" then return end
+    if C_ChatInfo and C_ChatInfo.SendAddonMessage then
+        pcall(C_ChatInfo.SendAddonMessage, prefix, msg, channel)
+        return
+    end
+    if SendAddonMessage then
+        pcall(SendAddonMessage, prefix, msg, channel)
+    end
+end
+
+local function GetGroupChannel()
+    local instCat = (LE_PARTY_CATEGORY_INSTANCE ~= nil) and LE_PARTY_CATEGORY_INSTANCE or 2
+    if IsInGroup and IsInGroup(instCat) then return "INSTANCE_CHAT" end
+    if IsInRaid and IsInRaid() then return "RAID" end
+    if IsInGroup and IsInGroup() then return "PARTY" end
+    return nil
+end
+
+function Addon:BroadcastVersion(force)
+    local nowSeconds = (GetTime and GetTime()) or 0
+    if not force then
+        local lastBroadcastAt = tonumber(self._lastVersionBroadcastAt or 0) or 0
+        if (nowSeconds - lastBroadcastAt) < BROADCAST_THROTTLE_SECONDS then
+            return
+        end
+    end
+
+    local myVersion = self:GetMyVersion()
+    if myVersion == "" then return end
+    local payload = "V:" .. myVersion
+
+    local channel = GetGroupChannel()
+    if channel then
+        SafeSendAddonMessage(COMM_PREFIX, payload, channel)
+    end
+    if IsInGuild and IsInGuild() then
+        SafeSendAddonMessage(COMM_PREFIX, payload, "GUILD")
+    end
+
+    self._lastVersionBroadcastAt = nowSeconds
+end
+
+function Addon:RequestVersions(force)
+    local nowSeconds = (GetTime and GetTime()) or 0
+    if not force then
+        local lastQueryAt = tonumber(self._lastVersionQueryAt or 0) or 0
+        if (nowSeconds - lastQueryAt) < BROADCAST_THROTTLE_SECONDS then
+            return
+        end
+    end
+
+    local channel = GetGroupChannel()
+    if channel then
+        SafeSendAddonMessage(COMM_PREFIX, "Q", channel)
+    end
+    if IsInGuild and IsInGuild() then
+        SafeSendAddonMessage(COMM_PREFIX, "Q", "GUILD")
+    end
+
+    self._lastVersionQueryAt = nowSeconds
+end
+
+function Addon:OnAddonMessage(prefix, message, sender)
+    if prefix ~= COMM_PREFIX then return end
+    if type(message) ~= "string" then return end
+
+    if message == "Q" then
+        local nowSeconds = (GetTime and GetTime()) or 0
+        local lastReplyAt = tonumber(self._lastVersionReplyAt or 0) or 0
+        if (nowSeconds - lastReplyAt) < REPLY_THROTTLE_SECONDS then
+            return
+        end
+        self._lastVersionReplyAt = nowSeconds
+        self:BroadcastVersion(true)
+        return
+    end
+
+    if message:sub(1, 2) ~= "V:" then return end
+
+    local remoteVersion = message:sub(3) or ""
+    remoteVersion = tostring(remoteVersion):gsub("^%s+", ""):gsub("%s+$", "")
+    if remoteVersion == "" then return end
+
+    local myVersion = self:GetMyVersion()
+    if myVersion == "" then return end
+
+    if sender and sender ~= "" and UnitName then
+        local me = UnitName("player")
+        if me and me ~= "" then
+            local s = sender
+            if Ambiguate then
+                s = Ambiguate(sender, "none")
+            end
+            if s == me then
+                return
+            end
+        end
+    end
+
+    if IsVersionNewer(remoteVersion, myVersion) then
+        local database = self:EnsureDB()
+        local newestSeenVersion = tostring(database._newestSeenRemoteVersion or "")
+        if newestSeenVersion == "" or IsVersionNewer(remoteVersion, newestSeenVersion) then
+            database._newestSeenRemoteVersion = remoteVersion
+            database._newestSeenRemoteSender = tostring(sender or "")
+        end
+    end
+end
+
+Addon._commFrame = Addon._commFrame or CreateFrame("Frame")
+Addon._commFrame:RegisterEvent("PLAYER_LOGIN")
+Addon._commFrame:RegisterEvent("CHAT_MSG_ADDON")
+Addon._commFrame:SetScript("OnEvent", function(_, event, ...)
+    if event == "PLAYER_LOGIN" then
+        SafeRegisterPrefix(COMM_PREFIX)
+        Addon._myVersion = GetAddonVersion(addonName)
+        -- Announce once on login so others can compare.
+        Addon:BroadcastVersion(true)
+        return
+    end
+    if event == "CHAT_MSG_ADDON" then
+        local prefix, messageText, _, sender = ...
+        Addon:OnAddonMessage(prefix, messageText, sender)
+        return
+    end
+end)
+
 local function Wipe(t)
     if not t then return end
     if wipe then
@@ -87,6 +331,10 @@ function Addon:EnsureDB()
     if db.hideCompletedSections == nil then db.hideCompletedSections = false end
     if db.showGreatVault == nil then db.showGreatVault = true end
     if db.showCurrency == nil then db.showCurrency = true end
+
+    -- Addon update notice state (per-character). (ElvUI-style: compares with versions seen from other players.)
+    if db._newestSeenRemoteVersion == nil then db._newestSeenRemoteVersion = "" end
+    if db._dismissedRemoteVersion == nil then db._dismissedRemoteVersion = "" end
     return db
 end
 
@@ -728,8 +976,12 @@ function Addon:Toggle()
     if frame:IsShown() then
         frame:Hide()
     else
+        self._updatePopupShownThisOpen = nil
+        self:BroadcastVersion(false)
+        self:RequestVersions(false)
         self:ApplyScrollLayout()
         self:Refresh()
+        self:ShowUpdatePopupIfNeeded()
         frame:Show()
     end
 end
