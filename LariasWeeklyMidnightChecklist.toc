@@ -1,8 +1,8 @@
 ## Interface: 120001, 120000, 110207
-## Title: Larias Checklist
+## Title: Larias Weekly Midnight Checklist (ALPHA)
 ## Notes: Weekly checklist with collapsible weeks
 ## Author: Larias
-## Version: 1.0.16.1-alpha
+## Version: 1.0.16.2-alpha
 ## SavedVariablesPerCharacter: LariasWeeklyMidnightChecklistDBPC
 ## SavedVariables: LariasWeeklyMidnightChecklistDB
 ## OptionalDeps: LariasWeeklyMidnightChecklist_Locales
