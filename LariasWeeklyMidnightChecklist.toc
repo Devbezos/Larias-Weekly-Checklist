@@ -4,8 +4,27 @@
 ## Author: Larias
 ## Version: 1.0.16
 ## SavedVariablesPerCharacter: LariasWeeklyMidnightChecklistDBPC
+## SavedVariables: LariasWeeklyMidnightChecklistDB
 ## X-Wago-ID: mKOD5RGx
 ## X-Curse-Project-ID: 1448023
+
+# Libraries
+Libs\\LibStub\\LibStub.lua
+Libs\\CallbackHandler-1.0\\CallbackHandler-1.0.lua
+Libs\\Ace3\\AceAddon-3.0\\AceAddon-3.0.lua
+Libs\\Ace3\\AceEvent-3.0\\AceEvent-3.0.lua
+Libs\\Ace3\\AceHook-3.0\\AceHook-3.0.lua
+Libs\\Ace3\\AceDB-3.0\\AceDB-3.0.lua
+Libs\\Ace3\\AceConsole-3.0\\AceConsole-3.0.lua
+Libs\\Ace3\\AceGUI-3.0\\AceGUI-3.0.lua
+Libs\\Ace3\\AceConfig-3.0\\AceConfig-3.0.lua
+Libs\\Ace3\\AceConfig-3.0\\AceConfigRegistry-3.0\\AceConfigRegistry-3.0.lua
+Libs\\Ace3\\AceConfig-3.0\\AceConfigCmd-3.0\\AceConfigCmd-3.0.lua
+Libs\\Ace3\\AceConfig-3.0\\AceConfigDialog-3.0\\AceConfigDialog-3.0.lua
+Libs\\Ace3\\AceTimer-3.0\\AceTimer-3.0.lua
+Libs\\Ace3\\AceLocale-3.0\\AceLocale-3.0.lua
+Libs\\LibDataBroker-1.1\\LibDataBroker-1.1.lua
+Libs\\LibDBIcon-1.0\\LibDBIcon-1.0.lua
 
 # Localization (adding a language):
 # - Create BOTH files:

@@ -1,18 +1,149 @@
 local addonName = ...
-local Addon = _G[addonName] or {}
+local Addon = LibStub("AceAddon-3.0"):NewAddon(addonName, "AceEvent-3.0", "AceHook-3.0", "AceConsole-3.0", "AceTimer-3.0")
 _G[addonName] = Addon
 
+-- Setup localization
+if not Addon.L then
+    local L = LibStub("AceLocale-3.0"):GetLocale(addonName, true)
+    Addon.L = L
+end
 local L = Addon.L or {}
 
-if Addon.InitConstants then
+-- Initialize all constants on the new Addon object
+do
+    function Addon:InitConstants(name)
+        name = name or addonName
+
+        local L = self.L or {}
+
+        -- Group core constants into objects (tables) while keeping legacy fields for compatibility.
+        self.CONSTANTS = self.CONSTANTS or {}
+        self.CONSTANTS.names = self.CONSTANTS.names or {}
+        local names = self.CONSTANTS.names
+
+        if names.displayName == nil then names.displayName = L.DISPLAY_NAME or name end
+        if names.dbName == nil then names.dbName = "LariasWeeklyMidnightChecklistDBPC" end
+        if names.accountDbName == nil then names.accountDbName = "LariasWeeklyMidnightChecklistDB" end
+        if names.listDataKey == nil then names.listDataKey = (name .. "_LIST_DATA") end
+
+        self.DISPLAY_NAME = self.DISPLAY_NAME or names.displayName
+        self._DB_NAME = self._DB_NAME or names.dbName
+        self._ACCOUNT_DB_NAME = self._ACCOUNT_DB_NAME or names.accountDbName
+        self._LIST_DATA_KEY = self._LIST_DATA_KEY or names.listDataKey
+
+        self.CONSTANTS.theme = self.CONSTANTS.theme or self.THEME or {
+            bg      = { r = 0.10, g = 0.10, b = 0.10, a = 0.65 },
+            border  = { r = 0.30, g = 0.30, b = 0.30, a = 0.90 },
+            header  = { r = 1.00, g = 0.82, b = 0.00, a = 1.00 },
+            text    = { r = 1.00, g = 1.00, b = 1.00, a = 1.00 },
+            textDim = { r = 1.00, g = 1.00, b = 1.00, a = 0.85 },
+        }
+        self.THEME = self.THEME or self.CONSTANTS.theme
+
+        self.CONSTANTS.ui = self.CONSTANTS.ui or self.UI or {
+            frameW = 520,
+            frameH = 650,
+            padOuterX = 14,
+            padOuterTop = 10,
+            closeInset = 4,
+            topRowH = 26,
+            topRowRightInset = 34,
+            scrollTop = 44,
+            scrollBottom = 16,
+            scrollRight = 30,
+            sectionGap = 10,
+            sectionTopPad = 10,
+            headerMinH = 22,
+            headerBottomPad = 4,
+            headerTextExtraW = 28,
+            itemMinH = 24,
+            itemTextPad = 8,
+            itemTextWidth = 420,
+            sectionInsetX = 14,
+            trackH = 210,
+            trackTopPad = 10,
+        }
+        self.UI = self.UI or self.CONSTANTS.ui
+
+        self.CONSTANTS.tracking = self.CONSTANTS.tracking or self.TRACKING or {}
+        self.TRACKING = self.TRACKING or self.CONSTANTS.tracking
+
+        self.TRACKING.profiles = self.TRACKING.profiles or {}
+        self.TRACKING.profileDisplayNames = self.TRACKING.profileDisplayNames or {
+            tww = "tww",
+            midnight = "midnight",
+        }
+
+        if self.TRACKING.midnightMinLevel == nil then
+            self.TRACKING.midnightMinLevel = 90
+        end
+
+        local function EnsureProfile(key)
+            local p = self.TRACKING.profiles[key]
+            if type(p) ~= "table" then
+                p = {}
+                self.TRACKING.profiles[key] = p
+            end
+            p.questIDs = p.questIDs or {}
+            return p
+        end
+
+        local tww = EnsureProfile("tww")
+        if type(tww.crestCurrencyIDs) ~= "table" then
+            tww.crestCurrencyIDs = {
+                3284,
+                3286,
+                3288,
+                3290,
+            }
+        end
+        if type(tww.crestAchievementIDs) ~= "table" then
+            tww.crestAchievementIDs = {
+                41886,
+                41887,
+                41888,
+                41892,
+            }
+        end
+        if tww.sparkCurrencyID == nil then tww.sparkCurrencyID = 3141 end
+        if tww.catalystCurrencyID == nil then tww.catalystCurrencyID = 3269 end
+        if tww.crestTradeBatch == nil then tww.crestTradeBatch = { 45, 15 } end
+        if tww.questIDs.delversBounty == nil then tww.questIDs.delversBounty = 86371 end
+        if tww.questIDs.weeklyPrey == nil then tww.questIDs.weeklyPrey = 0 end
+
+        local midnight = EnsureProfile("midnight")
+        if type(midnight.crestCurrencyIDs) ~= "table" then
+            midnight.crestCurrencyIDs = {
+                3383,
+                3341,
+                3343,
+                3345,
+                3347,
+            }
+        end
+        if type(midnight.crestAchievementIDs) ~= "table" then
+            midnight.crestAchievementIDs = {
+                61809,
+                42767,
+                72768,
+                42769,
+                42770,
+            }
+        end
+        if midnight.sparkCurrencyID == nil then midnight.sparkCurrencyID = 0 end
+        if midnight.catalystCurrencyID == nil then midnight.catalystCurrencyID = 0 end
+        if midnight.crestTradeBatch == nil then midnight.crestTradeBatch = { 45, 15 } end
+        if midnight.questIDs.delversBounty == nil then midnight.questIDs.delversBounty = 0 end
+        if midnight.questIDs.weeklyPrey == nil then midnight.questIDs.weeklyPrey = 0 end
+    end
+
     Addon:InitConstants(addonName)
 end
 
+-- Now that InitConstants has run, we can safely reference THEME and UI
 local frame
 local scrollFrame
 local scrollChild
-local THEME = Addon.THEME
-local UI = Addon.UI
 local type, tostring = type, tostring
 local pairs, ipairs, next = pairs, ipairs, next
 local max = math.max
@@ -22,6 +153,68 @@ local CreateFrame = CreateFrame
 local COMM_PREFIX = "LWMC"
 local BROADCAST_THROTTLE_SECONDS = 30
 local REPLY_THROTTLE_SECONDS = 5
+
+-- Throttle timers for version communication
+local broadcastTimerActive = false
+local replyTimerActive = false
+local queryTimerActive = false
+
+-- Set up database with AceDB
+local function SetupAddonDB()
+    if Addon.db then return end
+    
+    local defaults = {
+        profile = {
+            hideCompletedSections = false,
+            showGreatVault = true,
+            showCurrency = true,
+            collapsedSections = {},
+            checked = {},
+        },
+        global = {
+            _newestSeenRemoteVersion = "",
+            _newestSeenRemoteSender = "",
+            _dismissedRemoteVersion = "",
+        },
+    }
+    
+    Addon.db = LibStub("AceDB-3.0"):New(addonName .. "DB", defaults, true)
+end
+
+-- Set up LibDataBroker and LibDBIcon for minimap icon
+local function SetupMinimapIcon()
+    local LDB = LibStub("LibDataBroker-1.1")
+    local icon = LibStub("LibDBIcon-1.0")
+    
+    local dataObject = LDB:NewDataObject(addonName, {
+        type = "data source",
+        text = addonName,
+        icon = 135943, -- Gilded Crest icon
+        OnClick = function(_, button)
+            if button == "LeftButton" then
+                Addon:Toggle()
+            elseif button == "RightButton" then
+                LibStub("AceConfigDialog-3.0"):Open(addonName)
+            end
+        end,
+        OnTooltipShow = function(tooltip)
+            if not tooltip then return end
+            tooltip:AddLine(L.DISPLAY_NAME or addonName, 1, 0.82, 0)
+            tooltip:AddLine("Left-click: Toggle checklist", 1, 1, 1)
+            tooltip:AddLine("Right-click: Options", 1, 1, 1)
+        end,
+    })
+    
+    icon:Register(addonName, dataObject, Addon.db and Addon.db.profile or {})
+end
+
+-- Enable minimap icon by default
+local function EnsureMinimapIcon()
+    if not Addon.db or not Addon.db.profile then return end
+    if Addon.db.profile.minimap == nil then
+        Addon.db.profile.minimap = { hide = false }
+    end
+end
 
 local function GetAddonVersion(name)
     name = name or addonName
@@ -155,10 +348,9 @@ local function GetGroupChannel()
 end
 
 function Addon:BroadcastVersion(force)
-    local nowSeconds = (GetTime and GetTime()) or 0
+    -- Use AceTimer to throttle broadcasts
     if not force then
-        local lastBroadcastAt = tonumber(self._lastVersionBroadcastAt or 0) or 0
-        if (nowSeconds - lastBroadcastAt) < BROADCAST_THROTTLE_SECONDS then
+        if broadcastTimerActive then
             return
         end
     end
@@ -175,14 +367,17 @@ function Addon:BroadcastVersion(force)
         SafeSendAddonMessage(COMM_PREFIX, payload, "GUILD")
     end
 
-    self._lastVersionBroadcastAt = nowSeconds
+    -- Start throttle timer
+    if not force then
+        broadcastTimerActive = true
+        self:ScheduleTimer(function() broadcastTimerActive = false end, BROADCAST_THROTTLE_SECONDS)
+    end
 end
 
 function Addon:RequestVersions(force)
-    local nowSeconds = (GetTime and GetTime()) or 0
+    -- Use AceTimer to throttle version requests
     if not force then
-        local lastQueryAt = tonumber(self._lastVersionQueryAt or 0) or 0
-        if (nowSeconds - lastQueryAt) < BROADCAST_THROTTLE_SECONDS then
+        if queryTimerActive then
             return
         end
     end
@@ -195,7 +390,11 @@ function Addon:RequestVersions(force)
         SafeSendAddonMessage(COMM_PREFIX, "Q", "GUILD")
     end
 
-    self._lastVersionQueryAt = nowSeconds
+    -- Start throttle timer
+    if not force then
+        queryTimerActive = true
+        self:ScheduleTimer(function() queryTimerActive = false end, BROADCAST_THROTTLE_SECONDS)
+    end
 end
 
 function Addon:OnAddonMessage(prefix, message, sender)
@@ -203,12 +402,13 @@ function Addon:OnAddonMessage(prefix, message, sender)
     if type(message) ~= "string" then return end
 
     if message == "Q" then
-        local nowSeconds = (GetTime and GetTime()) or 0
-        local lastReplyAt = tonumber(self._lastVersionReplyAt or 0) or 0
-        if (nowSeconds - lastReplyAt) < REPLY_THROTTLE_SECONDS then
+        -- Use AceTimer-based throttle for replies
+        if replyTimerActive then
             return
         end
-        self._lastVersionReplyAt = nowSeconds
+        
+        replyTimerActive = true
+        self:ScheduleTimer(function() replyTimerActive = false end, REPLY_THROTTLE_SECONDS)
         self:BroadcastVersion(true)
         return
     end
@@ -245,23 +445,35 @@ function Addon:OnAddonMessage(prefix, message, sender)
     end
 end
 
-Addon._commFrame = Addon._commFrame or CreateFrame("Frame")
-Addon._commFrame:RegisterEvent("PLAYER_LOGIN")
-Addon._commFrame:RegisterEvent("CHAT_MSG_ADDON")
-Addon._commFrame:SetScript("OnEvent", function(_, event, ...)
-    if event == "PLAYER_LOGIN" then
-        SafeRegisterPrefix(COMM_PREFIX)
-        Addon._myVersion = GetAddonVersion(addonName)
-        -- Announce once on login so others can compare.
-        Addon:BroadcastVersion(true)
-        return
-    end
-    if event == "CHAT_MSG_ADDON" then
-        local prefix, messageText, _, sender = ...
-        Addon:OnAddonMessage(prefix, messageText, sender)
-        return
-    end
-end)
+-- Initialize AceDB and minimap icon on addon load
+function Addon:OnInitialize()
+    SetupAddonDB()
+    SetupMinimapIcon()
+    EnsureMinimapIcon()
+end
+
+-- Handle player login event
+function Addon:OnEnable()
+    SafeRegisterPrefix(COMM_PREFIX)
+    Addon._myVersion = GetAddonVersion(addonName)
+    
+    -- Register console commands
+    self:RegisterConsoleCommands()
+    
+    -- Setup options panel with AceConfig
+    self:SetupOptionsWithAceConfig()
+    
+    -- Register events using AceEvent
+    self:RegisterEvent("CHAT_MSG_ADDON")
+    
+    -- Announce once on login so others can compare
+    Addon:BroadcastVersion(true)
+end
+
+-- Handle chat message addon event
+function Addon:CHAT_MSG_ADDON(_, prefix, messageText, _, _, sender)
+    Addon:OnAddonMessage(prefix, messageText, sender)
+end
 
 local function Wipe(t)
     if not t then return end
@@ -284,6 +496,10 @@ Addon._order = Addon._order or {}
 Addon._sectionsIndexById = Addon._sectionsIndexById or {}
 
 function Addon:DB()
+    -- For backward compatibility, return the AceDB profile
+    if self.db then
+        return self.db.profile
+    end
     return _G[self._DB_NAME]
 end
 
@@ -305,108 +521,90 @@ local function CopyTableShallow(src)
 end
 
 function Addon:EnsureDB()
-    if not self:DB() then _G[self._DB_NAME] = {} end
-    local db = self:DB()
-    if db._migratedFromAccountDB ~= true then
-        local legacyName = self._ACCOUNT_DB_NAME
-        local legacy = legacyName and _G[legacyName] or nil
-        if type(legacy) == "table" then
-            local hasAnyChecks = (type(db.checked) == "table") and (next(db.checked) ~= nil)
-            if not hasAnyChecks then
-                if type(legacy.checked) == "table" then db.checked = CopyTableShallow(legacy.checked) end
-                if type(legacy.collapsedSections) == "table" then db.collapsedSections = CopyTableShallow(legacy.collapsedSections) end
-                if legacy.hideCompletedSections ~= nil then db.hideCompletedSections = legacy.hideCompletedSections and true or false end
-                if legacy.showCurrency ~= nil then
-                    local show = legacy.showCurrency and true or false
-                    db.showGreatVault = show
-                    db.showCurrency = show
-                end
-            end
-        end
-        db._migratedFromAccountDB = true
+    -- Initialize AceDB if not already done
+    if not self.db then
+        SetupAddonDB()
     end
-
-    db.checked = db.checked or {}
-    db.collapsedSections = db.collapsedSections or {}
-    if db.hideCompletedSections == nil then db.hideCompletedSections = false end
-    if db.showGreatVault == nil then db.showGreatVault = true end
-    if db.showCurrency == nil then db.showCurrency = true end
-
-    -- Addon update notice state (per-character). (ElvUI-style: compares with versions seen from other players.)
-    if db._newestSeenRemoteVersion == nil then db._newestSeenRemoteVersion = "" end
-    if db._dismissedRemoteVersion == nil then db._dismissedRemoteVersion = "" end
-    return db
+    
+    -- Return the profile from AceDB for backward compatibility
+    return self.db.profile
 end
 
+-- Set up AceConfig options
+function Addon:SetupOptionsWithAceConfig()
+    if self._optionsRegistered then return end
+    self._optionsRegistered = true
+    
+    local ACR = LibStub("AceConfigRegistry-3.0")
+    local ACD = LibStub("AceConfigDialog-3.0")
+    
+    local options = {
+        name = L.DISPLAY_NAME or addonName,
+        handler = self,
+        type = "group",
+        args = {
+            general = {
+                name = "General",
+                type = "group",
+                order = 1,
+                args = {
+                    showGreatVault = {
+                        name = L.OPTIONS_SHOW_GREAT_VAULT or "Show Great Vault",
+                        desc = "Display Great Vault tracking panel",
+                        type = "toggle",
+                        width = "full",
+                        order = 1,
+                        get = function() return self.db.profile.showGreatVault or false end,
+                        set = function(info, value)
+                            self.db.profile.showGreatVault = value
+                            if self.UpdateTracking then self:UpdateTracking() end
+                            self:ApplyScrollLayout()
+                            self:Refresh()
+                        end,
+                    },
+                    showCurrency = {
+                        name = L.OPTIONS_SHOW_CURRENCY or "Show Currency",
+                        desc = "Display currency tracking panel",
+                        type = "toggle",
+                        width = "full",
+                        order = 2,
+                        get = function() return self.db.profile.showCurrency or false end,
+                        set = function(info, value)
+                            self.db.profile.showCurrency = value
+                            if self.UpdateTracking then self:UpdateTracking() end
+                            self:ApplyScrollLayout()
+                            self:Refresh()
+                        end,
+                    },
+                    hideCompletedSections = {
+                        name = L.HIDE_COMPLETED_WEEKS or "Hide Completed Weeks",
+                        desc = "Hide weeks that are marked as complete",
+                        type = "toggle",
+                        width = "full",
+                        order = 3,
+                        get = function() return self.db.profile.hideCompletedSections or false end,
+                        set = function(info, value)
+                            self.db.profile.hideCompletedSections = value
+                            self:Refresh()
+                        end,
+                    },
+                },
+            },
+        },
+    }
+    
+    ACR:RegisterOptionsTable(addonName, options)
+    ACD:AddToBlizOptions(addonName, L.DISPLAY_NAME or addonName)
+end
+
+-- Legacy options panel method for compatibility
 function Addon:EnsureOptionsPanel()
-    if self._optionsPanel then return self._optionsPanel end
-
-    local displayName = (Addon.DISPLAY_NAME or addonName)
-
-    local panel = CreateFrame("Frame")
-    panel.name = displayName
-
-    local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-    title:SetPoint("TOPLEFT", 16, -16)
-    title:SetText(displayName)
-
-    local function MakeCheck(y, labelText)
-        local cb = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
-        cb:SetPoint("TOPLEFT", 16, y)
-        local t = cb.text or cb.Text
-        if t then
-            t:SetText(labelText)
-        end
-        return cb
-    end
-
-    local gvCheck = MakeCheck(-50, L.OPTIONS_SHOW_GREAT_VAULT or "")
-    local currencyCheck = MakeCheck(-78, L.OPTIONS_SHOW_CURRENCY or "")
-
-    panel:SetScript("OnShow", function()
-        local db = Addon:EnsureDB()
-        gvCheck:SetChecked(db.showGreatVault and true or false)
-        currencyCheck:SetChecked(db.showCurrency and true or false)
-    end)
-
-    gvCheck:SetScript("OnClick", function(selfBtn)
-        local db = Addon:EnsureDB()
-        db.showGreatVault = selfBtn:GetChecked() and true or false
-        if Addon.UpdateTracking then Addon:UpdateTracking() end
-        Addon:ApplyScrollLayout()
-        Addon:Refresh()
-    end)
-
-    currencyCheck:SetScript("OnClick", function(selfBtn)
-        local db = Addon:EnsureDB()
-        db.showCurrency = selfBtn:GetChecked() and true or false
-        if Addon.UpdateTracking then Addon:UpdateTracking() end
-        Addon:ApplyScrollLayout()
-        Addon:Refresh()
-    end)
-
-    if Settings and Settings.RegisterCanvasLayoutCategory and Settings.RegisterAddOnCategory then
-        local category = Settings.RegisterCanvasLayoutCategory(panel, panel.name)
-        Settings.RegisterAddOnCategory(category)
-        self._settingsCategory = category
-    elseif InterfaceOptions_AddCategory then
-        InterfaceOptions_AddCategory(panel)
-    end
-
-    self._optionsPanel = panel
-    return panel
+    self:SetupOptionsWithAceConfig()
+    return nil
 end
 
 function Addon:OpenOptions()
-    local panel = self:EnsureOptionsPanel()
-    if Settings and Settings.OpenToCategory and self._settingsCategory and self._settingsCategory.GetID then
-        Settings.OpenToCategory(self._settingsCategory:GetID())
-        return
-    end
-    if InterfaceOptionsFrame_OpenToCategory then
-        InterfaceOptionsFrame_OpenToCategory(panel)
-        InterfaceOptionsFrame_OpenToCategory(panel)
-    end
+    LibStub("AceConfigDialog-3.0"):Open(addonName)
 end
 
 function Addon:GetListData()
@@ -424,24 +622,24 @@ function Addon:ApplyTheme(f)
         edgeSize = 1,
         insets = { left = 3, right = 3, top = 3, bottom = 3 },
     })
-    f:SetBackdropColor(THEME.bg.r, THEME.bg.g, THEME.bg.b, THEME.bg.a)
-    f:SetBackdropBorderColor(THEME.border.r, THEME.border.g, THEME.border.b, THEME.border.a)
+    f:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, Addon.THEME.bg.a)
+    f:SetBackdropBorderColor(Addon.THEME.border.r, Addon.THEME.border.g, Addon.THEME.border.b, Addon.THEME.border.a)
 end
 function Addon:ApplyScrollLayout()
     if not (frame and scrollFrame) then return end
     local db = self:EnsureDB()
 
     scrollFrame:ClearAllPoints()
-    scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", UI.padOuterX, -UI.scrollTop)
+    scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", Addon.UI.padOuterX, -Addon.UI.scrollTop)
 
     local extra = 0
     if (db.showGreatVault or db.showCurrency) and self._trackingFrame and self._trackingFrame.IsShown and self._trackingFrame:IsShown() then
-        local h = (self._trackingFrame.GetHeight and self._trackingFrame:GetHeight()) or UI.trackH
-        h = tonumber(h) or UI.trackH
-        extra = h + UI.trackTopPad
+        local h = (self._trackingFrame.GetHeight and self._trackingFrame:GetHeight()) or Addon.UI.trackH
+        h = tonumber(h) or Addon.UI.trackH
+        extra = h + Addon.UI.trackTopPad
     end
 
-    scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -UI.scrollRight, UI.scrollBottom + extra)
+    scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -Addon.UI.scrollRight, Addon.UI.scrollBottom + extra)
 end
 
 local function Key(sectionId, itemId)
@@ -500,19 +698,19 @@ local function AcquireSectionFrame()
     local header = CreateFrame("Button", nil, sf)
     header:SetPoint("TOPLEFT", sf, "TOPLEFT", 0, 0)
     header:SetPoint("TOPRIGHT", sf, "TOPRIGHT", 0, 0)
-    header:SetHeight(UI.headerMinH)
+    header:SetHeight(Addon.UI.headerMinH)
     sf._header = header
 
     local title = header:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("LEFT", header, "LEFT", 0, 0)
-    title:SetTextColor(THEME.header.r, THEME.header.g, THEME.header.b, THEME.header.a)
+    title:SetTextColor(Addon.THEME.header.r, Addon.THEME.header.g, Addon.THEME.header.b, Addon.THEME.header.a)
     title:SetJustifyH("LEFT")
     if title.SetWordWrap then title:SetWordWrap(true) end
     sf._title = title
 
     local status = header:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     status:SetPoint("RIGHT", header, "RIGHT", 0, 0)
-    status:SetTextColor(THEME.textDim.r, THEME.textDim.g, THEME.textDim.b, THEME.textDim.a)
+    status:SetTextColor(Addon.THEME.textDim.r, Addon.THEME.textDim.g, Addon.THEME.textDim.b, Addon.THEME.textDim.a)
     sf._status = status
 
     return sf
@@ -557,7 +755,7 @@ local function AcquireCheckbox(sf)
         txt:SetJustifyH("LEFT")
         if txt.SetWordWrap then txt:SetWordWrap(true) end
         if txt.SetTextColor then
-            txt:SetTextColor(THEME.text.r, THEME.text.g, THEME.text.b, THEME.text.a)
+            txt:SetTextColor(Addon.THEME.text.r, Addon.THEME.text.g, Addon.THEME.text.b, Addon.THEME.text.a)
         end
     end
     return cb
@@ -570,20 +768,20 @@ local function ComputeHeaderHeight(sf, headerTextWidth)
     if sf._title.GetStringHeight then
         th = sf._title:GetStringHeight() or 0
     end
-    local hh = max(UI.headerMinH, th + 6)
+    local hh = max(Addon.UI.headerMinH, th + 6)
     sf._header:SetHeight(hh)
-    sf._headerBlockHeight = hh + UI.headerBottomPad
+    sf._headerBlockHeight = hh + Addon.UI.headerBottomPad
 end
 
 local function LayoutItems(sf, collapsed)
-    local y = -(sf._headerBlockHeight or (UI.headerMinH + UI.headerBottomPad))
+    local y = -(sf._headerBlockHeight or (Addon.UI.headerMinH + Addon.UI.headerBottomPad))
     local total = 0
     local boxes = sf._checkboxes
     for i = 1, #boxes do
         local cb = boxes[i]
         cb:ClearAllPoints()
         cb:SetPoint("TOPLEFT", sf, "TOPLEFT", 0, y)
-        local rh = cb:GetHeight() or UI.itemMinH
+        local rh = cb:GetHeight() or Addon.UI.itemMinH
         y = y - rh
         total = total + rh
         cb:SetShown(not collapsed)
@@ -592,7 +790,7 @@ local function LayoutItems(sf, collapsed)
 end
 
 local function UpdateSectionHeight(sf, collapsed)
-    local h = (sf._headerBlockHeight or (UI.headerMinH + UI.headerBottomPad))
+    local h = (sf._headerBlockHeight or (Addon.UI.headerMinH + Addon.UI.headerBottomPad))
     if not collapsed then
         h = h + (sf._itemsHeight or 0)
     end
@@ -600,24 +798,24 @@ local function UpdateSectionHeight(sf, collapsed)
 end
 
 local function LayoutFrom(startIndex)
-    local y = -UI.sectionTopPad
-    local paddingX = UI.sectionInsetX
+    local y = -Addon.UI.sectionTopPad
+    local paddingX = Addon.UI.sectionInsetX
 
     for i = 1, #Addon._activeSections do
         local sf = Addon._activeSections[i]
         if sf:IsShown() then
             if i < startIndex then
-                y = y - sf:GetHeight() - UI.sectionGap
+                y = y - sf:GetHeight() - Addon.UI.sectionGap
             else
                 sf:ClearAllPoints()
                 sf:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", paddingX, y)
                 sf:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", -paddingX, y)
-                y = y - sf:GetHeight() - UI.sectionGap
+                y = y - sf:GetHeight() - Addon.UI.sectionGap
             end
         end
     end
 
-    local height = max(1, -y + UI.sectionGap)
+    local height = max(1, -y + Addon.UI.sectionGap)
     scrollChild:SetHeight(height)
 end
 
@@ -671,7 +869,7 @@ local function OnCheckboxClick(selfBtn)
     local hideDone = db.hideCompletedSections and true or false
 
     SetHeaderText(sframe, sid, secCompleteNow)
-    ComputeHeaderHeight(sframe, UI.itemTextWidth + UI.headerTextExtraW)
+    ComputeHeaderHeight(sframe, Addon.UI.itemTextWidth + Addon.UI.headerTextExtraW)
 
     local collapsed = IsSectionCollapsed(sid, db) or false
     if secCompleteNow then collapsed = true end
@@ -732,16 +930,16 @@ local function SyncCheckboxesForSection(sf, sectionId, db)
         cb._dbKey = Key(sectionId, item.id)
 
         local txt = cb.text or cb.Text
-        local minRowH = max(32, UI.itemMinH or 0)
+        local minRowH = max(32, Addon.UI.itemMinH or 0)
         if txt then
-            txt:SetWidth(UI.itemTextWidth)
+            txt:SetWidth(Addon.UI.itemTextWidth)
             txt:SetText(tostring(item.text or item.id))
 
             local textHeight = 0
             if txt.GetStringHeight then
                 textHeight = txt:GetStringHeight() or 0
             end
-            cb:SetHeight(max(minRowH, textHeight + (UI.itemTextPad or 0)))
+            cb:SetHeight(max(minRowH, textHeight + (Addon.UI.itemTextPad or 0)))
         else
             cb:SetHeight(minRowH)
         end
@@ -769,7 +967,7 @@ UpdateSectionVisuals = function(sf, sectionId)
     end
 
     SetHeaderText(sf, sectionId, complete)
-    ComputeHeaderHeight(sf, UI.itemTextWidth + UI.headerTextExtraW)
+    ComputeHeaderHeight(sf, Addon.UI.itemTextWidth + Addon.UI.headerTextExtraW)
 
     local collapsed = IsSectionCollapsed(sectionId, db) or false
     if complete then collapsed = true end
@@ -845,8 +1043,8 @@ function Addon:Refresh()
     if not frame then return end
     SyncAllDataAndFrames()
 
-    local y = -UI.sectionTopPad
-    local paddingX = UI.sectionInsetX
+    local y = -Addon.UI.sectionTopPad
+    local paddingX = Addon.UI.sectionInsetX
 
     for i = 1, #self._activeSections do
         local sf = self._activeSections[i]
@@ -854,11 +1052,11 @@ function Addon:Refresh()
             sf:ClearAllPoints()
             sf:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", paddingX, y)
             sf:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", -paddingX, y)
-            y = y - sf:GetHeight() - UI.sectionGap
+            y = y - sf:GetHeight() - Addon.UI.sectionGap
         end
     end
 
-    scrollChild:SetHeight(max(1, -y + UI.sectionGap))
+    scrollChild:SetHeight(max(1, -y + Addon.UI.sectionGap))
 
     if self.UpdateTracking then
         self:UpdateTracking()
@@ -873,7 +1071,7 @@ function Addon:CreateFrame()
         Mixin(frame, BackdropTemplateMixin)
     end
 
-    frame:SetSize(UI.frameW, UI.frameH)
+    frame:SetSize(Addon.UI.frameW, Addon.UI.frameH)
     frame:SetClampedToScreen(true)
     frame:SetPoint("CENTER")
     frame:SetMovable(true)
@@ -902,21 +1100,21 @@ function Addon:CreateFrame()
     self:ApplyTheme(frame)
 
     local closeBtn = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
-    closeBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -UI.closeInset, -UI.closeInset)
+    closeBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -Addon.UI.closeInset, -Addon.UI.closeInset)
     closeBtn:SetScript("OnClick", function() frame:Hide() end)
 
     local topRow = CreateFrame("Frame", nil, frame)
-    topRow:SetPoint("TOPLEFT", frame, "TOPLEFT", UI.padOuterX, -UI.padOuterTop)
-    topRow:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -UI.topRowRightInset, -UI.padOuterTop)
-    topRow:SetHeight(UI.topRowH)
+    topRow:SetPoint("TOPLEFT", frame, "TOPLEFT", Addon.UI.padOuterX, -Addon.UI.padOuterTop)
+    topRow:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -Addon.UI.topRowRightInset, -Addon.UI.padOuterTop)
+    topRow:SetHeight(Addon.UI.topRowH)
 
     local hideDoneCheck = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
-    hideDoneCheck:SetPoint("LEFT", topRow, "LEFT", UI.padOuterX, 0)
+    hideDoneCheck:SetPoint("LEFT", topRow, "LEFT", Addon.UI.padOuterX, 0)
     local htxt = hideDoneCheck.text or hideDoneCheck.Text
     if htxt then
         htxt:SetText(L.HIDE_COMPLETED_WEEKS or "")
         if htxt.SetTextColor then
-            htxt:SetTextColor(THEME.text.r, THEME.text.g, THEME.text.b, THEME.text.a)
+            htxt:SetTextColor(Addon.THEME.text.r, Addon.THEME.text.g, Addon.THEME.text.b, Addon.THEME.text.a)
         end
     end
 
@@ -930,7 +1128,7 @@ function Addon:CreateFrame()
 
     local optionsBtn = CreateFrame("Button", nil, frame, "GameMenuButtonTemplate")
     optionsBtn:SetPoint("RIGHT", topRow, "RIGHT", 0, 0)
-    optionsBtn:SetSize(90, UI.topRowH)
+    optionsBtn:SetSize(90, Addon.UI.topRowH)
     optionsBtn:SetText(L.OPTIONS_BUTTON or "")
     optionsBtn:SetScript("OnClick", function()
         Addon:OpenOptions()
@@ -938,7 +1136,7 @@ function Addon:CreateFrame()
 
     local resetBtn = CreateFrame("Button", nil, frame, "GameMenuButtonTemplate")
     resetBtn:SetPoint("RIGHT", optionsBtn, "LEFT", -8, 0)
-    resetBtn:SetSize(90, UI.topRowH)
+    resetBtn:SetSize(90, Addon.UI.topRowH)
     resetBtn:SetText(L.RESET_BUTTON or "")
     resetBtn:SetScript("OnClick", function()
         local d = Addon:EnsureDB()
@@ -957,7 +1155,7 @@ function Addon:CreateFrame()
     end)
 
     scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", UI.padOuterX, -UI.scrollTop)
+    scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", Addon.UI.padOuterX, -Addon.UI.scrollTop)
 
     scrollChild = CreateFrame("Frame", nil, scrollFrame)
     scrollChild:SetSize(1, 1)
@@ -986,8 +1184,17 @@ function Addon:Toggle()
     end
 end
 
-SLASH_LARIASWEEKLYMIDNIGHTCHECKLIST1 = "/larias"
-SLASH_LARIASWEEKLYMIDNIGHTCHECKLIST2 = "/lcl"
-SlashCmdList["LARIASWEEKLYMIDNIGHTCHECKLIST"] = function()
-    Addon:Toggle()
+-- Register console commands using AceConsole
+function Addon:RegisterConsoleCommands()
+    self:RegisterChatCommand("larias", "ToggleCommand")
+    self:RegisterChatCommand("lcl", "ToggleCommand")
+end
+
+function Addon:ToggleCommand(input)
+    if input and input ~= "" then
+        -- Handle subcommands if needed in the future
+        self:Print("Usage: /larias or /lcl to toggle the checklist")
+    else
+        self:Toggle()
+    end
 end
