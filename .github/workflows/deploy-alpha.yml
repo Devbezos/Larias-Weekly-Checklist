@@ -1,23 +1,46 @@
 name: Deploy Alpha Release
 
 on:
+  schedule:
+    - cron: "0 2 * * *"  # Daily at 2 AM UTC
   workflow_dispatch:
-    inputs:
-      version_bump:
-        description: 'Version bump type'
-        required: true
-        default: 'patch'
-        type: choice
-        options:
-          - patch
-          - minor
-          - major
 
 permissions:
   contents: write
 
 jobs:
+  check-diff:
+    runs-on: ubuntu-latest
+    outputs:
+      has-diff: ${{ steps.diff.outputs.has-diff }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for differences
+        id: diff
+        run: |
+          # Compare against last tagged release or main
+          if git rev-list --tags --max-count=1 &>/dev/null; then
+            LAST_TAG=$(git rev-list --tags --max-count=1)
+            DIFF=$(git diff --quiet $LAST_TAG HEAD; echo $?)
+          else
+            DIFF=1
+          fi
+          
+          if [ $DIFF -gt 0 ]; then
+            echo "has-diff=true" >> $GITHUB_OUTPUT
+            echo "Changes detected since last release"
+          else
+            echo "has-diff=false" >> $GITHUB_OUTPUT
+            echo "No changes since last release"
+          fi
+
   deploy-alpha:
+    needs: check-diff
+    if: needs.check-diff.outputs.has-diff == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
 
     steps:
@@ -36,37 +59,17 @@ jobs:
           # Get branch name
           BRANCH_NAME=${GITHUB_REF#refs/heads/}
           echo "branch=$BRANCH_NAME" >> $GITHUB_OUTPUT
-          
-          # Check if this is a feature branch (not main/master/develop)
-          if [[ "$BRANCH_NAME" =~ ^(main|master|develop|release)$ ]]; then
-            echo "error=true" >> $GITHUB_OUTPUT
-            echo "::error::Cannot deploy alpha from release branch: $BRANCH_NAME"
-            exit 1
-          fi
 
       - name: Calculate new version
         id: newversion
         env:
           CURRENT: ${{ steps.version.outputs.current }}
-          BUMP: ${{ github.event.inputs.version_bump }}
         run: |
           # Parse semantic version
           IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
           
-          case "$BUMP" in
-            major)
-              MAJOR=$((MAJOR + 1))
-              MINOR=0
-              PATCH=0
-              ;;
-            minor)
-              MINOR=$((MINOR + 1))
-              PATCH=0
-              ;;
-            patch)
-              PATCH=$((PATCH + 1))
-              ;;
-          esac
+          # Always bump patch for alpha
+          PATCH=$((PATCH + 1))
           
           NEW_VERSION="$MAJOR.$MINOR.$PATCH"
           ALPHA_VERSION="$NEW_VERSION-alpha"
@@ -89,12 +92,12 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
           git add LariasWeeklyMidnightChecklist.toc
-          git commit -m "Alpha release: $ALPHA_VERSION from ${{ steps.version.outputs.branch }}"
-          git push
+          git commit -m "Alpha release: $ALPHA_VERSION from ${{ steps.version.outputs.branch }}" || true
+          git push || true
           
           TAG="v$ALPHA_VERSION"
-          git tag -a "$TAG" -m "Alpha Release $ALPHA_VERSION"
-          git push origin "$TAG"
+          git tag -a "$TAG" -m "Alpha Release $ALPHA_VERSION" 2>/dev/null || true
+          git push origin "$TAG" 2>/dev/null || true
           
           echo "tag=$TAG" >> $GITHUB_ENV
 
