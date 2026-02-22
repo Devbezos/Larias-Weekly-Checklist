@@ -148,6 +148,12 @@ local function SetShownIfChanged(region, shown)
     end
 end
 
+local function IsMainFrameOnListTab()
+    local main = _G and _G["LariasWeeklyMidnightChecklistFrame"]
+    local selectedTab = main and tonumber(main._lariasSelectedTab)
+    return (selectedTab == nil) or (selectedTab == 1)
+end
+
 local function FormatXY(currentAmount, maxAmount)
     currentAmount = tonumber(currentAmount) or 0
     maxAmount = tonumber(maxAmount) or 0
@@ -1128,7 +1134,7 @@ function Addon:CreateTrackingPanel(parentFrame)
         TrackingUI.right["line" .. tostring(i)] = MakeLinePair(rightCol, -18 * (i - 1), "GameFontHighlight")
     end
 
-    trackingFrame:SetShown((db.showGreatVault or db.showCurrency) and true or false)
+    trackingFrame:SetShown((db.showGreatVault or db.showCurrency) and IsMainFrameOnListTab())
     self._trackingFrame = trackingFrame
 
     if trackingFrame.SetScript then
@@ -1155,7 +1161,7 @@ function Addon:ApplyTrackingPanelOptions()
     local db = self:EnsureDB()
     local showGreatVault = db.showGreatVault and true or false
     local showCurrency = db.showCurrency and true or false
-    local wantPanel = showGreatVault or showCurrency
+    local wantPanel = (showGreatVault or showCurrency) and IsMainFrameOnListTab()
 
     trackingFrame:SetShown(wantPanel)
     if not wantPanel then
@@ -1210,6 +1216,9 @@ function Addon:UpdateTracking()
     local db = self:EnsureDB()
 
     local wantPanel = (db.showGreatVault or db.showCurrency) and true or false
+    if wantPanel and not IsMainFrameOnListTab() then
+        wantPanel = false
+    end
 
     if wantPanel and not self._trackingFrame then
         local main = _G["LariasWeeklyMidnightChecklistFrame"]

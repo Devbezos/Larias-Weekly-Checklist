@@ -147,6 +147,7 @@ local scrollChild
 local type, tostring = type, tostring
 local pairs, ipairs, next = pairs, ipairs, next
 local max = math.max
+local min = math.min
 local tinsert, tremove, tconcat = table.insert, table.remove, table.concat
 local CreateFrame = CreateFrame
 
@@ -165,7 +166,7 @@ local function SetupAddonDB()
     
     local defaults = {
         profile = {
-            hideCompletedSections = false,
+            hideCompletedSections = true,
             showGreatVault = true,
             showCurrency = true,
             collapsedSections = {},
@@ -192,6 +193,19 @@ local function SetupMinimapIcon()
         icon = 135943, -- Gilded Crest icon
         OnClick = function(_, button)
             if button == "LeftButton" then
+                -- If the addon is already open on the Options tab, left-click should
+                -- take you back to the List tab (and keep the window open).
+                if Addon.CreateFrame then
+                    Addon:CreateFrame()
+                end
+                local mainFrame = _G["LariasWeeklyMidnightChecklistFrame"]
+                if mainFrame and mainFrame.IsShown and mainFrame:IsShown() and tonumber(mainFrame._lariasSelectedTab) == 2 then
+                    if Addon.SelectMainTab then
+                        Addon:SelectMainTab(1)
+                    end
+                    return
+                end
+
                 Addon:Toggle()
             elseif button == "RightButton" then
                 Addon:OpenOptions()
@@ -595,11 +609,123 @@ function Addon:EnsureOptionsPanel()
 end
 
 function Addon:OpenOptions()
-    local ACD = LibStub("AceConfigDialog-3.0")
-    if ACD.OpenFrames[addonName] then
-        ACD:Close(addonName)
-    else
-        ACD:Open(addonName)
+    self:CreateFrame()
+
+    if frame and frame.IsShown and frame:IsShown() and tonumber(frame._lariasSelectedTab) == 2 then
+        frame:Hide()
+        return
+    end
+
+    if frame and frame.IsShown and not frame:IsShown() then
+        self._updatePopupShownThisOpen = nil
+        self:BroadcastVersion(false)
+        self:RequestVersions(false)
+        self:ApplyScrollLayout()
+        self:Refresh()
+        self:ShowUpdatePopupIfNeeded()
+        frame:Show()
+    end
+
+    if self.SelectMainTab then
+        self:SelectMainTab(2)
+    end
+end
+
+function Addon:SelectMainTab(tabId)
+    self:CreateFrame()
+    if not frame then return end
+
+    tabId = tonumber(tabId) or 1
+    if tabId ~= 2 then tabId = 1 end
+    frame._lariasSelectedTab = tabId
+
+    local listTab = frame._lariasTabList
+    local optionsTab = frame._lariasTabOptions
+
+    local function SetTabSelected(tabButton, selected)
+        if not tabButton then return end
+        if tabButton.SetEnabled then
+            tabButton:SetEnabled(not selected)
+        elseif selected and tabButton.Disable then
+            tabButton:Disable()
+        elseif tabButton.Enable then
+            tabButton:Enable()
+        end
+
+        if tabButton._lariasTabStyled and tabButton.SetBackdropColor and tabButton.SetBackdropBorderColor then
+            local bg = Addon.THEME.bg
+            local baseAlpha = tonumber(bg.a) or 1
+            local alpha
+            if selected then
+                alpha = min(1, baseAlpha + 0.18)
+            else
+                alpha = max(0, baseAlpha - 0.28)
+            end
+            tabButton:SetBackdropColor(bg.r, bg.g, bg.b, alpha)
+
+            local borderColor = selected and Addon.THEME.header or Addon.THEME.border
+            tabButton:SetBackdropBorderColor(borderColor.r, borderColor.g, borderColor.b, borderColor.a)
+        end
+
+        local textRegion = tabButton.Text or (tabButton.GetFontString and tabButton:GetFontString())
+        if textRegion and textRegion.SetTextColor then
+            if selected then
+                textRegion:SetTextColor(Addon.THEME.header.r, Addon.THEME.header.g, Addon.THEME.header.b, Addon.THEME.header.a)
+            else
+                textRegion:SetTextColor(Addon.THEME.textDim.r, Addon.THEME.textDim.g, Addon.THEME.textDim.b, Addon.THEME.textDim.a)
+            end
+        end
+    end
+
+    SetTabSelected(listTab, tabId == 1)
+    SetTabSelected(optionsTab, tabId == 2)
+
+    local showList = (tabId == 1)
+    if scrollFrame and scrollFrame.SetShown then
+        scrollFrame:SetShown(showList)
+    end
+
+    local optionsPanel = frame._lariasOptionsPanel
+    if optionsPanel and optionsPanel.SetShown then
+        optionsPanel:SetShown(not showList)
+    end
+
+    if not showList and self.SyncOptionsTabControls then
+        self:SyncOptionsTabControls()
+    end
+
+    -- Force tracking panel to respect the selected tab (List only).
+    if self.ApplyTrackingPanelOptions then
+        self:ApplyTrackingPanelOptions()
+    elseif self.UpdateTracking then
+        self:UpdateTracking()
+    end
+
+    if self.ApplyScrollLayout then
+        self:ApplyScrollLayout()
+    end
+    if showList and self.Refresh then
+        self:Refresh()
+    end
+end
+
+function Addon:SyncOptionsTabControls()
+    if not frame then return end
+    local db = self:EnsureDB()
+
+    local showGreatVaultCheck = frame._lariasOptShowGreatVault
+    if showGreatVaultCheck and showGreatVaultCheck.SetChecked then
+        showGreatVaultCheck:SetChecked(db.showGreatVault and true or false)
+    end
+
+    local showCurrencyCheck = frame._lariasOptShowCurrency
+    if showCurrencyCheck and showCurrencyCheck.SetChecked then
+        showCurrencyCheck:SetChecked(db.showCurrency and true or false)
+    end
+
+    local hideCompletedCheck = frame._lariasOptHideCompleted
+    if hideCompletedCheck and hideCompletedCheck.SetChecked then
+        hideCompletedCheck:SetChecked(db.hideCompletedSections and true or false)
     end
 end
 
@@ -829,7 +955,6 @@ local function CalcDataSig(data)
     -- We'll optimize by reducing table creation.
     
     local parts = {}
-    local counter = 0
     
     -- Pre-calculate size to avoid reallocations if possible (Lua internal)
     -- Just stick to efficient pushing.
@@ -1118,41 +1243,178 @@ function Addon:CreateFrame()
     closeBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -Addon.UI.closeInset, -Addon.UI.closeInset)
     closeBtn:SetScript("OnClick", function() frame:Hide() end)
 
-    local topRow = CreateFrame("Frame", nil, frame)
-    topRow:SetPoint("TOPLEFT", frame, "TOPLEFT", Addon.UI.padOuterX, -Addon.UI.padOuterTop)
-    topRow:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -Addon.UI.topRowRightInset, -Addon.UI.padOuterTop)
-    topRow:SetHeight(Addon.UI.topRowH)
+    local frameName = frame.GetName and frame:GetName() or nil
+    local tab1Name = frameName and (frameName .. "Tab1") or nil
+    local tab2Name = frameName and (frameName .. "Tab2") or nil
 
-    local hideDoneCheck = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
-    hideDoneCheck:SetPoint("LEFT", topRow, "LEFT", Addon.UI.padOuterX, 0)
-    local htxt = hideDoneCheck.text or hideDoneCheck.Text
-    if htxt then
-        htxt:SetText(L.HIDE_COMPLETED_WEEKS or "")
-        if htxt.SetTextColor then
-            htxt:SetTextColor(Addon.THEME.text.r, Addon.THEME.text.g, Addon.THEME.text.b, Addon.THEME.text.a)
+    local function StyleMainTabButton(tabButton)
+        if not tabButton then return end
+
+        if not tabButton.SetBackdrop and BackdropTemplateMixin and Mixin then
+            Mixin(tabButton, BackdropTemplateMixin)
         end
+
+        if tabButton.SetBackdrop then
+            tabButton:SetBackdrop({
+                bgFile = "Interface\\Buttons\\WHITE8x8",
+                edgeFile = "Interface\\Buttons\\WHITE8x8",
+                tile = false,
+                edgeSize = 1,
+                insets = { left = 3, right = 3, top = 3, bottom = 3 },
+            })
+            tabButton:SetBackdropBorderColor(Addon.THEME.border.r, Addon.THEME.border.g, Addon.THEME.border.b, Addon.THEME.border.a)
+            tabButton:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, max(0, (tonumber(Addon.THEME.bg.a) or 1) - 0.28))
+        end
+
+        local function ClearAndHideTexture(texture)
+            if not texture then return end
+            if texture.SetTexture then texture:SetTexture(nil) end
+            if texture.SetAlpha then texture:SetAlpha(0) end
+            if texture.Hide then texture:Hide() end
+        end
+
+        -- Some client builds error if SetNormalTexture(nil) is used. Hide existing textures instead.
+        if tabButton.GetNormalTexture then ClearAndHideTexture(tabButton:GetNormalTexture()) end
+        if tabButton.GetPushedTexture then ClearAndHideTexture(tabButton:GetPushedTexture()) end
+        if tabButton.GetDisabledTexture then ClearAndHideTexture(tabButton:GetDisabledTexture()) end
+        if tabButton.GetHighlightTexture then ClearAndHideTexture(tabButton:GetHighlightTexture()) end
+
+        -- UIPanelButtonTemplate uses these regions for its default art.
+        if tabButton.Left and tabButton.Left.Hide then tabButton.Left:Hide() end
+        if tabButton.Middle and tabButton.Middle.Hide then tabButton.Middle:Hide() end
+        if tabButton.Right and tabButton.Right.Hide then tabButton.Right:Hide() end
+
+        -- Ensure the label sits centered with even vertical padding.
+        if tabButton.SetTextInsets then
+            tabButton:SetTextInsets(12, 12, 4, 4)
+        end
+
+        local textRegion = tabButton.Text or (tabButton.GetFontString and tabButton:GetFontString())
+        if textRegion then
+            if textRegion.SetJustifyV then textRegion:SetJustifyV("MIDDLE") end
+            if textRegion.ClearAllPoints and textRegion.SetPoint then
+                textRegion:ClearAllPoints()
+                textRegion:SetPoint("CENTER", tabButton, "CENTER", 0, 0)
+            end
+        end
+
+        if tabButton.CreateTexture and not tabButton._lariasCustomHighlight then
+            local highlight = tabButton:CreateTexture(nil, "HIGHLIGHT")
+            highlight:SetAllPoints(tabButton)
+            highlight:SetColorTexture(Addon.THEME.text.r, Addon.THEME.text.g, Addon.THEME.text.b, 0.06)
+            tabButton._lariasCustomHighlight = highlight
+        end
+
+        tabButton._lariasTabStyled = true
     end
 
+    local listTab = CreateFrame("Button", tab1Name, frame, "UIPanelButtonTemplate")
+    listTab:SetID(1)
+    listTab:SetText("List")
+    listTab:SetSize(120, 28)
+    listTab:ClearAllPoints()
+    -- Tabs should sit *inside* the window.
+    local tabInsetX = (Addon.UI.padOuterX or 0) + (Addon.UI.sectionInsetX or 0)
+    listTab:SetPoint("TOPLEFT", frame, "TOPLEFT", tabInsetX, -Addon.UI.padOuterTop)
+    StyleMainTabButton(listTab)
+    listTab:SetScript("OnClick", function(selfBtn)
+        Addon:SelectMainTab(selfBtn:GetID())
+    end)
+
+    local optionsTab = CreateFrame("Button", tab2Name, frame, "UIPanelButtonTemplate")
+    optionsTab:SetID(2)
+    optionsTab:SetText("Options")
+    optionsTab:SetSize(120, 28)
+    optionsTab:ClearAllPoints()
+    optionsTab:SetPoint("LEFT", listTab, "RIGHT", 6, 0)
+    StyleMainTabButton(optionsTab)
+    optionsTab:SetScript("OnClick", function(selfBtn)
+        Addon:SelectMainTab(selfBtn:GetID())
+    end)
+
+    frame._lariasTabList = listTab
+    frame._lariasTabOptions = optionsTab
+
+    scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
+    scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", Addon.UI.padOuterX, -Addon.UI.scrollTop)
+
+    scrollChild = CreateFrame("Frame", nil, scrollFrame)
+    scrollChild:SetSize(1, 1)
+    scrollFrame:SetScrollChild(scrollChild)
+
+    local optionsPanel = CreateFrame("Frame", nil, frame)
+    optionsPanel:SetPoint("TOPLEFT", frame, "TOPLEFT", Addon.UI.padOuterX, -Addon.UI.scrollTop)
+    optionsPanel:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -Addon.UI.padOuterX, Addon.UI.scrollBottom)
+    optionsPanel:Hide()
+    frame._lariasOptionsPanel = optionsPanel
+
     local db = self:EnsureDB()
-    hideDoneCheck:SetChecked(db.hideCompletedSections)
-    hideDoneCheck:SetScript("OnClick", function(selfBtn)
+
+    local showGreatVaultCheck = CreateFrame("CheckButton", nil, optionsPanel, "UICheckButtonTemplate")
+    showGreatVaultCheck:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 6, -6)
+    do
+        local textRegion = showGreatVaultCheck.text or showGreatVaultCheck.Text
+        if textRegion then
+            textRegion:SetText(L.OPTIONS_SHOW_GREAT_VAULT or "Show Great Vault")
+            if textRegion.SetTextColor then
+                textRegion:SetTextColor(Addon.THEME.text.r, Addon.THEME.text.g, Addon.THEME.text.b, Addon.THEME.text.a)
+            end
+        end
+    end
+    showGreatVaultCheck:SetChecked(db.showGreatVault and true or false)
+    showGreatVaultCheck:SetScript("OnClick", function(selfBtn)
+        local d = Addon:EnsureDB()
+        d.showGreatVault = selfBtn:GetChecked() and true or false
+        if Addon.UpdateTracking then Addon:UpdateTracking() end
+        Addon:ApplyScrollLayout()
+        Addon:Refresh()
+    end)
+    frame._lariasOptShowGreatVault = showGreatVaultCheck
+
+    local showCurrencyCheck = CreateFrame("CheckButton", nil, optionsPanel, "UICheckButtonTemplate")
+    showCurrencyCheck:SetPoint("TOPLEFT", showGreatVaultCheck, "BOTTOMLEFT", 0, -8)
+    do
+        local textRegion = showCurrencyCheck.text or showCurrencyCheck.Text
+        if textRegion then
+            textRegion:SetText(L.OPTIONS_SHOW_CURRENCY or "Show Currency")
+            if textRegion.SetTextColor then
+                textRegion:SetTextColor(Addon.THEME.text.r, Addon.THEME.text.g, Addon.THEME.text.b, Addon.THEME.text.a)
+            end
+        end
+    end
+    showCurrencyCheck:SetChecked(db.showCurrency and true or false)
+    showCurrencyCheck:SetScript("OnClick", function(selfBtn)
+        local d = Addon:EnsureDB()
+        d.showCurrency = selfBtn:GetChecked() and true or false
+        if Addon.UpdateTracking then Addon:UpdateTracking() end
+        Addon:ApplyScrollLayout()
+        Addon:Refresh()
+    end)
+    frame._lariasOptShowCurrency = showCurrencyCheck
+
+    local hideCompletedCheck = CreateFrame("CheckButton", nil, optionsPanel, "UICheckButtonTemplate")
+    hideCompletedCheck:SetPoint("TOPLEFT", showCurrencyCheck, "BOTTOMLEFT", 0, -8)
+    do
+        local textRegion = hideCompletedCheck.text or hideCompletedCheck.Text
+        if textRegion then
+            textRegion:SetText(L.HIDE_COMPLETED_WEEKS or "Hide Completed Weeks")
+            if textRegion.SetTextColor then
+                textRegion:SetTextColor(Addon.THEME.text.r, Addon.THEME.text.g, Addon.THEME.text.b, Addon.THEME.text.a)
+            end
+        end
+    end
+    hideCompletedCheck:SetChecked(db.hideCompletedSections and true or false)
+    hideCompletedCheck:SetScript("OnClick", function(selfBtn)
         local d = Addon:EnsureDB()
         d.hideCompletedSections = selfBtn:GetChecked() and true or false
         Addon:Refresh()
     end)
+    frame._lariasOptHideCompleted = hideCompletedCheck
 
-    local optionsBtn = CreateFrame("Button", nil, frame, "GameMenuButtonTemplate")
-    optionsBtn:SetPoint("RIGHT", topRow, "RIGHT", 0, 0)
-    optionsBtn:SetSize(90, Addon.UI.topRowH)
-    optionsBtn:SetText(L.OPTIONS_BUTTON or "")
-    optionsBtn:SetScript("OnClick", function()
-        Addon:OpenOptions()
-    end)
-
-    local resetBtn = CreateFrame("Button", nil, frame, "GameMenuButtonTemplate")
-    resetBtn:SetPoint("RIGHT", optionsBtn, "LEFT", -8, 0)
-    resetBtn:SetSize(90, Addon.UI.topRowH)
-    resetBtn:SetText(L.RESET_BUTTON or "")
+    local resetBtn = CreateFrame("Button", nil, optionsPanel, "GameMenuButtonTemplate")
+    resetBtn:SetPoint("TOPLEFT", hideCompletedCheck, "BOTTOMLEFT", 0, -12)
+    resetBtn:SetSize(120, 24)
+    resetBtn:SetText(L.RESET_BUTTON or "Reset")
     resetBtn:SetScript("OnClick", function()
         local d = Addon:EnsureDB()
         if wipe then
@@ -1162,19 +1424,15 @@ function Addon:CreateFrame()
             d.checked = {}
             d.collapsedSections = {}
         end
-        d.hideCompletedSections = false
-        hideDoneCheck:SetChecked(false)
+        d.hideCompletedSections = true
+
+        if Addon.SyncOptionsTabControls then
+            Addon:SyncOptionsTabControls()
+        end
 
         Addon:ApplyScrollLayout()
         Addon:Refresh()
     end)
-
-    scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", Addon.UI.padOuterX, -Addon.UI.scrollTop)
-
-    scrollChild = CreateFrame("Frame", nil, scrollFrame)
-    scrollChild:SetSize(1, 1)
-    scrollFrame:SetScrollChild(scrollChild)
 
     if (db.showGreatVault or db.showCurrency) and self.CreateTrackingPanel and not self._trackingFrame then
         self:CreateTrackingPanel(frame)
@@ -1182,6 +1440,8 @@ function Addon:CreateFrame()
 
     self:ApplyScrollLayout()
     self:Refresh()
+
+    self:SelectMainTab(1)
 end
 
 function Addon:Toggle()
@@ -1192,6 +1452,9 @@ function Addon:Toggle()
         self._updatePopupShownThisOpen = nil
         self:BroadcastVersion(false)
         self:RequestVersions(false)
+        if self.SelectMainTab then
+            self:SelectMainTab(1)
+        end
         self:ApplyScrollLayout()
         self:Refresh()
         self:ShowUpdatePopupIfNeeded()
