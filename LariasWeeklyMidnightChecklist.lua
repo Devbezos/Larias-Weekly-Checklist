@@ -11,20 +11,20 @@ local L = Addon.L or {}
 
 -- Initialize all constants on the new Addon object
 do
-    function Addon:InitConstants(name)
-        name = name or addonName
+    function Addon:InitConstants(addonNameInput)
+        addonNameInput = addonNameInput or addonName
 
-        local L = self.L or {}
+        local locale = self.L or {}
 
         -- Group core constants into objects (tables) while keeping legacy fields for compatibility.
         self.CONSTANTS = self.CONSTANTS or {}
         self.CONSTANTS.names = self.CONSTANTS.names or {}
         local names = self.CONSTANTS.names
 
-        if names.displayName == nil then names.displayName = L.DISPLAY_NAME or name end
+        if names.displayName == nil then names.displayName = locale.DISPLAY_NAME or addonNameInput end
         if names.dbName == nil then names.dbName = "LariasWeeklyMidnightChecklistDBPC" end
         if names.accountDbName == nil then names.accountDbName = "LariasWeeklyMidnightChecklistDB" end
-        if names.listDataKey == nil then names.listDataKey = (name .. "_LIST_DATA") end
+        if names.listDataKey == nil then names.listDataKey = (addonNameInput .. "_LIST_DATA") end
 
         self.DISPLAY_NAME = self.DISPLAY_NAME or names.displayName
         self._DB_NAME = self._DB_NAME or names.dbName
@@ -79,41 +79,41 @@ do
         end
 
         local function EnsureProfile(key)
-            local p = self.TRACKING.profiles[key]
-            if type(p) ~= "table" then
-                p = {}
-                self.TRACKING.profiles[key] = p
+            local profile = self.TRACKING.profiles[key]
+            if type(profile) ~= "table" then
+                profile = {}
+                self.TRACKING.profiles[key] = profile
             end
-            p.questIDs = p.questIDs or {}
-            return p
+            profile.questIDs = profile.questIDs or {}
+            return profile
         end
 
-        local tww = EnsureProfile("tww")
-        if type(tww.crestCurrencyIDs) ~= "table" then
-            tww.crestCurrencyIDs = {
+        local twwProfile = EnsureProfile("tww")
+        if type(twwProfile.crestCurrencyIDs) ~= "table" then
+            twwProfile.crestCurrencyIDs = {
                 3284,
                 3286,
                 3288,
                 3290,
             }
         end
-        if type(tww.crestAchievementIDs) ~= "table" then
-            tww.crestAchievementIDs = {
+        if type(twwProfile.crestAchievementIDs) ~= "table" then
+            twwProfile.crestAchievementIDs = {
                 41886,
                 41887,
                 41888,
                 41892,
             }
         end
-        if tww.sparkCurrencyID == nil then tww.sparkCurrencyID = 3141 end
-        if tww.catalystCurrencyID == nil then tww.catalystCurrencyID = 3269 end
-        if tww.crestTradeBatch == nil then tww.crestTradeBatch = { 45, 15 } end
-        if tww.questIDs.delversBounty == nil then tww.questIDs.delversBounty = 86371 end
-        if tww.questIDs.weeklyPrey == nil then tww.questIDs.weeklyPrey = 0 end
+        if twwProfile.sparkCurrencyID == nil then twwProfile.sparkCurrencyID = 3141 end
+        if twwProfile.catalystCurrencyID == nil then twwProfile.catalystCurrencyID = 3269 end
+        if twwProfile.crestTradeBatch == nil then twwProfile.crestTradeBatch = { 45, 15 } end
+        if twwProfile.questIDs.delversBounty == nil then twwProfile.questIDs.delversBounty = 86371 end
+        if twwProfile.questIDs.weeklyPrey == nil then twwProfile.questIDs.weeklyPrey = 0 end
 
-        local midnight = EnsureProfile("midnight")
-        if type(midnight.crestCurrencyIDs) ~= "table" then
-            midnight.crestCurrencyIDs = {
+        local midnightProfile = EnsureProfile("midnight")
+        if type(midnightProfile.crestCurrencyIDs) ~= "table" then
+            midnightProfile.crestCurrencyIDs = {
                 3383,
                 3341,
                 3343,
@@ -121,8 +121,8 @@ do
                 3347,
             }
         end
-        if type(midnight.crestAchievementIDs) ~= "table" then
-            midnight.crestAchievementIDs = {
+        if type(midnightProfile.crestAchievementIDs) ~= "table" then
+            midnightProfile.crestAchievementIDs = {
                 61809,
                 42767,
                 72768,
@@ -130,11 +130,11 @@ do
                 42770,
             }
         end
-        if midnight.sparkCurrencyID == nil then midnight.sparkCurrencyID = 0 end
-        if midnight.catalystCurrencyID == nil then midnight.catalystCurrencyID = 0 end
-        if midnight.crestTradeBatch == nil then midnight.crestTradeBatch = { 45, 15 } end
-        if midnight.questIDs.delversBounty == nil then midnight.questIDs.delversBounty = 0 end
-        if midnight.questIDs.weeklyPrey == nil then midnight.questIDs.weeklyPrey = 0 end
+        if midnightProfile.sparkCurrencyID == nil then midnightProfile.sparkCurrencyID = 0 end
+        if midnightProfile.catalystCurrencyID == nil then midnightProfile.catalystCurrencyID = 0 end
+        if midnightProfile.crestTradeBatch == nil then midnightProfile.crestTradeBatch = { 45, 15 } end
+        if midnightProfile.questIDs.delversBounty == nil then midnightProfile.questIDs.delversBounty = 0 end
+        if midnightProfile.questIDs.weeklyPrey == nil then midnightProfile.questIDs.weeklyPrey = 0 end
     end
 
     Addon:InitConstants(addonName)
@@ -194,7 +194,7 @@ local function SetupMinimapIcon()
             if button == "LeftButton" then
                 Addon:Toggle()
             elseif button == "RightButton" then
-                LibStub("AceConfigDialog-3.0"):Open(addonName)
+                Addon:OpenOptions()
             end
         end,
         OnTooltipShow = function(tooltip)
@@ -205,7 +205,7 @@ local function SetupMinimapIcon()
         end,
     })
     
-    icon:Register(addonName, dataObject, Addon.db and Addon.db.profile or {})
+    icon:Register(addonName, dataObject, (Addon.db and Addon.db.profile and Addon.db.profile.minimap) or {})
 end
 
 -- Enable minimap icon by default
@@ -236,31 +236,29 @@ function Addon:GetMyVersion()
     return self._myVersion or ""
 end
 
-local function IsVersionNewer(a, b)
-    if a == b then return false end
-    if a == "" then return false end
-    if b == "" then return true end
+local function IsVersionNewer(versionA, versionB)
+    if versionA == versionB then return false end
+    if versionA == "" then return false end
+    if versionB == "" then return true end
 
-    local function SplitNums(s)
-        local out = {}
-        for n in tostring(s):gmatch("%d+") do
-            out[#out + 1] = tonumber(n) or 0
-        end
-        return out
-    end
-
-    local aParts = SplitNums(a)
-    local bParts = SplitNums(b)
-    local maxParts = max(#aParts, #bParts)
-    for index = 1, maxParts do
-        local aValue = aParts[index] or 0
-        local bValue = bParts[index] or 0
-        if aValue ~= bValue then
-            return aValue > bValue
+    local iterA = tostring(versionA):gmatch("%d+")
+    local iterB = tostring(versionB):gmatch("%d+")
+    
+    while true do
+        local numA = iterA()
+        local numB = iterB()
+        
+        if not numA and not numB then break end
+        
+        local valA = tonumber(numA) or 0
+        local valB = tonumber(numB) or 0
+        
+        if valA ~= valB then
+            return valA > valB
         end
     end
 
-    return a > b
+    return versionA > versionB
 end
 
 function Addon:ShouldShowUpdateNotice()
@@ -409,7 +407,12 @@ function Addon:OnAddonMessage(prefix, message, sender)
         
         replyTimerActive = true
         self:ScheduleTimer(function() replyTimerActive = false end, REPLY_THROTTLE_SECONDS)
-        self:BroadcastVersion(true)
+        
+        -- Add random jitter (0 to 2 seconds) to prevent synchronized packet bursts
+        local delay = (math.random() * 2.0)
+        self:ScheduleTimer(function() 
+            self:BroadcastVersion(true) 
+        end, delay)
         return
     end
 
@@ -448,8 +451,8 @@ end
 -- Initialize AceDB and minimap icon on addon load
 function Addon:OnInitialize()
     SetupAddonDB()
-    SetupMinimapIcon()
     EnsureMinimapIcon()
+    SetupMinimapIcon()
 end
 
 -- Handle player login event
@@ -475,14 +478,14 @@ function Addon:CHAT_MSG_ADDON(_, prefix, messageText, _, _, sender)
     Addon:OnAddonMessage(prefix, messageText, sender)
 end
 
-local function Wipe(t)
-    if not t then return end
+local function Wipe(tableToWipe)
+    if not tableToWipe then return end
     if wipe then
-        wipe(t)
+        wipe(tableToWipe)
         return
     end
-    for k in pairs(t) do
-        t[k] = nil
+    for key in pairs(tableToWipe) do
+        tableToWipe[key] = nil
     end
 end
 
@@ -503,21 +506,21 @@ function Addon:DB()
     return _G[self._DB_NAME]
 end
 
-local function CopyTableShallow(src)
-    if type(src) ~= "table" then return {} end
-    local dst = {}
-    for k, v in pairs(src) do
-        if type(v) == "table" then
-            local child = {}
-            for ck, cv in pairs(v) do
-                child[ck] = cv
+local function CopyTableShallow(srcTable)
+    if type(srcTable) ~= "table" then return {} end
+    local dstTable = {}
+    for key, value in pairs(srcTable) do
+        if type(value) == "table" then
+            local childTable = {}
+            for childKey, childValue in pairs(value) do
+                childTable[childKey] = childValue
             end
-            dst[k] = child
+            dstTable[key] = childTable
         else
-            dst[k] = v
+            dstTable[key] = value
         end
     end
-    return dst
+    return dstTable
 end
 
 function Addon:EnsureDB()
@@ -576,18 +579,6 @@ function Addon:SetupOptionsWithAceConfig()
                             self:Refresh()
                         end,
                     },
-                    hideCompletedSections = {
-                        name = L.HIDE_COMPLETED_WEEKS or "Hide Completed Weeks",
-                        desc = "Hide weeks that are marked as complete",
-                        type = "toggle",
-                        width = "full",
-                        order = 3,
-                        get = function() return self.db.profile.hideCompletedSections or false end,
-                        set = function(info, value)
-                            self.db.profile.hideCompletedSections = value
-                            self:Refresh()
-                        end,
-                    },
                 },
             },
         },
@@ -604,7 +595,12 @@ function Addon:EnsureOptionsPanel()
 end
 
 function Addon:OpenOptions()
-    LibStub("AceConfigDialog-3.0"):Open(addonName)
+    local ACD = LibStub("AceConfigDialog-3.0")
+    if ACD.OpenFrames[addonName] then
+        ACD:Close(addonName)
+    else
+        ACD:Open(addonName)
+    end
 end
 
 function Addon:GetListData()
@@ -613,17 +609,17 @@ function Addon:GetListData()
     return {}
 end
 
-function Addon:ApplyTheme(f)
-    if not f or not f.SetBackdrop then return end
-    f:SetBackdrop({
+function Addon:ApplyTheme(frameObj)
+    if not frameObj or not frameObj.SetBackdrop then return end
+    frameObj:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
         edgeFile = "Interface\\Buttons\\WHITE8x8",
         tile = false,
         edgeSize = 1,
         insets = { left = 3, right = 3, top = 3, bottom = 3 },
     })
-    f:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, Addon.THEME.bg.a)
-    f:SetBackdropBorderColor(Addon.THEME.border.r, Addon.THEME.border.g, Addon.THEME.border.b, Addon.THEME.border.a)
+    frameObj:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, Addon.THEME.bg.a)
+    frameObj:SetBackdropBorderColor(Addon.THEME.border.r, Addon.THEME.border.g, Addon.THEME.border.b, Addon.THEME.border.a)
 end
 function Addon:ApplyScrollLayout()
     if not (frame and scrollFrame) then return end
@@ -685,306 +681,325 @@ local function IsSectionCompleteById(sectionId, db)
 end
 
 local function AcquireSectionFrame()
-    local sf = tremove(Addon._sectionPool)
-    if sf then
-        sf:Show()
-        return sf
+    local sectionFrame = tremove(Addon._sectionPool)
+    if sectionFrame then
+        sectionFrame:Show()
+        return sectionFrame
     end
 
-    sf = CreateFrame("Frame", nil, scrollChild)
-    sf:SetWidth(1)
-    sf._checkboxes = {}
+    sectionFrame = CreateFrame("Frame", nil, scrollChild)
+    sectionFrame:SetWidth(1)
+    sectionFrame._checkboxes = {}
 
-    local header = CreateFrame("Button", nil, sf)
-    header:SetPoint("TOPLEFT", sf, "TOPLEFT", 0, 0)
-    header:SetPoint("TOPRIGHT", sf, "TOPRIGHT", 0, 0)
+    local header = CreateFrame("Button", nil, sectionFrame)
+    header:SetPoint("TOPLEFT", sectionFrame, "TOPLEFT", 0, 0)
+    header:SetPoint("TOPRIGHT", sectionFrame, "TOPRIGHT", 0, 0)
     header:SetHeight(Addon.UI.headerMinH)
-    sf._header = header
+    sectionFrame._header = header
 
     local title = header:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("LEFT", header, "LEFT", 0, 0)
     title:SetTextColor(Addon.THEME.header.r, Addon.THEME.header.g, Addon.THEME.header.b, Addon.THEME.header.a)
     title:SetJustifyH("LEFT")
     if title.SetWordWrap then title:SetWordWrap(true) end
-    sf._title = title
+    sectionFrame._title = title
 
     local status = header:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     status:SetPoint("RIGHT", header, "RIGHT", 0, 0)
     status:SetTextColor(Addon.THEME.textDim.r, Addon.THEME.textDim.g, Addon.THEME.textDim.b, Addon.THEME.textDim.a)
-    sf._status = status
+    sectionFrame._status = status
 
-    return sf
+    return sectionFrame
 end
 
-local function ReleaseSectionFrame(sf)
-    if not sf then return end
-    sf:Hide()
-    sf:ClearAllPoints()
-    sf._sectionId = nil
-    sf._index = nil
+local function ReleaseSectionFrame(sectionFrame)
+    if not sectionFrame then return end
+    sectionFrame:Hide()
+    sectionFrame:ClearAllPoints()
+    sectionFrame._sectionId = nil
+    sectionFrame._index = nil
 
-    if sf._checkboxes then
-        for i = #sf._checkboxes, 1, -1 do
-            local cb = sf._checkboxes[i]
-            cb:Hide()
-            cb:ClearAllPoints()
-            cb._sectionId = nil
-            cb._itemId = nil
-            cb._dbKey = nil
-            cb:SetScript("OnClick", nil)
-            tinsert(Addon._checkboxPool, cb)
-            sf._checkboxes[i] = nil
+    if sectionFrame._checkboxes then
+        for i = #sectionFrame._checkboxes, 1, -1 do
+            local checkbox = sectionFrame._checkboxes[i]
+            checkbox:Hide()
+            checkbox:ClearAllPoints()
+            checkbox._sectionId = nil
+            checkbox._itemId = nil
+            checkbox._dbKey = nil
+            checkbox:SetScript("OnClick", nil)
+            tinsert(Addon._checkboxPool, checkbox)
+            sectionFrame._checkboxes[i] = nil
         end
     end
 
-    sf._header:SetScript("OnClick", nil)
-    tinsert(Addon._sectionPool, sf)
+    sectionFrame._header:SetScript("OnClick", nil)
+    tinsert(Addon._sectionPool, sectionFrame)
 end
 
-local function AcquireCheckbox(sf)
-    local cb = tremove(Addon._checkboxPool)
-    if cb then
-        cb:SetParent(sf)
-        cb:Show()
-        return cb
+local function AcquireCheckbox(parentSectionFrame)
+    local checkbox = tremove(Addon._checkboxPool)
+    if checkbox then
+        checkbox:SetParent(parentSectionFrame)
+        checkbox:Show()
+        return checkbox
     end
 
-    cb = CreateFrame("CheckButton", nil, sf, "UICheckButtonTemplate")
-    local txt = cb.text or cb.Text
-    if txt then
-        txt:SetJustifyH("LEFT")
-        if txt.SetWordWrap then txt:SetWordWrap(true) end
-        if txt.SetTextColor then
-            txt:SetTextColor(Addon.THEME.text.r, Addon.THEME.text.g, Addon.THEME.text.b, Addon.THEME.text.a)
+    checkbox = CreateFrame("CheckButton", nil, parentSectionFrame, "UICheckButtonTemplate")
+    local textLabel = checkbox.text or checkbox.Text
+    if textLabel then
+        textLabel:SetJustifyH("LEFT")
+        if textLabel.SetWordWrap then textLabel:SetWordWrap(true) end
+        if textLabel.SetTextColor then
+            textLabel:SetTextColor(Addon.THEME.text.r, Addon.THEME.text.g, Addon.THEME.text.b, Addon.THEME.text.a)
         end
     end
-    return cb
+    return checkbox
 end
 local UpdateSectionVisuals
 
-local function ComputeHeaderHeight(sf, headerTextWidth)
-    sf._title:SetWidth(headerTextWidth)
-    local th = 0
-    if sf._title.GetStringHeight then
-        th = sf._title:GetStringHeight() or 0
+local function ComputeHeaderHeight(sectionFrame, headerTextWidth)
+    sectionFrame._title:SetWidth(headerTextWidth)
+    local textHeight = 0
+    if sectionFrame._title.GetStringHeight then
+        textHeight = sectionFrame._title:GetStringHeight() or 0
     end
-    local hh = max(Addon.UI.headerMinH, th + 6)
-    sf._header:SetHeight(hh)
-    sf._headerBlockHeight = hh + Addon.UI.headerBottomPad
+    local headerHeight = max(Addon.UI.headerMinH, textHeight + 6)
+    sectionFrame._header:SetHeight(headerHeight)
+    sectionFrame._headerBlockHeight = headerHeight + Addon.UI.headerBottomPad
 end
 
-local function LayoutItems(sf, collapsed)
-    local y = -(sf._headerBlockHeight or (Addon.UI.headerMinH + Addon.UI.headerBottomPad))
-    local total = 0
-    local boxes = sf._checkboxes
-    for i = 1, #boxes do
-        local cb = boxes[i]
-        cb:ClearAllPoints()
-        cb:SetPoint("TOPLEFT", sf, "TOPLEFT", 0, y)
-        local rh = cb:GetHeight() or Addon.UI.itemMinH
-        y = y - rh
-        total = total + rh
-        cb:SetShown(not collapsed)
+local function LayoutItems(sectionFrame, collapsed)
+    local posY = -(sectionFrame._headerBlockHeight or (Addon.UI.headerMinH + Addon.UI.headerBottomPad))
+    local totalHeight = 0
+    local checkboxes = sectionFrame._checkboxes
+    for i = 1, #checkboxes do
+        local checkbox = checkboxes[i]
+        checkbox:ClearAllPoints()
+        checkbox:SetPoint("TOPLEFT", sectionFrame, "TOPLEFT", 0, posY)
+        local rowHeight = checkbox:GetHeight() or Addon.UI.itemMinH
+        posY = posY - rowHeight
+        totalHeight = totalHeight + rowHeight
+        checkbox:SetShown(not collapsed)
     end
-    sf._itemsHeight = total
+    sectionFrame._itemsHeight = totalHeight
 end
 
-local function UpdateSectionHeight(sf, collapsed)
-    local h = (sf._headerBlockHeight or (Addon.UI.headerMinH + Addon.UI.headerBottomPad))
+local function UpdateSectionHeight(sectionFrame, collapsed)
+    local totalHeight = (sectionFrame._headerBlockHeight or (Addon.UI.headerMinH + Addon.UI.headerBottomPad))
     if not collapsed then
-        h = h + (sf._itemsHeight or 0)
+        totalHeight = totalHeight + (sectionFrame._itemsHeight or 0)
     end
-    sf:SetHeight(h)
+    sectionFrame:SetHeight(totalHeight)
 end
 
 local function LayoutFrom(startIndex)
-    local y = -Addon.UI.sectionTopPad
+    local posY = -Addon.UI.sectionTopPad
     local paddingX = Addon.UI.sectionInsetX
 
     for i = 1, #Addon._activeSections do
-        local sf = Addon._activeSections[i]
-        if sf:IsShown() then
+        local sectionFrame = Addon._activeSections[i]
+        if sectionFrame:IsShown() then
             if i < startIndex then
-                y = y - sf:GetHeight() - Addon.UI.sectionGap
+                posY = posY - sectionFrame:GetHeight() - Addon.UI.sectionGap
             else
-                sf:ClearAllPoints()
-                sf:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", paddingX, y)
-                sf:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", -paddingX, y)
-                y = y - sf:GetHeight() - Addon.UI.sectionGap
+                sectionFrame:ClearAllPoints()
+                sectionFrame:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", paddingX, posY)
+                sectionFrame:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", -paddingX, posY)
+                posY = posY - sectionFrame:GetHeight() - Addon.UI.sectionGap
             end
         end
     end
 
-    local height = max(1, -y + Addon.UI.sectionGap)
-    scrollChild:SetHeight(height)
+    local scrollHeight = max(1, -posY + Addon.UI.sectionGap)
+    scrollChild:SetHeight(scrollHeight)
 end
 
 local function CalcDataSig(data)
     if type(data) ~= "table" then return "" end
-    if data.__lariasSig and data.__lariasSigN == #data then
+    -- Return cached signature if the table reference hasn't changed and we have a sig.
+    -- NOTE: This assumes 'data' contents (ids) don't mutate in-place without clearing __lariasSig.
+    if data.__lariasSig then
         return data.__lariasSig
     end
+
+    -- Use a cyclic redundancy check (CRC) style approximation or simple djb2 hash
+    -- to avoid creating a massive string just to check for equality.
+    -- However, string concat is robust for strict structural equality.
+    -- We'll optimize by reducing table creation.
+    
     local parts = {}
+    local counter = 0
+    
+    -- Pre-calculate size to avoid reallocations if possible (Lua internal)
+    -- Just stick to efficient pushing.
+    
     parts[#parts + 1] = tostring(#data)
     for i = 1, #data do
-        local s = data[i]
-        parts[#parts + 1] = tostring(s.id)
-        local items = s.items or {}
-        parts[#parts + 1] = tostring(#items)
-        for j = 1, #items do
-            parts[#parts + 1] = tostring(items[j].id)
+        local section = data[i]
+        -- Only grab IDs, ignore other fields for the signature
+        parts[#parts + 1] = tostring(section.id)
+        
+        local items = section.items
+        if items then
+            parts[#parts + 1] = tostring(#items)
+            for j = 1, #items do
+                parts[#parts + 1] = tostring(items[j].id)
+            end
+        else
+            parts[#parts + 1] = "0"
         end
     end
-    local sig = tconcat(parts, "|")
+    
+    local sig = tconcat(parts, ":") -- separator
     data.__lariasSig = sig
-    data.__lariasSigN = #data
     return sig
 end
 
-local function SetHeaderText(sf, sectionId, complete)
+local function SetHeaderText(sectionFrame, sectionId, complete)
     local section = Addon._sectionsById[sectionId]
     if complete == nil then
         complete = IsSectionCompleteById(sectionId)
     end
     local titleText = tostring((section and section.title) or sectionId)
     if complete then titleText = (L.DONE_PREFIX or "") .. titleText end
-    sf._title:SetText(titleText)
-    sf._status:SetText("")
+    sectionFrame._title:SetText(titleText)
+    sectionFrame._status:SetText("")
 end
 
 local function OnCheckboxClick(selfBtn)
-    local db = Addon:EnsureDB()
+    local database = Addon:EnsureDB()
     local checked = selfBtn:GetChecked() and true or nil
-    db.checked[selfBtn._dbKey or Key(selfBtn._sectionId, selfBtn._itemId)] = checked
+    database.checked[selfBtn._dbKey or Key(selfBtn._sectionId, selfBtn._itemId)] = checked
 
-    local sid = selfBtn._sectionId
-    local secCompleteNow = IsSectionCompleteById(sid, db)
+    local sectionId = selfBtn._sectionId
+    local secCompleteNow = IsSectionCompleteById(sectionId, database)
     if secCompleteNow then
-        SetSectionCollapsed(sid, true, db)
+        SetSectionCollapsed(sectionId, true, database)
     end
 
-    local sframe = Addon._activeSections[Addon._sectionsIndexById[sid]]
-    if not sframe then return end
+    local sectionFrame = Addon._activeSections[Addon._sectionsIndexById[sectionId]]
+    if not sectionFrame then return end
 
-    local hideDone = db.hideCompletedSections and true or false
+    local hideDone = database.hideCompletedSections and true or false
 
-    SetHeaderText(sframe, sid, secCompleteNow)
-    ComputeHeaderHeight(sframe, Addon.UI.itemTextWidth + Addon.UI.headerTextExtraW)
+    SetHeaderText(sectionFrame, sectionId, secCompleteNow)
+    ComputeHeaderHeight(sectionFrame, Addon.UI.itemTextWidth + Addon.UI.headerTextExtraW)
 
-    local collapsed = IsSectionCollapsed(sid, db) or false
+    local collapsed = IsSectionCollapsed(sectionId, database) or false
     if secCompleteNow then collapsed = true end
 
-    LayoutItems(sframe, collapsed)
-    UpdateSectionHeight(sframe, collapsed)
+    LayoutItems(sectionFrame, collapsed)
+    UpdateSectionHeight(sectionFrame, collapsed)
 
     if hideDone and secCompleteNow then
-        sframe:Hide()
+        sectionFrame:Hide()
     else
-        sframe:Show()
+        sectionFrame:Show()
     end
 
-    LayoutFrom(sframe._index or 1)
+    LayoutFrom(sectionFrame._index or 1)
 end
 
 local function OnHeaderClick(header)
-    local sf = header and header._sectionFrame
-    if not sf then return end
-    local sid = sf._sectionId
-    SetSectionCollapsed(sid, not IsSectionCollapsed(sid))
+    local sectionFrame = header and header._sectionFrame
+    if not sectionFrame then return end
+    local sectionId = sectionFrame._sectionId
+    SetSectionCollapsed(sectionId, not IsSectionCollapsed(sectionId))
     if UpdateSectionVisuals then
-        UpdateSectionVisuals(sf, sid)
+        UpdateSectionVisuals(sectionFrame, sectionId)
     end
-    LayoutFrom(sf._index or 1)
+    LayoutFrom(sectionFrame._index or 1)
 end
 
-local function SyncCheckboxesForSection(sf, sectionId, db)
+local function SyncCheckboxesForSection(sectionFrame, sectionId, db)
     local section = Addon._sectionsById[sectionId]
     local items = (section and section.items) or {}
 
     local want = #items
-    local have = #sf._checkboxes
+    local have = #sectionFrame._checkboxes
 
     if have > want then
         for i = have, want + 1, -1 do
-            local cb = sf._checkboxes[i]
-            cb:Hide()
-            cb:ClearAllPoints()
-            cb._sectionId = nil
-            cb._itemId = nil
-            cb:SetScript("OnClick", nil)
-            tinsert(Addon._checkboxPool, cb)
-            sf._checkboxes[i] = nil
+            local checkbox = sectionFrame._checkboxes[i]
+            checkbox:Hide()
+            checkbox:ClearAllPoints()
+            checkbox._sectionId = nil
+            checkbox._itemId = nil
+            checkbox:SetScript("OnClick", nil)
+            tinsert(Addon._checkboxPool, checkbox)
+            sectionFrame._checkboxes[i] = nil
         end
     elseif have < want then
         for i = have + 1, want do
-            sf._checkboxes[i] = AcquireCheckbox(sf)
+            sectionFrame._checkboxes[i] = AcquireCheckbox(sectionFrame)
         end
     end
 
     for i = 1, want do
         local item = items[i]
-        local cb = sf._checkboxes[i]
+        local checkbox = sectionFrame._checkboxes[i]
 
-        cb._sectionId = sectionId
-        cb._itemId = item.id
-        cb._dbKey = Key(sectionId, item.id)
+        checkbox._sectionId = sectionId
+        checkbox._itemId = item.id
+        checkbox._dbKey = Key(sectionId, item.id)
 
-        local txt = cb.text or cb.Text
-        local minRowH = max(32, Addon.UI.itemMinH or 0)
-        if txt then
-            txt:SetWidth(Addon.UI.itemTextWidth)
-            txt:SetText(tostring(item.text or item.id))
+        local textLabel = checkbox.text or checkbox.Text
+        local minRowHeight = max(32, Addon.UI.itemMinH or 0)
+        if textLabel then
+            textLabel:SetWidth(Addon.UI.itemTextWidth)
+            textLabel:SetText(tostring(item.text or item.id))
 
             local textHeight = 0
-            if txt.GetStringHeight then
-                textHeight = txt:GetStringHeight() or 0
+            if textLabel.GetStringHeight then
+                textHeight = textLabel:GetStringHeight() or 0
             end
-            cb:SetHeight(max(minRowH, textHeight + (Addon.UI.itemTextPad or 0)))
+            checkbox:SetHeight(max(minRowHeight, textHeight + (Addon.UI.itemTextPad or 0)))
         else
-            cb:SetHeight(minRowH)
+            checkbox:SetHeight(minRowHeight)
         end
 
-        cb:SetChecked(IsItemChecked(sectionId, item.id, db))
+        checkbox:SetChecked(IsItemChecked(sectionId, item.id, db))
 
-        cb:SetScript("OnClick", OnCheckboxClick)
+        checkbox:SetScript("OnClick", OnCheckboxClick)
     end
 end
 
-UpdateSectionVisuals = function(sf, sectionId)
-    local db = Addon:EnsureDB()
-    local complete = IsSectionCompleteById(sectionId, db)
+UpdateSectionVisuals = function(sectionFrame, sectionId)
+    local database = Addon:EnsureDB()
+    local complete = IsSectionCompleteById(sectionId, database)
 
-    local hideDone = db.hideCompletedSections and true or false
+    local hideDone = database.hideCompletedSections and true or false
     if hideDone and complete then
-        sf:Hide()
+        sectionFrame:Hide()
         return
     end
 
-    sf:Show()
+    sectionFrame:Show()
 
     if complete then
-        SetSectionCollapsed(sectionId, true, db)
+        SetSectionCollapsed(sectionId, true, database)
     end
 
-    SetHeaderText(sf, sectionId, complete)
-    ComputeHeaderHeight(sf, Addon.UI.itemTextWidth + Addon.UI.headerTextExtraW)
+    SetHeaderText(sectionFrame, sectionId, complete)
+    ComputeHeaderHeight(sectionFrame, Addon.UI.itemTextWidth + Addon.UI.headerTextExtraW)
 
-    local collapsed = IsSectionCollapsed(sectionId, db) or false
+    local collapsed = IsSectionCollapsed(sectionId, database) or false
     if complete then collapsed = true end
 
-    for i = 1, #sf._checkboxes do
-        local cb = sf._checkboxes[i]
-        if cb and cb._itemId ~= nil then
-            cb:SetChecked(IsItemChecked(sectionId, cb._itemId, db))
+    for i = 1, #sectionFrame._checkboxes do
+        local checkbox = sectionFrame._checkboxes[i]
+        if checkbox and checkbox._itemId ~= nil then
+            checkbox:SetChecked(IsItemChecked(sectionId, checkbox._itemId, database))
         end
     end
 
-    LayoutItems(sf, collapsed)
-    UpdateSectionHeight(sf, collapsed)
+    LayoutItems(sectionFrame, collapsed)
+    UpdateSectionHeight(sectionFrame, collapsed)
 end
 
 local function SyncAllDataAndFrames()
-    local db = Addon:EnsureDB()
+    local database = Addon:EnsureDB()
 
     local data = Addon:GetListData()
     local sig = CalcDataSig(data)
@@ -993,9 +1008,9 @@ local function SyncAllDataAndFrames()
         Addon._sectionsById = {}
         Addon._order = {}
         for i = 1, #data do
-            local s = data[i]
-            Addon._sectionsById[s.id] = s
-            Addon._order[i] = s.id
+            local section = data[i]
+            Addon._sectionsById[section.id] = section
+            Addon._order[i] = section.id
         end
 
         for i = #Addon._activeSections, 1, -1 do
@@ -1023,18 +1038,18 @@ local function SyncAllDataAndFrames()
 
     for i = 1, want do
         local sectionId = Addon._order[i]
-        local sf = Addon._activeSections[i]
-        sf:SetParent(scrollChild)
-        sf._sectionId = sectionId
-        sf._index = i
+        local sectionFrame = Addon._activeSections[i]
+        sectionFrame:SetParent(scrollChild)
+        sectionFrame._sectionId = sectionId
+        sectionFrame._index = i
         Addon._sectionsIndexById[sectionId] = i
 
-        SyncCheckboxesForSection(sf, sectionId, db)
+        SyncCheckboxesForSection(sectionFrame, sectionId, database)
 
-        sf._header._sectionFrame = sf
-        sf._header:SetScript("OnClick", OnHeaderClick)
+        sectionFrame._header._sectionFrame = sectionFrame
+        sectionFrame._header:SetScript("OnClick", OnHeaderClick)
 
-        UpdateSectionVisuals(sf, sectionId)
+        UpdateSectionVisuals(sectionFrame, sectionId)
 
     end
 end
@@ -1043,20 +1058,20 @@ function Addon:Refresh()
     if not frame then return end
     SyncAllDataAndFrames()
 
-    local y = -Addon.UI.sectionTopPad
+    local posY = -Addon.UI.sectionTopPad
     local paddingX = Addon.UI.sectionInsetX
 
     for i = 1, #self._activeSections do
-        local sf = self._activeSections[i]
-        if sf:IsShown() then
-            sf:ClearAllPoints()
-            sf:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", paddingX, y)
-            sf:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", -paddingX, y)
-            y = y - sf:GetHeight() - Addon.UI.sectionGap
+        local sectionFrame = self._activeSections[i]
+        if sectionFrame:IsShown() then
+            sectionFrame:ClearAllPoints()
+            sectionFrame:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", paddingX, posY)
+            sectionFrame:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", -paddingX, posY)
+            posY = posY - sectionFrame:GetHeight() - Addon.UI.sectionGap
         end
     end
 
-    scrollChild:SetHeight(max(1, -y + Addon.UI.sectionGap))
+    scrollChild:SetHeight(max(1, -posY + Addon.UI.sectionGap))
 
     if self.UpdateTracking then
         self:UpdateTracking()

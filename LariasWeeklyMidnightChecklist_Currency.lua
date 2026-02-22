@@ -17,16 +17,15 @@ local TrackingUI = { left = {}, right = {} }
 local tonumber, tostring, type = tonumber, tostring, type
 local floor, max, abs = math.floor, math.max, math.abs
 local tinsert, tremove, tconcat, tsort = table.insert, table.remove, table.concat, table.sort
-local strlower, strfind = string.lower, string.find
 
-local function Wipe(t)
-    if not t then return end
+local function Wipe(tableToWipe)
+    if not tableToWipe then return end
     if wipe then
-        wipe(t)
+        wipe(tableToWipe)
         return
     end
-    for k in pairs(t) do
-        t[k] = nil
+    for key in pairs(tableToWipe) do
+        tableToWipe[key] = nil
     end
 end
 
@@ -108,8 +107,10 @@ function Addon:RequestTrackingUpdate()
         end
     end
 
+    -- Throttle updates to run at most once every 0.2 seconds to prevent spam
+    -- from rapid events like bag updates or currency changes.
     if C_Timer and C_Timer.After then
-        C_Timer.After(0, self._trackingUpdateRunner)
+        C_Timer.After(0.2, self._trackingUpdateRunner)
     else
         self._trackingUpdateRunner()
     end
@@ -124,19 +125,19 @@ local COLORS = {
 
 local function ColorWrap(hex, txt) return ("|c%s%s|r"):format(hex, tostring(txt or "")) end
 
-local function SetTextIfChanged(fs, text)
-    if not fs then return end
+local function SetTextIfChanged(fontString, text)
+    if not fontString then return end
     text = text or ""
-    if fs._lariasText ~= text then
-        fs._lariasText = text
-        fs:SetText(text)
+    if fontString._lariasText ~= text then
+        fontString._lariasText = text
+        fontString:SetText(text)
     end
 end
 
-local function IsNonEmptyText(s)
-    if type(s) ~= "string" then return false end
-    s = s:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
-    return s:match("%S") ~= nil
+local function IsNonEmptyText(text)
+    if type(text) ~= "string" then return false end
+    text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    return text:match("%S") ~= nil
 end
 
 local function SetShownIfChanged(region, shown)
@@ -147,20 +148,20 @@ local function SetShownIfChanged(region, shown)
     end
 end
 
-local function FormatXY(cur, cap)
-    cur = tonumber(cur) or 0
-    cap = tonumber(cap) or 0
-    if cap > 0 then return ("%d/%d"):format(cur, cap) end
-    local inf = L.TRACKING_INF
-    if type(inf) ~= "string" or inf == "" then inf = "∞" end
-    return ("%d/%s"):format(cur, inf)
+local function FormatXY(currentAmount, maxAmount)
+    currentAmount = tonumber(currentAmount) or 0
+    maxAmount = tonumber(maxAmount) or 0
+    if maxAmount > 0 then return ("%d/%d"):format(currentAmount, maxAmount) end
+    local infiniteString = L.TRACKING_INF
+    if type(infiniteString) ~= "string" or infiniteString == "" then infiniteString = "∞" end
+    return ("%d/%s"):format(currentAmount, infiniteString)
 end
 
-local function ColorForXY(cur, cap)
-    cur = tonumber(cur) or 0
-    cap = tonumber(cap) or 0
-    if cur <= 0 then return COLORS.red end
-    if cap > 0 and cur >= cap then return COLORS.green end
+local function ColorForXY(currentAmount, maxAmount)
+    currentAmount = tonumber(currentAmount) or 0
+    maxAmount = tonumber(maxAmount) or 0
+    if currentAmount <= 0 then return COLORS.red end
+    if maxAmount > 0 and currentAmount >= maxAmount then return COLORS.green end
     return COLORS.yellow
 end
 
@@ -196,8 +197,8 @@ end
 local function FirstWord(s)
     if not s then return nil end
     s = tostring(s)
-    local w = s:match("^(%S+)")
-    if w and w ~= "" then return w end
+    local firstWord = s:match("^(%S+)")
+    if firstWord and firstWord ~= "" then return firstWord end
     return nil
 end
 
@@ -214,10 +215,10 @@ end
 local function CommonPrefixLen(wordsList)
     local minLen
     for i = 1, #wordsList do
-        local w = wordsList[i]
-        local n = type(w) == "table" and #w or 0
-        if n > 0 then
-            if not minLen or n < minLen then minLen = n end
+        local words = wordsList[i]
+        local wordCount = type(words) == "table" and #words or 0
+        if wordCount > 0 then
+            if not minLen or wordCount < minLen then minLen = wordCount end
         end
     end
     if not minLen or minLen <= 0 then return 0 end
@@ -226,9 +227,9 @@ local function CommonPrefixLen(wordsList)
     for idx = 1, minLen do
         local base
         for i = 1, #wordsList do
-            local w = wordsList[i]
-            if type(w) == "table" and #w > 0 then
-                local cur = tostring(w[idx] or "")
+            local words = wordsList[i]
+            if type(words) == "table" and #words > 0 then
+                local cur = tostring(words[idx] or "")
                 if cur == "" then return prefix end
                 cur = cur:lower()
                 if base == nil then
@@ -246,10 +247,10 @@ end
 local function CommonSuffixLen(wordsList)
     local minLen
     for i = 1, #wordsList do
-        local w = wordsList[i]
-        local n = type(w) == "table" and #w or 0
-        if n > 0 then
-            if not minLen or n < minLen then minLen = n end
+        local words = wordsList[i]
+        local wordCount = type(words) == "table" and #words or 0
+        if wordCount > 0 then
+            if not minLen or wordCount < minLen then minLen = wordCount end
         end
     end
     if not minLen or minLen <= 0 then return 0 end
@@ -258,10 +259,10 @@ local function CommonSuffixLen(wordsList)
     for back = 1, minLen do
         local base
         for i = 1, #wordsList do
-            local w = wordsList[i]
-            if type(w) == "table" and #w > 0 then
-                local idx = (#w - back) + 1
-                local cur = tostring(w[idx] or "")
+            local words = wordsList[i]
+            if type(words) == "table" and #words > 0 then
+                local wordIndex = (#words - back) + 1
+                local cur = tostring(words[wordIndex] or "")
                 if cur == "" then return suffix end
                 cur = cur:lower()
                 if base == nil then
@@ -338,8 +339,15 @@ local function FormatCurrencyProgressParts(currencyID)
 end
 
 local function CountItemInBags(itemID)
-    if not itemID or not C_Item or not C_Item.GetItemCount then return 0 end
-    return C_Item.GetItemCount(itemID, true) or 0
+    if not itemID then return 0 end
+    -- Use C_Item.GetItemCount if available (Dragonflight+), else fallback
+    if C_Item and C_Item.GetItemCount then
+        return C_Item.GetItemCount(itemID, true) or 0
+    end
+    if GetItemCount then
+        return GetItemCount(itemID, true) or 0
+    end
+    return 0
 end
 
 local function DetectCrestCurrencyIDsFromList()
@@ -450,25 +458,25 @@ local function GetActivityRewardIlvl(activityInfo)
     return 0
 end
 
-local function IsActivityComplete(a)
-    if not a then return false end
-    if type(a.isComplete) == "boolean" then return a.isComplete end
-    if type(a.isCompleted) == "boolean" then return a.isCompleted end
-    if type(a.completed) == "boolean" then return a.completed end
-    local prog = a.progress
-    local thr = a.threshold
+local function IsActivityComplete(activity)
+    if not activity then return false end
+    if type(activity.isComplete) == "boolean" then return activity.isComplete end
+    if type(activity.isCompleted) == "boolean" then return activity.isCompleted end
+    if type(activity.completed) == "boolean" then return activity.completed end
+    local progress = activity.progress
+    local threshold = activity.threshold
 
-    if type(prog) == "table" then
-        thr = thr or prog.threshold or prog.required or prog.total
-        prog = prog.progress or prog.current or prog.value
+    if type(progress) == "table" then
+        threshold = threshold or progress.threshold or progress.required or progress.total
+        progress = progress.progress or progress.current or progress.value
     end
 
-    local progNum = tonumber(prog) or 0
-    local thrNum  = tonumber(thr) or 0
-    if thrNum > 0 then return progNum >= thrNum end
+    local progressNum = tonumber(progress) or 0
+    local thresholdNum  = tonumber(threshold) or 0
+    if thresholdNum > 0 then return progressNum >= thresholdNum end
 
-    local maxP = tonumber(a.maxProgress or a.requiredProgress or a.required or a.total)
-    if maxP and maxP > 0 then return progNum >= maxP end
+    local maxProgress = tonumber(activity.maxProgress or activity.requiredProgress or activity.required or activity.total)
+    if maxProgress and maxProgress > 0 then return progressNum >= maxProgress end
 
     return false
 end
@@ -497,9 +505,9 @@ local function MakeGVThresholdsString(complete, total, thresholds, parts)
     end
 
     for i = 1, #thresholds do
-        local v = tonumber(thresholds[i])
-        if v then
-            parts[#parts + 1] = ColorWrap((complete >= i) and COLORS.green or COLORS.red, " " .. tostring(v) .. " ")
+        local value = tonumber(thresholds[i])
+        if value then
+            parts[#parts + 1] = ColorWrap((complete >= i) and COLORS.green or COLORS.red, " " .. tostring(value) .. " ")
         end
     end
     return tconcat(parts, " ")
@@ -509,10 +517,10 @@ local function MakeGVIlvlsRow(ilvls, maxPossible, parts)
     parts = parts or {}
     Wipe(parts)
     for i = 1, #ilvls do
-        local v = tonumber(ilvls[i]) or 0
-        if v > 0 then
-            local c = (maxPossible > 0 and v == maxPossible) and COLORS.green or COLORS.red
-            parts[#parts + 1] = ColorWrap(c, tostring(v))
+        local value = tonumber(ilvls[i]) or 0
+        if value > 0 then
+            local c = (maxPossible > 0 and value == maxPossible) and COLORS.green or COLORS.red
+            parts[#parts + 1] = ColorWrap(c, tostring(value))
         else
             parts[#parts + 1] = ColorWrap(COLORS.dim, L.TRACKING_NA or "")
         end
@@ -526,14 +534,14 @@ local function SummarizeVaultType(allActivities, desiredType, ilvls)
     Wipe(ilvls)
 
     for idx = 1, #allActivities do
-        local a = allActivities[idx]
-        if a and a.type == desiredType then
+        local activity = allActivities[idx]
+        if activity and activity.type == desiredType then
             total = total + 1
-            if IsActivityComplete(a) then
+            if IsActivityComplete(activity) then
                 complete = complete + 1
-                local ilvl = GetActivityRewardIlvl(a)
+                local ilvl = GetActivityRewardIlvl(activity)
                 if not ilvl or ilvl <= 0 then
-                    ilvl = GetExampleRewardIlvlForActivity(a)
+                    ilvl = GetExampleRewardIlvlForActivity(activity)
                 end
                 ilvls[#ilvls + 1] = ilvl
                 if ilvl and ilvl > maxPossible then maxPossible = ilvl end
@@ -552,15 +560,15 @@ local function SummarizeVaultOther(allActivities, excludedTypes, ilvls)
     Wipe(ilvls)
 
     for idx = 1, #allActivities do
-        local a = allActivities[idx]
-        local t = a and a.type
-        if a and not (excludedTypes and excludedTypes[t]) then
+        local activity = allActivities[idx]
+        local activityType = activity and activity.type
+        if activity and not (excludedTypes and excludedTypes[activityType]) then
             total = total + 1
-            if IsActivityComplete(a) then
+            if IsActivityComplete(activity) then
                 complete = complete + 1
-                local ilvl = GetActivityRewardIlvl(a)
+                local ilvl = GetActivityRewardIlvl(activity)
                 if not ilvl or ilvl <= 0 then
-                    ilvl = GetExampleRewardIlvlForActivity(a)
+                    ilvl = GetExampleRewardIlvlForActivity(activity)
                 end
                 ilvls[#ilvls + 1] = ilvl
                 if ilvl > maxPossible then maxPossible = ilvl end
@@ -612,32 +620,61 @@ local function GetGreatVaultBlockLines()
     local TYPE_MPLUS = (Enum and Enum.WeeklyRewardChestActivityType and Enum.WeeklyRewardChestActivityType.MythicPlus) or 1
     local TYPE_RAID  = (Enum and Enum.WeeklyRewardChestActivityType and Enum.WeeklyRewardChestActivityType.Raid) or 3
 
-    local rC, rT, rMax = SummarizeVaultType(activities, TYPE_RAID, cache.rIlvls)
-    local mC, mT, mMax = SummarizeVaultType(activities, TYPE_MPLUS, cache.mIlvls)
-
+    Wipe(cache.rIlvls)
+    Wipe(cache.mIlvls)
+    
+    local raidTotal, raidComplete, raidMaxIlvl = 0, 0, 0
+    local mythicTotal, mythicComplete, mythicMaxIlvl = 0, 0, 0
     local raidExampleMax, dungeonExampleMax = 0, 0
+
     for idx = 1, #activities do
-        local a = activities[idx]
-        local t = a and a.type
-        if a and t then
-            if t == TYPE_RAID then
-                raidExampleMax = max(raidExampleMax, GetExampleRewardIlvlForActivity(a))
-            elseif t == TYPE_MPLUS then
-                dungeonExampleMax = max(dungeonExampleMax, GetExampleRewardIlvlForActivity(a))
+        local activity = activities[idx]
+        local activityType = activity and activity.type
+        
+        if activityType == TYPE_RAID then
+            raidTotal = raidTotal + 1
+            local level = 0
+            if IsActivityComplete(activity) then
+                raidComplete = raidComplete + 1
+                level = GetActivityRewardIlvl(activity)
+                if level <= 0 then
+                    level = GetExampleRewardIlvlForActivity(activity)
+                end
+                if level > raidMaxIlvl then raidMaxIlvl = level end
             end
+            cache.rIlvls[#cache.rIlvls + 1] = level
+            
+            local exLevel = GetExampleRewardIlvlForActivity(activity)
+            if exLevel > raidExampleMax then raidExampleMax = exLevel end
+            
+        elseif activityType == TYPE_MPLUS then
+            mythicTotal = mythicTotal + 1
+            local level = 0
+            if IsActivityComplete(activity) then
+                mythicComplete = mythicComplete + 1
+                level = GetActivityRewardIlvl(activity)
+                if level <= 0 then
+                    level = GetExampleRewardIlvlForActivity(activity)
+                end
+                if level > mythicMaxIlvl then mythicMaxIlvl = level end
+            end
+            cache.mIlvls[#cache.mIlvls + 1] = level
+            
+            local exLevel = GetExampleRewardIlvlForActivity(activity)
+            if exLevel > dungeonExampleMax then dungeonExampleMax = exLevel end
         end
     end
 
-    local raidMax = (raidExampleMax > 0) and raidExampleMax or rMax
-    local dungeonMax = (dungeonExampleMax > 0) and dungeonExampleMax or mMax
+    local raidMax = (raidExampleMax > 0) and raidExampleMax or raidMaxIlvl
+    local dungeonMax = (dungeonExampleMax > 0) and dungeonExampleMax or mythicMaxIlvl
 
     out[1] = MakeGVHeader(L.TRACKING_GV_RAID or "")
-    out[2] = (rT > 0) and MakeGVThresholdsString(rC, rT, { 2, 4, 6 }, cache.parts) or ColorWrap(COLORS.red, L.TRACKING_NA or "")
-    out[3] = (rT > 0) and MakeGVIlvlsRow(cache.rIlvls, raidMax, cache.parts) or ""
+    out[2] = (raidTotal > 0) and MakeGVThresholdsString(raidComplete, raidTotal, { 2, 4, 6 }, cache.parts) or ColorWrap(COLORS.red, L.TRACKING_NA or "")
+    out[3] = (raidTotal > 0) and MakeGVIlvlsRow(cache.rIlvls, raidMax, cache.parts) or ""
 
     out[4] = MakeGVHeader(L.TRACKING_GV_DUNGEONS or "")
-    out[5] = (mT > 0) and MakeGVThresholdsString(mC, mT, { 1, 4, 8 }, cache.parts) or ColorWrap(COLORS.red, L.TRACKING_NA or "")
-    out[6] = (mT > 0) and MakeGVIlvlsRow(cache.mIlvls, dungeonMax, cache.parts) or ""
+    out[5] = (mythicTotal > 0) and MakeGVThresholdsString(mythicComplete, mythicTotal, { 1, 4, 8 }, cache.parts) or ColorWrap(COLORS.red, L.TRACKING_NA or "")
+    out[6] = (mythicTotal > 0) and MakeGVIlvlsRow(cache.mIlvls, dungeonMax, cache.parts) or ""
 
     return out
 end
@@ -982,42 +1019,42 @@ function Addon:CreateTrackingPanel(parentFrame)
     if self._trackingFrame then return end
     local db = self:EnsureDB()
 
-    local tf = CreateFrame("Frame", nil, parentFrame)
-    if not tf.SetBackdrop and BackdropTemplateMixin and Mixin then
-        Mixin(tf, BackdropTemplateMixin)
+    local trackingFrame = CreateFrame("Frame", nil, parentFrame)
+    if not trackingFrame.SetBackdrop and BackdropTemplateMixin and Mixin then
+        Mixin(trackingFrame, BackdropTemplateMixin)
     end
-    tf:SetPoint("BOTTOMLEFT", parentFrame, "BOTTOMLEFT", Addon.UI.sectionInsetX, UI.scrollBottom)
-    tf:SetPoint("BOTTOMRIGHT", parentFrame, "BOTTOMRIGHT", -Addon.UI.sectionInsetX, UI.scrollBottom)
-    tf:SetHeight(UI.trackH)
-    self:ApplyTheme(tf)
+    trackingFrame:SetPoint("BOTTOMLEFT", parentFrame, "BOTTOMLEFT", Addon.UI.sectionInsetX, UI.scrollBottom)
+    trackingFrame:SetPoint("BOTTOMRIGHT", parentFrame, "BOTTOMRIGHT", -Addon.UI.sectionInsetX, UI.scrollBottom)
+    trackingFrame:SetHeight(UI.trackH)
+    self:ApplyTheme(trackingFrame)
 
-    local title = tf:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    title:SetPoint("TOPLEFT", tf, "TOPLEFT", 10, -8)
+    local title = trackingFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    title:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", 10, -8)
     title:SetTextColor(THEME.header.r, THEME.header.g, THEME.header.b, THEME.header.a)
     title:SetText(L.TRACKING_GREAT_VAULT_TITLE or "")
-    tf._lariasLeftTitle = title
+    trackingFrame._lariasLeftTitle = title
 
     local padL, padR = 10, 10
     local colGap = 12
     local innerW = (UI.frameW - (Addon.UI.sectionInsetX * 2) - padL - padR)
     local colW = math.floor((innerW - colGap) / 2)
-    tf._lariasPadL, tf._lariasPadR, tf._lariasColGap, tf._lariasColW = padL, padR, colGap, colW
+    trackingFrame._lariasPadL, trackingFrame._lariasPadR, trackingFrame._lariasColGap, trackingFrame._lariasColW = padL, padR, colGap, colW
 
-    local leftCol = CreateFrame("Frame", nil, tf)
-    leftCol:SetPoint("TOPLEFT", tf, "TOPLEFT", padL, -32)
+    local leftCol = CreateFrame("Frame", nil, trackingFrame)
+    leftCol:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", padL, -32)
     leftCol:SetSize(colW, UI.trackH - 40)
-    tf._lariasLeftCol = leftCol
+    trackingFrame._lariasLeftCol = leftCol
 
-    local rightCol = CreateFrame("Frame", nil, tf)
+    local rightCol = CreateFrame("Frame", nil, trackingFrame)
     rightCol:SetPoint("TOPLEFT", leftCol, "TOPRIGHT", colGap, 0)
     rightCol:SetSize(colW, UI.trackH - 40)
-    tf._lariasRightCol = rightCol
+    trackingFrame._lariasRightCol = rightCol
 
-    local rightTitle = tf:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    rightTitle:SetPoint("TOPLEFT", tf, "TOPLEFT", padL + colW + colGap, -8)
+    local rightTitle = trackingFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    rightTitle:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", padL + colW + colGap, -8)
     rightTitle:SetTextColor(THEME.header.r, THEME.header.g, THEME.header.b, THEME.header.a)
     rightTitle:SetText(L.TRACKING_CURRENCY_TITLE or "")
-    tf._lariasRightTitle = rightTitle
+    trackingFrame._lariasRightTitle = rightTitle
 
     title:ClearAllPoints()
     title:SetPoint("TOP", leftCol, "TOP", 0, 24)
@@ -1030,15 +1067,15 @@ function Addon:CreateTrackingPanel(parentFrame)
     rightTitle:SetJustifyH("CENTER")
 
     local function MakeLine(parent, y, template, justify)
-        local fs = parent:CreateFontString(nil, "OVERLAY", template or "GameFontHighlightSmall")
-        fs:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, y)
-        fs:SetWidth(colW)
-        fs:SetJustifyH(justify or "LEFT")
-        if fs.SetWordWrap then fs:SetWordWrap(false) end
-        fs:SetTextColor(THEME.text.r, THEME.text.g, THEME.text.b, THEME.text.a)
-        fs:SetText("")
-        fs._lariasBaseY = y
-        return fs
+        local fontString = parent:CreateFontString(nil, "OVERLAY", template or "GameFontHighlightSmall")
+        fontString:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, y)
+        fontString:SetWidth(colW)
+        fontString:SetJustifyH(justify or "LEFT")
+        if fontString.SetWordWrap then fontString:SetWordWrap(false) end
+        fontString:SetTextColor(THEME.text.r, THEME.text.g, THEME.text.b, THEME.text.a)
+        fontString:SetText("")
+        fontString._lariasBaseY = y
+        return fontString
     end
 
     TrackingUI.left.line1 = MakeLine(leftCol,    0, "GameFontHighlightLarge", "CENTER")
@@ -1048,13 +1085,13 @@ function Addon:CreateTrackingPanel(parentFrame)
     TrackingUI.left.line5 = MakeLine(leftCol,  -84, "GameFontHighlightSmall", "CENTER")
     TrackingUI.left.line6 = MakeLine(leftCol, -100, "GameFontHighlightSmall", "CENTER")
 
-    local function MakeUnderlineFor(fs)
-        if not fs then return nil end
+    local function MakeUnderlineFor(fontString)
+        if not fontString then return nil end
         local line = leftCol:CreateTexture(nil, "OVERLAY")
         line:SetColorTexture(THEME.textDim.r, THEME.textDim.g, THEME.textDim.b, 0.55)
         line:SetHeight(1)
-        line:SetPoint("TOPLEFT", fs, "BOTTOMLEFT", 0, -1)
-        line:SetPoint("TOPRIGHT", fs, "BOTTOMRIGHT", 0, -1)
+        line:SetPoint("TOPLEFT", fontString, "BOTTOMLEFT", 0, -1)
+        line:SetPoint("TOPRIGHT", fontString, "BOTTOMRIGHT", 0, -1)
         return line
     end
 
@@ -1091,16 +1128,16 @@ function Addon:CreateTrackingPanel(parentFrame)
         TrackingUI.right["line" .. tostring(i)] = MakeLinePair(rightCol, -18 * (i - 1), "GameFontHighlight")
     end
 
-    tf:SetShown((db.showGreatVault or db.showCurrency) and true or false)
-    self._trackingFrame = tf
+    trackingFrame:SetShown((db.showGreatVault or db.showCurrency) and true or false)
+    self._trackingFrame = trackingFrame
 
-    if tf.SetScript then
-        tf:SetScript("OnShow", function()
+    if trackingFrame.SetScript then
+        trackingFrame:SetScript("OnShow", function()
             local database = Addon:EnsureDB()
             Addon:ConfigureTrackingEvents(parentFrame, database.showGreatVault and true or false, database.showCurrency and true or false)
             Addon:RequestTrackingUpdate()
         end)
-        tf:SetScript("OnHide", function()
+        trackingFrame:SetScript("OnHide", function()
             if trackingEventFrame then
                 trackingEventFrame:UnregisterAllEvents()
             end
@@ -1112,15 +1149,15 @@ function Addon:CreateTrackingPanel(parentFrame)
 end
 
 function Addon:ApplyTrackingPanelOptions()
-    local tf = self._trackingFrame
-    if not tf then return end
+    local trackingFrame = self._trackingFrame
+    if not trackingFrame then return end
 
     local db = self:EnsureDB()
-    local showGV = db.showGreatVault and true or false
-    local showCur = db.showCurrency and true or false
-    local wantPanel = showGV or showCur
+    local showGreatVault = db.showGreatVault and true or false
+    local showCurrency = db.showCurrency and true or false
+    local wantPanel = showGreatVault or showCurrency
 
-    tf:SetShown(wantPanel)
+    trackingFrame:SetShown(wantPanel)
     if not wantPanel then
         if trackingEventFrame then
             trackingEventFrame:UnregisterAllEvents()
@@ -1129,19 +1166,19 @@ function Addon:ApplyTrackingPanelOptions()
         return
     end
 
-    self:ConfigureTrackingEvents(_G["LariasWeeklyMidnightChecklistFrame"], showGV, showCur)
+    self:ConfigureTrackingEvents(_G["LariasWeeklyMidnightChecklistFrame"], showGreatVault, showCurrency)
 
-    local leftCol = tf._lariasLeftCol
-    local rightCol = tf._lariasRightCol
-    local leftTitle = tf._lariasLeftTitle
-    local rightTitle = tf._lariasRightTitle
-    local padL = tonumber(tf._lariasPadL) or 10
-    local colGap = tonumber(tf._lariasColGap) or 12
+    local leftCol = trackingFrame._lariasLeftCol
+    local rightCol = trackingFrame._lariasRightCol
+    local leftTitle = trackingFrame._lariasLeftTitle
+    local rightTitle = trackingFrame._lariasRightTitle
+    local padL = tonumber(trackingFrame._lariasPadL) or 10
+    local colGap = tonumber(trackingFrame._lariasColGap) or 12
 
-    SetShownIfChanged(leftCol, showGV)
-    SetShownIfChanged(rightCol, showCur)
-    SetShownIfChanged(leftTitle, showGV)
-    SetShownIfChanged(rightTitle, showCur)
+    SetShownIfChanged(leftCol, showGreatVault)
+    SetShownIfChanged(rightCol, showCurrency)
+    SetShownIfChanged(leftTitle, showGreatVault)
+    SetShownIfChanged(rightTitle, showCurrency)
 
     if leftCol and leftCol.ClearAllPoints and leftCol.SetPoint then
         leftCol:ClearAllPoints()
@@ -1150,20 +1187,20 @@ function Addon:ApplyTrackingPanelOptions()
         rightCol:ClearAllPoints()
     end
 
-    if showGV and showCur then
-        if leftCol then leftCol:SetPoint("TOPLEFT", tf, "TOPLEFT", padL, -32) end
+    if showGreatVault and showCurrency then
+        if leftCol then leftCol:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", padL, -32) end
         if rightCol and leftCol then rightCol:SetPoint("TOPLEFT", leftCol, "TOPRIGHT", colGap, 0) end
-    elseif showGV then
-        if leftCol then leftCol:SetPoint("TOP", tf, "TOP", 0, -32) end
+    elseif showGreatVault then
+        if leftCol then leftCol:SetPoint("TOP", trackingFrame, "TOP", 0, -32) end
     else
-        if rightCol then rightCol:SetPoint("TOP", tf, "TOP", 0, -32) end
+        if rightCol then rightCol:SetPoint("TOP", trackingFrame, "TOP", 0, -32) end
     end
 
-    if showGV and leftTitle and leftCol then
+    if showGreatVault and leftTitle and leftCol then
         leftTitle:ClearAllPoints()
         leftTitle:SetPoint("TOP", leftCol, "TOP", 0, 24)
     end
-    if showCur and rightTitle and rightCol then
+    if showCurrency and rightTitle and rightCol then
         rightTitle:ClearAllPoints()
         rightTitle:SetPoint("TOP", rightCol, "TOP", 0, 24)
     end
@@ -1191,20 +1228,20 @@ function Addon:UpdateTracking()
         return
     end
 
-    local gv = GetGreatVaultBlockLines()
-    SetTextIfChanged(TrackingUI.left.line1, gv[1])
-    SetTextIfChanged(TrackingUI.left.line2, gv[2])
-    SetTextIfChanged(TrackingUI.left.line3, gv[3])
-    SetTextIfChanged(TrackingUI.left.line4, gv[4])
-    SetTextIfChanged(TrackingUI.left.line5, gv[5])
-    SetTextIfChanged(TrackingUI.left.line6, gv[6])
+    local greatVaultLines = GetGreatVaultBlockLines()
+    SetTextIfChanged(TrackingUI.left.line1, greatVaultLines[1])
+    SetTextIfChanged(TrackingUI.left.line2, greatVaultLines[2])
+    SetTextIfChanged(TrackingUI.left.line3, greatVaultLines[3])
+    SetTextIfChanged(TrackingUI.left.line4, greatVaultLines[4])
+    SetTextIfChanged(TrackingUI.left.line5, greatVaultLines[5])
+    SetTextIfChanged(TrackingUI.left.line6, greatVaultLines[6])
 
-    SetShownIfChanged(TrackingUI.left.line1, IsNonEmptyText(gv[1]))
-    SetShownIfChanged(TrackingUI.left.line2, IsNonEmptyText(gv[2]))
-    SetShownIfChanged(TrackingUI.left.line3, IsNonEmptyText(gv[3]))
-    SetShownIfChanged(TrackingUI.left.line4, IsNonEmptyText(gv[4]))
-    SetShownIfChanged(TrackingUI.left.line5, IsNonEmptyText(gv[5]))
-    SetShownIfChanged(TrackingUI.left.line6, IsNonEmptyText(gv[6]))
+    SetShownIfChanged(TrackingUI.left.line1, IsNonEmptyText(greatVaultLines[1]))
+    SetShownIfChanged(TrackingUI.left.line2, IsNonEmptyText(greatVaultLines[2]))
+    SetShownIfChanged(TrackingUI.left.line3, IsNonEmptyText(greatVaultLines[3]))
+    SetShownIfChanged(TrackingUI.left.line4, IsNonEmptyText(greatVaultLines[4]))
+    SetShownIfChanged(TrackingUI.left.line5, IsNonEmptyText(greatVaultLines[5]))
+    SetShownIfChanged(TrackingUI.left.line6, IsNonEmptyText(greatVaultLines[6]))
     SetShownIfChanged(TrackingUI.left.raidUnderline, TrackingUI.left.line1 and TrackingUI.left.line1:IsShown())
     SetShownIfChanged(TrackingUI.left.dungeonsUnderline, TrackingUI.left.line4 and TrackingUI.left.line4:IsShown())
 
@@ -1217,14 +1254,14 @@ function Addon:UpdateTracking()
         local val = cache and cache.value or nil
         local crestCount = (cache and tonumber(cache.count)) or 4
 
-        local function SetRow(i, l, v)
+        local function SetRow(i, rowLabel, rowValue)
             local row = TrackingUI.right["line" .. tostring(i)]
             if not (row and row.label and row.value) then return end
-            l = l or ""
-            v = v or ""
-            SetTextIfChanged(row.label, l)
-            SetTextIfChanged(row.value, v)
-            local showRow = IsNonEmptyText(l) or IsNonEmptyText(v)
+            rowLabel = rowLabel or ""
+            rowValue = rowValue or ""
+            SetTextIfChanged(row.label, rowLabel)
+            SetTextIfChanged(row.value, rowValue)
+            local showRow = IsNonEmptyText(rowLabel) or IsNonEmptyText(rowValue)
             SetShownIfChanged(row.frame or row.label, showRow)
         end
 
@@ -1282,8 +1319,8 @@ function Addon:UpdateTracking()
         if TrackingUI.right.line8 then SetShownIfChanged(TrackingUI.right.line8, IsNonEmptyText(TrackingUI.right.line8._lariasText or "")) end
     end
 
-    local tf = self._trackingFrame
-    if tf and tf.GetHeight and tf.SetHeight then
+    local trackingFrame = self._trackingFrame
+    if trackingFrame and trackingFrame.GetHeight and trackingFrame.SetHeight then
         local bottomLeft = 0
         bottomLeft = max(bottomLeft, BottomFor(TrackingUI.left.line1))
         bottomLeft = max(bottomLeft, BottomFor(TrackingUI.left.line2))
@@ -1308,14 +1345,14 @@ function Addon:UpdateTracking()
         local minH = 90
         local targetH = max(minH, topOffset + contentH + bottomPad)
 
-        local curH = tonumber(tf:GetHeight()) or 0
+        local curH = tonumber(trackingFrame:GetHeight()) or 0
         if math.abs(curH - targetH) > 1 then
-            tf:SetHeight(targetH)
-            if tf._lariasLeftCol and tf._lariasLeftCol.SetHeight then
-                tf._lariasLeftCol:SetHeight(max(1, targetH - 40))
+            trackingFrame:SetHeight(targetH)
+            if trackingFrame._lariasLeftCol and trackingFrame._lariasLeftCol.SetHeight then
+                trackingFrame._lariasLeftCol:SetHeight(max(1, targetH - 40))
             end
-            if tf._lariasRightCol and tf._lariasRightCol.SetHeight then
-                tf._lariasRightCol:SetHeight(max(1, targetH - 40))
+            if trackingFrame._lariasRightCol and trackingFrame._lariasRightCol.SetHeight then
+                trackingFrame._lariasRightCol:SetHeight(max(1, targetH - 40))
             end
             if self.ApplyScrollLayout then
                 self:ApplyScrollLayout()

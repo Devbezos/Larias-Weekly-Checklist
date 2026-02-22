@@ -91,13 +91,13 @@ function Addon:InitConstants(name)
     end
 
     local function EnsureProfile(key)
-        local p = self.TRACKING.profiles[key]
-        if type(p) ~= "table" then
-            p = {}
-            self.TRACKING.profiles[key] = p
+        local profile = self.TRACKING.profiles[key]
+        if type(profile) ~= "table" then
+            profile = {}
+            self.TRACKING.profiles[key] = profile
         end
-        p.questIDs = p.questIDs or {}
-        return p
+        profile.questIDs = profile.questIDs or {}
+        return profile
     end
 
     local tww = EnsureProfile("tww")
