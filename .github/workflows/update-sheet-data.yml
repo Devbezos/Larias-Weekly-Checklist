@@ -52,6 +52,9 @@ jobs:
           TOC="LariasWeeklyMidnightChecklist.toc"
           DATA_FILE="Locales/enUS_Data.lua"
 
+          # Ensure stable releases never keep an ALPHA display name.
+          sed -i "s/^## Title:.*/## Title: Larias's Checklist/" "$TOC"
+
           # Determine what changed.
           DATA_CHANGED=false
           TOC_CHANGED=false
@@ -144,7 +147,7 @@ jobs:
 
           payload=$(cat <<EOF
           {
-            "content": "🚀 **Larias Checklist ${TAG}** is live!\n\n📦 GitHub: ${RELEASE_URL}\n🔥 CurseForge: ${CURSE_URL}\n🛠 Workflow: ${RUN_URL}"
+            "content": "🚀 **Larias's Checklist ${TAG}** is live!\n\n📦 GitHub: ${RELEASE_URL}\n🔥 CurseForge: ${CURSE_URL}\n🛠 Workflow: ${RUN_URL}"
           }
           EOF
           )
