@@ -510,48 +510,17 @@ Addon._order = Addon._order or {}
 Addon._sectionsIndexById = Addon._sectionsIndexById or {}
 
 function Addon:DB()
-    -- For backward compatibility, return the AceDB profile
     if self.db then
         return self.db.profile
     end
     return _G[self._DB_NAME]
 end
 
-local function CopyTableShallow(srcTable)
-    if type(srcTable) ~= "table" then return {} end
-    local dstTable = {}
-    for key, value in pairs(srcTable) do
-        if type(value) == "table" then
-            local childTable = {}
-            for childKey, childValue in pairs(value) do
-                childTable[childKey] = childValue
-            end
-            dstTable[key] = childTable
-        else
-            dstTable[key] = value
-        end
-    end
-    return dstTable
-end
-
 function Addon:EnsureDB()
-    -- Initialize AceDB if not already done
     if not self.db then
         SetupAddonDB()
     end
-
-    -- Return the profile from AceDB for backward compatibility
     return self.db.profile
-end
-
--- System (Blizzard) options menu has been removed in favor of the in-window Options tab.
--- Keep no-op stubs for compatibility with older external calls.
-function Addon:SetupOptionsWithAceConfig()
-    return nil
-end
-
-function Addon:EnsureOptionsPanel()
-    return nil
 end
 
 function Addon:OpenOptions()

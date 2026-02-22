@@ -1,16 +1,3 @@
---[[
-Localization (strings)
-
-To add a new language:
-1) Copy Locales\\enUS.lua -> Locales\\<locale>.lua (example: Locales\\deDE.lua)
-2) Copy Locales\\enUS_Data.lua -> Locales\\<locale>_Data.lua (example: Locales\\deDE_Data.lua)
-3) In both copies, change the locale string ("enUS") to your locale ("deDE")
-4) Translate strings (this file) and checklist text (the _Data file)
-5) Add BOTH files to LariasWeeklyMidnightChecklist.toc AFTER the enUS entries
-
-Common locale codes: enUS, enGB, frFR, deDE, esES, esMX, itIT, ptBR, ruRU, koKR, zhCN, zhTW
-]]
-
 local addonName = ...
 local L = LibStub("AceLocale-3.0"):NewLocale(addonName, "enUS", true)
 
