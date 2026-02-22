@@ -657,12 +657,13 @@ function Addon:SetLocaleOverride(value)
     self:ApplyLocaleOverride()
 
     self._dataSig = ""
+    self._cachedListLocaleCode = nil
+    self._cachedListData = nil
 
     if frame and frame.IsShown and frame:IsShown() then
-        if self.ApplyScrollLayout then
-            self:ApplyScrollLayout()
-        end
-        if self.Refresh then
+        if self.RequestRefresh then
+            self:RequestRefresh()
+        elseif self.Refresh then
             self:Refresh()
         end
     end
@@ -680,8 +681,6 @@ function Addon:OpenOptions()
         self._updatePopupShownThisOpen = nil
         self:BroadcastVersion(false)
         self:RequestVersions(false)
-        self:ApplyScrollLayout()
-        self:Refresh()
         self:ShowUpdatePopupIfNeeded()
         frame:Show()
     end
@@ -761,11 +760,16 @@ function Addon:SelectMainTab(tabId)
         self:UpdateTracking()
     end
 
-    if self.ApplyScrollLayout then
-        self:ApplyScrollLayout()
-    end
-    if showList and self.Refresh then
-        self:Refresh()
+    if showList then
+        if self.RequestRefresh then
+            self:RequestRefresh()
+        elseif self.Refresh then
+            self:Refresh()
+        end
+    else
+        if self.ApplyScrollLayout then
+            self:ApplyScrollLayout()
+        end
     end
 end
 
@@ -799,11 +803,24 @@ function Addon:GetListData()
     if type(dataByLocale) ~= "table" then return {} end
 
     local localeCode = self:GetEffectiveLocaleCode()
+
+    if self._cachedListLocaleCode == localeCode and type(self._cachedListData) == "table" then
+        return self._cachedListData
+    end
+
     local data = dataByLocale[localeCode]
-    if type(data) == "table" then return data end
+    if type(data) == "table" then
+        self._cachedListLocaleCode = localeCode
+        self._cachedListData = data
+        return data
+    end
 
     data = dataByLocale.enUS
-    if type(data) == "table" then return data end
+    if type(data) == "table" then
+        self._cachedListLocaleCode = "enUS"
+        self._cachedListData = data
+        return data
+    end
 
     return {}
 end
@@ -850,6 +867,11 @@ function Addon:UpdateLocalizedUI()
     SetCheckText(frame._lariasOptShowCurrency, L.OPTIONS_SHOW_CURRENCY or "Show Currency")
     SetCheckText(frame._lariasOptHideCompleted, L.HIDE_COMPLETED_WEEKS or "Hide Completed Weeks")
 
+    local optionsTab = frame._lariasTabOptions
+    if optionsTab and optionsTab.SetText then
+        optionsTab:SetText(L.OPTIONS_BUTTON or "Options")
+    end
+
     local resetBtn = frame._lariasOptResetBtn
     if resetBtn and resetBtn.SetText then
         resetBtn:SetText(L.RESET_BUTTON or "Reset")
@@ -878,6 +900,16 @@ function Addon:UpdateLocalizedUI()
             else
                 UIDropDownMenu_SetText(dropdown, self:GetLocaleDisplayName(selectedValue))
             end
+        end
+    end
+
+    local trackingFrame = self._trackingFrame
+    if trackingFrame and trackingFrame.IsShown and trackingFrame:IsShown() then
+        if trackingFrame._lariasLeftTitle and trackingFrame._lariasLeftTitle.SetText then
+            trackingFrame._lariasLeftTitle:SetText(L.TRACKING_GREAT_VAULT_TITLE or "")
+        end
+        if trackingFrame._lariasRightTitle and trackingFrame._lariasRightTitle.SetText then
+            trackingFrame._lariasRightTitle:SetText(L.TRACKING_CURRENCY_TITLE or "")
         end
     end
 end
@@ -1088,44 +1120,123 @@ local function LayoutFrom(startIndex)
     scrollChild:SetHeight(scrollHeight)
 end
 
-local function CalcDataSig(data)
-    if type(data) ~= "table" then return "" end
-    -- Return cached signature if the table reference hasn't changed and we have a sig.
-    -- NOTE: This assumes 'data' contents (ids) don't mutate in-place without clearing __lariasSig.
-    if data.__lariasSig then
-        return data.__lariasSig
+function Addon:IsListComplete(db)
+    db = db or self:EnsureDB()
+
+    -- Ensure we have up-to-date section indexes for current dataset.
+    if not self._order or #self._order == 0 then
+        return false
     end
 
-    -- Use a cyclic redundancy check (CRC) style approximation or simple djb2 hash
-    -- to avoid creating a massive string just to check for equality.
-    -- However, string concat is robust for strict structural equality.
-    -- We'll optimize by reducing table creation.
-    
-    local parts = {}
-    
-    -- Pre-calculate size to avoid reallocations if possible (Lua internal)
-    -- Just stick to efficient pushing.
-    
-    parts[#parts + 1] = tostring(#data)
-    for i = 1, #data do
-        local section = data[i]
-        -- Only grab IDs, ignore other fields for the signature
-        parts[#parts + 1] = tostring(section.id)
-        
-        local items = section.items
-        if items then
-            parts[#parts + 1] = tostring(#items)
-            for j = 1, #items do
-                parts[#parts + 1] = tostring(items[j].id)
-            end
-        else
-            parts[#parts + 1] = "0"
+    for i = 1, #self._order do
+        local sectionId = self._order[i]
+        if not IsSectionCompleteById(sectionId, db) then
+            return false
         end
     end
-    
-    local sig = tconcat(parts, ":") -- separator
-    data.__lariasSig = sig
-    return sig
+
+    return true
+end
+
+function Addon:UpdateCompletionEasterEgg(db)
+    if not (frame and scrollFrame) then return end
+
+    db = db or self:EnsureDB()
+    local isComplete = self:IsListComplete(db)
+
+    local visibleSections = 0
+    if self._activeSections then
+        for i = 1, #self._activeSections do
+            local sectionFrame = self._activeSections[i]
+            if sectionFrame and sectionFrame.IsShown and sectionFrame:IsShown() then
+                visibleSections = visibleSections + 1
+                break
+            end
+        end
+    end
+
+    local showPig = isComplete and (visibleSections == 0)
+
+    local pig = frame._lariasPigTexture
+    if pig and pig.SetShown then
+        pig:SetShown(showPig)
+        if showPig and scrollFrame and scrollFrame.GetWidth and scrollFrame.GetHeight then
+            local w = tonumber(scrollFrame:GetWidth()) or 0
+            local h = tonumber(scrollFrame:GetHeight()) or 0
+            local size = math.min(w > 0 and w or 260, h > 0 and h or 260)
+            size = math.max(120, size)
+            if pig.SetSize then
+                pig:SetSize(size, size)
+            end
+        end
+    end
+
+    local sb = scrollFrame.ScrollBar
+    if sb and sb.SetShown then
+        sb:SetShown(not isComplete)
+    elseif sb and isComplete and sb.Hide then
+        sb:Hide()
+    elseif sb and (not isComplete) and sb.Show then
+        sb:Show()
+    end
+end
+
+local function CalcDataSig(data)
+    if type(data) ~= "table" then return 0 end
+
+    -- Cache the signature on the dataset table.
+    -- NOTE: This assumes list data doesn't mutate in-place without clearing __lariasSig.
+    local cached = rawget(data, "__lariasSig")
+    if type(cached) == "number" then
+        return cached
+    end
+
+    -- Memory-friendly signature: numeric hash, no big temp tables / concatenated strings.
+    -- (Collision risk is extremely low for our static dataset; acceptable for change detection.)
+    local MOD = 2147483647
+    local hash = 5381
+
+    local function MixInt(x)
+        x = tonumber(x) or 0
+        hash = (hash * 33 + x) % MOD
+    end
+
+    local function MixString(s)
+        if type(s) ~= "string" then
+            s = tostring(s or "")
+        end
+        for k = 1, #s do
+            hash = (hash * 33 + (string.byte(s, k) or 0)) % MOD
+        end
+    end
+
+    MixInt(#data)
+    for i = 1, #data do
+        local section = data[i]
+        if type(section) == "table" then
+            MixString(section.id)
+            local items = section.items
+            if type(items) == "table" then
+                MixInt(#items)
+                for j = 1, #items do
+                    local item = items[j]
+                    if type(item) == "table" then
+                        MixString(item.id)
+                    else
+                        MixString(item)
+                    end
+                end
+            else
+                MixInt(0)
+            end
+        else
+            MixString(section)
+            MixInt(0)
+        end
+    end
+
+    data.__lariasSig = hash
+    return hash
 end
 
 local function SetHeaderText(sectionFrame, sectionId, complete)
@@ -1171,6 +1282,10 @@ local function OnCheckboxClick(selfBtn)
     end
 
     LayoutFrom(sectionFrame._index or 1)
+
+    if Addon.UpdateCompletionEasterEgg then
+        Addon:UpdateCompletionEasterEgg(database)
+    end
 end
 
 local function OnHeaderClick(header)
@@ -1276,7 +1391,8 @@ local function SyncAllDataAndFrames()
     local data = Addon:GetListData()
     local sig = CalcDataSig(data)
 
-    if Addon._dataSig ~= sig or not Addon._sectionsById or not next(Addon._sectionsById) then
+    local dataChanged = (Addon._dataSig ~= sig) or (not Addon._sectionsById) or (not next(Addon._sectionsById))
+    if dataChanged then
         Addon._sectionsById = {}
         Addon._order = {}
         for i = 1, #data do
@@ -1295,7 +1411,8 @@ local function SyncAllDataAndFrames()
     Wipe(Addon._sectionsIndexById)
 
     local want = #Addon._order
-    local have = #Addon._activeSections
+    local haveBefore = #Addon._activeSections
+    local have = haveBefore
 
     if have > want then
         for i = have, want + 1, -1 do
@@ -1308,6 +1425,8 @@ local function SyncAllDataAndFrames()
         end
     end
 
+    local needCheckboxResync = dataChanged
+
     for i = 1, want do
         local sectionId = Addon._order[i]
         local sectionFrame = Addon._activeSections[i]
@@ -1316,7 +1435,9 @@ local function SyncAllDataAndFrames()
         sectionFrame._index = i
         Addon._sectionsIndexById[sectionId] = i
 
-        SyncCheckboxesForSection(sectionFrame, sectionId, database)
+        if needCheckboxResync or i > haveBefore then
+            SyncCheckboxesForSection(sectionFrame, sectionId, database)
+        end
 
         sectionFrame._header._sectionFrame = sectionFrame
         sectionFrame._header:SetScript("OnClick", OnHeaderClick)
@@ -1326,8 +1447,36 @@ local function SyncAllDataAndFrames()
     end
 end
 
+function Addon:RequestRefresh()
+    if not frame then return end
+    if self._refreshQueued then return end
+    self._refreshQueued = true
+
+    local function Run()
+        self._refreshQueued = nil
+        if self.Refresh then
+            self:Refresh()
+        end
+    end
+
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, Run)
+    else
+        Run()
+    end
+end
+
 function Addon:Refresh()
     if not frame then return end
+
+    if self.ApplyScrollLayout then
+        self:ApplyScrollLayout()
+    end
+
+    if tonumber(frame._lariasSelectedTab) ~= 1 then
+        return
+    end
+
     SyncAllDataAndFrames()
 
     local posY = -Addon.UI.sectionTopPad
@@ -1344,6 +1493,10 @@ function Addon:Refresh()
     end
 
     scrollChild:SetHeight(max(1, -posY + Addon.UI.sectionGap))
+
+    if self.UpdateCompletionEasterEgg then
+        self:UpdateCompletionEasterEgg()
+    end
 
     if self.UpdateTracking then
         self:UpdateTracking()
@@ -1485,6 +1638,18 @@ function Addon:CreateFrame()
     scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
     scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", Addon.UI.padOuterX, -Addon.UI.scrollTop)
 
+    do
+        local pig = scrollFrame:CreateTexture(nil, "ARTWORK")
+        pig:SetPoint("CENTER", scrollFrame, "CENTER", 0, 0)
+        pig:SetTexture("Interface\\Icons\\INV_Pig")
+        if pig.SetTexCoord then
+            pig:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        end
+        pig:SetAlpha(0.95)
+        pig:Hide()
+        frame._lariasPigTexture = pig
+    end
+
     scrollChild = CreateFrame("Frame", nil, scrollFrame)
     scrollChild:SetSize(1, 1)
     scrollFrame:SetScrollChild(scrollChild)
@@ -1512,9 +1677,11 @@ function Addon:CreateFrame()
     showGreatVaultCheck:SetScript("OnClick", function(selfBtn)
         local d = Addon:EnsureDB()
         d.showGreatVault = selfBtn:GetChecked() and true or false
-        if Addon.UpdateTracking then Addon:UpdateTracking() end
-        Addon:ApplyScrollLayout()
-        Addon:Refresh()
+        if Addon.RequestRefresh then
+            Addon:RequestRefresh()
+        else
+            Addon:Refresh()
+        end
     end)
     frame._lariasOptShowGreatVault = showGreatVaultCheck
 
@@ -1533,9 +1700,11 @@ function Addon:CreateFrame()
     showCurrencyCheck:SetScript("OnClick", function(selfBtn)
         local d = Addon:EnsureDB()
         d.showCurrency = selfBtn:GetChecked() and true or false
-        if Addon.UpdateTracking then Addon:UpdateTracking() end
-        Addon:ApplyScrollLayout()
-        Addon:Refresh()
+        if Addon.RequestRefresh then
+            Addon:RequestRefresh()
+        else
+            Addon:Refresh()
+        end
     end)
     frame._lariasOptShowCurrency = showCurrencyCheck
 
@@ -1554,7 +1723,11 @@ function Addon:CreateFrame()
     hideCompletedCheck:SetScript("OnClick", function(selfBtn)
         local d = Addon:EnsureDB()
         d.hideCompletedSections = selfBtn:GetChecked() and true or false
-        Addon:Refresh()
+        if Addon.RequestRefresh then
+            Addon:RequestRefresh()
+        else
+            Addon:Refresh()
+        end
     end)
     frame._lariasOptHideCompleted = hideCompletedCheck
 
@@ -1577,8 +1750,11 @@ function Addon:CreateFrame()
             Addon:SyncOptionsTabControls()
         end
 
-        Addon:ApplyScrollLayout()
-        Addon:Refresh()
+        if Addon.RequestRefresh then
+            Addon:RequestRefresh()
+        else
+            Addon:Refresh()
+        end
     end)
 
     frame._lariasOptResetBtn = resetBtn
@@ -1628,9 +1804,6 @@ function Addon:CreateFrame()
         self:CreateTrackingPanel(frame)
     end
 
-    self:ApplyScrollLayout()
-    self:Refresh()
-
     if self.UpdateLocalizedUI then
         self:UpdateLocalizedUI()
     end
@@ -1649,8 +1822,11 @@ function Addon:Toggle()
         if self.SelectMainTab then
             self:SelectMainTab(1)
         end
-        self:ApplyScrollLayout()
-        self:Refresh()
+        if self.RequestRefresh then
+            self:RequestRefresh()
+        else
+            self:Refresh()
+        end
         self:ShowUpdatePopupIfNeeded()
         frame:Show()
     end
