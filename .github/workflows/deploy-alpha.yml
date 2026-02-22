@@ -63,13 +63,32 @@ jobs:
         env:
           CURRENT: ${{ steps.version.outputs.current }}
         run: |
-          # Parse semantic version
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
-          
-          # Always bump patch for alpha
-          PATCH=$((PATCH + 1))
-          
-          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          # Versioning rules for alpha:
+          # - If CURRENT is already an alpha version, only bump the 4th component (build).
+          # - If CURRENT is not alpha, bump PATCH once and start build at 1.
+          # Examples:
+          #   1.0.16          -> 1.0.17.1-alpha
+          #   1.0.16-alpha    -> 1.0.16.1-alpha
+          #   1.0.16.3-alpha  -> 1.0.16.4-alpha
+          BASE_VERSION="${CURRENT%%-*}"
+          IFS='.' read -r MAJOR MINOR PATCH BUILD <<< "$BASE_VERSION"
+
+          IS_ALPHA=false
+          case "$CURRENT" in
+            *-alpha*) IS_ALPHA=true ;;
+          esac
+
+          if [ "$IS_ALPHA" = "true" ]; then
+            if [ -z "${BUILD:-}" ]; then
+              BUILD=0
+            fi
+            BUILD=$((BUILD + 1))
+          else
+            PATCH=$((PATCH + 1))
+            BUILD=1
+          fi
+
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH.$BUILD"
           ALPHA_VERSION="$NEW_VERSION-alpha"
           
           echo "new=$NEW_VERSION" >> $GITHUB_OUTPUT
