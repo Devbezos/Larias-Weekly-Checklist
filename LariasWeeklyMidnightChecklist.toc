@@ -2,9 +2,10 @@
 ## Title: Larias Weekly Midnight Checklist (ALPHA)
 ## Notes: Weekly checklist with collapsible weeks
 ## Author: Larias
-## Version: 1.0.18-alpha
+## Version: 1.0.16-alpha
 ## SavedVariablesPerCharacter: LariasWeeklyMidnightChecklistDBPC
 ## SavedVariables: LariasWeeklyMidnightChecklistDB
+## OptionalDeps: LariasWeeklyMidnightChecklist_Locales
 ## X-Wago-ID: mKOD5RGx
 ## X-Curse-Project-ID: 1448023
 
@@ -17,7 +18,6 @@ Libs\\Ace3\\AceHook-3.0\\AceHook-3.0.lua
 Libs\\Ace3\\AceDB-3.0\\AceDB-3.0.lua
 Libs\\Ace3\\AceConsole-3.0\\AceConsole-3.0.lua
 Libs\\Ace3\\AceTimer-3.0\\AceTimer-3.0.lua
-Libs\\Ace3\\AceLocale-3.0\\AceLocale-3.0.lua
 Libs\\LibDataBroker-1.1\\LibDataBroker-1.1.lua
 Libs\\LibDBIcon-1.0\\LibDBIcon-1.0.lua
 Locales\\enUS.lua

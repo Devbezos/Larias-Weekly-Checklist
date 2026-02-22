@@ -1,44 +1,57 @@
-local addonName = ...
-local L = LibStub("AceLocale-3.0"):NewLocale(addonName, "enUS", true)
+local LOCALE_REGISTRY_KEY = "LARIASWEEKLYMIDNIGHTCHECKLIST_LOCALE_REGISTRY"
 
-if not L then return end
+local reg = _G[LOCALE_REGISTRY_KEY]
+if type(reg) ~= "table" then
+	reg = {}
+	_G[LOCALE_REGISTRY_KEY] = reg
+end
+if type(reg.strings) ~= "table" then reg.strings = {} end
 
-L["DISPLAY_NAME"] = "Larias Weekly Midnight Checklist"
+reg.strings["enUS"] = reg.strings["enUS"] or {}
+local L = reg.strings["enUS"]
 
--- UI: popup shown when a new addon version is installed (until acknowledged).
-L["UPDATE_AVAILABLE_TITLE"] = "New version available"
-L["UPDATE_AVAILABLE_TEXT"] = "New version available"
-L["UPDATE_AVAILABLE_FMT"] = "%s has an update available.\n\nPlease update the addon to the newest version."
+local function Set(key, value)
+	L[key] = value
+end
 
-L["OPTIONS_SHOW_GREAT_VAULT"] = "Show Great Vault"
-L["OPTIONS_SHOW_CURRENCY"] = "Show Currency"
+Set("DISPLAY_NAME", "Larias Weekly Midnight Checklist")
 
-L["HIDE_COMPLETED_WEEKS"] = "Hide completed weeks"
-L["OPTIONS_BUTTON"] = "Options"
-L["RESET_BUTTON"] = "Reset"
-L["DONE_PREFIX"] = "[Done] "
+Set("UPDATE_AVAILABLE_TITLE", "New version available")
+Set("UPDATE_AVAILABLE_TEXT", "New version available")
+Set("UPDATE_AVAILABLE_FMT", "%s has an update available.\n\nPlease update the addon to the newest version.")
 
-L["TRACKING_GREAT_VAULT_TITLE"] = "Great Vault"
-L["TRACKING_CURRENCY_TITLE"] = "Currency"
-L["TRACKING_GV_RAID"] = "Raid"
-L["TRACKING_GV_DUNGEONS"] = "Dungeons"
-L["TRACKING_NA"] = "N/A"
+Set("OPTIONS_SHOW_GREAT_VAULT", "Show Great Vault")
+Set("OPTIONS_SHOW_CURRENCY", "Show Currency")
 
-L["TRACKING_SPARKS_LABEL"] = "Sparks:"
-L["TRACKING_DONE"] = "Done"
-L["TRACKING_NOT_DONE"] = "Not done"
+Set("HIDE_COMPLETED_WEEKS", "Hide completed weeks")
+Set("OPTIONS_BUTTON", "Options")
+Set("RESET_BUTTON", "Reset")
+Set("DONE_PREFIX", "[Done] ")
 
-L["TRACKING_QUEST_DELVERS_BOUNTY"] = "Delver's Bounty:"
-L["TRACKING_QUEST_WEEKLY_PREY"] = "Weekly Prey:"
+Set("OPTIONS_LANGUAGE", "Language")
+Set("OPTIONS_LANGUAGE_AUTO", "Auto")
 
-L["TRACKING_CREST_LABEL"] = "Crest:"
-L["TRACKING_CREST_ID_LABEL_FMT"] = "Crest %s:"
-L["TRACKING_NO_ID"] = "No ID"
-L["TRACKING_TRADE_UP_SUFFIX"] = " Trade Up)"
+Set("TRACKING_GREAT_VAULT_TITLE", "Great Vault")
+Set("TRACKING_CURRENCY_TITLE", "Currency")
+Set("TRACKING_GV_RAID", "Raid")
+Set("TRACKING_GV_DUNGEONS", "Dungeons")
+Set("TRACKING_NA", "N/A")
 
-L["TRACKING_CATALYST_LABEL"] = "Catalyst:"
+Set("TRACKING_SPARKS_LABEL", "Sparks:")
+Set("TRACKING_DONE", "Done")
+Set("TRACKING_NOT_DONE", "Not done")
 
-L["TRACKING_CURRENCY_FALLBACK_PREFIX"] = "Currency "
-L["TRACKING_CREST_MATCH_SUBSTRING"] = "crest"
-L["TRACKING_INF"] = "INF"
-L["MINIMAP_TOOLTIP_TEXT"] = "Left-click to toggle the checklist"
+Set("TRACKING_QUEST_DELVERS_BOUNTY", "Delver's Bounty:")
+Set("TRACKING_QUEST_WEEKLY_PREY", "Weekly Prey:")
+
+Set("TRACKING_CREST_LABEL", "Crest:")
+Set("TRACKING_CREST_ID_LABEL_FMT", "Crest %s:")
+Set("TRACKING_NO_ID", "No ID")
+Set("TRACKING_TRADE_UP_SUFFIX", " Trade Up)")
+
+Set("TRACKING_CATALYST_LABEL", "Catalyst:")
+
+Set("TRACKING_CURRENCY_FALLBACK_PREFIX", "Currency ")
+Set("TRACKING_CREST_MATCH_SUBSTRING", "crest")
+Set("TRACKING_INF", "INF")
+Set("MINIMAP_TOOLTIP_TEXT", "Left-click to toggle the checklist")

@@ -2,12 +2,27 @@ local addonName = ...
 local Addon = LibStub("AceAddon-3.0"):NewAddon(addonName, "AceEvent-3.0", "AceHook-3.0", "AceConsole-3.0", "AceTimer-3.0")
 _G[addonName] = Addon
 
--- Setup localization
-if not Addon.L then
-    local L = LibStub("AceLocale-3.0"):GetLocale(addonName, true)
-    Addon.L = L
+local LOCALE_REGISTRY_KEY = "LARIASWEEKLYMIDNIGHTCHECKLIST_LOCALE_REGISTRY"
+
+local function GetLocaleRegistry()
+    local reg = _G[LOCALE_REGISTRY_KEY]
+    if type(reg) ~= "table" then
+        reg = {}
+        _G[LOCALE_REGISTRY_KEY] = reg
+    end
+    if type(reg.strings) ~= "table" then reg.strings = {} end
+    if type(reg.data) ~= "table" then reg.data = {} end
+    return reg
 end
-local L = Addon.L or {}
+
+Addon.L = Addon.L or {}
+local L = Addon.L
+
+do
+    local reg = GetLocaleRegistry()
+    Addon.LOCALES = reg.strings
+    Addon.LIST_DATA = reg.data
+end
 
 -- Initialize all constants on the new Addon object
 do
@@ -48,7 +63,7 @@ do
             closeInset = 4,
             topRowH = 26,
             topRowRightInset = 34,
-            scrollTop = 44,
+            scrollTop = 38,
             scrollBottom = 16,
             scrollRight = 30,
             sectionGap = 10,
@@ -169,6 +184,7 @@ local function SetupAddonDB()
             hideCompletedSections = true,
             showGreatVault = true,
             showCurrency = true,
+            localeOverride = "auto",
             collapsedSections = {},
             checked = {},
         },
@@ -465,6 +481,9 @@ end
 -- Initialize AceDB and minimap icon on addon load
 function Addon:OnInitialize()
     SetupAddonDB()
+    if self.ApplyLocaleOverride then
+        self:ApplyLocaleOverride()
+    end
     EnsureMinimapIcon()
     SetupMinimapIcon()
 end
@@ -521,6 +540,132 @@ function Addon:EnsureDB()
         SetupAddonDB()
     end
     return self.db.profile
+end
+
+local function WipeTableInPlace(t)
+    if type(t) ~= "table" then return end
+    for k in pairs(t) do
+        t[k] = nil
+    end
+end
+
+local LOCALE_DISPLAY_NAMES = {
+    enUS = "English",
+    frFR = "Français",
+    esES = "Español (ES)",
+    esMX = "Español (MX)",
+}
+
+function Addon:GetSupportedLocaleCodes()
+    local reg = GetLocaleRegistry()
+    local data = reg and reg.data
+
+    local out = {}
+    local seen = {}
+
+    if type(data) == "table" then
+        for code, dataset in pairs(data) do
+            if type(code) == "string" and type(dataset) == "table" then
+                out[#out + 1] = code
+                seen[code] = true
+            end
+        end
+    end
+
+    if not seen.enUS then
+        out[#out + 1] = "enUS"
+    end
+
+    table.sort(out, function(a, b)
+        if a == b then return false end
+        if a == "enUS" then return true end
+        if b == "enUS" then return false end
+        return tostring(a) < tostring(b)
+    end)
+
+    return out
+end
+
+function Addon:GetLocaleDisplayName(code)
+    code = tostring(code or "")
+    local pretty = LOCALE_DISPLAY_NAMES[code] or code
+    return ("%s (%s)"):format(pretty, code)
+end
+
+function Addon:GetEffectiveLocaleCode()
+    local db = self:EnsureDB()
+    local override = tostring(db.localeOverride or "auto")
+
+    local code
+    if override ~= "auto" and override ~= "" then
+        code = override
+    else
+        code = (GetLocale and GetLocale()) or "enUS"
+    end
+
+    local reg = GetLocaleRegistry()
+    if reg and type(reg.data) == "table" and type(reg.data[code]) == "table" then
+        return code
+    end
+    return "enUS"
+end
+
+function Addon:ApplyLocaleOverride()
+    local db = self:EnsureDB()
+    if db.localeOverride == nil or db.localeOverride == "" then
+        db.localeOverride = "auto"
+    end
+
+    local reg = GetLocaleRegistry()
+    local strings = reg and reg.strings
+    if type(strings) ~= "table" then strings = {} end
+
+    local selected = self:GetEffectiveLocaleCode()
+
+    WipeTableInPlace(self.L)
+
+    local fallback = strings.enUS
+    if type(fallback) == "table" then
+        for k, v in pairs(fallback) do
+            self.L[k] = v
+        end
+    end
+
+    local overlay = strings[selected]
+    if type(overlay) == "table" then
+        for k, v in pairs(overlay) do
+            self.L[k] = v
+        end
+    end
+
+    if self.L and self.L.DISPLAY_NAME then
+        self.DISPLAY_NAME = self.L.DISPLAY_NAME
+    end
+
+    if self.UpdateLocalizedUI then
+        self:UpdateLocalizedUI()
+    end
+end
+
+function Addon:SetLocaleOverride(value)
+    local db = self:EnsureDB()
+    value = tostring(value or "auto")
+    if value == "" then value = "auto" end
+
+    db.localeOverride = value
+
+    self:ApplyLocaleOverride()
+
+    self._dataSig = ""
+
+    if frame and frame.IsShown and frame:IsShown() then
+        if self.ApplyScrollLayout then
+            self:ApplyScrollLayout()
+        end
+        if self.Refresh then
+            self:Refresh()
+        end
+    end
 end
 
 function Addon:OpenOptions()
@@ -642,12 +787,99 @@ function Addon:SyncOptionsTabControls()
     if hideCompletedCheck and hideCompletedCheck.SetChecked then
         hideCompletedCheck:SetChecked(db.hideCompletedSections and true or false)
     end
+
+    if self.UpdateLocalizedUI then
+        self:UpdateLocalizedUI()
+    end
 end
 
 function Addon:GetListData()
-    local data = _G[self._LIST_DATA_KEY]
+    local reg = GetLocaleRegistry()
+    local dataByLocale = reg and reg.data
+    if type(dataByLocale) ~= "table" then return {} end
+
+    local localeCode = self:GetEffectiveLocaleCode()
+    local data = dataByLocale[localeCode]
     if type(data) == "table" then return data end
+
+    data = dataByLocale.enUS
+    if type(data) == "table" then return data end
+
     return {}
+end
+
+function Addon:UpdateLocalizedUI()
+    if not frame then return end
+
+    local showLocaleDropdown = false
+    do
+        local codes = self.GetSupportedLocaleCodes and self:GetSupportedLocaleCodes() or {}
+        for i = 1, #codes do
+            if codes[i] ~= "enUS" then
+                showLocaleDropdown = true
+                break
+            end
+        end
+    end
+
+    local function SetShownCompat(region, shown)
+        if not region then return end
+        if region.SetShown then
+            region:SetShown(shown and true or false)
+            return
+        end
+        if shown then
+            if region.Show then region:Show() end
+        else
+            if region.Hide then region:Hide() end
+        end
+    end
+
+    local function SetCheckText(checkButton, text)
+        if not checkButton then return end
+        local textRegion = checkButton.text or checkButton.Text
+        if textRegion and textRegion.SetText then
+            textRegion:SetText(text)
+            if textRegion.SetTextColor then
+                textRegion:SetTextColor(Addon.THEME.text.r, Addon.THEME.text.g, Addon.THEME.text.b, Addon.THEME.text.a)
+            end
+        end
+    end
+
+    SetCheckText(frame._lariasOptShowGreatVault, L.OPTIONS_SHOW_GREAT_VAULT or "Show Great Vault")
+    SetCheckText(frame._lariasOptShowCurrency, L.OPTIONS_SHOW_CURRENCY or "Show Currency")
+    SetCheckText(frame._lariasOptHideCompleted, L.HIDE_COMPLETED_WEEKS or "Hide Completed Weeks")
+
+    local resetBtn = frame._lariasOptResetBtn
+    if resetBtn and resetBtn.SetText then
+        resetBtn:SetText(L.RESET_BUTTON or "Reset")
+    end
+
+    local localeLabel = frame._lariasOptLocaleLabel
+    if localeLabel and localeLabel.SetText then
+        SetShownCompat(localeLabel, showLocaleDropdown)
+        if showLocaleDropdown then
+            localeLabel:SetText(L.OPTIONS_LANGUAGE or "Language")
+            if localeLabel.SetTextColor then
+                localeLabel:SetTextColor(Addon.THEME.text.r, Addon.THEME.text.g, Addon.THEME.text.b, Addon.THEME.text.a)
+            end
+        end
+    end
+
+    local dropdown = frame._lariasOptLocaleDropdown
+    if dropdown and UIDropDownMenu_SetText and UIDropDownMenu_SetSelectedValue then
+        SetShownCompat(dropdown, showLocaleDropdown)
+        if showLocaleDropdown then
+            local db = self:EnsureDB()
+            local selectedValue = tostring(db.localeOverride or "auto")
+            UIDropDownMenu_SetSelectedValue(dropdown, selectedValue)
+            if selectedValue == "auto" then
+                UIDropDownMenu_SetText(dropdown, (L.OPTIONS_LANGUAGE_AUTO or "Auto") .. " (" .. tostring((GetLocale and GetLocale()) or "enUS") .. ")")
+            else
+                UIDropDownMenu_SetText(dropdown, self:GetLocaleDisplayName(selectedValue))
+            end
+        end
+    end
 end
 
 function Addon:ApplyTheme(frameObj)
@@ -1349,12 +1581,59 @@ function Addon:CreateFrame()
         Addon:Refresh()
     end)
 
+    frame._lariasOptResetBtn = resetBtn
+
+    local localeLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    localeLabel:SetPoint("TOPLEFT", resetBtn, "BOTTOMLEFT", 0, -18)
+    localeLabel:SetText(L.OPTIONS_LANGUAGE or "Language")
+    localeLabel:SetTextColor(Addon.THEME.text.r, Addon.THEME.text.g, Addon.THEME.text.b, Addon.THEME.text.a)
+    frame._lariasOptLocaleLabel = localeLabel
+
+    if UIDropDownMenu_Initialize and UIDropDownMenu_CreateInfo and UIDropDownMenu_AddButton then
+        local localeDropdown = CreateFrame("Frame", nil, optionsPanel, "UIDropDownMenuTemplate")
+        localeDropdown:SetPoint("TOPLEFT", localeLabel, "BOTTOMLEFT", -16, -6)
+        if UIDropDownMenu_SetWidth then UIDropDownMenu_SetWidth(localeDropdown, 190) end
+
+        UIDropDownMenu_Initialize(localeDropdown, function(_, level)
+            level = level or 1
+
+            local d = Addon:EnsureDB()
+            local current = tostring(d.localeOverride or "auto")
+
+            local function AddItem(value, text)
+                local info = UIDropDownMenu_CreateInfo()
+                info.text = text
+                info.value = value
+                info.checked = (current == value)
+                info.func = function()
+                    Addon:SetLocaleOverride(value)
+                end
+                UIDropDownMenu_AddButton(info, level)
+            end
+
+            local autoText = (L.OPTIONS_LANGUAGE_AUTO or "Auto") .. " (" .. tostring((GetLocale and GetLocale()) or "enUS") .. ")"
+            AddItem("auto", autoText)
+
+            local codes = Addon:GetSupportedLocaleCodes()
+            for i = 1, #codes do
+                local code = codes[i]
+                AddItem(code, Addon:GetLocaleDisplayName(code))
+            end
+        end)
+
+        frame._lariasOptLocaleDropdown = localeDropdown
+    end
+
     if (db.showGreatVault or db.showCurrency) and self.CreateTrackingPanel and not self._trackingFrame then
         self:CreateTrackingPanel(frame)
     end
 
     self:ApplyScrollLayout()
     self:Refresh()
+
+    if self.UpdateLocalizedUI then
+        self:UpdateLocalizedUI()
+    end
 
     self:SelectMainTab(1)
 end
@@ -1385,7 +1664,6 @@ end
 
 function Addon:ToggleCommand(input)
     if input and input ~= "" then
-        -- Handle subcommands if needed in the future
         self:Print("Usage: /larias or /lcl to toggle the checklist")
     else
         self:Toggle()
