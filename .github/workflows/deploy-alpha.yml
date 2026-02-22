@@ -1,0 +1,133 @@
+name: Deploy Alpha Release
+
+on:
+  schedule:
+    - cron: "0 2 * * *"  # Daily at 2 AM UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  check-diff:
+    runs-on: ubuntu-latest
+    outputs:
+      has-diff: ${{ steps.diff.outputs.has-diff }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for differences
+        id: diff
+        run: |
+          # Compare against last tagged release or main
+          if git rev-list --tags --max-count=1 &>/dev/null; then
+            LAST_TAG=$(git rev-list --tags --max-count=1)
+            DIFF=$(git diff --quiet $LAST_TAG HEAD; echo $?)
+          else
+            DIFF=1
+          fi
+          
+          if [ $DIFF -gt 0 ]; then
+            echo "has-diff=true" >> $GITHUB_OUTPUT
+            echo "Changes detected since last release"
+          else
+            echo "has-diff=false" >> $GITHUB_OUTPUT
+            echo "No changes since last release"
+          fi
+
+  deploy-alpha:
+    needs: check-diff
+    if: needs.check-diff.outputs.has-diff == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get current version
+        id: version
+        run: |
+          # Extract version from .toc file
+          CURRENT_VERSION=$(grep "^## Version:" LariasWeeklyMidnightChecklist.toc | sed 's/## Version: //')
+          echo "current=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          
+          # Get branch name
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          echo "branch=$BRANCH_NAME" >> $GITHUB_OUTPUT
+
+      - name: Calculate new version
+        id: newversion
+        env:
+          CURRENT: ${{ steps.version.outputs.current }}
+        run: |
+          # Parse semantic version
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+          
+          # Always bump patch for alpha
+          PATCH=$((PATCH + 1))
+          
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          ALPHA_VERSION="$NEW_VERSION-alpha"
+          
+          echo "new=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "alpha=$ALPHA_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Update version in .toc file
+        env:
+          ALPHA_VERSION: ${{ steps.newversion.outputs.alpha }}
+        run: |
+          sed -i "s/^## Version:.*/## Version: $ALPHA_VERSION/" LariasWeeklyMidnightChecklist.toc
+          sed -i "s/^## Title:.*/## Title: Larias Weekly Midnight Checklist (ALPHA)/" LariasWeeklyMidnightChecklist.toc
+
+      - name: Commit and tag
+        env:
+          ALPHA_VERSION: ${{ steps.newversion.outputs.alpha }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add LariasWeeklyMidnightChecklist.toc
+          git commit -m "Alpha release: $ALPHA_VERSION from ${{ steps.version.outputs.branch }}" || true
+          git push || true
+          
+          TAG="v$ALPHA_VERSION"
+          git tag -a "$TAG" -m "Alpha Release $ALPHA_VERSION" 2>/dev/null || true
+          git push origin "$TAG" 2>/dev/null || true
+          
+          echo "tag=$TAG" >> $GITHUB_ENV
+
+      - name: Package + Upload (CurseForge & Wago)
+        uses: BigWigsMods/packager@v2.4.3
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+
+      - name: Notify Discord (alpha deployed)
+        if: success()
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          TAG: v${{ steps.newversion.outputs.alpha }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ steps.version.outputs.branch }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          RELEASE_URL="https://github.com/${REPO}/releases/tag/${TAG}"
+          CURSE_URL="https://www.curseforge.com/wow/addons/larias-weekly-midnight-checklist"
+
+          payload=$(cat <<EOF
+          {
+            "content": "🧪 **Larias Weekly Midnight Checklist ${TAG}** (ALPHA from \`${BRANCH}\`) is ready!\n\n📦 GitHub: ${RELEASE_URL}\n🔥 CurseForge: ${CURSE_URL}\n🛠 Workflow: ${RUN_URL}"
+          }
+          EOF
+          )
+
+          curl -sS -H "Content-Type: application/json" \
+            -d "$payload" \
+            "$DISCORD_WEBHOOK_URL" || true
