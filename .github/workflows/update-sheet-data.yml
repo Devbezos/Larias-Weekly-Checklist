@@ -144,7 +144,7 @@ jobs:
 
           payload=$(cat <<EOF
           {
-            "content": "🚀 **Larias Weekly Midnight Checklist ${TAG}** is live!\n\n📦 GitHub: ${RELEASE_URL}\n🔥 CurseForge: ${CURSE_URL}\n🛠 Workflow: ${RUN_URL}"
+            "content": "🚀 **Larias Checklist ${TAG}** is live!\n\n📦 GitHub: ${RELEASE_URL}\n🔥 CurseForge: ${CURSE_URL}\n🛠 Workflow: ${RUN_URL}"
           }
           EOF
           )
