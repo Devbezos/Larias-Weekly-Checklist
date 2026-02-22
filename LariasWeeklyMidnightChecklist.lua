@@ -477,9 +477,6 @@ function Addon:OnEnable()
     -- Register console commands
     self:RegisterConsoleCommands()
     
-    -- Setup options panel with AceConfig
-    self:SetupOptionsWithAceConfig()
-    
     -- Register events using AceEvent
     self:RegisterEvent("CHAT_MSG_ADDON")
     
@@ -542,69 +539,18 @@ function Addon:EnsureDB()
     if not self.db then
         SetupAddonDB()
     end
-    
+
     -- Return the profile from AceDB for backward compatibility
     return self.db.profile
 end
 
--- Set up AceConfig options
+-- System (Blizzard) options menu has been removed in favor of the in-window Options tab.
+-- Keep no-op stubs for compatibility with older external calls.
 function Addon:SetupOptionsWithAceConfig()
-    if self._optionsRegistered then return end
-    self._optionsRegistered = true
-    
-    local ACR = LibStub("AceConfigRegistry-3.0")
-    local ACD = LibStub("AceConfigDialog-3.0")
-    
-    local options = {
-        name = L.DISPLAY_NAME or addonName,
-        handler = self,
-        type = "group",
-        args = {
-            general = {
-                name = "General",
-                type = "group",
-                order = 1,
-                args = {
-                    showGreatVault = {
-                        name = L.OPTIONS_SHOW_GREAT_VAULT or "Show Great Vault",
-                        desc = "Display Great Vault tracking panel",
-                        type = "toggle",
-                        width = "full",
-                        order = 1,
-                        get = function() return self.db.profile.showGreatVault or false end,
-                        set = function(info, value)
-                            self.db.profile.showGreatVault = value
-                            if self.UpdateTracking then self:UpdateTracking() end
-                            self:ApplyScrollLayout()
-                            self:Refresh()
-                        end,
-                    },
-                    showCurrency = {
-                        name = L.OPTIONS_SHOW_CURRENCY or "Show Currency",
-                        desc = "Display currency tracking panel",
-                        type = "toggle",
-                        width = "full",
-                        order = 2,
-                        get = function() return self.db.profile.showCurrency or false end,
-                        set = function(info, value)
-                            self.db.profile.showCurrency = value
-                            if self.UpdateTracking then self:UpdateTracking() end
-                            self:ApplyScrollLayout()
-                            self:Refresh()
-                        end,
-                    },
-                },
-            },
-        },
-    }
-    
-    ACR:RegisterOptionsTable(addonName, options)
-    ACD:AddToBlizOptions(addonName, L.DISPLAY_NAME or addonName)
+    return nil
 end
 
--- Legacy options panel method for compatibility
 function Addon:EnsureOptionsPanel()
-    self:SetupOptionsWithAceConfig()
     return nil
 end
 
