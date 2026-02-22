@@ -14,7 +14,7 @@ local function Set(key, value)
 	L[key] = value
 end
 
-Set("DISPLAY_NAME", "Larias Weekly Midnight Checklist")
+Set("DISPLAY_NAME", "Larias Checklist")
 
 Set("UPDATE_AVAILABLE_TITLE", "New version available")
 Set("UPDATE_AVAILABLE_TEXT", "New version available")
