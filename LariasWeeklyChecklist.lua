@@ -22,6 +22,15 @@ do
     local reg = GetLocaleRegistry()
     Addon.LOCALES = reg.strings
     Addon.LIST_DATA = reg.data
+
+    -- Seed `Addon.L` with enUS immediately so early UI (and things like
+    -- CreateFrame called before DB init) never needs hardcoded English fallbacks.
+    local seed = reg.strings and reg.strings.enUS
+    if type(seed) == "table" then
+        for k, v in pairs(seed) do
+            Addon.L[k] = v
+        end
+    end
 end
 
 -- Initialize all constants on the new Addon object
@@ -230,8 +239,8 @@ local function SetupMinimapIcon()
         OnTooltipShow = function(tooltip)
             if not tooltip then return end
             tooltip:AddLine(L.DISPLAY_NAME or addonName, 1, 0.82, 0)
-            tooltip:AddLine("Left-click: Toggle checklist", 1, 1, 1)
-            tooltip:AddLine("Right-click: Options", 1, 1, 1)
+            tooltip:AddLine(L.MINIMAP_TOOLTIP_LEFT_CLICK_TOGGLE or "", 1, 1, 1)
+            tooltip:AddLine(L.MINIMAP_TOOLTIP_RIGHT_CLICK_OPTIONS or "", 1, 1, 1)
         end,
     })
     
@@ -314,8 +323,8 @@ function Addon:EnsureUpdatePopup()
 
     StaticPopupDialogs["LARIASWEEKLYCHECKLIST_UPDATE"] = {
         text = "%s",
-        button1 = (OKAY or "OK"),
-        button2 = (CANCEL or "Later"),
+        button1 = (OKAY or (L.BUTTON_OK or "")),
+        button2 = (CANCEL or (L.BUTTON_CANCEL or "")),
         OnAccept = function()
             Addon:DismissUpdateNotice()
         end,
@@ -341,7 +350,7 @@ function Addon:ShowUpdatePopupIfNeeded()
     if type(L.UPDATE_AVAILABLE_FMT) == "string" and L.UPDATE_AVAILABLE_FMT ~= "" then
         popupText = string.format(L.UPDATE_AVAILABLE_FMT, tostring(displayName))
     else
-        popupText = (L.UPDATE_AVAILABLE_TEXT or L.UPDATE_AVAILABLE_TITLE or "New version available")
+        popupText = (L.UPDATE_AVAILABLE_TEXT or L.UPDATE_AVAILABLE_TITLE or "")
     end
 
     StaticPopup_Show("LARIASWEEKLYCHECKLIST_UPDATE", popupText)
@@ -549,11 +558,11 @@ local function WipeTableInPlace(t)
     end
 end
 
-local LOCALE_DISPLAY_NAMES = {
-    enUS = "English",
-    frFR = "Français",
-    esES = "Español (ES)",
-    esMX = "Español (MX)",
+local LOCALE_NAME_KEYS = {
+    enUS = "LOCALE_NAME_ENUS",
+    frFR = "LOCALE_NAME_FRFR",
+    esES = "LOCALE_NAME_ESES",
+    esMX = "LOCALE_NAME_ESMX",
 }
 
 function Addon:GetSupportedLocaleCodes()
@@ -588,7 +597,8 @@ end
 
 function Addon:GetLocaleDisplayName(code)
     code = tostring(code or "")
-    local pretty = LOCALE_DISPLAY_NAMES[code] or code
+    local key = LOCALE_NAME_KEYS[code]
+    local pretty = (key and L[key]) or code
     return ("%s (%s)"):format(pretty, code)
 end
 
@@ -863,25 +873,30 @@ function Addon:UpdateLocalizedUI()
         end
     end
 
-    SetCheckText(frame._lariasOptShowGreatVault, L.OPTIONS_SHOW_GREAT_VAULT or "Show Great Vault")
-    SetCheckText(frame._lariasOptShowCurrency, L.OPTIONS_SHOW_CURRENCY or "Show Currency")
-    SetCheckText(frame._lariasOptHideCompleted, L.HIDE_COMPLETED_WEEKS or "Hide Completed Weeks")
+    SetCheckText(frame._lariasOptShowGreatVault, L.OPTIONS_SHOW_GREAT_VAULT or "")
+    SetCheckText(frame._lariasOptShowCurrency, L.OPTIONS_SHOW_CURRENCY or "")
+    SetCheckText(frame._lariasOptHideCompleted, L.HIDE_COMPLETED_WEEKS or "")
 
     local optionsTab = frame._lariasTabOptions
     if optionsTab and optionsTab.SetText then
-        optionsTab:SetText(L.OPTIONS_BUTTON or "Options")
+        optionsTab:SetText(L.TAB_OPTIONS or "")
+    end
+
+    local listTab = frame._lariasTabList
+    if listTab and listTab.SetText then
+        listTab:SetText(L.TAB_LIST or "")
     end
 
     local resetBtn = frame._lariasOptResetBtn
     if resetBtn and resetBtn.SetText then
-        resetBtn:SetText(L.RESET_BUTTON or "Reset")
+        resetBtn:SetText(L.RESET_BUTTON or "")
     end
 
     local localeLabel = frame._lariasOptLocaleLabel
     if localeLabel and localeLabel.SetText then
         SetShownCompat(localeLabel, showLocaleDropdown)
         if showLocaleDropdown then
-            localeLabel:SetText(L.OPTIONS_LANGUAGE or "Language")
+            localeLabel:SetText(L.OPTIONS_LANGUAGE or "")
             if localeLabel.SetTextColor then
                 localeLabel:SetTextColor(Addon.THEME.text.r, Addon.THEME.text.g, Addon.THEME.text.b, Addon.THEME.text.a)
             end
@@ -896,7 +911,7 @@ function Addon:UpdateLocalizedUI()
             local selectedValue = tostring(db.localeOverride or "auto")
             UIDropDownMenu_SetSelectedValue(dropdown, selectedValue)
             if selectedValue == "auto" then
-                UIDropDownMenu_SetText(dropdown, (L.OPTIONS_LANGUAGE_AUTO or "Auto") .. " (" .. tostring((GetLocale and GetLocale()) or "enUS") .. ")")
+                UIDropDownMenu_SetText(dropdown, (L.OPTIONS_LANGUAGE_AUTO or "") .. " (" .. tostring((GetLocale and GetLocale()) or "enUS") .. ")")
             else
                 UIDropDownMenu_SetText(dropdown, self:GetLocaleDisplayName(selectedValue))
             end
@@ -1610,7 +1625,7 @@ function Addon:CreateFrame()
 
     local listTab = CreateFrame("Button", tab1Name, frame, "UIPanelButtonTemplate")
     listTab:SetID(1)
-    listTab:SetText("List")
+    listTab:SetText(L.TAB_LIST or "")
     listTab:SetSize(120, 28)
     listTab:ClearAllPoints()
     -- Tabs should sit *inside* the window.
@@ -1623,7 +1638,7 @@ function Addon:CreateFrame()
 
     local optionsTab = CreateFrame("Button", tab2Name, frame, "UIPanelButtonTemplate")
     optionsTab:SetID(2)
-    optionsTab:SetText("Options")
+    optionsTab:SetText(L.TAB_OPTIONS or "")
     optionsTab:SetSize(120, 28)
     optionsTab:ClearAllPoints()
     optionsTab:SetPoint("LEFT", listTab, "RIGHT", 6, 0)
@@ -1667,7 +1682,7 @@ function Addon:CreateFrame()
     do
         local textRegion = showGreatVaultCheck.text or showGreatVaultCheck.Text
         if textRegion then
-            textRegion:SetText(L.OPTIONS_SHOW_GREAT_VAULT or "Show Great Vault")
+            textRegion:SetText(L.OPTIONS_SHOW_GREAT_VAULT or "")
             if textRegion.SetTextColor then
                 textRegion:SetTextColor(Addon.THEME.text.r, Addon.THEME.text.g, Addon.THEME.text.b, Addon.THEME.text.a)
             end
@@ -1690,7 +1705,7 @@ function Addon:CreateFrame()
     do
         local textRegion = showCurrencyCheck.text or showCurrencyCheck.Text
         if textRegion then
-            textRegion:SetText(L.OPTIONS_SHOW_CURRENCY or "Show Currency")
+            textRegion:SetText(L.OPTIONS_SHOW_CURRENCY or "")
             if textRegion.SetTextColor then
                 textRegion:SetTextColor(Addon.THEME.text.r, Addon.THEME.text.g, Addon.THEME.text.b, Addon.THEME.text.a)
             end
@@ -1713,7 +1728,7 @@ function Addon:CreateFrame()
     do
         local textRegion = hideCompletedCheck.text or hideCompletedCheck.Text
         if textRegion then
-            textRegion:SetText(L.HIDE_COMPLETED_WEEKS or "Hide Completed Weeks")
+            textRegion:SetText(L.HIDE_COMPLETED_WEEKS or "")
             if textRegion.SetTextColor then
                 textRegion:SetTextColor(Addon.THEME.text.r, Addon.THEME.text.g, Addon.THEME.text.b, Addon.THEME.text.a)
             end
@@ -1734,7 +1749,7 @@ function Addon:CreateFrame()
     local resetBtn = CreateFrame("Button", nil, optionsPanel, "GameMenuButtonTemplate")
     resetBtn:SetPoint("TOPLEFT", hideCompletedCheck, "BOTTOMLEFT", 0, -12)
     resetBtn:SetSize(120, 24)
-    resetBtn:SetText(L.RESET_BUTTON or "Reset")
+    resetBtn:SetText(L.RESET_BUTTON or "")
     resetBtn:SetScript("OnClick", function()
         local d = Addon:EnsureDB()
         if wipe then
@@ -1761,7 +1776,7 @@ function Addon:CreateFrame()
 
     local localeLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     localeLabel:SetPoint("TOPLEFT", resetBtn, "BOTTOMLEFT", 0, -18)
-    localeLabel:SetText(L.OPTIONS_LANGUAGE or "Language")
+    localeLabel:SetText(L.OPTIONS_LANGUAGE or "")
     localeLabel:SetTextColor(Addon.THEME.text.r, Addon.THEME.text.g, Addon.THEME.text.b, Addon.THEME.text.a)
     frame._lariasOptLocaleLabel = localeLabel
 
@@ -1787,7 +1802,7 @@ function Addon:CreateFrame()
                 UIDropDownMenu_AddButton(info, level)
             end
 
-            local autoText = (L.OPTIONS_LANGUAGE_AUTO or "Auto") .. " (" .. tostring((GetLocale and GetLocale()) or "enUS") .. ")"
+            local autoText = (L.OPTIONS_LANGUAGE_AUTO or "") .. " (" .. tostring((GetLocale and GetLocale()) or "enUS") .. ")"
             AddItem("auto", autoText)
 
             local codes = Addon:GetSupportedLocaleCodes()
@@ -1840,7 +1855,7 @@ end
 
 function Addon:ToggleCommand(input)
     if input and input ~= "" then
-        self:Print("Usage: /larias or /lcl to toggle the checklist")
+        self:Print(L.SLASH_USAGE_TOGGLE or "")
     else
         self:Toggle()
     end

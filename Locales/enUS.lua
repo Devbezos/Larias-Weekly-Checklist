@@ -20,6 +20,9 @@ Set("UPDATE_AVAILABLE_TITLE", "New version available")
 Set("UPDATE_AVAILABLE_TEXT", "New version available")
 Set("UPDATE_AVAILABLE_FMT", "%s has an update available.\n\nPlease update the addon to the newest version.")
 
+Set("BUTTON_OK", "OK")
+Set("BUTTON_CANCEL", "Cancel")
+
 Set("OPTIONS_SHOW_GREAT_VAULT", "Show Great Vault")
 Set("OPTIONS_SHOW_CURRENCY", "Show Currency")
 
@@ -55,3 +58,16 @@ Set("TRACKING_CURRENCY_FALLBACK_PREFIX", "Currency ")
 Set("TRACKING_CREST_MATCH_SUBSTRING", "crest")
 Set("TRACKING_INF", "INF")
 Set("MINIMAP_TOOLTIP_TEXT", "Left-click to toggle the checklist")
+
+Set("MINIMAP_TOOLTIP_LEFT_CLICK_TOGGLE", "Left-click: Toggle checklist")
+Set("MINIMAP_TOOLTIP_RIGHT_CLICK_OPTIONS", "Right-click: Options")
+
+Set("TAB_LIST", "List")
+Set("TAB_OPTIONS", "Options")
+
+Set("SLASH_USAGE_TOGGLE", "Usage: /larias or /lcl to toggle the checklist")
+
+Set("LOCALE_NAME_ENUS", "English")
+Set("LOCALE_NAME_FRFR", "French")
+Set("LOCALE_NAME_ESES", "Spanish (ES)")
+Set("LOCALE_NAME_ESMX", "Spanish (MX)")
