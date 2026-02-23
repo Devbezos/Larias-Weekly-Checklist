@@ -1,44 +1,18 @@
-name: Deploy Alpha Release
+name: Deploy Alpha
 
 on:
   workflow_dispatch:
+    inputs:
+      target_branch:
+        description: "Branch to deploy alpha from (e.g. main, feature/foo)"
+        required: false
+        default: ""
 
 permissions:
   contents: write
 
 jobs:
-  check-diff:
-    runs-on: ubuntu-latest
-    outputs:
-      has-diff: ${{ steps.diff.outputs.has-diff }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Check for differences
-        id: diff
-        run: |
-          # Compare against last tagged release or main
-          if git rev-list --tags --max-count=1 &>/dev/null; then
-            LAST_TAG=$(git rev-list --tags --max-count=1)
-            DIFF=$(git diff --quiet $LAST_TAG HEAD; echo $?)
-          else
-            DIFF=1
-          fi
-          
-          if [ $DIFF -gt 0 ]; then
-            echo "has-diff=true" >> $GITHUB_OUTPUT
-            echo "Changes detected since last release"
-          else
-            echo "has-diff=false" >> $GITHUB_OUTPUT
-            echo "No changes since last release"
-          fi
-
   deploy-alpha:
-    needs: check-diff
-    if: needs.check-diff.outputs.has-diff == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
 
     steps:
@@ -46,16 +20,17 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ inputs.target_branch || github.ref_name }}
 
       - name: Get current version
         id: version
         run: |
           # Extract version from .toc file
-          CURRENT_VERSION=$(grep "^## Version:" LariasWeeklyMidnightChecklist.toc | sed 's/## Version: //')
+          CURRENT_VERSION=$(grep "^## Version:" LariasWeeklyChecklist.toc | sed 's/## Version: //')
           echo "current=$CURRENT_VERSION" >> $GITHUB_OUTPUT
           
           # Get branch name
-          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          BRANCH_NAME="${{ inputs.target_branch || github.ref_name }}"
           echo "branch=$BRANCH_NAME" >> $GITHUB_OUTPUT
 
       - name: Calculate new version
@@ -98,8 +73,8 @@ jobs:
         env:
           ALPHA_VERSION: ${{ steps.newversion.outputs.alpha }}
         run: |
-          sed -i "s/^## Version:.*/## Version: $ALPHA_VERSION/" LariasWeeklyMidnightChecklist.toc
-          sed -i "s/^## Title:.*/## Title: Larias Weekly Midnight Checklist (ALPHA)/" LariasWeeklyMidnightChecklist.toc
+          sed -i "s/^## Version:.*/## Version: $ALPHA_VERSION/" LariasWeeklyChecklist.toc
+          sed -i "s/^## Title:.*/## Title: Larias's Weekly Checklist (ALPHA)/" LariasWeeklyChecklist.toc
 
       - name: Commit and tag
         env:
@@ -108,15 +83,50 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
-          git add LariasWeeklyMidnightChecklist.toc
+          git add LariasWeeklyChecklist.toc
           git commit -m "Alpha release: $ALPHA_VERSION from ${{ steps.version.outputs.branch }}" || true
-          git push || true
+          git push origin "HEAD:${{ steps.version.outputs.branch }}" || true
           
           TAG="v$ALPHA_VERSION"
           git tag -a "$TAG" -m "Alpha Release $ALPHA_VERSION" 2>/dev/null || true
           git push origin "$TAG" 2>/dev/null || true
           
           echo "tag=$TAG" >> $GITHUB_ENV
+
+      - name: Check packager config
+        id: pkgmeta
+        shell: bash
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [ ! -f .pkgmeta ]; then
+            echo "cf_enabled=false" >> "$GITHUB_OUTPUT"
+            echo "wago_enabled=false" >> "$GITHUB_OUTPUT"
+            echo "cf_id=0" >> "$GITHUB_OUTPUT"
+            echo ".pkgmeta missing; uploads will be skipped."
+            exit 0
+          fi
+
+          CF_ID=$(sed -n 's/^curse-project-id:[[:space:]]*//p' .pkgmeta | head -n 1 | tr -d '[:space:]' || true)
+          WAGO_ID=$(sed -n 's/^wago-id:[[:space:]]*//p' .pkgmeta | head -n 1 | tr -d '"[:space:]' || true)
+
+          if [ -z "${CF_ID:-}" ]; then CF_ID=0; fi
+          CF_ENABLED=false
+          WAGO_ENABLED=false
+          if [ "${CF_ID}" != "0" ] && [ -n "${CF_API_KEY:-}" ]; then CF_ENABLED=true; fi
+          if [ -n "${WAGO_ID:-}" ] && [ -n "${WAGO_API_TOKEN:-}" ]; then WAGO_ENABLED=true; fi
+
+          echo "CurseForge project id: ${CF_ID}"
+          echo "Wago id: ${WAGO_ID:-<empty>}"
+          echo "CurseForge upload enabled: ${CF_ENABLED}"
+          echo "Wago upload enabled: ${WAGO_ENABLED}"
+
+          echo "cf_enabled=${CF_ENABLED}" >> "$GITHUB_OUTPUT"
+          echo "wago_enabled=${WAGO_ENABLED}" >> "$GITHUB_OUTPUT"
+          echo "cf_id=${CF_ID}" >> "$GITHUB_OUTPUT"
 
       - name: Package + Upload (CurseForge & Wago)
         uses: BigWigsMods/packager@v2.4.3
@@ -128,6 +138,7 @@ jobs:
         if: success()
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
           TAG: v${{ steps.newversion.outputs.alpha }}
           REPO: ${{ github.repository }}
           BRANCH: ${{ steps.version.outputs.branch }}
@@ -136,11 +147,25 @@ jobs:
           set -euo pipefail
 
           RELEASE_URL="https://github.com/${REPO}/releases/tag/${TAG}"
-          CURSE_URL="https://www.curseforge.com/wow/addons/larias-weekly-midnight-checklist"
+          CF_ID=$(sed -n 's/^curse-project-id:[[:space:]]*//p' .pkgmeta | head -n 1 | tr -d '[:space:]' || true)
+          if [ -z "${CF_ID:-}" ]; then CF_ID=0; fi
+          CURSE_URL=""
+          if [ "${CF_ID}" != "0" ]; then
+            if [ -n "${CF_API_KEY:-}" ]; then
+              SLUG=$(curl -sS -H "x-api-key: ${CF_API_KEY}" "https://api.curseforge.com/v1/mods/${CF_ID}" \
+                | python3 -c "import sys,json; data=json.load(sys.stdin).get('data') or {}; print(data.get('slug',''))" 2>/dev/null || true)
+              if [ -n "${SLUG:-}" ]; then
+                CURSE_URL="https://www.curseforge.com/wow/addons/${SLUG}"
+              fi
+            fi
+            if [ -z "${CURSE_URL:-}" ]; then
+              CURSE_URL="https://www.curseforge.com/wow/search?search=${CF_ID}"
+            fi
+          fi
 
           payload=$(cat <<EOF
           {
-            "content": "🧪 **Larias Weekly Midnight Checklist ${TAG}** (ALPHA from \`${BRANCH}\`) is ready!\n\n📦 GitHub: ${RELEASE_URL}\n🔥 CurseForge: ${CURSE_URL}\n🛠 Workflow: ${RUN_URL}"
+            "content": "🧪 **Larias's Weekly Checklist ${TAG}** (ALPHA from \`${BRANCH}\`) is ready!\n\n📦 GitHub: ${RELEASE_URL}${CURSE_URL:+\n🔥 CurseForge: ${CURSE_URL}}\n🛠 Workflow: ${RUN_URL}"
           }
           EOF
           )

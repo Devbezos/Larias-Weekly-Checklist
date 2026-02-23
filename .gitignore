@@ -1,2 +1,5 @@
 
 scripts/deploy_to_wow.ps1
+
+# Local dev dependencies (cloned by scripts/setup-libs.ps1)
+Libs/
