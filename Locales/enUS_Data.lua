@@ -1,17 +1,24 @@
+--[[
+Localization (checklist data)
+
+This file provides the default (enUS) checklist data.
+To add a new language:
+1) Copy Locales\\enUS.lua -> Locales\\<locale>.lua (example: Locales\\deDE.lua)
+2) Copy Locales\\enUS_Data.lua -> Locales\\<locale>_Data.lua (example: Locales\\deDE_Data.lua)
+3) In both copies, change the locale string ("enUS") to your locale ("deDE")
+4) Translate section titles and item text in the _Data file
+5) Add BOTH files to LariasWeeklyChecklist.toc AFTER the enUS entries
+
+Common locale codes: enUS, enGB, frFR, deDE, esES, esMX, itIT, ptBR, ruRU, koKR, zhCN, zhTW
+]]
+
 local addonName = ...
 local locale = (GetLocale and GetLocale()) or nil
 local LOCALE = "enUS"
 local listKey = addonName .. "_LIST_DATA"
 
-local LOCALE_REGISTRY_KEY = "LARIASWEEKLYCHECKLIST_LOCALE_REGISTRY"
-local reg = _G[LOCALE_REGISTRY_KEY]
-if type(reg) ~= "table" then
-    reg = {}
-    _G[LOCALE_REGISTRY_KEY] = reg
-end
-if type(reg.data) ~= "table" then reg.data = {} end
-
-local DATASET = {
+if locale == LOCALE or type(_G[listKey]) ~= "table" then
+_G[listKey] = {
 
     {
         id = "early_access_feb_26_through_mar_2_pay_to_win",
@@ -156,11 +163,4 @@ local DATASET = {
         },
     },
 }
-
-reg.data[LOCALE] = DATASET
-
--- Back-compat for any older code paths still reading the legacy global list key.
--- Only seed it if it isn't already set (or if the client locale is enUS).
-if locale == LOCALE or type(_G[listKey]) ~= "table" then
-    _G[listKey] = DATASET
 end
