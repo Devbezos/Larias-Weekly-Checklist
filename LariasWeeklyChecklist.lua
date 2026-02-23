@@ -1,5 +1,5 @@
 local addonName = ...
-local Addon = LibStub("AceAddon-3.0"):NewAddon(addonName, "AceEvent-3.0", "AceConsole-3.0", "AceTimer-3.0", "AceComm-3.0")
+local Addon = LibStub("AceAddon-3.0"):NewAddon(addonName, "AceEvent-3.0", "AceConsole-3.0", "AceTimer-3.0", "AceComm-3.0", "AceBucket-3.0")
 _G[addonName] = Addon
 
 local LOCALE_REGISTRY_KEY = "LARIASWEEKLYCHECKLIST_LOCALE_REGISTRY"
@@ -106,63 +106,67 @@ do
             self.TRACKING.midnightMinLevel = 90
         end
 
-        local function EnsureProfile(key)
+        -- Tracking IDs are sourced from `LariasWeeklyChecklist_Constants.lua`.
+        -- This keeps one obvious edit spot for currency/achievement/quest IDs.
+
+        -- Optional user overrides (IDs, tracking profiles, etc.)
+        -- Loaded from `LariasWeeklyChecklist_Constants.lua` which defines a global table:
+        --   _G["<addonName>_USER_CONSTANTS"] = { TRACKING = { ... } }
+        local function IsArrayLike(t)
+            if type(t) ~= "table" then return false end
+            local maxIndex = 0
+            for k, _ in pairs(t) do
+                if type(k) ~= "number" then return false end
+                if k < 1 or k % 1 ~= 0 then return false end
+                if k > maxIndex then maxIndex = k end
+            end
+            return maxIndex == #t
+        end
+
+        local function DeepMerge(dst, src)
+            if type(dst) ~= "table" or type(src) ~= "table" then return end
+            for k, v in pairs(src) do
+                if type(v) == "table" then
+                    if IsArrayLike(v) then
+                        local out = {}
+                        for i = 1, #v do out[i] = v[i] end
+                        dst[k] = out
+                    else
+                        if type(dst[k]) ~= "table" then dst[k] = {} end
+                        DeepMerge(dst[k], v)
+                    end
+                else
+                    dst[k] = v
+                end
+            end
+        end
+
+        local constantsKey = tostring(addonNameInput or addonName) .. "_CONSTANTS"
+        local userConstantsKey = tostring(addonNameInput or addonName) .. "_USER_CONSTANTS" -- backward compat
+        local constants = _G and (_G[constantsKey] or _G[userConstantsKey])
+        if type(constants) == "table" and type(constants.TRACKING) == "table" then
+            DeepMerge(self.TRACKING, constants.TRACKING)
+        else
+            -- If the constants file is missing or failed to load, we don't silently invent IDs.
+            -- Leave defaults as-is and print a single warning.
+            if not self._warnedMissingConstants then
+                self._warnedMissingConstants = true
+                if self.Print then
+                    self:Print("Warning: constants file missing; tracking IDs not loaded.")
+                end
+            end
+        end
+
+        -- Ensure common shape for downstream code.
+        self.TRACKING.profiles = self.TRACKING.profiles or {}
+        for _, key in ipairs({ "tww", "midnight" }) do
             local profile = self.TRACKING.profiles[key]
             if type(profile) ~= "table" then
                 profile = {}
                 self.TRACKING.profiles[key] = profile
             end
             profile.questIDs = profile.questIDs or {}
-            return profile
         end
-
-        local twwProfile = EnsureProfile("tww")
-        if type(twwProfile.crestCurrencyIDs) ~= "table" then
-            twwProfile.crestCurrencyIDs = {
-                3284,
-                3286,
-                3288,
-                3290,
-            }
-        end
-        if type(twwProfile.crestAchievementIDs) ~= "table" then
-            twwProfile.crestAchievementIDs = {
-                41886,
-                41887,
-                41888,
-                41892,
-            }
-        end
-        if twwProfile.sparkCurrencyID == nil then twwProfile.sparkCurrencyID = 3141 end
-        if twwProfile.catalystCurrencyID == nil then twwProfile.catalystCurrencyID = 3269 end
-        if twwProfile.crestTradeBatch == nil then twwProfile.crestTradeBatch = { 45, 15 } end
-        if twwProfile.questIDs.delversBounty == nil then twwProfile.questIDs.delversBounty = 86371 end
-        if twwProfile.questIDs.weeklyPrey == nil then twwProfile.questIDs.weeklyPrey = 0 end
-
-        local midnightProfile = EnsureProfile("midnight")
-        if type(midnightProfile.crestCurrencyIDs) ~= "table" then
-            midnightProfile.crestCurrencyIDs = {
-                3383,
-                3341,
-                3343,
-                3345,
-                3347,
-            }
-        end
-        if type(midnightProfile.crestAchievementIDs) ~= "table" then
-            midnightProfile.crestAchievementIDs = {
-                61809,
-                42767,
-                72768,
-                42769,
-                42770,
-            }
-        end
-        if midnightProfile.sparkCurrencyID == nil then midnightProfile.sparkCurrencyID = 0 end
-        if midnightProfile.catalystCurrencyID == nil then midnightProfile.catalystCurrencyID = 0 end
-        if midnightProfile.crestTradeBatch == nil then midnightProfile.crestTradeBatch = { 45, 15 } end
-        if midnightProfile.questIDs.delversBounty == nil then midnightProfile.questIDs.delversBounty = 0 end
-        if midnightProfile.questIDs.weeklyPrey == nil then midnightProfile.questIDs.weeklyPrey = 0 end
     end
 
     Addon:InitConstants(addonName)
@@ -773,30 +777,6 @@ function Addon:SelectMainTab(tabId)
     end
 end
 
-function Addon:SyncOptionsTabControls()
-    if not frame then return end
-    local db = self:EnsureDB()
-
-    local showGreatVaultCheck = frame._lariasOptShowGreatVault
-    if showGreatVaultCheck and showGreatVaultCheck.SetChecked then
-        showGreatVaultCheck:SetChecked(db.showGreatVault and true or false)
-    end
-
-    local showCurrencyCheck = frame._lariasOptShowCurrency
-    if showCurrencyCheck and showCurrencyCheck.SetChecked then
-        showCurrencyCheck:SetChecked(db.showCurrency and true or false)
-    end
-
-    local hideCompletedCheck = frame._lariasOptHideCompleted
-    if hideCompletedCheck and hideCompletedCheck.SetChecked then
-        hideCompletedCheck:SetChecked(db.hideCompletedSections and true or false)
-    end
-
-    if self.UpdateLocalizedUI then
-        self:UpdateLocalizedUI()
-    end
-end
-
 function Addon:GetListData()
     local reg = GetLocaleRegistry()
     local dataByLocale = reg and reg.data
@@ -828,20 +808,9 @@ end
 function Addon:UpdateLocalizedUI()
     if not frame then return end
 
-    local function SetCheckText(checkButton, text)
-        if not checkButton then return end
-        local textRegion = checkButton.text or checkButton.Text
-        if textRegion and textRegion.SetText then
-            textRegion:SetText(text)
-            if textRegion.SetTextColor then
-                textRegion:SetTextColor(Addon.THEME.text.r, Addon.THEME.text.g, Addon.THEME.text.b, Addon.THEME.text.a)
-            end
-        end
+    if self.UpdateOptionsLocalizedUI then
+        self:UpdateOptionsLocalizedUI()
     end
-
-    SetCheckText(frame._lariasOptShowGreatVault, L.OPTIONS_SHOW_GREAT_VAULT or "Show Great Vault")
-    SetCheckText(frame._lariasOptShowCurrency, L.OPTIONS_SHOW_CURRENCY or "Show Currency")
-    SetCheckText(frame._lariasOptHideCompleted, L.HIDE_COMPLETED_WEEKS or "Hide completed weeks")
 
     local optionsTab = frame._lariasTabOptions
     if optionsTab and optionsTab.SetText then
@@ -851,11 +820,6 @@ function Addon:UpdateLocalizedUI()
     local listTab = frame._lariasTabList
     if listTab and listTab.SetText then
         listTab:SetText(L.TAB_LIST or "List")
-    end
-
-    local resetBtn = frame._lariasOptResetBtn
-    if resetBtn and resetBtn.SetText then
-        resetBtn:SetText(L.RESET_BUTTON or "Reset")
     end
 
     local trackingFrame = self._trackingFrame
@@ -1480,6 +1444,7 @@ function Addon:CreateFrame()
     if frame then return end
 
     frame = CreateFrame("Frame", "LariasWeeklyChecklistFrame", UIParent)
+    self._mainFrame = frame
     if not frame.SetBackdrop and BackdropTemplateMixin and Mixin then
         Mixin(frame, BackdropTemplateMixin)
     end
@@ -1633,105 +1598,11 @@ function Addon:CreateFrame()
     optionsPanel:Hide()
     frame._lariasOptionsPanel = optionsPanel
 
+    if self.InitOptionsTab then
+        self:InitOptionsTab(frame, optionsPanel)
+    end
+
     local db = self:EnsureDB()
-
-    local showGreatVaultCheck = CreateFrame("CheckButton", nil, optionsPanel, "UICheckButtonTemplate")
-    showGreatVaultCheck:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 6, -6)
-    do
-        local textRegion = showGreatVaultCheck.text or showGreatVaultCheck.Text
-        if textRegion then
-            textRegion:SetText(L.OPTIONS_SHOW_GREAT_VAULT or "")
-            if textRegion.SetTextColor then
-                textRegion:SetTextColor(Addon.THEME.text.r, Addon.THEME.text.g, Addon.THEME.text.b, Addon.THEME.text.a)
-            end
-        end
-    end
-    showGreatVaultCheck:SetChecked(db.showGreatVault and true or false)
-    showGreatVaultCheck:SetScript("OnClick", function(selfBtn)
-        local dbForClick = Addon:EnsureDB()
-        dbForClick.showGreatVault = selfBtn:GetChecked() and true or false
-        if Addon.RequestRefresh then
-            Addon:RequestRefresh()
-        else
-            Addon:Refresh()
-        end
-    end)
-    frame._lariasOptShowGreatVault = showGreatVaultCheck
-
-    local showCurrencyCheck = CreateFrame("CheckButton", nil, optionsPanel, "UICheckButtonTemplate")
-    showCurrencyCheck:SetPoint("TOPLEFT", showGreatVaultCheck, "BOTTOMLEFT", 0, -8)
-    do
-        local textRegion = showCurrencyCheck.text or showCurrencyCheck.Text
-        if textRegion then
-            textRegion:SetText(L.OPTIONS_SHOW_CURRENCY or "")
-            if textRegion.SetTextColor then
-                textRegion:SetTextColor(Addon.THEME.text.r, Addon.THEME.text.g, Addon.THEME.text.b, Addon.THEME.text.a)
-            end
-        end
-    end
-    showCurrencyCheck:SetChecked(db.showCurrency and true or false)
-    showCurrencyCheck:SetScript("OnClick", function(selfBtn)
-        local dbForClick = Addon:EnsureDB()
-        dbForClick.showCurrency = selfBtn:GetChecked() and true or false
-        if Addon.RequestRefresh then
-            Addon:RequestRefresh()
-        else
-            Addon:Refresh()
-        end
-    end)
-    frame._lariasOptShowCurrency = showCurrencyCheck
-
-    local hideCompletedCheck = CreateFrame("CheckButton", nil, optionsPanel, "UICheckButtonTemplate")
-    hideCompletedCheck:SetPoint("TOPLEFT", showCurrencyCheck, "BOTTOMLEFT", 0, -8)
-    do
-        local textRegion = hideCompletedCheck.text or hideCompletedCheck.Text
-        if textRegion then
-            textRegion:SetText(L.HIDE_COMPLETED_WEEKS or "")
-            if textRegion.SetTextColor then
-                textRegion:SetTextColor(Addon.THEME.text.r, Addon.THEME.text.g, Addon.THEME.text.b, Addon.THEME.text.a)
-            end
-        end
-    end
-    hideCompletedCheck:SetChecked(db.hideCompletedSections and true or false)
-    hideCompletedCheck:SetScript("OnClick", function(selfBtn)
-        local dbForClick = Addon:EnsureDB()
-        dbForClick.hideCompletedSections = selfBtn:GetChecked() and true or false
-        if Addon.RequestRefresh then
-            Addon:RequestRefresh()
-        else
-            Addon:Refresh()
-        end
-    end)
-    frame._lariasOptHideCompleted = hideCompletedCheck
-
-    local resetBtn = CreateFrame("Button", nil, optionsPanel, "GameMenuButtonTemplate")
-    resetBtn:SetPoint("TOPLEFT", hideCompletedCheck, "BOTTOMLEFT", 0, -12)
-    resetBtn:SetSize(120, 24)
-    resetBtn:SetText(L.RESET_BUTTON or "")
-    resetBtn:SetScript("OnClick", function()
-        local dbForReset = Addon:EnsureDB()
-        if wipe then
-            wipe(dbForReset.checked)
-            wipe(dbForReset.collapsedSections)
-        else
-            dbForReset.checked = {}
-            dbForReset.collapsedSections = {}
-        end
-        dbForReset.hideCompletedSections = true
-
-        if Addon.SyncOptionsTabControls then
-            Addon:SyncOptionsTabControls()
-        end
-
-        if Addon.RequestRefresh then
-            Addon:RequestRefresh()
-        else
-            Addon:Refresh()
-        end
-    end)
-
-    frame._lariasOptResetBtn = resetBtn
-
     if (db.showGreatVault or db.showCurrency) and self.CreateTrackingPanel and not self._trackingFrame then
         self:CreateTrackingPanel(frame)
     end
