@@ -6,13 +6,9 @@ if Addon.InitConstants then
     Addon:InitConstants(addonName)
 end
 
-local THEME = Addon.THEME
-local UI = Addon.UI
-
 local L = Addon.L or {}
 
 local trackingEventFrame
-local TrackingUI = { left = {}, right = {} }
 
 local tonumber, tostring, type = tonumber, tostring, type
 local floor, max, abs = math.floor, math.max, math.abs
@@ -85,8 +81,10 @@ function Addon:ConfigureTrackingEvents(parentFrame, showGreatVault, showCurrency
         trackingEventFrame._lariasOnEventSet = true
         trackingEventFrame:SetScript("OnEvent", function()
             local isMainFrameVisible = parentFrame and parentFrame.IsShown and parentFrame:IsShown()
-            local isTrackingPanelVisible = Addon._trackingFrame and Addon._trackingFrame.IsShown and Addon._trackingFrame:IsShown()
-            if isMainFrameVisible and isTrackingPanelVisible then
+            local main = _G and _G["LariasWeeklyChecklistFrame"]
+            local selectedTab = main and tonumber(main._lariasSelectedTab)
+            local isOnListTab = (selectedTab == nil) or (selectedTab == 1)
+            if isMainFrameVisible and isOnListTab then
                 Addon:RequestTrackingUpdate()
             end
         end)
@@ -101,8 +99,10 @@ function Addon:RequestTrackingUpdate()
         local addon = self
         self._trackingUpdateRunner = function()
             addon._trackingUpdatePending = nil
-            if addon.UpdateTracking then
-                addon:UpdateTracking()
+            if addon.RequestRefresh then
+                addon:RequestRefresh()
+            elseif addon.Refresh then
+                addon:Refresh()
             end
         end
     end
@@ -125,27 +125,10 @@ local COLORS = {
 
 local function ColorWrap(hex, txt) return ("|c%s%s|r"):format(hex, tostring(txt or "")) end
 
-local function SetTextIfChanged(fontString, text)
-    if not fontString then return end
-    text = text or ""
-    if fontString._lariasText ~= text then
-        fontString._lariasText = text
-        fontString:SetText(text)
-    end
-end
-
 local function IsNonEmptyText(text)
     if type(text) ~= "string" then return false end
     text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
     return text:match("%S") ~= nil
-end
-
-local function SetShownIfChanged(region, shown)
-    if not (region and region.IsShown and region.SetShown) then return end
-    local want = shown and true or false
-    if region:IsShown() ~= want then
-        region:SetShown(want)
-    end
 end
 
 local function IsMainFrameOnListTab()
@@ -182,8 +165,6 @@ local function IsAchievementCompleteSafe(achievementID)
     end
     return false
 end
-
-local RIGHT_LINE_COUNT = 10
 
 local function GetCrestAchievementID(i)
     local profile = GetActiveTrackingProfile()
@@ -386,18 +367,6 @@ local function DetectCrestCurrencyIDsFromList()
         ids[i] = found[i]
     end
     return ids
-end
-
-local function BottomFor(obj)
-    if not obj then return 0 end
-    if obj.IsShown and not obj:IsShown() then return 0 end
-
-    local y = tonumber(obj._lariasBaseY) or 0
-    local h = 0
-    if obj.GetStringHeight then h = tonumber(obj:GetStringHeight()) or 0 end
-    if h <= 0 and obj.GetHeight then h = tonumber(obj:GetHeight()) or 0 end
-    if h <= 0 then h = 16 end
-    return abs(y) + h
 end
 
 local function GetIlvlFromItemLink(itemLink)
@@ -711,11 +680,6 @@ local function GetSparksParts()
     return label, ColorWrap(COLORS.red, L.TRACKING_NA or "")
 end
 
-local function GetSparksLine()
-    local label, value = GetSparksParts()
-    return label .. " " .. (value or "")
-end
-
 local function GetTrackedQuestID(key)
     local profile = GetActiveTrackingProfile()
     local q = profile and profile.questIDs and profile.questIDs[key]
@@ -1016,358 +980,97 @@ local function GetCatalystParts()
     return ColorWrap(COLORS.dim, L.TRACKING_CATALYST_LABEL or ""), ColorWrap(color, ("%d"):format(cur))
 end
 
-local function GetCatalystLine()
-    local label, value = GetCatalystParts()
-    return label .. " " .. (value or "")
+local AceGUI
+local function GetAceGUI()
+    if AceGUI ~= nil then return AceGUI end
+    if LibStub then
+        AceGUI = LibStub("AceGUI-3.0", true)
+    end
+    return AceGUI
 end
 
-function Addon:CreateTrackingPanel(parentFrame)
-    if self._trackingFrame then return end
-    local db = self:EnsureDB()
-
-    local trackingFrame = CreateFrame("Frame", nil, parentFrame)
-    if not trackingFrame.SetBackdrop and BackdropTemplateMixin and Mixin then
-        Mixin(trackingFrame, BackdropTemplateMixin)
-    end
-    trackingFrame:SetPoint("BOTTOMLEFT", parentFrame, "BOTTOMLEFT", Addon.UI.sectionInsetX, UI.scrollBottom)
-    trackingFrame:SetPoint("BOTTOMRIGHT", parentFrame, "BOTTOMRIGHT", -Addon.UI.sectionInsetX, UI.scrollBottom)
-    trackingFrame:SetHeight(UI.trackH)
-    self:ApplyTheme(trackingFrame)
-
-    local title = trackingFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    title:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", 10, -8)
-    title:SetTextColor(THEME.header.r, THEME.header.g, THEME.header.b, THEME.header.a)
-    title:SetText(L.TRACKING_GREAT_VAULT_TITLE or "")
-    trackingFrame._lariasLeftTitle = title
-
-    local padL, padR = 10, 10
-    local colGap = 12
-    local innerW = (UI.frameW - (Addon.UI.sectionInsetX * 2) - padL - padR)
-    local colW = math.floor((innerW - colGap) / 2)
-    trackingFrame._lariasPadL, trackingFrame._lariasPadR, trackingFrame._lariasColGap, trackingFrame._lariasColW = padL, padR, colGap, colW
-
-    local leftCol = CreateFrame("Frame", nil, trackingFrame)
-    leftCol:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", padL, -32)
-    leftCol:SetSize(colW, UI.trackH - 40)
-    trackingFrame._lariasLeftCol = leftCol
-
-    local rightCol = CreateFrame("Frame", nil, trackingFrame)
-    rightCol:SetPoint("TOPLEFT", leftCol, "TOPRIGHT", colGap, 0)
-    rightCol:SetSize(colW, UI.trackH - 40)
-    trackingFrame._lariasRightCol = rightCol
-
-    local rightTitle = trackingFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    rightTitle:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", padL + colW + colGap, -8)
-    rightTitle:SetTextColor(THEME.header.r, THEME.header.g, THEME.header.b, THEME.header.a)
-    rightTitle:SetText(L.TRACKING_CURRENCY_TITLE or "")
-    trackingFrame._lariasRightTitle = rightTitle
-
-    title:ClearAllPoints()
-    title:SetPoint("TOP", leftCol, "TOP", 0, 24)
-    title:SetWidth(colW)
-    title:SetJustifyH("CENTER")
-
-    rightTitle:ClearAllPoints()
-    rightTitle:SetPoint("TOP", rightCol, "TOP", 0, 24)
-    rightTitle:SetWidth(colW)
-    rightTitle:SetJustifyH("CENTER")
-
-    local function MakeLine(parent, y, template, justify)
-        local fontString = parent:CreateFontString(nil, "OVERLAY", template or "GameFontHighlightSmall")
-        fontString:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, y)
-        fontString:SetWidth(colW)
-        fontString:SetJustifyH(justify or "LEFT")
-        if fontString.SetWordWrap then fontString:SetWordWrap(false) end
-        fontString:SetTextColor(THEME.text.r, THEME.text.g, THEME.text.b, THEME.text.a)
-        fontString:SetText("")
-        fontString._lariasBaseY = y
-        return fontString
-    end
-
-    TrackingUI.left.line1 = MakeLine(leftCol,    0, "GameFontHighlightLarge", "CENTER")
-    TrackingUI.left.line2 = MakeLine(leftCol,  -22, "GameFontHighlightSmall", "CENTER")
-    TrackingUI.left.line3 = MakeLine(leftCol,  -38, "GameFontHighlightSmall", "CENTER")
-    TrackingUI.left.line4 = MakeLine(leftCol,  -62, "GameFontHighlightLarge", "CENTER")
-    TrackingUI.left.line5 = MakeLine(leftCol,  -84, "GameFontHighlightSmall", "CENTER")
-    TrackingUI.left.line6 = MakeLine(leftCol, -100, "GameFontHighlightSmall", "CENTER")
-
-    local function MakeUnderlineFor(fontString)
-        if not fontString then return nil end
-        local line = leftCol:CreateTexture(nil, "OVERLAY")
-        line:SetColorTexture(THEME.textDim.r, THEME.textDim.g, THEME.textDim.b, 0.55)
-        line:SetHeight(1)
-        line:SetPoint("TOPLEFT", fontString, "BOTTOMLEFT", 0, -1)
-        line:SetPoint("TOPRIGHT", fontString, "BOTTOMRIGHT", 0, -1)
-        return line
-    end
-
-    TrackingUI.left.raidUnderline = MakeUnderlineFor(TrackingUI.left.line1)
-    TrackingUI.left.dungeonsUnderline = MakeUnderlineFor(TrackingUI.left.line4)
-
-    local function MakeLinePair(parent, y, template)
-        local row = CreateFrame("Frame", nil, parent)
-        row:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, y)
-        row:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, y)
-        row:SetHeight(16)
-        row._lariasBaseY = y
-
-        local label = row:CreateFontString(nil, "OVERLAY", template or "GameFontHighlightSmall")
-        label:SetPoint("LEFT", row, "LEFT", 0, 0)
-        label:SetJustifyH("LEFT")
-        if label.SetWordWrap then label:SetWordWrap(false) end
-        label:SetTextColor(THEME.text.r, THEME.text.g, THEME.text.b, THEME.text.a)
-        label:SetText("")
-
-        local value = row:CreateFontString(nil, "OVERLAY", template or "GameFontHighlightSmall")
-        value:SetPoint("RIGHT", row, "RIGHT", 0, 0)
-        value:SetJustifyH("RIGHT")
-        if value.SetWordWrap then value:SetWordWrap(false) end
-        value:SetTextColor(THEME.text.r, THEME.text.g, THEME.text.b, THEME.text.a)
-        value:SetText("")
-
-        label:SetPoint("RIGHT", value, "LEFT", -6, 0)
-
-        return { frame = row, label = label, value = value }
-    end
-
-    for i = 1, RIGHT_LINE_COUNT do
-        TrackingUI.right["line" .. tostring(i)] = MakeLinePair(rightCol, -18 * (i - 1), "GameFontHighlight")
-    end
-
-    trackingFrame:SetShown((db.showGreatVault or db.showCurrency) and IsMainFrameOnListTab())
-    self._trackingFrame = trackingFrame
-
-    if trackingFrame.SetScript then
-        trackingFrame:SetScript("OnShow", function()
-            local database = Addon:EnsureDB()
-            Addon:ConfigureTrackingEvents(parentFrame, database.showGreatVault and true or false, database.showCurrency and true or false)
-            Addon:RequestTrackingUpdate()
-        end)
-        trackingFrame:SetScript("OnHide", function()
-            if trackingEventFrame then
-                trackingEventFrame:UnregisterAllEvents()
-            end
-        end)
-    end
-
-    self:ConfigureTrackingEvents(parentFrame, db.showGreatVault and true or false, db.showCurrency and true or false)
-
+local function AddLineWidget(container, ace, text)
+    if not IsNonEmptyText(text) then return end
+    local w = ace:Create("Label")
+    w:SetFullWidth(true)
+    w:SetText(text)
+    container:AddChild(w)
 end
 
-function Addon:ApplyTrackingPanelOptions()
-    local trackingFrame = self._trackingFrame
-    if not trackingFrame then return end
+function Addon:AceRenderTracking(container)
+    local ace = GetAceGUI()
+    if not (ace and container and container.AddChild) then return end
 
     local db = self:EnsureDB()
     local showGreatVault = db.showGreatVault and true or false
     local showCurrency = db.showCurrency and true or false
-    local wantPanel = (showGreatVault or showCurrency) and IsMainFrameOnListTab()
+    if not (showGreatVault or showCurrency) then return end
 
-    trackingFrame:SetShown(wantPanel)
-    if not wantPanel then
-        if trackingEventFrame then
-            trackingEventFrame:UnregisterAllEvents()
-        end
-        if self.ApplyScrollLayout then self:ApplyScrollLayout() end
-        return
-    end
+    if showGreatVault then
+        local h = ace:Create("Heading")
+        h:SetFullWidth(true)
+        h:SetText(L.TRACKING_GREAT_VAULT_TITLE or "")
+        container:AddChild(h)
 
-    self:ConfigureTrackingEvents(_G["LariasWeeklyChecklistFrame"], showGreatVault, showCurrency)
-
-    local leftCol = trackingFrame._lariasLeftCol
-    local rightCol = trackingFrame._lariasRightCol
-    local leftTitle = trackingFrame._lariasLeftTitle
-    local rightTitle = trackingFrame._lariasRightTitle
-    local padL = tonumber(trackingFrame._lariasPadL) or 10
-    local colGap = tonumber(trackingFrame._lariasColGap) or 12
-
-    SetShownIfChanged(leftCol, showGreatVault)
-    SetShownIfChanged(rightCol, showCurrency)
-    SetShownIfChanged(leftTitle, showGreatVault)
-    SetShownIfChanged(rightTitle, showCurrency)
-
-    if leftCol and leftCol.ClearAllPoints and leftCol.SetPoint then
-        leftCol:ClearAllPoints()
-    end
-    if rightCol and rightCol.ClearAllPoints and rightCol.SetPoint then
-        rightCol:ClearAllPoints()
-    end
-
-    if showGreatVault and showCurrency then
-        if leftCol then leftCol:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", padL, -32) end
-        if rightCol and leftCol then rightCol:SetPoint("TOPLEFT", leftCol, "TOPRIGHT", colGap, 0) end
-    elseif showGreatVault then
-        if leftCol then leftCol:SetPoint("TOP", trackingFrame, "TOP", 0, -32) end
-    else
-        if rightCol then rightCol:SetPoint("TOP", trackingFrame, "TOP", 0, -32) end
-    end
-
-    if showGreatVault and leftTitle and leftCol then
-        leftTitle:ClearAllPoints()
-        leftTitle:SetPoint("TOP", leftCol, "TOP", 0, 24)
-    end
-    if showCurrency and rightTitle and rightCol then
-        rightTitle:ClearAllPoints()
-        rightTitle:SetPoint("TOP", rightCol, "TOP", 0, 24)
-    end
-end
-
-function Addon:UpdateTracking()
-    local db = self:EnsureDB()
-
-    local wantPanel = (db.showGreatVault or db.showCurrency) and true or false
-    if wantPanel and not IsMainFrameOnListTab() then
-        wantPanel = false
-    end
-
-    if wantPanel and not self._trackingFrame then
-        local main = _G["LariasWeeklyChecklistFrame"]
-        if main then
-            self:CreateTrackingPanel(main)
-            self:ApplyScrollLayout()
+        local lines = GetGreatVaultBlockLines()
+        for i = 1, #lines do
+            AddLineWidget(container, ace, lines[i])
         end
     end
 
-    if self.ApplyTrackingPanelOptions then
-        self:ApplyTrackingPanelOptions()
-    end
+    if showCurrency then
+        local h = ace:Create("Heading")
+        h:SetFullWidth(true)
+        h:SetText(L.TRACKING_CURRENCY_TITLE or "")
+        container:AddChild(h)
 
-    if not (wantPanel and self._trackingFrame and self._trackingFrame:IsShown()) then
-        if self.ApplyScrollLayout then self:ApplyScrollLayout() end
-        return
-    end
-
-    local greatVaultLines = GetGreatVaultBlockLines()
-    SetTextIfChanged(TrackingUI.left.line1, greatVaultLines[1])
-    SetTextIfChanged(TrackingUI.left.line2, greatVaultLines[2])
-    SetTextIfChanged(TrackingUI.left.line3, greatVaultLines[3])
-    SetTextIfChanged(TrackingUI.left.line4, greatVaultLines[4])
-    SetTextIfChanged(TrackingUI.left.line5, greatVaultLines[5])
-    SetTextIfChanged(TrackingUI.left.line6, greatVaultLines[6])
-
-    SetShownIfChanged(TrackingUI.left.line1, IsNonEmptyText(greatVaultLines[1]))
-    SetShownIfChanged(TrackingUI.left.line2, IsNonEmptyText(greatVaultLines[2]))
-    SetShownIfChanged(TrackingUI.left.line3, IsNonEmptyText(greatVaultLines[3]))
-    SetShownIfChanged(TrackingUI.left.line4, IsNonEmptyText(greatVaultLines[4]))
-    SetShownIfChanged(TrackingUI.left.line5, IsNonEmptyText(greatVaultLines[5]))
-    SetShownIfChanged(TrackingUI.left.line6, IsNonEmptyText(greatVaultLines[6]))
-    SetShownIfChanged(TrackingUI.left.raidUnderline, TrackingUI.left.line1 and TrackingUI.left.line1:IsShown())
-    SetShownIfChanged(TrackingUI.left.dungeonsUnderline, TrackingUI.left.line4 and TrackingUI.left.line4:IsShown())
-
-    local crests
-    if type(TrackingUI.right.line1) == "table" then
         local profile = GetActiveTrackingProfile()
-        GetCrestLines()
+        GetCrestLines() -- populates profile._crestCache
         local cache = profile and profile._crestCache
         local lbl = cache and cache.label or nil
         local val = cache and cache.value or nil
         local crestCount = (cache and tonumber(cache.count)) or 4
 
-        local function SetRow(i, rowLabel, rowValue)
-            local row = TrackingUI.right["line" .. tostring(i)]
-            if not (row and row.label and row.value) then return end
-            rowLabel = rowLabel or ""
-            rowValue = rowValue or ""
-            SetTextIfChanged(row.label, rowLabel)
-            SetTextIfChanged(row.value, rowValue)
-            local showRow = IsNonEmptyText(rowLabel) or IsNonEmptyText(rowValue)
-            SetShownIfChanged(row.frame or row.label, showRow)
-        end
-
         for i = 1, crestCount do
-            SetRow(i, lbl and lbl[i] or "", val and val[i] or "")
+            local line = (lbl and lbl[i] or "") .. " " .. (val and val[i] or "")
+            AddLineWidget(container, ace, line)
         end
 
-        local idx = crestCount + 1
         local cLbl, cVal = GetCatalystParts()
-        SetRow(idx, cLbl, cVal)
+        AddLineWidget(container, ace, (cLbl or "") .. " " .. (cVal or ""))
 
-        idx = idx + 1
         local sLbl, sVal = GetSparksParts()
-        SetRow(idx, sLbl, sVal)
+        AddLineWidget(container, ace, (sLbl or "") .. " " .. (sVal or ""))
 
-        idx = idx + 1
         local bLbl, bVal = GetDelversBountyParts()
-        SetRow(idx, bLbl, bVal)
+        AddLineWidget(container, ace, (bLbl or "") .. " " .. (bVal or ""))
 
-        idx = idx + 1
         local pLbl, pVal = GetWeeklyPreyParts()
-        SetRow(idx, pLbl, pVal)
-
-        for i = idx + 1, RIGHT_LINE_COUNT do
-            SetRow(i, "", "")
-        end
-    else
-        crests = GetCrestLines()
-        SetTextIfChanged(TrackingUI.right.line1, crests[1])
-        SetTextIfChanged(TrackingUI.right.line2, crests[2])
-        SetTextIfChanged(TrackingUI.right.line3, crests[3])
-        SetTextIfChanged(TrackingUI.right.line4, crests[4])
-        if TrackingUI.right.line5 then
-            SetTextIfChanged(TrackingUI.right.line5, GetCatalystLine())
-        end
-        if TrackingUI.right.line6 then
-            SetTextIfChanged(TrackingUI.right.line6, GetSparksLine())
-        end
-        if TrackingUI.right.line7 then
-            local bLbl, bVal = GetDelversBountyParts()
-            SetTextIfChanged(TrackingUI.right.line7, (bLbl or "") .. " " .. (bVal or ""))
-        end
-        if TrackingUI.right.line8 then
-            local pLbl, pVal = GetWeeklyPreyParts()
-            SetTextIfChanged(TrackingUI.right.line8, (pLbl or "") .. " " .. (pVal or ""))
-        end
-
-        SetShownIfChanged(TrackingUI.right.line1, IsNonEmptyText(crests[1]))
-        SetShownIfChanged(TrackingUI.right.line2, IsNonEmptyText(crests[2]))
-        SetShownIfChanged(TrackingUI.right.line3, IsNonEmptyText(crests[3]))
-        SetShownIfChanged(TrackingUI.right.line4, IsNonEmptyText(crests[4]))
-        if TrackingUI.right.line5 then SetShownIfChanged(TrackingUI.right.line5, IsNonEmptyText(TrackingUI.right.line5._lariasText or "")) end
-        if TrackingUI.right.line6 then SetShownIfChanged(TrackingUI.right.line6, IsNonEmptyText(TrackingUI.right.line6._lariasText or "")) end
-        if TrackingUI.right.line7 then SetShownIfChanged(TrackingUI.right.line7, IsNonEmptyText(TrackingUI.right.line7._lariasText or "")) end
-        if TrackingUI.right.line8 then SetShownIfChanged(TrackingUI.right.line8, IsNonEmptyText(TrackingUI.right.line8._lariasText or "")) end
+        AddLineWidget(container, ace, (pLbl or "") .. " " .. (pVal or ""))
     end
 
-    local trackingFrame = self._trackingFrame
-    if trackingFrame and trackingFrame.GetHeight and trackingFrame.SetHeight then
-        local bottomLeft = 0
-        bottomLeft = max(bottomLeft, BottomFor(TrackingUI.left.line1))
-        bottomLeft = max(bottomLeft, BottomFor(TrackingUI.left.line2))
-        bottomLeft = max(bottomLeft, BottomFor(TrackingUI.left.line3))
-        bottomLeft = max(bottomLeft, BottomFor(TrackingUI.left.line4))
-        bottomLeft = max(bottomLeft, BottomFor(TrackingUI.left.line5))
-        bottomLeft = max(bottomLeft, BottomFor(TrackingUI.left.line6))
+    local spacer = ace:Create("Label")
+    spacer:SetFullWidth(true)
+    spacer:SetText(" ")
+    container:AddChild(spacer)
+end
 
-        local bottomRight = 0
-        for i = 1, RIGHT_LINE_COUNT do
-            local row = TrackingUI.right["line" .. tostring(i)]
-            if type(row) == "table" then
-                bottomRight = max(bottomRight, BottomFor(row.frame or row.label))
-            else
-                bottomRight = max(bottomRight, BottomFor(row))
-            end
+function Addon:ApplyTrackingPanelOptions()
+    local db = self:EnsureDB()
+    local showGreatVault = db.showGreatVault and true or false
+    local showCurrency = db.showCurrency and true or false
+
+    local main = _G and _G["LariasWeeklyChecklistFrame"]
+    if not main then return end
+
+    if not IsMainFrameOnListTab() then
+        if trackingEventFrame then
+            trackingEventFrame:UnregisterAllEvents()
         end
-
-        local contentH = max(bottomLeft, bottomRight)
-        local topOffset = 32
-        local bottomPad = 10
-        local minH = 90
-        local targetH = max(minH, topOffset + contentH + bottomPad)
-
-        local curH = tonumber(trackingFrame:GetHeight()) or 0
-        if math.abs(curH - targetH) > 1 then
-            trackingFrame:SetHeight(targetH)
-            if trackingFrame._lariasLeftCol and trackingFrame._lariasLeftCol.SetHeight then
-                trackingFrame._lariasLeftCol:SetHeight(max(1, targetH - 40))
-            end
-            if trackingFrame._lariasRightCol and trackingFrame._lariasRightCol.SetHeight then
-                trackingFrame._lariasRightCol:SetHeight(max(1, targetH - 40))
-            end
-            if self.ApplyScrollLayout then
-                self:ApplyScrollLayout()
-            end
-        end
+        return
     end
+
+    self:ConfigureTrackingEvents(main, showGreatVault, showCurrency)
 end
 
 function Addon:SetTrackingVisible(show)
@@ -1376,18 +1079,14 @@ function Addon:SetTrackingVisible(show)
     db.showGreatVault = want
     db.showCurrency = want
 
-    if (db.showGreatVault or db.showCurrency) and not self._trackingFrame then
-        local main = _G["LariasWeeklyChecklistFrame"]
-        if main then
-            self:CreateTrackingPanel(main)
-        end
+    if self.ApplyTrackingPanelOptions then
+        self:ApplyTrackingPanelOptions()
     end
 
-    if self._trackingFrame then
-        self._trackingFrame:SetShown((db.showGreatVault or db.showCurrency) and true or false)
+    if self.RequestRefresh then
+        self:RequestRefresh()
+    elseif self.Refresh then
+        self:Refresh()
     end
-
-    self:ApplyScrollLayout()
-    if self.Refresh then self:Refresh() end
 end
 
