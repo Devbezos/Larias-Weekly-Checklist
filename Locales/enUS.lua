@@ -60,6 +60,8 @@ local STRINGS = {
 	TAB_OPTIONS = "Options",
 
 	SLASH_USAGE_TOGGLE = "Usage: /larias or /lcl to toggle the checklist",
+	SLASH_USAGE_LOCALE = "Usage: /larias locale auto|enUS|esMX",
+	SLASH_LOCALE_SET_FMT = "Locale override set to %s (effective: %s)",
 }
 
 for key, value in pairs(STRINGS) do

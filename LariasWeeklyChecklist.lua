@@ -1,5 +1,5 @@
 local addonName = ...
-local Addon = LibStub("AceAddon-3.0"):NewAddon(addonName, "AceEvent-3.0", "AceHook-3.0", "AceConsole-3.0", "AceTimer-3.0")
+local Addon = LibStub("AceAddon-3.0"):NewAddon(addonName, "AceEvent-3.0", "AceHook-3.0", "AceConsole-3.0", "AceTimer-3.0", "AceComm-3.0", "AceBucket-3.0")
 _G[addonName] = Addon
 
 local LOCALE_REGISTRY_KEY = "LARIASWEEKLYCHECKLIST_LOCALE_REGISTRY"
@@ -13,6 +13,10 @@ local function GetLocaleRegistry()
     if type(reg.strings) ~= "table" then reg.strings = {} end
     if type(reg.data) ~= "table" then reg.data = {} end
     return reg
+end
+
+local function IsFrameShown(frameObj)
+    return frameObj and frameObj.IsShown and frameObj:IsShown()
 end
 
 Addon.L = Addon.L or {}
@@ -179,6 +183,12 @@ local COMM_PREFIX = "LWMC"
 local BROADCAST_THROTTLE_SECONDS = 30
 local REPLY_THROTTLE_SECONDS = 5
 
+local LOCALIZATION_ADDON_NAME = "LariasWeeklyChecklist_Localization"
+
+-- Session-only locale override set by slash command.
+-- This intentionally does NOT persist across /reload or relog.
+Addon._sessionLocaleOverride = Addon._sessionLocaleOverride
+
 -- Throttle timers for version communication
 local broadcastTimerActive = false
 local replyTimerActive = false
@@ -224,7 +234,7 @@ local function SetupMinimapIcon()
                     Addon:CreateFrame()
                 end
                 local mainFrame = _G["LariasWeeklyChecklistFrame"]
-                if mainFrame and mainFrame.IsShown and mainFrame:IsShown() and tonumber(mainFrame._lariasSelectedTab) == 2 then
+                if IsFrameShown(mainFrame) and tonumber(mainFrame._lariasSelectedTab) == 2 then
                     if Addon.SelectMainTab then
                         Addon:SelectMainTab(1)
                     end
@@ -357,22 +367,10 @@ function Addon:ShowUpdatePopupIfNeeded()
     self._updatePopupShownThisOpen = true
 end
 
-local function SafeRegisterPrefix(prefix)
-    if C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix then
-        pcall(C_ChatInfo.RegisterAddonMessagePrefix, prefix)
-    elseif RegisterAddonMessagePrefix then
-        pcall(RegisterAddonMessagePrefix, prefix)
-    end
-end
-
-local function SafeSendAddonMessage(prefix, msg, channel)
+local function SafeSendCommMessage(msg, channel)
     if not channel or channel == "" then return end
-    if C_ChatInfo and C_ChatInfo.SendAddonMessage then
-        pcall(C_ChatInfo.SendAddonMessage, prefix, msg, channel)
-        return
-    end
-    if SendAddonMessage then
-        pcall(SendAddonMessage, prefix, msg, channel)
+    if Addon and Addon.SendCommMessage then
+        pcall(Addon.SendCommMessage, Addon, COMM_PREFIX, msg, channel)
     end
 end
 
@@ -398,10 +396,10 @@ function Addon:BroadcastVersion(force)
 
     local channel = GetGroupChannel()
     if channel then
-        SafeSendAddonMessage(COMM_PREFIX, payload, channel)
+        SafeSendCommMessage(payload, channel)
     end
     if IsInGuild and IsInGuild() then
-        SafeSendAddonMessage(COMM_PREFIX, payload, "GUILD")
+        SafeSendCommMessage(payload, "GUILD")
     end
 
     -- Start throttle timer
@@ -421,10 +419,10 @@ function Addon:RequestVersions(force)
 
     local channel = GetGroupChannel()
     if channel then
-        SafeSendAddonMessage(COMM_PREFIX, "Q", channel)
+        SafeSendCommMessage("Q", channel)
     end
     if IsInGuild and IsInGuild() then
-        SafeSendAddonMessage(COMM_PREFIX, "Q", "GUILD")
+        SafeSendCommMessage("Q", "GUILD")
     end
 
     -- Start throttle timer
@@ -467,11 +465,11 @@ function Addon:OnAddonMessage(prefix, message, sender)
     if sender and sender ~= "" and UnitName then
         local me = UnitName("player")
         if me and me ~= "" then
-            local s = sender
+            local senderName = sender
             if Ambiguate then
-                s = Ambiguate(sender, "none")
+                senderName = Ambiguate(sender, "none")
             end
-            if s == me then
+            if senderName == me then
                 return
             end
         end
@@ -499,21 +497,56 @@ end
 
 -- Handle player login event
 function Addon:OnEnable()
-    SafeRegisterPrefix(COMM_PREFIX)
     Addon._myVersion = GetAddonVersion(addonName)
     
     -- Register console commands
     self:RegisterConsoleCommands()
+
+    -- If the localization companion addon loads after us for any reason,
+    -- re-apply locale as soon as it becomes available.
+    if self.RegisterEvent and not self._listeningForAddonLoaded then
+        self._listeningForAddonLoaded = true
+        self:RegisterEvent("ADDON_LOADED", "OnAddonLoaded")
+    end
     
-    -- Register events using AceEvent
-    self:RegisterEvent("CHAT_MSG_ADDON")
+    if self.RegisterComm then
+        self:RegisterComm(COMM_PREFIX)
+    end
+
+    -- Re-apply locale after login to handle any late-loaded localization tables.
+    if self.ApplyLocaleOverride then
+        self._dataSig = ""
+        self._cachedListLocaleCode = nil
+        self._cachedListData = nil
+        self:ApplyLocaleOverride()
+    end
     
     -- Announce once on login so others can compare
     Addon:BroadcastVersion(true)
 end
 
--- Handle chat message addon event
-function Addon:CHAT_MSG_ADDON(_, prefix, messageText, _, _, sender)
+function Addon:OnAddonLoaded(_, loadedName)
+    if loadedName ~= LOCALIZATION_ADDON_NAME then return end
+
+    -- Refresh strings/data now that locale addon is in memory.
+    if self.ApplyLocaleOverride then
+        self._dataSig = ""
+        self._cachedListLocaleCode = nil
+        self._cachedListData = nil
+        self:ApplyLocaleOverride()
+    end
+
+    -- If UI is visible, refresh it immediately.
+    if IsFrameShown(frame) then
+        if self.RequestRefresh then
+            self:RequestRefresh()
+        elseif self.Refresh then
+            self:Refresh()
+        end
+    end
+end
+
+function Addon:OnCommReceived(prefix, messageText, _, sender)
     Addon:OnAddonMessage(prefix, messageText, sender)
 end
 
@@ -537,13 +570,6 @@ Addon._sectionsById = Addon._sectionsById or {}
 Addon._order = Addon._order or {}
 Addon._sectionsIndexById = Addon._sectionsIndexById or {}
 
-function Addon:DB()
-    if self.db then
-        return self.db.profile
-    end
-    return _G[self._DB_NAME]
-end
-
 function Addon:EnsureDB()
     if not self.db then
         SetupAddonDB()
@@ -551,60 +577,8 @@ function Addon:EnsureDB()
     return self.db.profile
 end
 
-local function WipeTableInPlace(t)
-    if type(t) ~= "table" then return end
-    for k in pairs(t) do
-        t[k] = nil
-    end
-end
-
-local LOCALE_NAME_KEYS = {
-    enUS = "LOCALE_NAME_ENUS",
-    frFR = "LOCALE_NAME_FRFR",
-    esES = "LOCALE_NAME_ESES",
-    esMX = "LOCALE_NAME_ESMX",
-}
-
-function Addon:GetSupportedLocaleCodes()
-    local reg = GetLocaleRegistry()
-    local data = reg and reg.data
-
-    local out = {}
-    local seen = {}
-
-    if type(data) == "table" then
-        for code, dataset in pairs(data) do
-            if type(code) == "string" and type(dataset) == "table" then
-                out[#out + 1] = code
-                seen[code] = true
-            end
-        end
-    end
-
-    if not seen.enUS then
-        out[#out + 1] = "enUS"
-    end
-
-    table.sort(out, function(a, b)
-        if a == b then return false end
-        if a == "enUS" then return true end
-        if b == "enUS" then return false end
-        return tostring(a) < tostring(b)
-    end)
-
-    return out
-end
-
-function Addon:GetLocaleDisplayName(code)
-    code = tostring(code or "")
-    local key = LOCALE_NAME_KEYS[code]
-    local pretty = (key and L[key]) or code
-    return ("%s (%s)"):format(pretty, code)
-end
-
 function Addon:GetEffectiveLocaleCode()
-    local db = self:EnsureDB()
-    local override = tostring(db.localeOverride or "auto")
+    local override = tostring(self._sessionLocaleOverride or "auto")
 
     local code
     if override ~= "auto" and override ~= "" then
@@ -614,25 +588,30 @@ function Addon:GetEffectiveLocaleCode()
     end
 
     local reg = GetLocaleRegistry()
-    if reg and type(reg.data) == "table" and type(reg.data[code]) == "table" then
+    local hasData = reg and type(reg.data) == "table" and type(reg.data[code]) == "table"
+    local hasStrings = reg and type(reg.strings) == "table" and type(reg.strings[code]) == "table"
+    if hasData or hasStrings then
         return code
     end
     return "enUS"
 end
 
 function Addon:ApplyLocaleOverride()
-    local db = self:EnsureDB()
-    if db.localeOverride == nil or db.localeOverride == "" then
-        db.localeOverride = "auto"
-    end
-
     local reg = GetLocaleRegistry()
     local strings = reg and reg.strings
     if type(strings) ~= "table" then strings = {} end
 
+    -- Defensive: never leave `self.L` empty due to missing/late-loaded locale files.
+    local previous = {}
+    if type(self.L) == "table" then
+        for k, v in pairs(self.L) do
+            previous[k] = v
+        end
+    end
+
     local selected = self:GetEffectiveLocaleCode()
 
-    WipeTableInPlace(self.L)
+    Wipe(self.L)
 
     local fallback = strings.enUS
     if type(fallback) == "table" then
@@ -648,6 +627,13 @@ function Addon:ApplyLocaleOverride()
         end
     end
 
+    -- If locale tables weren't available for some reason, restore the prior strings.
+    if next(self.L) == nil and next(previous) ~= nil then
+        for k, v in pairs(previous) do
+            self.L[k] = v
+        end
+    end
+
     if self.L and self.L.DISPLAY_NAME then
         self.DISPLAY_NAME = self.L.DISPLAY_NAME
     end
@@ -658,11 +644,15 @@ function Addon:ApplyLocaleOverride()
 end
 
 function Addon:SetLocaleOverride(value)
-    local db = self:EnsureDB()
     value = tostring(value or "auto")
     if value == "" then value = "auto" end
 
-    db.localeOverride = value
+    -- Session-only: do not persist to SavedVariables.
+    if value == "auto" then
+        self._sessionLocaleOverride = nil
+    else
+        self._sessionLocaleOverride = value
+    end
 
     self:ApplyLocaleOverride()
 
@@ -670,7 +660,7 @@ function Addon:SetLocaleOverride(value)
     self._cachedListLocaleCode = nil
     self._cachedListData = nil
 
-    if frame and frame.IsShown and frame:IsShown() then
+    if IsFrameShown(frame) then
         if self.RequestRefresh then
             self:RequestRefresh()
         elseif self.Refresh then
@@ -682,12 +672,12 @@ end
 function Addon:OpenOptions()
     self:CreateFrame()
 
-    if frame and frame.IsShown and frame:IsShown() and tonumber(frame._lariasSelectedTab) == 2 then
+    if IsFrameShown(frame) and tonumber(frame._lariasSelectedTab) == 2 then
         frame:Hide()
         return
     end
 
-    if frame and frame.IsShown and not frame:IsShown() then
+    if frame and not IsFrameShown(frame) then
         self._updatePopupShownThisOpen = nil
         self:BroadcastVersion(false)
         self:RequestVersions(false)
@@ -849,32 +839,32 @@ function Addon:UpdateLocalizedUI()
         end
     end
 
-    SetCheckText(frame._lariasOptShowGreatVault, L.OPTIONS_SHOW_GREAT_VAULT or "")
-    SetCheckText(frame._lariasOptShowCurrency, L.OPTIONS_SHOW_CURRENCY or "")
-    SetCheckText(frame._lariasOptHideCompleted, L.HIDE_COMPLETED_WEEKS or "")
+    SetCheckText(frame._lariasOptShowGreatVault, L.OPTIONS_SHOW_GREAT_VAULT or "Show Great Vault")
+    SetCheckText(frame._lariasOptShowCurrency, L.OPTIONS_SHOW_CURRENCY or "Show Currency")
+    SetCheckText(frame._lariasOptHideCompleted, L.HIDE_COMPLETED_WEEKS or "Hide completed weeks")
 
     local optionsTab = frame._lariasTabOptions
     if optionsTab and optionsTab.SetText then
-        optionsTab:SetText(L.TAB_OPTIONS or "")
+        optionsTab:SetText(L.TAB_OPTIONS or "Options")
     end
 
     local listTab = frame._lariasTabList
     if listTab and listTab.SetText then
-        listTab:SetText(L.TAB_LIST or "")
+        listTab:SetText(L.TAB_LIST or "List")
     end
 
     local resetBtn = frame._lariasOptResetBtn
     if resetBtn and resetBtn.SetText then
-        resetBtn:SetText(L.RESET_BUTTON or "")
+        resetBtn:SetText(L.RESET_BUTTON or "Reset")
     end
 
     local trackingFrame = self._trackingFrame
-    if trackingFrame and trackingFrame.IsShown and trackingFrame:IsShown() then
+    if trackingFrame then
         if trackingFrame._lariasLeftTitle and trackingFrame._lariasLeftTitle.SetText then
-            trackingFrame._lariasLeftTitle:SetText(L.TRACKING_GREAT_VAULT_TITLE or "")
+            trackingFrame._lariasLeftTitle:SetText(L.TRACKING_GREAT_VAULT_TITLE or "Great Vault")
         end
         if trackingFrame._lariasRightTitle and trackingFrame._lariasRightTitle.SetText then
-            trackingFrame._lariasRightTitle:SetText(L.TRACKING_CURRENCY_TITLE or "")
+            trackingFrame._lariasRightTitle:SetText(L.TRACKING_CURRENCY_TITLE or "Currency")
         end
     end
 end
@@ -899,10 +889,10 @@ function Addon:ApplyScrollLayout()
     scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", Addon.UI.padOuterX, -Addon.UI.scrollTop)
 
     local extra = 0
-    if (db.showGreatVault or db.showCurrency) and self._trackingFrame and self._trackingFrame.IsShown and self._trackingFrame:IsShown() then
-        local h = (self._trackingFrame.GetHeight and self._trackingFrame:GetHeight()) or Addon.UI.trackH
-        h = tonumber(h) or Addon.UI.trackH
-        extra = h + Addon.UI.trackTopPad
+    if (db.showGreatVault or db.showCurrency) and IsFrameShown(self._trackingFrame) then
+        local trackingHeight = (self._trackingFrame.GetHeight and self._trackingFrame:GetHeight()) or Addon.UI.trackH
+        trackingHeight = tonumber(trackingHeight) or Addon.UI.trackH
+        extra = trackingHeight + Addon.UI.trackTopPad
     end
 
     scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -Addon.UI.scrollRight, Addon.UI.scrollBottom + extra)
@@ -1113,7 +1103,7 @@ function Addon:UpdateCompletionEasterEgg(db)
     if self._activeSections then
         for i = 1, #self._activeSections do
             local sectionFrame = self._activeSections[i]
-            if sectionFrame and sectionFrame.IsShown and sectionFrame:IsShown() then
+            if IsFrameShown(sectionFrame) then
                 visibleSections = visibleSections + 1
                 break
             end
@@ -1126,9 +1116,9 @@ function Addon:UpdateCompletionEasterEgg(db)
     if pig and pig.SetShown then
         pig:SetShown(showPig)
         if showPig and scrollFrame and scrollFrame.GetWidth and scrollFrame.GetHeight then
-            local w = tonumber(scrollFrame:GetWidth()) or 0
-            local h = tonumber(scrollFrame:GetHeight()) or 0
-            local size = math.min(w > 0 and w or 260, h > 0 and h or 260)
+            local scrollWidth = tonumber(scrollFrame:GetWidth()) or 0
+            local scrollHeight = tonumber(scrollFrame:GetHeight()) or 0
+            local size = math.min(scrollWidth > 0 and scrollWidth or 260, scrollHeight > 0 and scrollHeight or 260)
             size = math.max(120, size)
             if pig.SetSize then
                 pig:SetSize(size, size)
@@ -1487,17 +1477,17 @@ function Addon:CreateFrame()
     frame:Hide()
 
     if UISpecialFrames and frame.GetName then
-        local n = frame:GetName()
-        if n and n ~= "" then
+        local frameNameForSpecialFrames = frame:GetName()
+        if frameNameForSpecialFrames and frameNameForSpecialFrames ~= "" then
             local exists = false
             for i = 1, #UISpecialFrames do
-                if UISpecialFrames[i] == n then
+                if UISpecialFrames[i] == frameNameForSpecialFrames then
                     exists = true
                     break
                 end
             end
             if not exists then
-                tinsert(UISpecialFrames, n)
+                tinsert(UISpecialFrames, frameNameForSpecialFrames)
             end
         end
     end
@@ -1640,8 +1630,8 @@ function Addon:CreateFrame()
     end
     showGreatVaultCheck:SetChecked(db.showGreatVault and true or false)
     showGreatVaultCheck:SetScript("OnClick", function(selfBtn)
-        local d = Addon:EnsureDB()
-        d.showGreatVault = selfBtn:GetChecked() and true or false
+        local dbForClick = Addon:EnsureDB()
+        dbForClick.showGreatVault = selfBtn:GetChecked() and true or false
         if Addon.RequestRefresh then
             Addon:RequestRefresh()
         else
@@ -1663,8 +1653,8 @@ function Addon:CreateFrame()
     end
     showCurrencyCheck:SetChecked(db.showCurrency and true or false)
     showCurrencyCheck:SetScript("OnClick", function(selfBtn)
-        local d = Addon:EnsureDB()
-        d.showCurrency = selfBtn:GetChecked() and true or false
+        local dbForClick = Addon:EnsureDB()
+        dbForClick.showCurrency = selfBtn:GetChecked() and true or false
         if Addon.RequestRefresh then
             Addon:RequestRefresh()
         else
@@ -1686,8 +1676,8 @@ function Addon:CreateFrame()
     end
     hideCompletedCheck:SetChecked(db.hideCompletedSections and true or false)
     hideCompletedCheck:SetScript("OnClick", function(selfBtn)
-        local d = Addon:EnsureDB()
-        d.hideCompletedSections = selfBtn:GetChecked() and true or false
+        local dbForClick = Addon:EnsureDB()
+        dbForClick.hideCompletedSections = selfBtn:GetChecked() and true or false
         if Addon.RequestRefresh then
             Addon:RequestRefresh()
         else
@@ -1701,15 +1691,15 @@ function Addon:CreateFrame()
     resetBtn:SetSize(120, 24)
     resetBtn:SetText(L.RESET_BUTTON or "")
     resetBtn:SetScript("OnClick", function()
-        local d = Addon:EnsureDB()
+        local dbForReset = Addon:EnsureDB()
         if wipe then
-            wipe(d.checked)
-            wipe(d.collapsedSections)
+            wipe(dbForReset.checked)
+            wipe(dbForReset.collapsedSections)
         else
-            d.checked = {}
-            d.collapsedSections = {}
+            dbForReset.checked = {}
+            dbForReset.collapsedSections = {}
         end
-        d.hideCompletedSections = true
+        dbForReset.hideCompletedSections = true
 
         if Addon.SyncOptionsTabControls then
             Addon:SyncOptionsTabControls()
@@ -1763,9 +1753,63 @@ function Addon:RegisterConsoleCommands()
 end
 
 function Addon:ToggleCommand(input)
-    if input and input ~= "" then
-        self:Print(L.SLASH_USAGE_TOGGLE or "")
-    else
+    input = tostring(input or "")
+    input = input:gsub("^%s+", ""):gsub("%s+$", "")
+
+    if input == "" then
         self:Toggle()
+        return
     end
+
+    local cmd, arg = input:match("^(%S+)%s*(.-)%s*$")
+    cmd = tostring(cmd or ""):lower()
+    arg = tostring(arg or ""):gsub("^%s+", ""):gsub("%s+$", "")
+
+    if cmd == "locale" or cmd == "lang" then
+        if not self.SetLocaleOverride then
+            self:Print("Locale override is not available in this build.")
+            return
+        end
+
+        if arg:lower() == "status" or arg == "?" then
+            local client = (GetLocale and GetLocale()) or ""
+            local reg = GetLocaleRegistry()
+            local strings = reg and reg.strings
+            local data = reg and reg.data
+            local function HasTable(t, key)
+                return type(t) == "table" and type(t[key]) == "table"
+            end
+            local override = tostring(self._sessionLocaleOverride or "auto")
+            local effective = (self.GetEffectiveLocaleCode and self:GetEffectiveLocaleCode()) or ""
+
+            self:Print(("Locale status: client=%s override=%s effective=%s"):format(tostring(client), tostring(override), tostring(effective)))
+            self:Print(("Locale status: strings.esMX=%s data.esMX=%s strings.enUS=%s data.enUS=%s"):format(
+                tostring(HasTable(strings, "esMX")),
+                tostring(HasTable(data, "esMX")),
+                tostring(HasTable(strings, "enUS")),
+                tostring(HasTable(data, "enUS"))
+            ))
+            return
+        end
+
+        if arg == "" then
+            self:Print(L.SLASH_USAGE_LOCALE or "Usage: /larias locale auto|enUS|esMX")
+            return
+        end
+
+        -- Keep it simple: accept common casing, normalize.
+        local value = arg
+        if value:lower() == "auto" then value = "auto" end
+        if value:lower() == "enus" then value = "enUS" end
+        if value:lower() == "esmx" then value = "esMX" end
+
+        self:SetLocaleOverride(value)
+        local effective = (self.GetEffectiveLocaleCode and self:GetEffectiveLocaleCode()) or ""
+        self:Print((L.SLASH_LOCALE_SET_FMT or "Locale override set to %s (effective: %s)"):format(tostring(value), tostring(effective)))
+        return
+    end
+
+    -- Unknown args: show help.
+    self:Print(L.SLASH_USAGE_TOGGLE or "Usage: /larias or /lcl to toggle the checklist")
+    self:Print(L.SLASH_USAGE_LOCALE or "Usage: /larias locale auto|enUS|esMX")
 end

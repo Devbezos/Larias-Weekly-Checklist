@@ -18,6 +18,10 @@ local tonumber, tostring, type = tonumber, tostring, type
 local floor, max, abs = math.floor, math.max, math.abs
 local tinsert, tremove, tconcat, tsort = table.insert, table.remove, table.concat, table.sort
 
+local function IsFrameShown(frameObj)
+    return frameObj and frameObj.IsShown and frameObj:IsShown()
+end
+
 local function Wipe(tableToWipe)
     if not tableToWipe then return end
     if wipe then
@@ -84,8 +88,8 @@ function Addon:ConfigureTrackingEvents(parentFrame, showGreatVault, showCurrency
     if not trackingEventFrame._lariasOnEventSet then
         trackingEventFrame._lariasOnEventSet = true
         trackingEventFrame:SetScript("OnEvent", function()
-            local isMainFrameVisible = parentFrame and parentFrame.IsShown and parentFrame:IsShown()
-            local isTrackingPanelVisible = Addon._trackingFrame and Addon._trackingFrame.IsShown and Addon._trackingFrame:IsShown()
+            local isMainFrameVisible = IsFrameShown(parentFrame)
+            local isTrackingPanelVisible = IsFrameShown(Addon._trackingFrame)
             if isMainFrameVisible and isTrackingPanelVisible then
                 Addon:RequestTrackingUpdate()
             end
@@ -94,6 +98,23 @@ function Addon:ConfigureTrackingEvents(parentFrame, showGreatVault, showCurrency
 end
 
 function Addon:RequestTrackingUpdate()
+    -- Throttle updates to run at most once every 0.2 seconds to prevent spam
+    -- from rapid events like bag updates or currency changes.
+    if self.RegisterBucketMessage and self.SendMessage then
+        if not self._trackingUpdateBucketRegistered then
+            self._trackingUpdateBucketRegistered = true
+            self:RegisterBucketMessage("LWMC_TRACKING_UPDATE", 0.2, function()
+                if Addon.UpdateTracking then
+                    Addon:UpdateTracking()
+                end
+            end)
+        end
+
+        self:SendMessage("LWMC_TRACKING_UPDATE")
+        return
+    end
+
+    -- Fallback if AceBucket isn't available.
     if self._trackingUpdatePending then return end
     self._trackingUpdatePending = true
 
@@ -107,8 +128,6 @@ function Addon:RequestTrackingUpdate()
         end
     end
 
-    -- Throttle updates to run at most once every 0.2 seconds to prevent spam
-    -- from rapid events like bag updates or currency changes.
     if C_Timer and C_Timer.After then
         C_Timer.After(0.2, self._trackingUpdateRunner)
     else
@@ -390,7 +409,7 @@ end
 
 local function BottomFor(obj)
     if not obj then return 0 end
-    if obj.IsShown and not obj:IsShown() then return 0 end
+    if obj.IsShown and not IsFrameShown(obj) then return 0 end
 
     local y = tonumber(obj._lariasBaseY) or 0
     local h = 0
@@ -607,18 +626,18 @@ local function GetGreatVaultBlockLines()
     out[1], out[2], out[3], out[4], out[5], out[6] = "", "", "", "", "", ""
 
     if not C_WeeklyRewards or not C_WeeklyRewards.GetActivities then
-        out[1] = MakeGVHeader(L.TRACKING_GV_RAID or "")
+        out[1] = MakeGVHeader(L.TRACKING_GV_RAID or "Raid")
         out[2] = ColorWrap(COLORS.red, L.TRACKING_NA or "")
-        out[4] = MakeGVHeader(L.TRACKING_GV_DUNGEONS or "")
+        out[4] = MakeGVHeader(L.TRACKING_GV_DUNGEONS or "Dungeons")
         out[5] = ColorWrap(COLORS.red, L.TRACKING_NA or "")
         return out
     end
 
     local activities = C_WeeklyRewards.GetActivities()
     if type(activities) ~= "table" then
-        out[1] = MakeGVHeader(L.TRACKING_GV_RAID or "")
+        out[1] = MakeGVHeader(L.TRACKING_GV_RAID or "Raid")
         out[2] = ColorWrap(COLORS.red, L.TRACKING_NA or "")
-        out[4] = MakeGVHeader(L.TRACKING_GV_DUNGEONS or "")
+        out[4] = MakeGVHeader(L.TRACKING_GV_DUNGEONS or "Dungeons")
         out[5] = ColorWrap(COLORS.red, L.TRACKING_NA or "")
         return out
     end
@@ -674,11 +693,11 @@ local function GetGreatVaultBlockLines()
     local raidMax = (raidExampleMax > 0) and raidExampleMax or raidMaxIlvl
     local dungeonMax = (dungeonExampleMax > 0) and dungeonExampleMax or mythicMaxIlvl
 
-    out[1] = MakeGVHeader(L.TRACKING_GV_RAID or "")
+    out[1] = MakeGVHeader(L.TRACKING_GV_RAID or "Raid")
     out[2] = (raidTotal > 0) and MakeGVThresholdsString(raidComplete, raidTotal, { 2, 4, 6 }, cache.parts) or ColorWrap(COLORS.red, L.TRACKING_NA or "")
     out[3] = (raidTotal > 0) and MakeGVIlvlsRow(cache.rIlvls, raidMax, cache.parts) or ""
 
-    out[4] = MakeGVHeader(L.TRACKING_GV_DUNGEONS or "")
+    out[4] = MakeGVHeader(L.TRACKING_GV_DUNGEONS or "Dungeons")
     out[5] = (mythicTotal > 0) and MakeGVThresholdsString(mythicComplete, mythicTotal, { 1, 4, 8 }, cache.parts) or ColorWrap(COLORS.red, L.TRACKING_NA or "")
     out[6] = (mythicTotal > 0) and MakeGVIlvlsRow(cache.mIlvls, dungeonMax, cache.parts) or ""
 
@@ -1037,7 +1056,7 @@ function Addon:CreateTrackingPanel(parentFrame)
     local title = trackingFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", 10, -8)
     title:SetTextColor(THEME.header.r, THEME.header.g, THEME.header.b, THEME.header.a)
-    title:SetText(L.TRACKING_GREAT_VAULT_TITLE or "")
+    title:SetText(L.TRACKING_GREAT_VAULT_TITLE or "Great Vault")
     trackingFrame._lariasLeftTitle = title
 
     local padL, padR = 10, 10
@@ -1059,7 +1078,7 @@ function Addon:CreateTrackingPanel(parentFrame)
     local rightTitle = trackingFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     rightTitle:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", padL + colW + colGap, -8)
     rightTitle:SetTextColor(THEME.header.r, THEME.header.g, THEME.header.b, THEME.header.a)
-    rightTitle:SetText(L.TRACKING_CURRENCY_TITLE or "")
+    rightTitle:SetText(L.TRACKING_CURRENCY_TITLE or "Currency")
     trackingFrame._lariasRightTitle = rightTitle
 
     title:ClearAllPoints()

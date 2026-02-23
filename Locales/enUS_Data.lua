@@ -11,8 +11,7 @@ if type(reg) ~= "table" then
 end
 if type(reg.data) ~= "table" then reg.data = {} end
 
-if locale == LOCALE or type(_G[listKey]) ~= "table" then
-_G[listKey] = {
+local DATASET = {
 
     {
         id = "early_access_feb_26_through_mar_2_pay_to_win",
@@ -157,8 +156,11 @@ _G[listKey] = {
         },
     },
 }
-end
 
-if type(_G[listKey]) == "table" then
-    reg.data[LOCALE] = _G[listKey]
+reg.data[LOCALE] = DATASET
+
+-- Back-compat for any older code paths still reading the legacy global list key.
+-- Only seed it if it isn't already set (or if the client locale is enUS).
+if locale == LOCALE or type(_G[listKey]) ~= "table" then
+    _G[listKey] = DATASET
 end
