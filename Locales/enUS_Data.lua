@@ -1,15 +1,8 @@
 --[[
-Localization (checklist data)
+English (enUS) checklist data for Larias's Weekly Checklist
 
-This file provides the default (enUS) checklist data.
-To add a new language:
-1) Copy Locales\\enUS.lua -> Locales\\<locale>.lua (example: Locales\\deDE.lua)
-2) Copy Locales\\enUS_Data.lua -> Locales\\<locale>_Data.lua (example: Locales\\deDE_Data.lua)
-3) In both copies, change the locale string ("enUS") to your locale ("deDE")
-4) Translate section titles and item text in the _Data file
-5) Add BOTH files to LariasWeeklyChecklist.toc AFTER the enUS entries
-
-Common locale codes: enUS, enGB, frFR, deDE, esES, esMX, itIT, ptBR, ruRU, koKR, zhCN, zhTW
+NOTE: This is the canonical enUS dataset; other locales must keep IDs identical
+so completion tracking stays consistent across locales.
 ]]
 
 local addonName = ...
@@ -17,8 +10,16 @@ local locale = (GetLocale and GetLocale()) or nil
 local LOCALE = "enUS"
 local listKey = addonName .. "_LIST_DATA"
 
-if locale == LOCALE or type(_G[listKey]) ~= "table" then
-_G[listKey] = {
+local LOCALE_REGISTRY_KEY = "LARIASWEEKLYCHECKLIST_LOCALE_REGISTRY"
+
+local reg = _G[LOCALE_REGISTRY_KEY]
+if type(reg) ~= "table" then
+    reg = {}
+    _G[LOCALE_REGISTRY_KEY] = reg
+end
+if type(reg.data) ~= "table" then reg.data = {} end
+
+local DATASET = {
 
     {
         id = "early_access_feb_26_through_mar_2_pay_to_win",
@@ -163,4 +164,11 @@ _G[listKey] = {
         },
     },
 }
+
+reg.data[LOCALE] = DATASET
+
+-- Back-compat: only set the legacy global dataset when the client locale matches.
+-- Locale override uses `reg.data[LOCALE]` and should not require a matching client locale.
+if locale == LOCALE then
+    _G[listKey] = DATASET
 end

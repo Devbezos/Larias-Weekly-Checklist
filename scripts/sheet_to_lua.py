@@ -62,6 +62,18 @@ def extract_leading_block_comment(text: str) -> str | None:
         return None
     return m.group(0)
 
+
+def build_enus_data_header() -> list[str]:
+    return [
+        "--[[",
+        "English (enUS) checklist data for Larias's Weekly Checklist",
+        "",
+        "NOTE: This is the canonical enUS dataset; other locales must keep IDs identical",
+        "so completion tracking stays consistent across locales.",
+        "]]",
+        "",
+    ]
+
 def main(csv_in: str, lua_out: str) -> None:
     with open(csv_in, encoding="utf-8", newline="") as f:
         rows = list(csv.reader(f))
@@ -88,40 +100,28 @@ def main(csv_in: str, lua_out: str) -> None:
     existing_text = None
     out_path = Path(lua_out)
     nl = "\n"
-    existing_header = None
 
     if out_path.exists():
         existing_text = out_path.read_text(encoding="utf-8")
         nl = detect_newline(existing_text)
-        existing_header = extract_leading_block_comment(existing_text)
 
-    if existing_header:
-        header_norm = existing_header.replace("\r\n", "\n").replace("\r", "\n").rstrip("\n")
-        out.extend(header_norm.split("\n"))
-        out.append("")
-    else:
-        out.append("--[[")
-        out.append("Localization (checklist data)")
-        out.append("")
-        out.append("This file provides the default (enUS) checklist data.")
-        out.append("To add a new language:")
-        out.append("1) Copy Locales\\\\enUS.lua -> Locales\\\\<locale>.lua (example: Locales\\\\deDE.lua)")
-        out.append("2) Copy Locales\\\\enUS_Data.lua -> Locales\\\\<locale>_Data.lua (example: Locales\\\\deDE_Data.lua)")
-        out.append('3) In both copies, change the locale string ("enUS") to your locale ("deDE")')
-        out.append("4) Translate section titles and item text in the _Data file")
-        out.append("5) Add BOTH files to LariasWeeklyChecklist.toc AFTER the enUS entries")
-        out.append("")
-        out.append("Common locale codes: enUS, enGB, frFR, deDE, esES, esMX, itIT, ptBR, ruRU, koKR, zhCN, zhTW")
-        out.append("]]")
-        out.append("")
+    out.extend(build_enus_data_header())
 
     out.append("local addonName = ...")
     out.append("local locale = (GetLocale and GetLocale()) or nil")
     out.append('local LOCALE = "enUS"')
     out.append('local listKey = addonName .. "_LIST_DATA"')
     out.append("")
-    out.append('if locale == LOCALE or type(_G[listKey]) ~= "table" then')
-    out.append("_G[listKey] = {")
+    out.append('local LOCALE_REGISTRY_KEY = "LARIASWEEKLYCHECKLIST_LOCALE_REGISTRY"')
+    out.append("")
+    out.append("local reg = _G[LOCALE_REGISTRY_KEY]")
+    out.append('if type(reg) ~= "table" then')
+    out.append("    reg = {}")
+    out.append("    _G[LOCALE_REGISTRY_KEY] = reg")
+    out.append("end")
+    out.append('if type(reg.data) ~= "table" then reg.data = {} end')
+    out.append("")
+    out.append("local DATASET = {")
     out.append("")
 
     for s in sections:
@@ -134,6 +134,13 @@ def main(csv_in: str, lua_out: str) -> None:
         out.append("        },")
         out.append("    },")
     out.append("}")
+    out.append("")
+    out.append("reg.data[LOCALE] = DATASET")
+    out.append("")
+    out.append("-- Back-compat: only set the legacy global dataset when the client locale matches.")
+    out.append("-- Locale override uses `reg.data[LOCALE]` and should not require a matching client locale.")
+    out.append('if locale == LOCALE then')
+    out.append("    _G[listKey] = DATASET")
     out.append("end")
     out.append("")
 
