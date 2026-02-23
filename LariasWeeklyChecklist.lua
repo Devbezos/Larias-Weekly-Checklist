@@ -838,30 +838,6 @@ end
 function Addon:UpdateLocalizedUI()
     if not frame then return end
 
-    local showLocaleDropdown = false
-    do
-        local codes = self.GetSupportedLocaleCodes and self:GetSupportedLocaleCodes() or {}
-        for i = 1, #codes do
-            if codes[i] ~= "enUS" then
-                showLocaleDropdown = true
-                break
-            end
-        end
-    end
-
-    local function SetShownCompat(region, shown)
-        if not region then return end
-        if region.SetShown then
-            region:SetShown(shown and true or false)
-            return
-        end
-        if shown then
-            if region.Show then region:Show() end
-        else
-            if region.Hide then region:Hide() end
-        end
-    end
-
     local function SetCheckText(checkButton, text)
         if not checkButton then return end
         local textRegion = checkButton.text or checkButton.Text
@@ -890,32 +866,6 @@ function Addon:UpdateLocalizedUI()
     local resetBtn = frame._lariasOptResetBtn
     if resetBtn and resetBtn.SetText then
         resetBtn:SetText(L.RESET_BUTTON or "")
-    end
-
-    local localeLabel = frame._lariasOptLocaleLabel
-    if localeLabel and localeLabel.SetText then
-        SetShownCompat(localeLabel, showLocaleDropdown)
-        if showLocaleDropdown then
-            localeLabel:SetText(L.OPTIONS_LANGUAGE or "")
-            if localeLabel.SetTextColor then
-                localeLabel:SetTextColor(Addon.THEME.text.r, Addon.THEME.text.g, Addon.THEME.text.b, Addon.THEME.text.a)
-            end
-        end
-    end
-
-    local dropdown = frame._lariasOptLocaleDropdown
-    if dropdown and UIDropDownMenu_SetText and UIDropDownMenu_SetSelectedValue then
-        SetShownCompat(dropdown, showLocaleDropdown)
-        if showLocaleDropdown then
-            local db = self:EnsureDB()
-            local selectedValue = tostring(db.localeOverride or "auto")
-            UIDropDownMenu_SetSelectedValue(dropdown, selectedValue)
-            if selectedValue == "auto" then
-                UIDropDownMenu_SetText(dropdown, (L.OPTIONS_LANGUAGE_AUTO or "") .. " (" .. tostring((GetLocale and GetLocale()) or "enUS") .. ")")
-            else
-                UIDropDownMenu_SetText(dropdown, self:GetLocaleDisplayName(selectedValue))
-            end
-        end
     end
 
     local trackingFrame = self._trackingFrame
@@ -1773,47 +1723,6 @@ function Addon:CreateFrame()
     end)
 
     frame._lariasOptResetBtn = resetBtn
-
-    local localeLabel = optionsPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    localeLabel:SetPoint("TOPLEFT", resetBtn, "BOTTOMLEFT", 0, -18)
-    localeLabel:SetText(L.OPTIONS_LANGUAGE or "")
-    localeLabel:SetTextColor(Addon.THEME.text.r, Addon.THEME.text.g, Addon.THEME.text.b, Addon.THEME.text.a)
-    frame._lariasOptLocaleLabel = localeLabel
-
-    if UIDropDownMenu_Initialize and UIDropDownMenu_CreateInfo and UIDropDownMenu_AddButton then
-        local localeDropdown = CreateFrame("Frame", nil, optionsPanel, "UIDropDownMenuTemplate")
-        localeDropdown:SetPoint("TOPLEFT", localeLabel, "BOTTOMLEFT", -16, -6)
-        if UIDropDownMenu_SetWidth then UIDropDownMenu_SetWidth(localeDropdown, 190) end
-
-        UIDropDownMenu_Initialize(localeDropdown, function(_, level)
-            level = level or 1
-
-            local d = Addon:EnsureDB()
-            local current = tostring(d.localeOverride or "auto")
-
-            local function AddItem(value, text)
-                local info = UIDropDownMenu_CreateInfo()
-                info.text = text
-                info.value = value
-                info.checked = (current == value)
-                info.func = function()
-                    Addon:SetLocaleOverride(value)
-                end
-                UIDropDownMenu_AddButton(info, level)
-            end
-
-            local autoText = (L.OPTIONS_LANGUAGE_AUTO or "") .. " (" .. tostring((GetLocale and GetLocale()) or "enUS") .. ")"
-            AddItem("auto", autoText)
-
-            local codes = Addon:GetSupportedLocaleCodes()
-            for i = 1, #codes do
-                local code = codes[i]
-                AddItem(code, Addon:GetLocaleDisplayName(code))
-            end
-        end)
-
-        frame._lariasOptLocaleDropdown = localeDropdown
-    end
 
     if (db.showGreatVault or db.showCurrency) and self.CreateTrackingPanel and not self._trackingFrame then
         self:CreateTrackingPanel(frame)
