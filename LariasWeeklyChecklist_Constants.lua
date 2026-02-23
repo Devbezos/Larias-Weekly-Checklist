@@ -71,8 +71,6 @@ function Addon:InitConstants(name)
         itemTextPad = 8,
         itemTextWidth = 420,
         sectionInsetX = 14,
-        trackH = 210,
-        trackTopPad = 10,
     }
     self.UI = self.UI or self.CONSTANTS.ui
 

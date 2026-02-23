@@ -980,15 +980,6 @@ local function GetCatalystParts()
     return ColorWrap(COLORS.dim, L.TRACKING_CATALYST_LABEL or ""), ColorWrap(color, ("%d"):format(cur))
 end
 
-local AceGUI
-local function GetAceGUI()
-    if AceGUI ~= nil then return AceGUI end
-    if LibStub then
-        AceGUI = LibStub("AceGUI-3.0", true)
-    end
-    return AceGUI
-end
-
 local function AddLineWidget(container, ace, text)
     if not IsNonEmptyText(text) then return end
     local w = ace:Create("Label")
@@ -998,7 +989,7 @@ local function AddLineWidget(container, ace, text)
 end
 
 function Addon:AceRenderTracking(container)
-    local ace = GetAceGUI()
+    local ace = self.GetAceGUI and self:GetAceGUI()
     if not (ace and container and container.AddChild) then return end
 
     local db = self:EnsureDB()

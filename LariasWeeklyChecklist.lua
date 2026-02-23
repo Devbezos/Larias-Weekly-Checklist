@@ -703,21 +703,12 @@ function Addon:SelectMainTab(tabId)
     -- Keep tracking panel aligned with List-only behavior.
     if self.ApplyTrackingPanelOptions then
         self:ApplyTrackingPanelOptions()
-    elseif self.UpdateTracking then
-        self:UpdateTracking()
     end
 
     if tabId == 1 then
         if self.RequestRefresh then self:RequestRefresh() end
     else
         if self.ApplyScrollLayout then self:ApplyScrollLayout() end
-    end
-end
-
-function Addon:SyncOptionsTabControls()
-    -- AceGUI options are rebuilt on refresh.
-    if self.RequestRefresh then
-        self:RequestRefresh()
     end
 end
 
@@ -842,7 +833,7 @@ function Addon:GetAceGUI()
 end
 
 function Addon:_AceRenderList(container)
-    local ace = GetAceGUI()
+    local ace = self:GetAceGUI()
     if not ace then return end
 
     container:SetLayout("Fill")
@@ -913,98 +904,109 @@ function Addon:_AceRenderList(container)
 end
 
 function Addon:_AceRenderOptions(container)
-    local ace = GetAceGUI()
-    if not ace then return end
+    if not container then return end
 
-    container:SetLayout("List")
+    local dialog = LibStub and LibStub("AceConfigDialog-3.0", true)
+    local registry = LibStub and LibStub("AceConfigRegistry-3.0", true)
+    if not (dialog and registry) then return end
 
-    local db = self:EnsureDB()
-
-    local showGreatVault = ace:Create("CheckBox")
-    showGreatVault:SetFullWidth(true)
-    showGreatVault:SetLabel(L.OPTIONS_SHOW_GREAT_VAULT or "")
-    showGreatVault:SetValue(db.showGreatVault and true or false)
-    showGreatVault:SetCallback("OnValueChanged", function(_, _, val)
-        local d = Addon:EnsureDB()
-        d.showGreatVault = val and true or false
-        if Addon.ApplyTrackingPanelOptions then
-            Addon:ApplyTrackingPanelOptions()
+    if not self._aceOptionsRegistered then
+        local function HasOtherLocales()
+            local codes = Addon.GetSupportedLocaleCodes and Addon:GetSupportedLocaleCodes() or {}
+            for i = 1, #codes do
+                if codes[i] ~= "enUS" then return true end
+            end
+            return false
         end
-        Addon:RequestRefresh()
-    end)
-    container:AddChild(showGreatVault)
 
-    local showCurrency = ace:Create("CheckBox")
-    showCurrency:SetFullWidth(true)
-    showCurrency:SetLabel(L.OPTIONS_SHOW_CURRENCY or "")
-    showCurrency:SetValue(db.showCurrency and true or false)
-    showCurrency:SetCallback("OnValueChanged", function(_, _, val)
-        local d = Addon:EnsureDB()
-        d.showCurrency = val and true or false
-        if Addon.ApplyTrackingPanelOptions then
-            Addon:ApplyTrackingPanelOptions()
+        local function LocaleValues()
+            local codes = Addon.GetSupportedLocaleCodes and Addon:GetSupportedLocaleCodes() or {}
+            local list = {}
+            list.auto = (L.OPTIONS_LANGUAGE_AUTO or "") .. " (" .. tostring((GetLocale and GetLocale()) or "enUS") .. ")"
+            for i = 1, #codes do
+                local code = tostring(codes[i])
+                list[code] = Addon:GetLocaleDisplayName(code)
+            end
+            return list
         end
-        Addon:RequestRefresh()
-    end)
-    container:AddChild(showCurrency)
 
-    local hideCompleted = ace:Create("CheckBox")
-    hideCompleted:SetFullWidth(true)
-    hideCompleted:SetLabel(L.HIDE_COMPLETED_WEEKS or "")
-    hideCompleted:SetValue(db.hideCompletedSections and true or false)
-    hideCompleted:SetCallback("OnValueChanged", function(_, _, val)
-        local d = Addon:EnsureDB()
-        d.hideCompletedSections = val and true or false
-        Addon:RequestRefresh()
-    end)
-    container:AddChild(hideCompleted)
+        local options = {
+            type = "group",
+            name = L.TAB_OPTIONS or "",
+            args = {
+                showGreatVault = {
+                    type = "toggle",
+                    name = L.OPTIONS_SHOW_GREAT_VAULT or "",
+                    order = 10,
+                    get = function() return Addon:EnsureDB().showGreatVault and true or false end,
+                    set = function(_, val)
+                        local db = Addon:EnsureDB()
+                        db.showGreatVault = val and true or false
+                        if Addon.ApplyTrackingPanelOptions then Addon:ApplyTrackingPanelOptions() end
+                        Addon:RequestRefresh()
+                    end,
+                },
+                showCurrency = {
+                    type = "toggle",
+                    name = L.OPTIONS_SHOW_CURRENCY or "",
+                    order = 20,
+                    get = function() return Addon:EnsureDB().showCurrency and true or false end,
+                    set = function(_, val)
+                        local db = Addon:EnsureDB()
+                        db.showCurrency = val and true or false
+                        if Addon.ApplyTrackingPanelOptions then Addon:ApplyTrackingPanelOptions() end
+                        Addon:RequestRefresh()
+                    end,
+                },
+                hideCompleted = {
+                    type = "toggle",
+                    name = L.HIDE_COMPLETED_WEEKS or "",
+                    order = 30,
+                    get = function() return Addon:EnsureDB().hideCompletedSections and true or false end,
+                    set = function(_, val)
+                        Addon:EnsureDB().hideCompletedSections = val and true or false
+                        Addon:RequestRefresh()
+                    end,
+                },
+                reset = {
+                    type = "execute",
+                    name = L.RESET_BUTTON or "",
+                    order = 40,
+                    func = function()
+                        local db = Addon:EnsureDB()
+                        if wipe then
+                            wipe(db.checked)
+                            wipe(db.collapsedSections)
+                        else
+                            db.checked = {}
+                            db.collapsedSections = {}
+                        end
+                        db.hideCompletedSections = true
+                        Addon:RequestRefresh()
+                    end,
+                },
+                language = {
+                    type = "select",
+                    name = L.OPTIONS_LANGUAGE or "",
+                    order = 50,
+                    values = LocaleValues,
+                    hidden = function() return not HasOtherLocales() end,
+                    get = function()
+                        return tostring((Addon:EnsureDB().localeOverride) or "auto")
+                    end,
+                    set = function(_, val)
+                        Addon:SetLocaleOverride(val)
+                    end,
+                },
+            },
+        }
 
-    local resetBtn = ace:Create("Button")
-    resetBtn:SetFullWidth(false)
-    resetBtn:SetText(L.RESET_BUTTON or "")
-    resetBtn:SetCallback("OnClick", function()
-        local d = Addon:EnsureDB()
-        if wipe then
-            wipe(d.checked)
-            wipe(d.collapsedSections)
-        else
-            d.checked = {}
-            d.collapsedSections = {}
-        end
-        d.hideCompletedSections = true
-        Addon:RequestRefresh()
-    end)
-    container:AddChild(resetBtn)
-
-    local codes = self.GetSupportedLocaleCodes and self:GetSupportedLocaleCodes() or {}
-    local showLocaleDropdown = false
-    for i = 1, #codes do
-        if codes[i] ~= "enUS" then
-            showLocaleDropdown = true
-            break
-        end
+        registry:RegisterOptionsTable(addonName, options)
+        self._aceOptionsRegistered = true
     end
 
-    if showLocaleDropdown then
-        local dropdown = ace:Create("Dropdown")
-        dropdown:SetFullWidth(true)
-        dropdown:SetLabel(L.OPTIONS_LANGUAGE or "")
-
-        local list = {}
-        list.auto = (L.OPTIONS_LANGUAGE_AUTO or "") .. " (" .. tostring((GetLocale and GetLocale()) or "enUS") .. ")"
-        for i = 1, #codes do
-            local code = tostring(codes[i])
-            list[code] = self:GetLocaleDisplayName(code)
-        end
-        dropdown:SetList(list)
-
-        local selectedValue = tostring(db.localeOverride or "auto")
-        dropdown:SetValue(selectedValue)
-        dropdown:SetCallback("OnValueChanged", function(_, _, value)
-            Addon:SetLocaleOverride(value)
-        end)
-        container:AddChild(dropdown)
-    end
+    container:SetLayout("Fill")
+    dialog:Open(addonName, container)
 end
 
 local function AceOnGroupSelected(widget, _, group)
@@ -1020,8 +1022,6 @@ local function AceOnGroupSelected(widget, _, group)
 
     if Addon.ApplyTrackingPanelOptions then
         Addon:ApplyTrackingPanelOptions()
-    elseif Addon.UpdateTracking then
-        Addon:UpdateTracking()
     end
 
     if Addon.ApplyScrollLayout then
@@ -1061,8 +1061,6 @@ function Addon:Refresh()
             aceTabGroup:SelectTab("list")
         end
     end
-
-    if self.UpdateTracking then self:UpdateTracking() end
 end
 
 function Addon:CreateFrame()
@@ -1108,7 +1106,7 @@ function Addon:CreateFrame()
     -- Host frame for AceGUI widgets.
     aceHost = CreateFrame("Frame", nil, frame)
 
-    local ace = GetAceGUI()
+    local ace = self:GetAceGUI()
     if not ace then
         -- If AceGUI isn't available for some reason, keep the window closable but avoid errors.
         frame._lariasSelectedTab = 1
