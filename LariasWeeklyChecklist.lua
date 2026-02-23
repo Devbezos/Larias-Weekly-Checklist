@@ -1,5 +1,5 @@
 local addonName = ...
-local Addon = LibStub("AceAddon-3.0"):NewAddon(addonName, "AceEvent-3.0", "AceHook-3.0", "AceConsole-3.0", "AceTimer-3.0", "AceComm-3.0", "AceBucket-3.0")
+local Addon = LibStub("AceAddon-3.0"):NewAddon(addonName, "AceEvent-3.0", "AceConsole-3.0", "AceTimer-3.0", "AceComm-3.0")
 _G[addonName] = Addon
 
 local LOCALE_REGISTRY_KEY = "LARIASWEEKLYCHECKLIST_LOCALE_REGISTRY"
@@ -1002,10 +1002,26 @@ local function AcquireCheckbox(parentSectionFrame)
     if checkbox then
         checkbox:SetParent(parentSectionFrame)
         checkbox:Show()
-        return checkbox
+    else
+        checkbox = CreateFrame("CheckButton", nil, parentSectionFrame, "UICheckButtonTemplate")
     end
 
-    checkbox = CreateFrame("CheckButton", nil, parentSectionFrame, "UICheckButtonTemplate")
+    do
+        local boxSize = 32
+        local function PinTexture(tex)
+            if not tex then return end
+            tex:ClearAllPoints()
+            tex:SetSize(boxSize, boxSize)
+            tex:SetPoint("LEFT", checkbox, "LEFT", 0, 0)
+        end
+
+        PinTexture(checkbox.GetNormalTexture and checkbox:GetNormalTexture())
+        PinTexture(checkbox.GetPushedTexture and checkbox:GetPushedTexture())
+        PinTexture(checkbox.GetHighlightTexture and checkbox:GetHighlightTexture())
+        PinTexture(checkbox.GetCheckedTexture and checkbox:GetCheckedTexture())
+        PinTexture(checkbox.GetDisabledTexture and checkbox:GetDisabledTexture())
+    end
+
     local textLabel = checkbox.text or checkbox.Text
     if textLabel then
         textLabel:SetJustifyH("LEFT")
@@ -1014,6 +1030,7 @@ local function AcquireCheckbox(parentSectionFrame)
             textLabel:SetTextColor(Addon.THEME.text.r, Addon.THEME.text.g, Addon.THEME.text.b, Addon.THEME.text.a)
         end
     end
+
     return checkbox
 end
 local UpdateSectionVisuals
@@ -1423,6 +1440,7 @@ end
 
 function Addon:Refresh()
     if not frame then return end
+    if not IsFrameShown(frame) then return end
 
     if self.ApplyScrollLayout then
         self:ApplyScrollLayout()
