@@ -7,7 +7,7 @@ To add a new language:
 2) Copy Locales\\enUS_Data.lua -> Locales\\<locale>_Data.lua (example: Locales\\deDE_Data.lua)
 3) In both copies, change the locale string ("enUS") to your locale ("deDE")
 4) Translate section titles and item text in the _Data file
-5) Add BOTH files to LariasWeeklyMidnightChecklist.toc AFTER the enUS entries
+5) Add BOTH files to LariasWeeklyChecklist.toc AFTER the enUS entries
 
 Common locale codes: enUS, enGB, frFR, deDE, esES, esMX, itIT, ptBR, ruRU, koKR, zhCN, zhTW
 ]]

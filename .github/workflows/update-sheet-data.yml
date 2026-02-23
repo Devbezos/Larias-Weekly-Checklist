@@ -1,4 +1,4 @@
-name: Update Sheet Data + Upload to CurseForge & Wago
+name: Deploy Stable
 
 on:
   workflow_dispatch:
@@ -40,7 +40,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          TOC="LariasWeeklyMidnightChecklist.toc"
+          TOC="LariasWeeklyChecklist.toc"
 
           python scripts/update_toc_interface.py --toc "$TOC" --count 3
 
@@ -49,8 +49,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          TOC="LariasWeeklyMidnightChecklist.toc"
+          TOC="LariasWeeklyChecklist.toc"
           DATA_FILE="Locales/enUS_Data.lua"
+
+          # Ensure stable releases never keep an ALPHA display name.
+          sed -i "s/^## Title:.*/## Title: Larias's Weekly Checklist/" "$TOC"
 
           # Determine what changed.
           DATA_CHANGED=false
@@ -133,6 +136,7 @@ jobs:
         if: steps.commitstep.outputs.released == 'true'
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
           TAG: ${{ steps.commitstep.outputs.tag }}
           REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -140,11 +144,25 @@ jobs:
           set -euo pipefail
 
           RELEASE_URL="https://github.com/${REPO}/releases/tag/${TAG}"
-          CURSE_URL="https://www.curseforge.com/wow/addons/larias-weekly-midnight-checklist"
+          CF_ID=$(sed -n 's/^curse-project-id:[[:space:]]*//p' .pkgmeta | head -n 1 | tr -d '[:space:]' || true)
+          if [ -z "${CF_ID:-}" ]; then CF_ID=0; fi
+          CURSE_URL=""
+          if [ "${CF_ID}" != "0" ]; then
+            if [ -n "${CF_API_KEY:-}" ]; then
+              SLUG=$(curl -sS -H "x-api-key: ${CF_API_KEY}" "https://api.curseforge.com/v1/mods/${CF_ID}" \
+                | python3 -c "import sys,json; data=json.load(sys.stdin).get('data') or {}; print(data.get('slug',''))" 2>/dev/null || true)
+              if [ -n "${SLUG:-}" ]; then
+                CURSE_URL="https://www.curseforge.com/wow/addons/${SLUG}"
+              fi
+            fi
+            if [ -z "${CURSE_URL:-}" ]; then
+              CURSE_URL="https://www.curseforge.com/wow/search?search=${CF_ID}"
+            fi
+          fi
 
           payload=$(cat <<EOF
           {
-            "content": "🚀 **Larias Weekly Midnight Checklist ${TAG}** is live!\n\n📦 GitHub: ${RELEASE_URL}\n🔥 CurseForge: ${CURSE_URL}\n🛠 Workflow: ${RUN_URL}"
+            "content": "🚀 **Larias's Weekly Checklist ${TAG}** is live!\n\n📦 GitHub: ${RELEASE_URL}${CURSE_URL:+\n🔥 CurseForge: ${CURSE_URL}}\n🛠 Workflow: ${RUN_URL}"
           }
           EOF
           )
