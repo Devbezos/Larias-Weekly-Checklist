@@ -1,12 +1,7 @@
-name: Deploy Alpha
+name: Deploy Alpha Release
 
 on:
   workflow_dispatch:
-    inputs:
-      target_branch:
-        description: "Branch to deploy alpha from (e.g. main, feature/foo)"
-        required: false
-        default: ""
 
 permissions:
   contents: write
@@ -20,17 +15,16 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ inputs.target_branch || github.ref_name }}
 
       - name: Get current version
         id: version
         run: |
           # Extract version from .toc file
-          CURRENT_VERSION=$(grep "^## Version:" LariasWeeklyChecklist.toc | sed 's/## Version: //')
+          CURRENT_VERSION=$(grep "^## Version:" LariasWeeklyMidnightChecklist.toc | sed 's/## Version: //')
           echo "current=$CURRENT_VERSION" >> $GITHUB_OUTPUT
           
           # Get branch name
-          BRANCH_NAME="${{ inputs.target_branch || github.ref_name }}"
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
           echo "branch=$BRANCH_NAME" >> $GITHUB_OUTPUT
 
       - name: Calculate new version
@@ -73,8 +67,8 @@ jobs:
         env:
           ALPHA_VERSION: ${{ steps.newversion.outputs.alpha }}
         run: |
-          sed -i "s/^## Version:.*/## Version: $ALPHA_VERSION/" LariasWeeklyChecklist.toc
-          sed -i "s/^## Title:.*/## Title: Larias's Checklist (ALPHA)/" LariasWeeklyChecklist.toc
+          sed -i "s/^## Version:.*/## Version: $ALPHA_VERSION/" LariasWeeklyMidnightChecklist.toc
+          sed -i "s/^## Title:.*/## Title: Larias Weekly Midnight Checklist (ALPHA)/" LariasWeeklyMidnightChecklist.toc
 
       - name: Commit and tag
         env:
@@ -83,9 +77,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
-          git add LariasWeeklyChecklist.toc
+          git add LariasWeeklyMidnightChecklist.toc
           git commit -m "Alpha release: $ALPHA_VERSION from ${{ steps.version.outputs.branch }}" || true
-          git push origin "HEAD:${{ steps.version.outputs.branch }}" || true
+          git push || true
           
           TAG="v$ALPHA_VERSION"
           git tag -a "$TAG" -m "Alpha Release $ALPHA_VERSION" 2>/dev/null || true
@@ -93,91 +87,16 @@ jobs:
           
           echo "tag=$TAG" >> $GITHUB_ENV
 
-      - name: Check packager config
-        id: pkgmeta
-        shell: bash
-        env:
-          CF_API_KEY: ${{ secrets.CF_API_KEY }}
-          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
-        run: |
-          set -euo pipefail
-
-          if [ ! -f .pkgmeta ]; then
-            echo "cf_enabled=false" >> "$GITHUB_OUTPUT"
-            echo "wago_enabled=false" >> "$GITHUB_OUTPUT"
-            echo "cf_id=0" >> "$GITHUB_OUTPUT"
-            echo ".pkgmeta missing; uploads will be skipped."
-            exit 0
-          fi
-
-          CF_ID=$(sed -n 's/^curse-project-id:[[:space:]]*//p' .pkgmeta | head -n 1 | tr -d '[:space:]' || true)
-          WAGO_ID=$(sed -n 's/^wago-id:[[:space:]]*//p' .pkgmeta | head -n 1 | tr -d '"[:space:]' || true)
-
-          if [ -z "${CF_ID:-}" ]; then CF_ID=0; fi
-          CF_ENABLED=false
-          WAGO_ENABLED=false
-          if [ "${CF_ID}" != "0" ] && [ -n "${CF_API_KEY:-}" ]; then CF_ENABLED=true; fi
-          if [ -n "${WAGO_ID:-}" ] && [ -n "${WAGO_API_TOKEN:-}" ]; then WAGO_ENABLED=true; fi
-
-          echo "CurseForge project id: ${CF_ID}"
-          echo "Wago id: ${WAGO_ID:-<empty>}"
-          echo "CurseForge upload enabled: ${CF_ENABLED}"
-          echo "Wago upload enabled: ${WAGO_ENABLED}"
-
-          echo "cf_enabled=${CF_ENABLED}" >> "$GITHUB_OUTPUT"
-          echo "wago_enabled=${WAGO_ENABLED}" >> "$GITHUB_OUTPUT"
-          echo "cf_id=${CF_ID}" >> "$GITHUB_OUTPUT"
-
       - name: Package + Upload (CurseForge & Wago)
         uses: BigWigsMods/packager@v2.4.3
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
           WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
 
-      - name: Verify CurseForge upload
-        if: steps.pkgmeta.outputs.cf_enabled == 'true'
-        shell: bash
-        env:
-          CF_API_KEY: ${{ secrets.CF_API_KEY }}
-          CF_ID: ${{ steps.pkgmeta.outputs.cf_id }}
-          VER: ${{ steps.newversion.outputs.alpha }}
-        run: |
-          set -euo pipefail
-          echo "Checking CurseForge project ${CF_ID} for version ${VER}"
-
-          # CurseForge file indexing can lag behind the upload step.
-          # Fetch a larger window and retry for a few minutes to avoid false negatives.
-          ATTEMPTS=12
-          PAGE_SIZE=50
-
-          for attempt in $(seq 1 ${ATTEMPTS}); do
-            echo "Attempt ${attempt}/${ATTEMPTS}..."
-
-            JSON=$(curl -sS -H "x-api-key: ${CF_API_KEY}" \
-              "https://api.curseforge.com/v1/mods/${CF_ID}/files?index=0&pageSize=${PAGE_SIZE}" || true)
-
-            FOUND=$(printf '%s' "$JSON" | python3 -c "import json,os,sys; ver=os.environ.get('VER',''); base=ver.replace('-alpha','') if ver else ''; raw=sys.stdin.read(); obj=json.loads(raw) if raw else {}; files=(obj.get('data') or []) if isinstance(obj,dict) else []; defn=lambda f: ((f.get('displayName') or '')+' '+(f.get('fileName') or '')) if isinstance(f,dict) else ''; print('true' if any((isinstance(f,dict) and ((ver and ver in defn(f)) or (base and base in defn(f) and f.get('releaseType')==3))) for f in files) else 'false')" 2>/dev/null || echo false)
-
-            if [ "${FOUND}" = "true" ]; then
-              echo "✅ CurseForge lists a file matching ${VER} (or ${VER%-alpha} as alpha) in the last ${PAGE_SIZE} uploads."
-              exit 0
-            fi
-
-            # Debug output: show the newest few filenames to help diagnose mismatches.
-            printf '%s' "$JSON" | python3 -c "import json,sys; raw=sys.stdin.read(); obj=json.loads(raw) if raw else {}; files=(obj.get('data') or []) if isinstance(obj,dict) else []; [print('- %s (releaseType=%s)' % ((f.get('displayName') or f.get('fileName') or '<no name>'), f.get('releaseType'))) for f in files[:5] if isinstance(f,dict)]" 2>/dev/null || true
-
-            sleep 20
-          done
-
-          echo "❌ Could not find version ${VER} in CurseForge file list after retries." >&2
-          echo "This suggests packager did not upload to CurseForge, indexing is very delayed, or the project/file naming differs." >&2
-          exit 1
-
       - name: Notify Discord (alpha deployed)
         if: success()
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          CF_API_KEY: ${{ secrets.CF_API_KEY }}
           TAG: v${{ steps.newversion.outputs.alpha }}
           REPO: ${{ github.repository }}
           BRANCH: ${{ steps.version.outputs.branch }}
@@ -186,25 +105,11 @@ jobs:
           set -euo pipefail
 
           RELEASE_URL="https://github.com/${REPO}/releases/tag/${TAG}"
-          CF_ID=$(sed -n 's/^curse-project-id:[[:space:]]*//p' .pkgmeta | head -n 1 | tr -d '[:space:]' || true)
-          if [ -z "${CF_ID:-}" ]; then CF_ID=0; fi
-          CURSE_URL=""
-          if [ "${CF_ID}" != "0" ]; then
-            if [ -n "${CF_API_KEY:-}" ]; then
-              SLUG=$(curl -sS -H "x-api-key: ${CF_API_KEY}" "https://api.curseforge.com/v1/mods/${CF_ID}" \
-                | python3 -c "import sys,json; data=json.load(sys.stdin).get('data') or {}; print(data.get('slug',''))" 2>/dev/null || true)
-              if [ -n "${SLUG:-}" ]; then
-                CURSE_URL="https://www.curseforge.com/wow/addons/${SLUG}"
-              fi
-            fi
-            if [ -z "${CURSE_URL:-}" ]; then
-              CURSE_URL="https://www.curseforge.com/wow/search?search=${CF_ID}"
-            fi
-          fi
+          CURSE_URL="https://www.curseforge.com/wow/addons/larias-weekly-midnight-checklist"
 
           payload=$(cat <<EOF
           {
-            "content": "🧪 **Larias's Checklist ${TAG}** (ALPHA from \`${BRANCH}\`) is ready!\n\n📦 GitHub: ${RELEASE_URL}${CURSE_URL:+\n🔥 CurseForge: ${CURSE_URL}}\n🛠 Workflow: ${RUN_URL}"
+            "content": "🧪 **Larias Weekly Midnight Checklist ${TAG}** (ALPHA from \`${BRANCH}\`) is ready!\n\n📦 GitHub: ${RELEASE_URL}\n🔥 CurseForge: ${CURSE_URL}\n🛠 Workflow: ${RUN_URL}"
           }
           EOF
           )
