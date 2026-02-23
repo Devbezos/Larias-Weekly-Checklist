@@ -183,20 +183,43 @@ local min = math.min
 local tinsert, tremove, tconcat = table.insert, table.remove, table.concat
 local CreateFrame = CreateFrame
 
-local COMM_PREFIX = "LWMC"
-local BROADCAST_THROTTLE_SECONDS = 30
-local REPLY_THROTTLE_SECONDS = 5
+Addon._debugRate = Addon._debugRate or {}
+
+function Addon:IsDebugEnabled()
+    return self.db and self.db.profile and self.db.profile.debug and true or false
+end
+
+function Addon:Debugf(rateKey, fmt, ...)
+    if not self:IsDebugEnabled() then return end
+
+    local msg
+    if type(fmt) == "string" then
+        local ok, formatted = pcall(string.format, fmt, ...)
+        msg = ok and formatted or fmt
+    else
+        msg = tostring(fmt)
+    end
+
+    local now = (GetTime and GetTime()) or 0
+    if rateKey then
+        rateKey = tostring(rateKey)
+        local last = tonumber(self._debugRate[rateKey] or 0) or 0
+        if (now - last) < 2.0 then
+            return
+        end
+        self._debugRate[rateKey] = now
+    end
+
+    if self.Print then
+        self:Print("[debug] " .. msg)
+    end
+end
 
 local LOCALIZATION_ADDON_NAME = "LariasWeeklyChecklist_Localization"
 
 -- Session-only locale override set by slash command.
 -- This intentionally does NOT persist across /reload or relog.
 Addon._sessionLocaleOverride = Addon._sessionLocaleOverride
-
--- Throttle timers for version communication
-local broadcastTimerActive = false
-local replyTimerActive = false
-local queryTimerActive = false
 
 -- Set up database with AceDB
 local function SetupAddonDB()
@@ -207,6 +230,7 @@ local function SetupAddonDB()
             hideCompletedSections = true,
             showGreatVault = true,
             showCurrency = true,
+            debug = false,
             localeOverride = "auto",
             collapsedSections = {},
             checked = {},
@@ -269,226 +293,6 @@ local function EnsureMinimapIcon()
     end
 end
 
-local function GetAddonVersion(name)
-    name = name or addonName
-    local versionString
-    if C_AddOns and C_AddOns.GetAddOnMetadata then
-        versionString = C_AddOns.GetAddOnMetadata(name, "Version")
-    elseif GetAddOnMetadata then
-        versionString = GetAddOnMetadata(name, "Version")
-    end
-    versionString = tostring(versionString or "")
-    versionString = versionString:gsub("^%s+", ""):gsub("%s+$", "")
-    return versionString
-end
-
-function Addon:GetMyVersion()
-    if self._myVersion == nil then
-        self._myVersion = GetAddonVersion(addonName)
-    end
-    return self._myVersion or ""
-end
-
-local function IsVersionNewer(versionA, versionB)
-    if versionA == versionB then return false end
-    if versionA == "" then return false end
-    if versionB == "" then return true end
-
-    local iterA = tostring(versionA):gmatch("%d+")
-    local iterB = tostring(versionB):gmatch("%d+")
-    
-    while true do
-        local numA = iterA()
-        local numB = iterB()
-        
-        if not numA and not numB then break end
-        
-        local valA = tonumber(numA) or 0
-        local valB = tonumber(numB) or 0
-        
-        if valA ~= valB then
-            return valA > valB
-        end
-    end
-
-    return versionA > versionB
-end
-
-function Addon:ShouldShowUpdateNotice()
-    local database = self:EnsureDB()
-    local myVersion = self:GetMyVersion()
-    local newestSeenVersion = tostring(database._newestSeenRemoteVersion or "")
-    if newestSeenVersion == "" or myVersion == "" then return false end
-    if not IsVersionNewer(newestSeenVersion, myVersion) then return false end
-    if tostring(database._dismissedRemoteVersion or "") == newestSeenVersion then return false end
-    return true
-end
-
-function Addon:DismissUpdateNotice()
-    local database = self:EnsureDB()
-    database._dismissedRemoteVersion = tostring(database._newestSeenRemoteVersion or "")
-end
-
-function Addon:EnsureUpdatePopup()
-    if self._updatePopupRegistered then return end
-    self._updatePopupRegistered = true
-
-    if not StaticPopupDialogs then return end
-
-    StaticPopupDialogs["LARIASWEEKLYCHECKLIST_UPDATE"] = {
-        text = "%s",
-        button1 = (OKAY or (L.BUTTON_OK or "")),
-        button2 = (CANCEL or (L.BUTTON_CANCEL or "")),
-        OnAccept = function()
-            Addon:DismissUpdateNotice()
-        end,
-        OnCancel = function()
-            -- Keep pending; we'll remind next time they open the list.
-        end,
-        timeout = 0,
-        whileDead = true,
-        hideOnEscape = true,
-        preferredIndex = 3,
-    }
-end
-
-function Addon:ShowUpdatePopupIfNeeded()
-    if not self:ShouldShowUpdateNotice() then return end
-    if self._updatePopupShownThisOpen then return end
-
-    self:EnsureUpdatePopup()
-    if not (StaticPopup_Show and StaticPopupDialogs) then return end
-
-    local displayName = (self.DISPLAY_NAME or (L and L.DISPLAY_NAME) or addonName)
-    local popupText
-    if type(L.UPDATE_AVAILABLE_FMT) == "string" and L.UPDATE_AVAILABLE_FMT ~= "" then
-        popupText = string.format(L.UPDATE_AVAILABLE_FMT, tostring(displayName))
-    else
-        popupText = (L.UPDATE_AVAILABLE_TEXT or L.UPDATE_AVAILABLE_TITLE or "")
-    end
-
-    StaticPopup_Show("LARIASWEEKLYCHECKLIST_UPDATE", popupText)
-    self._updatePopupShownThisOpen = true
-end
-
-local function SafeSendCommMessage(msg, channel)
-    if not channel or channel == "" then return end
-    if Addon and Addon.SendCommMessage then
-        pcall(Addon.SendCommMessage, Addon, COMM_PREFIX, msg, channel)
-    end
-end
-
-local function GetGroupChannel()
-    local instCat = (LE_PARTY_CATEGORY_INSTANCE ~= nil) and LE_PARTY_CATEGORY_INSTANCE or 2
-    if IsInGroup and IsInGroup(instCat) then return "INSTANCE_CHAT" end
-    if IsInRaid and IsInRaid() then return "RAID" end
-    if IsInGroup and IsInGroup() then return "PARTY" end
-    return nil
-end
-
-function Addon:BroadcastVersion(force)
-    -- Use AceTimer to throttle broadcasts
-    if not force then
-        if broadcastTimerActive then
-            return
-        end
-    end
-
-    local myVersion = self:GetMyVersion()
-    if myVersion == "" then return end
-    local payload = "V:" .. myVersion
-
-    local channel = GetGroupChannel()
-    if channel then
-        SafeSendCommMessage(payload, channel)
-    end
-    if IsInGuild and IsInGuild() then
-        SafeSendCommMessage(payload, "GUILD")
-    end
-
-    -- Start throttle timer
-    if not force then
-        broadcastTimerActive = true
-        self:ScheduleTimer(function() broadcastTimerActive = false end, BROADCAST_THROTTLE_SECONDS)
-    end
-end
-
-function Addon:RequestVersions(force)
-    -- Use AceTimer to throttle version requests
-    if not force then
-        if queryTimerActive then
-            return
-        end
-    end
-
-    local channel = GetGroupChannel()
-    if channel then
-        SafeSendCommMessage("Q", channel)
-    end
-    if IsInGuild and IsInGuild() then
-        SafeSendCommMessage("Q", "GUILD")
-    end
-
-    -- Start throttle timer
-    if not force then
-        queryTimerActive = true
-        self:ScheduleTimer(function() queryTimerActive = false end, BROADCAST_THROTTLE_SECONDS)
-    end
-end
-
-function Addon:OnAddonMessage(prefix, message, sender)
-    if prefix ~= COMM_PREFIX then return end
-    if type(message) ~= "string" then return end
-
-    if message == "Q" then
-        -- Use AceTimer-based throttle for replies
-        if replyTimerActive then
-            return
-        end
-        
-        replyTimerActive = true
-        self:ScheduleTimer(function() replyTimerActive = false end, REPLY_THROTTLE_SECONDS)
-        
-        -- Add random jitter (0 to 2 seconds) to prevent synchronized packet bursts
-        local delay = (math.random() * 2.0)
-        self:ScheduleTimer(function() 
-            self:BroadcastVersion(true) 
-        end, delay)
-        return
-    end
-
-    if message:sub(1, 2) ~= "V:" then return end
-
-    local remoteVersion = message:sub(3) or ""
-    remoteVersion = tostring(remoteVersion):gsub("^%s+", ""):gsub("%s+$", "")
-    if remoteVersion == "" then return end
-
-    local myVersion = self:GetMyVersion()
-    if myVersion == "" then return end
-
-    if sender and sender ~= "" and UnitName then
-        local me = UnitName("player")
-        if me and me ~= "" then
-            local senderName = sender
-            if Ambiguate then
-                senderName = Ambiguate(sender, "none")
-            end
-            if senderName == me then
-                return
-            end
-        end
-    end
-
-    if IsVersionNewer(remoteVersion, myVersion) then
-        local database = self:EnsureDB()
-        local newestSeenVersion = tostring(database._newestSeenRemoteVersion or "")
-        if newestSeenVersion == "" or IsVersionNewer(remoteVersion, newestSeenVersion) then
-            database._newestSeenRemoteVersion = remoteVersion
-            database._newestSeenRemoteSender = tostring(sender or "")
-        end
-    end
-end
-
 -- Initialize AceDB and minimap icon on addon load
 function Addon:OnInitialize()
     SetupAddonDB()
@@ -501,8 +305,6 @@ end
 
 -- Handle player login event
 function Addon:OnEnable()
-    Addon._myVersion = GetAddonVersion(addonName)
-    
     -- Register console commands
     self:RegisterConsoleCommands()
 
@@ -513,8 +315,8 @@ function Addon:OnEnable()
         self:RegisterEvent("ADDON_LOADED", "OnAddonLoaded")
     end
     
-    if self.RegisterComm then
-        self:RegisterComm(COMM_PREFIX)
+    if self.CommsOnEnable then
+        self:CommsOnEnable()
     end
 
     -- Re-apply locale after login to handle any late-loaded localization tables.
@@ -525,8 +327,7 @@ function Addon:OnEnable()
         self:ApplyLocaleOverride()
     end
     
-    -- Announce once on login so others can compare
-    Addon:BroadcastVersion(true)
+    -- Version announce happens in CommsOnEnable.
 end
 
 function Addon:OnAddonLoaded(_, loadedName)
@@ -548,10 +349,6 @@ function Addon:OnAddonLoaded(_, loadedName)
             self:Refresh()
         end
     end
-end
-
-function Addon:OnCommReceived(prefix, messageText, _, sender)
-    Addon:OnAddonMessage(prefix, messageText, sender)
 end
 
 local function Wipe(tableToWipe)
@@ -1653,6 +1450,18 @@ function Addon:ToggleCommand(input)
     local cmd, arg = input:match("^(%S+)%s*(.-)%s*$")
     cmd = tostring(cmd or ""):lower()
     arg = tostring(arg or ""):gsub("^%s+", ""):gsub("%s+$", "")
+
+    if cmd == "debug" then
+        local db = self:EnsureDB()
+        local v = arg:lower()
+        if v == "on" or v == "1" or v == "true" then
+            db.debug = true
+        elseif v == "off" or v == "0" or v == "false" then
+            db.debug = false
+        end
+        self:Print(("Debug: %s"):format(db.debug and "ON" or "OFF"))
+        return
+    end
 
     if cmd == "locale" or cmd == "lang" then
         if not self.SetLocaleOverride then

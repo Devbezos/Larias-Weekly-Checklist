@@ -17,6 +17,7 @@ Libs\\Ace3\\AceEvent-3.0\\AceEvent-3.0.lua
 Libs\\Ace3\\AceDB-3.0\\AceDB-3.0.lua
 Libs\\Ace3\\AceConsole-3.0\\AceConsole-3.0.lua
 Libs\\Ace3\\AceTimer-3.0\\AceTimer-3.0.lua
+Libs\\Ace3\\AceSerializer-3.0\\AceSerializer-3.0.lua
 Libs\\Ace3\\AceComm-3.0\\AceComm-3.0.lua
 Libs\\Ace3\\AceBucket-3.0\\AceBucket-3.0.lua
 Libs\\LibDataBroker-1.1\\LibDataBroker-1.1.lua
@@ -26,4 +27,5 @@ Locales\\enUS_Data.lua
 LariasWeeklyChecklist_Constants.lua
 LariasWeeklyChecklist.lua
 LariasWeeklyChecklist_Options.lua
+LariasWeeklyChecklist_Comms.lua
 LariasWeeklyChecklist_Currency.lua
