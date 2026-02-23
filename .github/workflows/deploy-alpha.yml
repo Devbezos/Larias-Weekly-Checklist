@@ -145,22 +145,32 @@ jobs:
           set -euo pipefail
           echo "Checking CurseForge project ${CF_ID} for version ${VER}"
 
-          for attempt in 1 2 3 4 5 6; do
-            echo "Attempt ${attempt}/6..."
-            JSON=$(curl -sS -H "x-api-key: ${CF_API_KEY}" "https://api.curseforge.com/v1/mods/${CF_ID}/files?pageSize=10" || true)
+          # CurseForge file indexing can lag behind the upload step.
+          # Fetch a larger window and retry for a few minutes to avoid false negatives.
+          ATTEMPTS=12
+          PAGE_SIZE=50
 
-            FOUND=$(printf '%s' "$JSON" | python3 -c "import json,os,sys; ver=os.environ.get('VER',''); raw=sys.stdin.read(); obj=json.loads(raw) if raw else {}; files=(obj.get('data') or []) if isinstance(obj,dict) else []; hay=[(f.get('displayName','') or '')+' '+(f.get('fileName','') or '') for f in files if isinstance(f,dict)]; print('true' if (ver and any(ver in s for s in hay)) else 'false')" 2>/dev/null || echo false)
+          for attempt in $(seq 1 ${ATTEMPTS}); do
+            echo "Attempt ${attempt}/${ATTEMPTS}..."
+
+            JSON=$(curl -sS -H "x-api-key: ${CF_API_KEY}" \
+              "https://api.curseforge.com/v1/mods/${CF_ID}/files?index=0&pageSize=${PAGE_SIZE}" || true)
+
+            FOUND=$(printf '%s' "$JSON" | python3 -c "import json,os,sys; ver=os.environ.get('VER',''); base=ver.replace('-alpha','') if ver else ''; raw=sys.stdin.read(); obj=json.loads(raw) if raw else {}; files=(obj.get('data') or []) if isinstance(obj,dict) else []; defn=lambda f: ((f.get('displayName') or '')+' '+(f.get('fileName') or '')) if isinstance(f,dict) else ''; print('true' if any((isinstance(f,dict) and ((ver and ver in defn(f)) or (base and base in defn(f) and f.get('releaseType')==3))) for f in files) else 'false')" 2>/dev/null || echo false)
 
             if [ "${FOUND}" = "true" ]; then
-              echo "✅ CurseForge lists a file containing version ${VER} in the last 10 uploads."
+              echo "✅ CurseForge lists a file matching ${VER} (or ${VER%-alpha} as alpha) in the last ${PAGE_SIZE} uploads."
               exit 0
             fi
+
+            # Debug output: show the newest few filenames to help diagnose mismatches.
+            printf '%s' "$JSON" | python3 -c "import json,sys; raw=sys.stdin.read(); obj=json.loads(raw) if raw else {}; files=(obj.get('data') or []) if isinstance(obj,dict) else []; [print('- %s (releaseType=%s)' % ((f.get('displayName') or f.get('fileName') or '<no name>'), f.get('releaseType'))) for f in files[:5] if isinstance(f,dict)]" 2>/dev/null || true
 
             sleep 20
           done
 
           echo "❌ Could not find version ${VER} in CurseForge file list after retries." >&2
-          echo "This suggests packager did not upload to CurseForge (or the project/file naming differs)." >&2
+          echo "This suggests packager did not upload to CurseForge, indexing is very delayed, or the project/file naming differs." >&2
           exit 1
 
       - name: Notify Discord (alpha deployed)
