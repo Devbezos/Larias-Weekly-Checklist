@@ -1,5 +1,5 @@
 local addonName = ...
-local Addon = LibStub("AceAddon-3.0"):NewAddon(addonName, "AceEvent-3.0", "AceHook-3.0", "AceConsole-3.0", "AceTimer-3.0", "AceComm-3.0")
+local Addon = LibStub("AceAddon-3.0"):NewAddon(addonName, "AceEvent-3.0", "AceHook-3.0", "AceConsole-3.0", "AceTimer-3.0", "AceComm-3.0", "AceBucket-3.0")
 _G[addonName] = Addon
 
 local AceLocale = LibStub and LibStub("AceLocale-3.0", true)
@@ -148,6 +148,7 @@ local tinsert, tremove, tconcat = table.insert, table.remove, table.concat
 local CreateFrame = CreateFrame
 
 local COMM_PREFIX = "LWMC"
+
 local BROADCAST_THROTTLE_SECONDS = 30
 local REPLY_THROTTLE_SECONDS = 5
 
@@ -337,7 +338,7 @@ local function GetGroupChannel()
 end
 
 function Addon:BroadcastVersion(force)
-    -- Use AceTimer to throttle broadcasts
+    -- Send immediately, then suppress for the throttle window.
     if not force then
         if broadcastTimerActive then
             return
@@ -356,7 +357,6 @@ function Addon:BroadcastVersion(force)
         self:SendCommMessage(COMM_PREFIX, payload, "GUILD", nil, "ALERT")
     end
 
-    -- Start throttle timer
     if not force then
         broadcastTimerActive = true
         self:ScheduleTimer(function() broadcastTimerActive = false end, BROADCAST_THROTTLE_SECONDS)
@@ -364,7 +364,7 @@ function Addon:BroadcastVersion(force)
 end
 
 function Addon:RequestVersions(force)
-    -- Use AceTimer to throttle version requests
+    -- Send immediately, then suppress for the throttle window.
     if not force then
         if queryTimerActive then
             return
@@ -379,7 +379,6 @@ function Addon:RequestVersions(force)
         self:SendCommMessage(COMM_PREFIX, "Q", "GUILD", nil, "ALERT")
     end
 
-    -- Start throttle timer
     if not force then
         queryTimerActive = true
         self:ScheduleTimer(function() queryTimerActive = false end, BROADCAST_THROTTLE_SECONDS)
@@ -391,18 +390,17 @@ function Addon:OnAddonMessage(prefix, message, sender)
     if type(message) ~= "string" then return end
 
     if message == "Q" then
-        -- Use AceTimer-based throttle for replies
         if replyTimerActive then
             return
         end
-        
+
         replyTimerActive = true
         self:ScheduleTimer(function() replyTimerActive = false end, REPLY_THROTTLE_SECONDS)
-        
-        -- Add random jitter (0 to 2 seconds) to prevent synchronized packet bursts
+
+        -- Add random jitter (0 to 2 seconds) to prevent synchronized packet bursts.
         local delay = (math.random() * 2.0)
-        self:ScheduleTimer(function() 
-            self:BroadcastVersion(true) 
+        self:ScheduleTimer(function()
+            self:BroadcastVersion(true)
         end, delay)
         return
     end
@@ -833,7 +831,9 @@ function Addon:RequestRefresh()
         end
     end
 
-    if C_Timer and C_Timer.After then
+    if self.ScheduleTimer then
+        self:ScheduleTimer(Run, 0)
+    elseif C_Timer and C_Timer.After then
         C_Timer.After(0, Run)
     else
         Run()

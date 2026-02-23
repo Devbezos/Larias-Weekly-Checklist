@@ -56,3 +56,4 @@ Set("TAB_LIST", "List")
 Set("TAB_OPTIONS", "Options")
 
 Set("SLASH_USAGE_TOGGLE", "Usage: /larias or /lcl to toggle the checklist")
+

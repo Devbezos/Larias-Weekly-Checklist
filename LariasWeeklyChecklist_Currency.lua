@@ -8,7 +8,24 @@ end
 
 local L = Addon.L or {}
 
-local trackingEventFrame
+local TRACKING_BUCKET_INTERVAL_SECONDS = 0.2
+
+local _eventProbeFrame
+local function CanRegisterEvent(eventName)
+    if not (CreateFrame and eventName) then return false end
+    _eventProbeFrame = _eventProbeFrame or CreateFrame("Frame")
+    local ok = pcall(_eventProbeFrame.RegisterEvent, _eventProbeFrame, eventName)
+    if ok and _eventProbeFrame.UnregisterEvent then
+        _eventProbeFrame:UnregisterEvent(eventName)
+    end
+    return ok and true or false
+end
+
+local function AddEvent(events, eventName)
+    if CanRegisterEvent(eventName) then
+        events[#events + 1] = eventName
+    end
+end
 
 local tonumber, tostring, type = tonumber, tostring, type
 local floor, max, abs = math.floor, math.max, math.abs
@@ -45,74 +62,58 @@ local function GetActiveTrackingProfile()
     return tww or tracking
 end
 
-local function SafeRegisterEvent(frame, eventName)
-    if not (frame and eventName) then return false end
-    local ok = pcall(frame.RegisterEvent, frame, eventName)
-    return ok and true or false
-end
-
 function Addon:ConfigureTrackingEvents(parentFrame, showGreatVault, showCurrency)
-    trackingEventFrame = trackingEventFrame or CreateFrame("Frame")
-    trackingEventFrame:UnregisterAllEvents()
+    -- `parentFrame` is the actual UI frame; we only want to refresh while it's visible.
+    self._trackingParentFrame = parentFrame
+
+    if self.UnregisterBucket and self._trackingBucketHandle then
+        self:UnregisterBucket(self._trackingBucketHandle)
+        self._trackingBucketHandle = nil
+    end
 
     local shouldListen = (showGreatVault or showCurrency) and true or false
     if not shouldListen then return end
 
-    -- Only respond while the UI is visible.
-    trackingEventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+    if not self.RegisterBucketEvent then return end
+
+    local events = {
+        -- Baseline refresh trigger.
+        "PLAYER_ENTERING_WORLD",
+    }
 
     if showGreatVault then
-        trackingEventFrame:RegisterEvent("WEEKLY_REWARDS_UPDATE")
-        trackingEventFrame:RegisterEvent("ITEM_DATA_LOAD_RESULT")
+        events[#events + 1] = "WEEKLY_REWARDS_UPDATE"
+        events[#events + 1] = "ITEM_DATA_LOAD_RESULT"
     end
 
     if showCurrency then
-        trackingEventFrame:RegisterEvent("CURRENCY_DISPLAY_UPDATE")
-        trackingEventFrame:RegisterEvent("BAG_UPDATE_DELAYED")
-        trackingEventFrame:RegisterEvent("QUEST_TURNED_IN")
-        SafeRegisterEvent(trackingEventFrame, "QUEST_LOG_UPDATE")
-        SafeRegisterEvent(trackingEventFrame, "CATALYST_CHARGES_UPDATED")
-        SafeRegisterEvent(trackingEventFrame, "CATALYST_UPDATE")
-        SafeRegisterEvent(trackingEventFrame, "ITEM_INTERACTION_ITEM_SELECTION_UPDATED")
-        trackingEventFrame:RegisterEvent("ITEM_DATA_LOAD_RESULT")
+        events[#events + 1] = "CURRENCY_DISPLAY_UPDATE"
+        events[#events + 1] = "BAG_UPDATE_DELAYED"
+        events[#events + 1] = "QUEST_TURNED_IN"
+        AddEvent(events, "QUEST_LOG_UPDATE")
+        AddEvent(events, "CATALYST_CHARGES_UPDATED")
+        AddEvent(events, "CATALYST_UPDATE")
+        AddEvent(events, "ITEM_INTERACTION_ITEM_SELECTION_UPDATED")
+        events[#events + 1] = "ITEM_DATA_LOAD_RESULT"
     end
 
-    if not trackingEventFrame._lariasOnEventSet then
-        trackingEventFrame._lariasOnEventSet = true
-        trackingEventFrame:SetScript("OnEvent", function()
-            local isMainFrameVisible = parentFrame and parentFrame.IsShown and parentFrame:IsShown()
-            local main = _G and _G["LariasWeeklyChecklistFrame"]
-            local selectedTab = main and tonumber(main._lariasSelectedTab)
-            local isOnListTab = (selectedTab == nil) or (selectedTab == 1)
-            if isMainFrameVisible and isOnListTab then
-                Addon:RequestTrackingUpdate()
-            end
-        end)
-    end
+    self._trackingBucketHandle = self:RegisterBucketEvent(events, TRACKING_BUCKET_INTERVAL_SECONDS, "OnTrackingBucketFired")
 end
 
-function Addon:RequestTrackingUpdate()
-    if self._trackingUpdatePending then return end
-    self._trackingUpdatePending = true
+function Addon:OnTrackingBucketFired(_received)
+    local parentFrame = self._trackingParentFrame
+    local isMainFrameVisible = parentFrame and parentFrame.IsShown and parentFrame:IsShown()
+    if not isMainFrameVisible then return end
 
-    if not self._trackingUpdateRunner then
-        local addon = self
-        self._trackingUpdateRunner = function()
-            addon._trackingUpdatePending = nil
-            if addon.RequestRefresh then
-                addon:RequestRefresh()
-            elseif addon.Refresh then
-                addon:Refresh()
-            end
-        end
-    end
+    local main = _G and _G["LariasWeeklyChecklistFrame"]
+    local selectedTab = main and tonumber(main._lariasSelectedTab)
+    local isOnListTab = (selectedTab == nil) or (selectedTab == 1)
+    if not isOnListTab then return end
 
-    -- Throttle updates to run at most once every 0.2 seconds to prevent spam
-    -- from rapid events like bag updates or currency changes.
-    if C_Timer and C_Timer.After then
-        C_Timer.After(0.2, self._trackingUpdateRunner)
-    else
-        self._trackingUpdateRunner()
+    if self.RequestRefresh then
+        self:RequestRefresh()
+    elseif self.Refresh then
+        self:Refresh()
     end
 end
 
@@ -1055,8 +1056,9 @@ function Addon:ApplyTrackingPanelOptions()
     if not main then return end
 
     if not IsMainFrameOnListTab() then
-        if trackingEventFrame then
-            trackingEventFrame:UnregisterAllEvents()
+        if self.UnregisterBucket and self._trackingBucketHandle then
+            self:UnregisterBucket(self._trackingBucketHandle)
+            self._trackingBucketHandle = nil
         end
         return
     end
