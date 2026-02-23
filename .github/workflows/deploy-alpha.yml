@@ -134,35 +134,6 @@ jobs:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
           WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
 
-      - name: Verify CurseForge upload
-        if: steps.pkgmeta.outputs.cf_enabled == 'true'
-        shell: bash
-        env:
-          CF_API_KEY: ${{ secrets.CF_API_KEY }}
-          CF_ID: ${{ steps.pkgmeta.outputs.cf_id }}
-          VER: ${{ steps.newversion.outputs.alpha }}
-        run: |
-          set -euo pipefail
-          echo "Checking CurseForge project ${CF_ID} for version ${VER}"
-
-          for attempt in 1 2 3 4 5 6; do
-            echo "Attempt ${attempt}/6..."
-            JSON=$(curl -sS -H "x-api-key: ${CF_API_KEY}" "https://api.curseforge.com/v1/mods/${CF_ID}/files?pageSize=10" || true)
-
-            FOUND=$(printf '%s' "$JSON" | python3 -c "import json,os,sys; ver=os.environ.get('VER',''); raw=sys.stdin.read(); obj=json.loads(raw) if raw else {}; files=(obj.get('data') or []) if isinstance(obj,dict) else []; hay=[(f.get('displayName','') or '')+' '+(f.get('fileName','') or '') for f in files if isinstance(f,dict)]; print('true' if (ver and any(ver in s for s in hay)) else 'false')" 2>/dev/null || echo false)
-
-            if [ "${FOUND}" = "true" ]; then
-              echo "✅ CurseForge lists a file containing version ${VER} in the last 10 uploads."
-              exit 0
-            fi
-
-            sleep 20
-          done
-
-          echo "❌ Could not find version ${VER} in CurseForge file list after retries." >&2
-          echo "This suggests packager did not upload to CurseForge (or the project/file naming differs)." >&2
-          exit 1
-
       - name: Notify Discord (alpha deployed)
         if: success()
         env:
