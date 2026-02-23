@@ -93,16 +93,81 @@ jobs:
           
           echo "tag=$TAG" >> $GITHUB_ENV
 
+      - name: Check packager config
+        id: pkgmeta
+        shell: bash
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [ ! -f .pkgmeta ]; then
+            echo "cf_enabled=false" >> "$GITHUB_OUTPUT"
+            echo "wago_enabled=false" >> "$GITHUB_OUTPUT"
+            echo "cf_id=0" >> "$GITHUB_OUTPUT"
+            echo ".pkgmeta missing; uploads will be skipped."
+            exit 0
+          fi
+
+          CF_ID=$(sed -n 's/^curse-project-id:[[:space:]]*//p' .pkgmeta | head -n 1 | tr -d '[:space:]' || true)
+          WAGO_ID=$(sed -n 's/^wago-id:[[:space:]]*//p' .pkgmeta | head -n 1 | tr -d '"[:space:]' || true)
+
+          if [ -z "${CF_ID:-}" ]; then CF_ID=0; fi
+          CF_ENABLED=false
+          WAGO_ENABLED=false
+          if [ "${CF_ID}" != "0" ] && [ -n "${CF_API_KEY:-}" ]; then CF_ENABLED=true; fi
+          if [ -n "${WAGO_ID:-}" ] && [ -n "${WAGO_API_TOKEN:-}" ]; then WAGO_ENABLED=true; fi
+
+          echo "CurseForge project id: ${CF_ID}"
+          echo "Wago id: ${WAGO_ID:-<empty>}"
+          echo "CurseForge upload enabled: ${CF_ENABLED}"
+          echo "Wago upload enabled: ${WAGO_ENABLED}"
+
+          echo "cf_enabled=${CF_ENABLED}" >> "$GITHUB_OUTPUT"
+          echo "wago_enabled=${WAGO_ENABLED}" >> "$GITHUB_OUTPUT"
+          echo "cf_id=${CF_ID}" >> "$GITHUB_OUTPUT"
+
       - name: Package + Upload (CurseForge & Wago)
         uses: BigWigsMods/packager@v2.4.3
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
           WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
 
+      - name: Verify CurseForge upload
+        if: steps.pkgmeta.outputs.cf_enabled == 'true'
+        shell: bash
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          CF_ID: ${{ steps.pkgmeta.outputs.cf_id }}
+          VER: ${{ steps.newversion.outputs.alpha }}
+        run: |
+          set -euo pipefail
+          echo "Checking CurseForge project ${CF_ID} for version ${VER}"
+
+          for attempt in 1 2 3 4 5 6; do
+            echo "Attempt ${attempt}/6..."
+            JSON=$(curl -sS -H "x-api-key: ${CF_API_KEY}" "https://api.curseforge.com/v1/mods/${CF_ID}/files?pageSize=10" || true)
+
+            FOUND=$(printf '%s' "$JSON" | python3 -c "import json,os,sys; ver=os.environ.get('VER',''); raw=sys.stdin.read(); obj=json.loads(raw) if raw else {}; files=(obj.get('data') or []) if isinstance(obj,dict) else []; hay=[(f.get('displayName','') or '')+' '+(f.get('fileName','') or '') for f in files if isinstance(f,dict)]; print('true' if (ver and any(ver in s for s in hay)) else 'false')" 2>/dev/null || echo false)
+
+            if [ "${FOUND}" = "true" ]; then
+              echo "✅ CurseForge lists a file containing version ${VER} in the last 10 uploads."
+              exit 0
+            fi
+
+            sleep 20
+          done
+
+          echo "❌ Could not find version ${VER} in CurseForge file list after retries." >&2
+          echo "This suggests packager did not upload to CurseForge (or the project/file naming differs)." >&2
+          exit 1
+
       - name: Notify Discord (alpha deployed)
         if: success()
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
           TAG: v${{ steps.newversion.outputs.alpha }}
           REPO: ${{ github.repository }}
           BRANCH: ${{ steps.version.outputs.branch }}
@@ -111,11 +176,25 @@ jobs:
           set -euo pipefail
 
           RELEASE_URL="https://github.com/${REPO}/releases/tag/${TAG}"
-          CURSE_URL="https://www.curseforge.com/wow/addons/larias-weekly-midnight-checklist"
+          CF_ID=$(sed -n 's/^curse-project-id:[[:space:]]*//p' .pkgmeta | head -n 1 | tr -d '[:space:]' || true)
+          if [ -z "${CF_ID:-}" ]; then CF_ID=0; fi
+          CURSE_URL=""
+          if [ "${CF_ID}" != "0" ]; then
+            if [ -n "${CF_API_KEY:-}" ]; then
+              SLUG=$(curl -sS -H "x-api-key: ${CF_API_KEY}" "https://api.curseforge.com/v1/mods/${CF_ID}" \
+                | python3 -c "import sys,json; data=json.load(sys.stdin).get('data') or {}; print(data.get('slug',''))" 2>/dev/null || true)
+              if [ -n "${SLUG:-}" ]; then
+                CURSE_URL="https://www.curseforge.com/wow/addons/${SLUG}"
+              fi
+            fi
+            if [ -z "${CURSE_URL:-}" ]; then
+              CURSE_URL="https://www.curseforge.com/wow/search?search=${CF_ID}"
+            fi
+          fi
 
           payload=$(cat <<EOF
           {
-            "content": "🧪 **Larias's Checklist ${TAG}** (ALPHA from \`${BRANCH}\`) is ready!\n\n📦 GitHub: ${RELEASE_URL}\n🔥 CurseForge: ${CURSE_URL}\n🛠 Workflow: ${RUN_URL}"
+            "content": "🧪 **Larias's Checklist ${TAG}** (ALPHA from \`${BRANCH}\`) is ready!\n\n📦 GitHub: ${RELEASE_URL}${CURSE_URL:+\n🔥 CurseForge: ${CURSE_URL}}\n🛠 Workflow: ${RUN_URL}"
           }
           EOF
           )
