@@ -1,14 +1,7 @@
-local LOCALE_REGISTRY_KEY = "LARIASWEEKLYCHECKLIST_LOCALE_REGISTRY"
-
-local reg = _G[LOCALE_REGISTRY_KEY]
-if type(reg) ~= "table" then
-	reg = {}
-	_G[LOCALE_REGISTRY_KEY] = reg
-end
-if type(reg.strings) ~= "table" then reg.strings = {} end
-
-reg.strings["enUS"] = reg.strings["enUS"] or {}
-local L = reg.strings["enUS"]
+local addonName = ...
+local AceLocale = LibStub("AceLocale-3.0")
+local L = AceLocale:NewLocale(addonName, "enUS", true)
+if not L then return end
 
 local function Set(key, value)
 	L[key] = value
@@ -30,9 +23,6 @@ Set("HIDE_COMPLETED_WEEKS", "Hide completed weeks")
 Set("OPTIONS_BUTTON", "Options")
 Set("RESET_BUTTON", "Reset")
 Set("DONE_PREFIX", "[Done] ")
-
-Set("OPTIONS_LANGUAGE", "Language")
-Set("OPTIONS_LANGUAGE_AUTO", "Auto")
 
 Set("TRACKING_GREAT_VAULT_TITLE", "Great Vault")
 Set("TRACKING_CURRENCY_TITLE", "Currency")
@@ -66,8 +56,3 @@ Set("TAB_LIST", "List")
 Set("TAB_OPTIONS", "Options")
 
 Set("SLASH_USAGE_TOGGLE", "Usage: /larias or /lcl to toggle the checklist")
-
-Set("LOCALE_NAME_ENUS", "English")
-Set("LOCALE_NAME_FRFR", "French")
-Set("LOCALE_NAME_ESES", "Spanish (ES)")
-Set("LOCALE_NAME_ESMX", "Spanish (MX)")

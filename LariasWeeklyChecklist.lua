@@ -1,37 +1,10 @@
 local addonName = ...
-local Addon = LibStub("AceAddon-3.0"):NewAddon(addonName, "AceEvent-3.0", "AceHook-3.0", "AceConsole-3.0", "AceTimer-3.0")
+local Addon = LibStub("AceAddon-3.0"):NewAddon(addonName, "AceEvent-3.0", "AceHook-3.0", "AceConsole-3.0", "AceTimer-3.0", "AceComm-3.0")
 _G[addonName] = Addon
 
-local LOCALE_REGISTRY_KEY = "LARIASWEEKLYCHECKLIST_LOCALE_REGISTRY"
-
-local function GetLocaleRegistry()
-    local reg = _G[LOCALE_REGISTRY_KEY]
-    if type(reg) ~= "table" then
-        reg = {}
-        _G[LOCALE_REGISTRY_KEY] = reg
-    end
-    if type(reg.strings) ~= "table" then reg.strings = {} end
-    if type(reg.data) ~= "table" then reg.data = {} end
-    return reg
-end
-
-Addon.L = Addon.L or {}
-local L = Addon.L
-
-do
-    local reg = GetLocaleRegistry()
-    Addon.LOCALES = reg.strings
-    Addon.LIST_DATA = reg.data
-
-    -- Seed `Addon.L` with enUS immediately so early UI (and things like
-    -- CreateFrame called before DB init) never needs hardcoded English fallbacks.
-    local seed = reg.strings and reg.strings.enUS
-    if type(seed) == "table" then
-        for k, v in pairs(seed) do
-            Addon.L[k] = v
-        end
-    end
-end
+local AceLocale = LibStub and LibStub("AceLocale-3.0", true)
+local L = (AceLocale and AceLocale:GetLocale(addonName, true)) or {}
+Addon.L = L
 
 -- Initialize all constants on the new Addon object
 do
@@ -192,7 +165,6 @@ local function SetupAddonDB()
             hideCompletedSections = true,
             showGreatVault = true,
             showCurrency = true,
-            localeOverride = "auto",
             collapsedSections = {},
             checked = {},
         },
@@ -344,7 +316,7 @@ function Addon:ShowUpdatePopupIfNeeded()
     self:EnsureUpdatePopup()
     if not (StaticPopup_Show and StaticPopupDialogs) then return end
 
-    local displayName = (self.DISPLAY_NAME or (L and L.DISPLAY_NAME) or addonName)
+    local displayName = ((L and L.DISPLAY_NAME) or self.DISPLAY_NAME or addonName)
     local popupText
     if type(L.UPDATE_AVAILABLE_FMT) == "string" and L.UPDATE_AVAILABLE_FMT ~= "" then
         popupText = string.format(L.UPDATE_AVAILABLE_FMT, tostring(displayName))
@@ -354,25 +326,6 @@ function Addon:ShowUpdatePopupIfNeeded()
 
     StaticPopup_Show("LARIASWEEKLYCHECKLIST_UPDATE", popupText)
     self._updatePopupShownThisOpen = true
-end
-
-local function SafeRegisterPrefix(prefix)
-    if C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix then
-        pcall(C_ChatInfo.RegisterAddonMessagePrefix, prefix)
-    elseif RegisterAddonMessagePrefix then
-        pcall(RegisterAddonMessagePrefix, prefix)
-    end
-end
-
-local function SafeSendAddonMessage(prefix, msg, channel)
-    if not channel or channel == "" then return end
-    if C_ChatInfo and C_ChatInfo.SendAddonMessage then
-        pcall(C_ChatInfo.SendAddonMessage, prefix, msg, channel)
-        return
-    end
-    if SendAddonMessage then
-        pcall(SendAddonMessage, prefix, msg, channel)
-    end
 end
 
 local function GetGroupChannel()
@@ -397,10 +350,10 @@ function Addon:BroadcastVersion(force)
 
     local channel = GetGroupChannel()
     if channel then
-        SafeSendAddonMessage(COMM_PREFIX, payload, channel)
+        self:SendCommMessage(COMM_PREFIX, payload, channel, nil, "ALERT")
     end
     if IsInGuild and IsInGuild() then
-        SafeSendAddonMessage(COMM_PREFIX, payload, "GUILD")
+        self:SendCommMessage(COMM_PREFIX, payload, "GUILD", nil, "ALERT")
     end
 
     -- Start throttle timer
@@ -420,10 +373,10 @@ function Addon:RequestVersions(force)
 
     local channel = GetGroupChannel()
     if channel then
-        SafeSendAddonMessage(COMM_PREFIX, "Q", channel)
+        self:SendCommMessage(COMM_PREFIX, "Q", channel, nil, "ALERT")
     end
     if IsInGuild and IsInGuild() then
-        SafeSendAddonMessage(COMM_PREFIX, "Q", "GUILD")
+        self:SendCommMessage(COMM_PREFIX, "Q", "GUILD", nil, "ALERT")
     end
 
     -- Start throttle timer
@@ -486,34 +439,36 @@ function Addon:OnAddonMessage(prefix, message, sender)
     end
 end
 
+function Addon:OnCommReceived(prefix, message, distribution, sender)
+    -- `distribution` is not currently used, but is provided by AceComm.
+    self:OnAddonMessage(prefix, message, sender)
+end
+
 -- Initialize AceDB and minimap icon on addon load
 function Addon:OnInitialize()
     SetupAddonDB()
-    if self.ApplyLocaleOverride then
-        self:ApplyLocaleOverride()
-    end
     EnsureMinimapIcon()
     SetupMinimapIcon()
 end
 
 -- Handle player login event
 function Addon:OnEnable()
-    SafeRegisterPrefix(COMM_PREFIX)
+    self:RegisterComm(COMM_PREFIX)
     Addon._myVersion = GetAddonVersion(addonName)
+
+    if type(L.DISPLAY_NAME) == "string" and L.DISPLAY_NAME ~= "" then
+        self.DISPLAY_NAME = L.DISPLAY_NAME
+        if self.CONSTANTS and self.CONSTANTS.names then
+            self.CONSTANTS.names.displayName = L.DISPLAY_NAME
+        end
+    end
     
     -- Register console commands
     self:RegisterConsoleCommands()
     
     -- Register events using AceEvent
-    self:RegisterEvent("CHAT_MSG_ADDON")
-    
     -- Announce once on login so others can compare
     Addon:BroadcastVersion(true)
-end
-
--- Handle chat message addon event
-function Addon:CHAT_MSG_ADDON(_, prefix, messageText, _, _, sender)
-    Addon:OnAddonMessage(prefix, messageText, sender)
 end
 
 local function Wipe(tableToWipe)
@@ -539,132 +494,6 @@ function Addon:EnsureDB()
         SetupAddonDB()
     end
     return self.db.profile
-end
-
-local function WipeTableInPlace(t)
-    if type(t) ~= "table" then return end
-    for k in pairs(t) do
-        t[k] = nil
-    end
-end
-
-local LOCALE_NAME_KEYS = {
-    enUS = "LOCALE_NAME_ENUS",
-    frFR = "LOCALE_NAME_FRFR",
-    esES = "LOCALE_NAME_ESES",
-    esMX = "LOCALE_NAME_ESMX",
-}
-
-function Addon:GetSupportedLocaleCodes()
-    local reg = GetLocaleRegistry()
-    local data = reg and reg.data
-
-    local out = {}
-    local seen = {}
-
-    if type(data) == "table" then
-        for code, dataset in pairs(data) do
-            if type(code) == "string" and type(dataset) == "table" then
-                out[#out + 1] = code
-                seen[code] = true
-            end
-        end
-    end
-
-    if not seen.enUS then
-        out[#out + 1] = "enUS"
-    end
-
-    table.sort(out, function(a, b)
-        if a == b then return false end
-        if a == "enUS" then return true end
-        if b == "enUS" then return false end
-        return tostring(a) < tostring(b)
-    end)
-
-    return out
-end
-
-function Addon:GetLocaleDisplayName(code)
-    code = tostring(code or "")
-    local key = LOCALE_NAME_KEYS[code]
-    local pretty = (key and L[key]) or code
-    return ("%s (%s)"):format(pretty, code)
-end
-
-function Addon:GetEffectiveLocaleCode()
-    local db = self:EnsureDB()
-    local override = tostring(db.localeOverride or "auto")
-
-    local code
-    if override ~= "auto" and override ~= "" then
-        code = override
-    else
-        code = (GetLocale and GetLocale()) or "enUS"
-    end
-
-    local reg = GetLocaleRegistry()
-    if reg and type(reg.data) == "table" and type(reg.data[code]) == "table" then
-        return code
-    end
-    return "enUS"
-end
-
-function Addon:ApplyLocaleOverride()
-    local db = self:EnsureDB()
-    if db.localeOverride == nil or db.localeOverride == "" then
-        db.localeOverride = "auto"
-    end
-
-    local reg = GetLocaleRegistry()
-    local strings = reg and reg.strings
-    if type(strings) ~= "table" then strings = {} end
-
-    local selected = self:GetEffectiveLocaleCode()
-
-    WipeTableInPlace(self.L)
-
-    local fallback = strings.enUS
-    if type(fallback) == "table" then
-        for k, v in pairs(fallback) do
-            self.L[k] = v
-        end
-    end
-
-    local overlay = strings[selected]
-    if type(overlay) == "table" then
-        for k, v in pairs(overlay) do
-            self.L[k] = v
-        end
-    end
-
-    if self.L and self.L.DISPLAY_NAME then
-        self.DISPLAY_NAME = self.L.DISPLAY_NAME
-    end
-
-    if self.UpdateLocalizedUI then
-        self:UpdateLocalizedUI()
-    end
-end
-
-function Addon:SetLocaleOverride(value)
-    local db = self:EnsureDB()
-    value = tostring(value or "auto")
-    if value == "" then value = "auto" end
-
-    db.localeOverride = value
-
-    self:ApplyLocaleOverride()
-    self._cachedListLocaleCode = nil
-    self._cachedListData = nil
-
-    if frame and frame.IsShown and frame:IsShown() then
-        if self.RequestRefresh then
-            self:RequestRefresh()
-        elseif self.Refresh then
-            self:Refresh()
-        end
-    end
 end
 
 function Addon:OpenOptions()
@@ -713,30 +542,11 @@ function Addon:SelectMainTab(tabId)
 end
 
 function Addon:GetListData()
-    local reg = GetLocaleRegistry()
-    local dataByLocale = reg and reg.data
-    if type(dataByLocale) ~= "table" then return {} end
-
-    local localeCode = self:GetEffectiveLocaleCode()
-
-    if self._cachedListLocaleCode == localeCode and type(self._cachedListData) == "table" then
-        return self._cachedListData
-    end
-
-    local data = dataByLocale[localeCode]
+    local key = self._LIST_DATA_KEY or (addonName .. "_LIST_DATA")
+    local data = _G and _G[key]
     if type(data) == "table" then
-        self._cachedListLocaleCode = localeCode
-        self._cachedListData = data
         return data
     end
-
-    data = dataByLocale.enUS
-    if type(data) == "table" then
-        self._cachedListLocaleCode = "enUS"
-        self._cachedListData = data
-        return data
-    end
-
     return {}
 end
 
@@ -911,23 +721,9 @@ function Addon:_AceRenderOptions(container)
     if not (dialog and registry) then return end
 
     if not self._aceOptionsRegistered then
-        local function HasOtherLocales()
-            local codes = Addon.GetSupportedLocaleCodes and Addon:GetSupportedLocaleCodes() or {}
-            for i = 1, #codes do
-                if codes[i] ~= "enUS" then return true end
-            end
-            return false
-        end
-
-        local function LocaleValues()
-            local codes = Addon.GetSupportedLocaleCodes and Addon:GetSupportedLocaleCodes() or {}
-            local list = {}
-            list.auto = (L.OPTIONS_LANGUAGE_AUTO or "") .. " (" .. tostring((GetLocale and GetLocale()) or "enUS") .. ")"
-            for i = 1, #codes do
-                local code = tostring(codes[i])
-                list[code] = Addon:GetLocaleDisplayName(code)
-            end
-            return list
+        -- Ensure the AceDB object exists for AceDBOptions (profiles UI).
+        if not Addon.db then
+            Addon:EnsureDB()
         end
 
         local options = {
@@ -985,21 +781,17 @@ function Addon:_AceRenderOptions(container)
                         Addon:RequestRefresh()
                     end,
                 },
-                language = {
-                    type = "select",
-                    name = L.OPTIONS_LANGUAGE or "",
-                    order = 50,
-                    values = LocaleValues,
-                    hidden = function() return not HasOtherLocales() end,
-                    get = function()
-                        return tostring((Addon:EnsureDB().localeOverride) or "auto")
-                    end,
-                    set = function(_, val)
-                        Addon:SetLocaleOverride(val)
-                    end,
-                },
             },
         }
+
+        local dbOptions = LibStub and LibStub("AceDBOptions-3.0", true)
+        if dbOptions and Addon.db then
+            local profiles = dbOptions:GetOptionsTable(Addon.db)
+            if type(profiles) == "table" then
+                profiles.order = 100
+                options.args.profiles = profiles
+            end
+        end
 
         registry:RegisterOptionsTable(addonName, options)
         self._aceOptionsRegistered = true

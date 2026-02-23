@@ -5,7 +5,6 @@
 ## Version: 1.0.16.7-alpha
 ## SavedVariablesPerCharacter: LariasWeeklyChecklistDBPC
 ## SavedVariables: LariasWeeklyChecklistDB
-## OptionalDeps: LariasWeeklyChecklist_Localization
 ## X-Wago-ID: mKOD5RGx
 ## X-Curse-Project-ID: 1448023
 
@@ -18,6 +17,8 @@ Libs\\Ace3\\AceHook-3.0\\AceHook-3.0.lua
 Libs\\Ace3\\AceDB-3.0\\AceDB-3.0.lua
 Libs\\Ace3\\AceConsole-3.0\\AceConsole-3.0.lua
 Libs\\Ace3\\AceTimer-3.0\\AceTimer-3.0.lua
+Libs\\Ace3\\AceComm-3.0\\AceComm-3.0.xml
+Libs\\Ace3\\AceLocale-3.0\\AceLocale-3.0.xml
 Libs\\Ace3\\AceGUI-3.0\\AceGUI-3.0.xml
 Libs\\Ace3\\AceConfig-3.0\\AceConfig-3.0.xml
 Libs\\Ace3\\AceDBOptions-3.0\\AceDBOptions-3.0.xml
