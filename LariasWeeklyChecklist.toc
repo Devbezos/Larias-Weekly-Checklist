@@ -1,11 +1,11 @@
 ## Interface: 120001, 120000, 110207
-## Title: Larias Checklist (ALPHA)
+## Title: Larias's Checklist
 ## Notes: Weekly checklist with collapsible weeks
 ## Author: Larias
 ## Version: 1.0.16.5-alpha
-## SavedVariablesPerCharacter: LariasWeeklyMidnightChecklistDBPC
-## SavedVariables: LariasWeeklyMidnightChecklistDB
-## OptionalDeps: LariasWeeklyMidnightChecklist_Locales
+## SavedVariablesPerCharacter: LariasWeeklyChecklistDBPC
+## SavedVariables: LariasWeeklyChecklistDB
+## OptionalDeps: LariasWeeklyChecklist_Locales
 ## X-Wago-ID: mKOD5RGx
 ## X-Curse-Project-ID: 1448023
 
@@ -22,6 +22,6 @@ Libs\\LibDataBroker-1.1\\LibDataBroker-1.1.lua
 Libs\\LibDBIcon-1.0\\LibDBIcon-1.0.lua
 Locales\\enUS.lua
 Locales\\enUS_Data.lua
-LariasWeeklyMidnightChecklist_Constants.lua
-LariasWeeklyMidnightChecklist.lua
-LariasWeeklyMidnightChecklist_Currency.lua
+LariasWeeklyChecklist_Constants.lua
+LariasWeeklyChecklist.lua
+LariasWeeklyChecklist_Currency.lua

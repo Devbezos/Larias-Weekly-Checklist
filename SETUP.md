@@ -71,7 +71,7 @@ Libraries will be fetched from these repository URLs:
 ## File Structure
 
 ```
-LariasWeeklyMidnightChecklist/
+LariasWeeklyChecklist/
 ├── Libs/
 │   ├── LibStub/                 (populated by pkgmeta)
 │   ├── CallbackHandler-1.0/     (populated by pkgmeta)
@@ -84,10 +84,10 @@ LariasWeeklyMidnightChecklist/
 │   └── ...
 ├── data/
 ├── scripts/
-├── LariasWeeklyMidnightChecklist.toc
-├── LariasWeeklyMidnightChecklist.lua
-├── LariasWeeklyMidnightChecklist_Constants.lua
-├── LariasWeeklyMidnightChecklist_Currency.lua
+├── LariasWeeklyChecklist.toc
+├── LariasWeeklyChecklist.lua
+├── LariasWeeklyChecklist_Constants.lua
+├── LariasWeeklyChecklist_Currency.lua
 ├── .pkgmeta                     (dependency configuration)
 └── README.md
 ```

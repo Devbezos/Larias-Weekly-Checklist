@@ -109,7 +109,7 @@ def main(csv_in: str, lua_out: str) -> None:
         out.append("2) Copy Locales\\\\enUS_Data.lua -> Locales\\\\<locale>_Data.lua (example: Locales\\\\deDE_Data.lua)")
         out.append('3) In both copies, change the locale string ("enUS") to your locale ("deDE")')
         out.append("4) Translate section titles and item text in the _Data file")
-        out.append("5) Add BOTH files to LariasWeeklyMidnightChecklist.toc AFTER the enUS entries")
+        out.append("5) Add BOTH files to LariasWeeklyChecklist.toc AFTER the enUS entries")
         out.append("")
         out.append("Common locale codes: enUS, enGB, frFR, deDE, esES, esMX, itIT, ptBR, ruRU, koKR, zhCN, zhTW")
         out.append("]]")

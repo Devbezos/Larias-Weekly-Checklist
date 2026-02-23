@@ -46,7 +46,7 @@ def replace_or_insert_line(toc_text: str, key: str, new_line: str) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Update ## Interface: line in a WoW addon .toc")
-    parser.add_argument("--toc", default="LariasWeeklyMidnightChecklist.toc")
+    parser.add_argument("--toc", default="LariasWeeklyChecklist.toc")
     parser.add_argument("--url", default=DEFAULT_URL)
     parser.add_argument("--count", type=int, default=DEFAULT_COUNT)
     args = parser.parse_args()
@@ -64,7 +64,7 @@ def main() -> int:
         req = urllib.request.Request(
             args.url,
             headers={
-                "User-Agent": "LariasWeeklyMidnightChecklist-GitHubActions/1.0",
+                "User-Agent": "LariasWeeklyChecklist-GitHubActions/1.0",
                 "Accept": "application/json",
             },
         )

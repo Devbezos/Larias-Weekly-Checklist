@@ -3,7 +3,7 @@ local locale = (GetLocale and GetLocale()) or nil
 local LOCALE = "enUS"
 local listKey = addonName .. "_LIST_DATA"
 
-local LOCALE_REGISTRY_KEY = "LARIASWEEKLYMIDNIGHTCHECKLIST_LOCALE_REGISTRY"
+local LOCALE_REGISTRY_KEY = "LARIASWEEKLYCHECKLIST_LOCALE_REGISTRY"
 local reg = _G[LOCALE_REGISTRY_KEY]
 if type(reg) ~= "table" then
     reg = {}

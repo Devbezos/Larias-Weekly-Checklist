@@ -1,4 +1,4 @@
-name: Dry Run - Update Sheet Data (no commit/no publish)
+name: Deploy Stable (Dry Run)
 
 on:
   workflow_dispatch:
@@ -27,7 +27,7 @@ jobs:
           set -euo pipefail
           set -x
 
-          TOC="LariasWeeklyMidnightChecklist.toc"
+          TOC="LariasWeeklyChecklist.toc"
           DATA_FILE="Locales/enUS_Data.lua"
           SHEET_ID="1iK2SZUcz_ljnkdTG7KW6pqfzaUDuSgnlh1HupcLrkus"
           GID="53744607"
@@ -107,4 +107,4 @@ jobs:
           path: |
             data/spreadsheet.csv
             Locales/enUS_Data.lua
-            LariasWeeklyMidnightChecklist.toc
+            LariasWeeklyChecklist.toc
