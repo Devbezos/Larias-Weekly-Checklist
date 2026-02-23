@@ -74,7 +74,7 @@ jobs:
           ALPHA_VERSION: ${{ steps.newversion.outputs.alpha }}
         run: |
           sed -i "s/^## Version:.*/## Version: $ALPHA_VERSION/" LariasWeeklyChecklist.toc
-          sed -i "s/^## Title:.*/## Title: Larias's Checklist (ALPHA)/" LariasWeeklyChecklist.toc
+          sed -i "s/^## Title:.*/## Title: Larias's Weekly Checklist (ALPHA)/" LariasWeeklyChecklist.toc
 
       - name: Commit and tag
         env:
@@ -165,7 +165,7 @@ jobs:
 
           payload=$(cat <<EOF
           {
-            "content": "🧪 **Larias's Checklist ${TAG}** (ALPHA from \`${BRANCH}\`) is ready!\n\n📦 GitHub: ${RELEASE_URL}${CURSE_URL:+\n🔥 CurseForge: ${CURSE_URL}}\n🛠 Workflow: ${RUN_URL}"
+            "content": "🧪 **Larias's Weekly Checklist ${TAG}** (ALPHA from \`${BRANCH}\`) is ready!\n\n📦 GitHub: ${RELEASE_URL}${CURSE_URL:+\n🔥 CurseForge: ${CURSE_URL}}\n🛠 Workflow: ${RUN_URL}"
           }
           EOF
           )

@@ -53,7 +53,7 @@ jobs:
           DATA_FILE="Locales/enUS_Data.lua"
 
           # Ensure stable releases never keep an ALPHA display name.
-          sed -i "s/^## Title:.*/## Title: Larias's Checklist/" "$TOC"
+          sed -i "s/^## Title:.*/## Title: Larias's Weekly Checklist/" "$TOC"
 
           # Determine what changed.
           DATA_CHANGED=false
@@ -162,7 +162,7 @@ jobs:
 
           payload=$(cat <<EOF
           {
-            "content": "🚀 **Larias's Checklist ${TAG}** is live!\n\n📦 GitHub: ${RELEASE_URL}${CURSE_URL:+\n🔥 CurseForge: ${CURSE_URL}}\n🛠 Workflow: ${RUN_URL}"
+            "content": "🚀 **Larias's Weekly Checklist ${TAG}** is live!\n\n📦 GitHub: ${RELEASE_URL}${CURSE_URL:+\n🔥 CurseForge: ${CURSE_URL}}\n🛠 Workflow: ${RUN_URL}"
           }
           EOF
           )

@@ -1,5 +1,5 @@
 ## Interface: 120001, 120000, 110207
-## Title: Larias's Checklist (ALPHA)
+## Title: Larias's Weekly Checklist (ALPHA)
 ## Notes: Weekly checklist with collapsible weeks
 ## Author: Larias
 ## Version: 1.0.16.11-alpha

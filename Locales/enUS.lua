@@ -14,7 +14,7 @@ local function Set(key, value)
 	L[key] = value
 end
 
-Set("DISPLAY_NAME", "Larias's Checklist")
+Set("DISPLAY_NAME", "Larias's Weekly Checklist")
 
 Set("UPDATE_AVAILABLE_TITLE", "New version available")
 Set("UPDATE_AVAILABLE_TEXT", "New version available")
@@ -30,9 +30,6 @@ Set("HIDE_COMPLETED_WEEKS", "Hide completed weeks")
 Set("OPTIONS_BUTTON", "Options")
 Set("RESET_BUTTON", "Reset")
 Set("DONE_PREFIX", "[Done] ")
-
-Set("OPTIONS_LANGUAGE", "Language")
-Set("OPTIONS_LANGUAGE_AUTO", "Auto")
 
 Set("TRACKING_GREAT_VAULT_TITLE", "Great Vault")
 Set("TRACKING_CURRENCY_TITLE", "Currency")
@@ -66,8 +63,3 @@ Set("TAB_LIST", "List")
 Set("TAB_OPTIONS", "Options")
 
 Set("SLASH_USAGE_TOGGLE", "Usage: /larias or /lcl to toggle the checklist")
-
-Set("LOCALE_NAME_ENUS", "English")
-Set("LOCALE_NAME_FRFR", "French")
-Set("LOCALE_NAME_ESES", "Spanish (ES)")
-Set("LOCALE_NAME_ESMX", "Spanish (MX)")
