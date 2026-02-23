@@ -12,39 +12,7 @@ permissions:
   contents: write
 
 jobs:
-  check-diff:
-    runs-on: ubuntu-latest
-    outputs:
-      has-diff: ${{ steps.diff.outputs.has-diff }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: ${{ inputs.target_branch || github.ref_name }}
-
-      - name: Check for differences
-        id: diff
-        run: |
-          # Compare against the most recent reachable v* tag on this branch.
-          LAST_TAG=$(git describe --tags --abbrev=0 --match "v*" 2>/dev/null || true)
-          if [ -n "$LAST_TAG" ]; then
-            DIFF=$(git diff --quiet "$LAST_TAG" HEAD; echo $?)
-          else
-            DIFF=1
-          fi
-          
-          if [ $DIFF -gt 0 ]; then
-            echo "has-diff=true" >> $GITHUB_OUTPUT
-            echo "Changes detected since last release"
-          else
-            echo "has-diff=false" >> $GITHUB_OUTPUT
-            echo "No changes since last release"
-          fi
-
   deploy-alpha:
-    needs: check-diff
-    if: needs.check-diff.outputs.has-diff == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
 
     steps:
