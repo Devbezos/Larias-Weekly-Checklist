@@ -172,4 +172,3 @@ reg.data[LOCALE] = DATASET
 if locale == LOCALE then
     _G[listKey] = DATASET
 end
-
