@@ -19,6 +19,10 @@ local constants = {
         -- If this min-level changes in the future, update it here.
         midnightMinLevel = 90,
 
+        -- Midnight early access go-live (Thu Feb 26, 2026 6pm EST).
+        -- Stored as a UTC Unix timestamp so it can be compared to GetServerTime().
+        midnightEarlyAccessUnix = 1772146800,
+
         profileDisplayNames = {
             tww = "tww",
             midnight = "midnight",

@@ -41,6 +41,16 @@ local function GetActiveTrackingProfile()
     local tww = profiles and profiles.tww
     local midnight = profiles and profiles.midnight
 
+    -- Prefer a time-based switch so the profile flips automatically at launch.
+    local launchUnix = tracking and tonumber(tracking.midnightEarlyAccessUnix)
+    if launchUnix and launchUnix > 0 and GetServerTime then
+        local now = tonumber(GetServerTime())
+        if now and now >= launchUnix then
+            return midnight or tww or tracking
+        end
+        return tww or tracking
+    end
+
     local threshold = (tracking and tonumber(tracking.midnightMinLevel)) or 90
     local level = 0
     if UnitLevel then
@@ -705,9 +715,14 @@ local function GetGreatVaultBlockLines()
 end
 
 local function GetSparksParts()
-    local label = ColorWrap(COLORS.dim, L.TRACKING_SPARKS_LABEL or "")
     local profile = GetActiveTrackingProfile()
     local id = profile and profile.sparkCurrencyID
+    if not (id and tonumber(id) and tonumber(id) > 0) then
+        -- Disabled/unconfigured.
+        return "", ""
+    end
+
+    local label = ColorWrap(COLORS.dim, L.TRACKING_SPARKS_LABEL or "")
     if id and tonumber(id) and tonumber(id) > 0 then
         local _, cur, c = FormatCurrencyProgressParts(id)
         cur = cur or 0
@@ -727,11 +742,15 @@ local function GetSparksParts()
         return label, ColorWrap(color, xy)
     end
 
+    -- If we have an ID but cannot read it, treat as unavailable.
     return label, ColorWrap(COLORS.red, L.TRACKING_NA or "")
 end
 
 local function GetSparksLine()
     local label, value = GetSparksParts()
+    if not IsNonEmptyText(label) and not IsNonEmptyText(value) then
+        return ""
+    end
     return label .. " " .. (value or "")
 end
 
@@ -744,11 +763,13 @@ local function GetTrackedQuestID(key)
 end
 
 local function GetQuestDoneParts(labelText, questKey, opts)
-    local label = ColorWrap(COLORS.dim, labelText)
     local questID = GetTrackedQuestID(questKey)
     if not questID then
-        return label, ColorWrap(COLORS.dim, "?")
+        -- Disabled/unconfigured.
+        return "", ""
     end
+
+    local label = ColorWrap(COLORS.dim, labelText)
 
     opts = opts or {}
     local doneText = opts.doneText
@@ -996,7 +1017,8 @@ local function GetCatalystParts()
 
     local profile = GetActiveTrackingProfile()
     local id = profile and profile.catalystCurrencyID
-    if id and tonumber(id) and tonumber(id) > 0 then
+    local hasConfiguredID = (id and tonumber(id) and tonumber(id) > 0) and true or false
+    if hasConfiguredID then
         local _, qty, c = FormatCurrencyProgressParts(id)
         cur = tonumber(qty)
         cap = tonumber(c)
@@ -1022,6 +1044,11 @@ local function GetCatalystParts()
     cur = tonumber(cur)
     cap = tonumber(cap)
     if not cur then
+        -- If no ID is configured and we couldn't detect via C_Catalyst, hide the row entirely.
+        if not hasConfiguredID then
+            return "", ""
+        end
+
         return ColorWrap(COLORS.dim, L.TRACKING_CATALYST_LABEL or ""), ColorWrap(COLORS.red, L.TRACKING_NA or "")
     end
 
@@ -1037,6 +1064,9 @@ end
 
 local function GetCatalystLine()
     local label, value = GetCatalystParts()
+    if not IsNonEmptyText(label) and not IsNonEmptyText(value) then
+        return ""
+    end
     return label .. " " .. (value or "")
 end
 
@@ -1293,27 +1323,34 @@ function Addon:UpdateTracking()
             SetShownIfChanged(row.frame or row.label, showRow)
         end
 
-        for i = 1, crestCount do
-            SetRow(i, lbl and lbl[i] or "", val and val[i] or "")
+        local idx = 1
+        local function AddRow(rowLabel, rowValue)
+            if idx > RIGHT_LINE_COUNT then return end
+            rowLabel = rowLabel or ""
+            rowValue = rowValue or ""
+            if IsNonEmptyText(rowLabel) or IsNonEmptyText(rowValue) then
+                SetRow(idx, rowLabel, rowValue)
+                idx = idx + 1
+            end
         end
 
-        local idx = crestCount + 1
+        for i = 1, crestCount do
+            AddRow(lbl and lbl[i] or "", val and val[i] or "")
+        end
+
         local cLbl, cVal = GetCatalystParts()
-        SetRow(idx, cLbl, cVal)
+        AddRow(cLbl, cVal)
 
-        idx = idx + 1
         local sLbl, sVal = GetSparksParts()
-        SetRow(idx, sLbl, sVal)
+        AddRow(sLbl, sVal)
 
-        idx = idx + 1
         local bLbl, bVal = GetDelversBountyParts()
-        SetRow(idx, bLbl, bVal)
+        AddRow(bLbl, bVal)
 
-        idx = idx + 1
         local pLbl, pVal = GetWeeklyPreyParts()
-        SetRow(idx, pLbl, pVal)
+        AddRow(pLbl, pVal)
 
-        for i = idx + 1, RIGHT_LINE_COUNT do
+        for i = idx, RIGHT_LINE_COUNT do
             SetRow(i, "", "")
         end
     else

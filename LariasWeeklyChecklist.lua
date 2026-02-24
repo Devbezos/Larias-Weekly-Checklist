@@ -106,6 +106,12 @@ do
             self.TRACKING.midnightMinLevel = 90
         end
 
+        -- Midnight early access go-live (Thu Feb 26, 2026 6pm EST).
+        -- Stored as UTC Unix time for comparison with GetServerTime().
+        if self.TRACKING.midnightEarlyAccessUnix == nil then
+            self.TRACKING.midnightEarlyAccessUnix = 1772146800
+        end
+
         -- Tracking IDs are sourced from `LariasWeeklyChecklist_Constants.lua`.
         -- This keeps one obvious edit spot for currency/achievement/quest IDs.
 
