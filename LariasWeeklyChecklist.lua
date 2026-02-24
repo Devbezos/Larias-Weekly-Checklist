@@ -1578,10 +1578,22 @@ function Addon:Toggle()
     end
 end
 
--- Register console commands using AceConsole
+-- Register slash commands.
+-- NOTE: We intentionally register /lcl as a second alias of the *same* command
+-- name to avoid collisions with other addons that may use a generic "LCL"
+-- SlashCmdList entry.
 function Addon:RegisterConsoleCommands()
-    self:RegisterChatCommand("larias", "ToggleCommand")
-    self:RegisterChatCommand("lcl", "ToggleCommand")
+    if type(SlashCmdList) ~= "table" then
+        return
+    end
+
+    SLASH_LARIASWEEKLYCHECKLIST1 = "/larias"
+    SLASH_LARIASWEEKLYCHECKLIST2 = "/lcl"
+
+    local addon = self
+    SlashCmdList["LARIASWEEKLYCHECKLIST"] = function(input)
+        addon:ToggleCommand(input)
+    end
 end
 
 function Addon:ToggleCommand(input)
