@@ -2,6 +2,9 @@ name: Deploy Alpha
 
 on:
   push:
+    paths:
+      - '**/*.lua'
+      - '**/*.toc'
     branches-ignore:
       # Auto-deploy alphas only from NON long-lived branches.
       # (Long-lived branches like main/release/hotfix should not mint alpha tags.)
