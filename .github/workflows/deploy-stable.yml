@@ -125,6 +125,13 @@ jobs:
             echo "released=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Fetch tags (packager)
+        if: steps.commitstep.outputs.released == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+
       - name: Package + Upload (CurseForge & Wago)
         if: steps.commitstep.outputs.released == 'true'
         uses: BigWigsMods/packager@v2.4.3

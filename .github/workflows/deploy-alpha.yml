@@ -153,6 +153,12 @@ jobs:
           echo "wago_enabled=${WAGO_ENABLED}" >> "$GITHUB_OUTPUT"
           echo "cf_id=${CF_ID}" >> "$GITHUB_OUTPUT"
 
+      - name: Fetch tags (packager)
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+
       - name: Package + Upload (CurseForge & Wago)
         uses: BigWigsMods/packager@v2.4.3
         env:
