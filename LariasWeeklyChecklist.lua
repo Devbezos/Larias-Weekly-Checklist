@@ -262,6 +262,9 @@ local function SetupAddonDB()
             showGreatVault = true,
             showCurrency = true,
             debug = false,
+            -- When set, only show sections at/after this sectionId in the list.
+            -- Nil/empty means show all sections.
+            startAtSectionId = "",
             collapsedSections = {},
             checked = {},
         },
@@ -657,6 +660,16 @@ function Addon:SelectMainTab(tabId)
         scrollFrame:SetShown(showList)
     end
 
+    local changeWeekBtn = frame._lariasChangeWeekBtn
+    if changeWeekBtn and changeWeekBtn.SetShown then
+        changeWeekBtn:SetShown(showList)
+    end
+
+    local picker = frame._lariasHeaderPicker
+    if (not showList) and picker and picker.Hide then
+        picker:Hide()
+    end
+
     local optionsPanel = frame._lariasOptionsPanel
     if optionsPanel and optionsPanel.SetShown then
         optionsPanel:SetShown(not showList)
@@ -733,6 +746,11 @@ function Addon:UpdateLocalizedUI()
     local listTab = frame._lariasTabList
     if listTab and listTab.SetText then
         listTab:SetText(L.TAB_LIST or "List")
+    end
+
+    local changeWeekBtn = frame._lariasChangeWeekBtn
+    if changeWeekBtn and changeWeekBtn.SetText then
+        changeWeekBtn:SetText(L.CHANGE_WEEK_BUTTON or "Change Week")
     end
 
     local trackingFrame = self._trackingFrame
@@ -838,6 +856,9 @@ local function AcquireSectionFrame()
     header:SetPoint("TOPLEFT", sectionFrame, "TOPLEFT", 0, 0)
     header:SetPoint("TOPRIGHT", sectionFrame, "TOPRIGHT", 0, 0)
     header:SetHeight(Addon.UI.headerMinH)
+    if header.RegisterForClicks then
+        header:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    end
     sectionFrame._header = header
 
     local title = header:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
@@ -1222,6 +1243,17 @@ end
 
 UpdateSectionVisuals = function(sectionFrame, sectionId)
     local database = Addon:EnsureDB()
+
+    -- Optional filter: hide everything before a selected header.
+    local startId = tostring(database.startAtSectionId or "")
+    if startId ~= "" then
+        local startIndex = Addon._sectionsIndexById and Addon._sectionsIndexById[startId]
+        if type(startIndex) == "number" and type(sectionFrame._index) == "number" and sectionFrame._index < startIndex then
+            sectionFrame:Hide()
+            return
+        end
+    end
+
     local complete = IsSectionCompleteById(sectionId, database)
 
     local hideDone = database.hideCompletedSections and true or false
@@ -1279,6 +1311,10 @@ local function SyncAllDataAndFrames()
             Addon._activeSections[i] = nil
         end
         Addon._dataSig = sig
+
+        if frame and frame._lariasHeaderPicker and Addon._PopulateHeaderPicker then
+            Addon._PopulateHeaderPicker()
+        end
     end
 
     Wipe(Addon._sectionsIndexById)
@@ -1514,6 +1550,274 @@ function Addon:CreateFrame()
 
     frame._lariasTabList = listTab
     frame._lariasTabOptions = optionsTab
+
+    local changeWeekBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    changeWeekBtn:SetSize(108, 22)
+    changeWeekBtn:SetPoint("TOPRIGHT", closeBtn, "TOPLEFT", -6, -2)
+    StyleMainTabButton(changeWeekBtn)
+    changeWeekBtn:SetText(L.CHANGE_WEEK_BUTTON or "Change Week")
+    frame._lariasChangeWeekBtn = changeWeekBtn
+
+    -- Header picker: lets users jump to any week. Selecting a future week auto-checks
+    -- all sections before it (they're "done"). Selecting a past week auto-unchecks
+    -- sections between the new and old start (so you can redo them).
+    -- Implemented WITHOUT a scrollframe — buttons sit directly on the picker frame
+    -- so nothing intercepts mouse clicks.
+
+    local function ExtractMonthRangeLabel(label)
+        label = tostring(label or "")
+        local s = label:gsub("^%s*>%s*", ""):gsub("^%s+", "")
+        if s == "" then return label end
+        -- Everything before the first hyphen (" - " preferred, else first "-").
+        local hyphenA = s:find("%s%-%s") or s:find("%-")
+        if not hyphenA then return s end
+        local out = s:sub(1, hyphenA - 1):gsub("%s+$", "")
+        return out ~= "" and out or s
+    end
+
+    local function EnsureHeaderPicker()
+        if frame._lariasHeaderPicker then
+            return frame._lariasHeaderPicker
+        end
+
+        local picker
+        if BackdropTemplateMixin then
+            picker = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+        else
+            picker = CreateFrame("Frame", nil, UIParent)
+        end
+        if not picker.SetBackdrop and BackdropTemplateMixin and Mixin then
+            Mixin(picker, BackdropTemplateMixin)
+        end
+
+        picker:SetFrameStrata("TOOLTIP")
+        picker:SetClampedToScreen(true)
+        picker:SetSize(200, 40)
+        picker:Hide()
+        if picker.SetToplevel then picker:SetToplevel(true) end
+        -- Assign a very high frame level so it renders above the main window.
+        if picker.SetFrameLevel then picker:SetFrameLevel(200) end
+
+        Addon:ApplyTheme(picker)
+        if picker.SetBackdropColor then
+            picker:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, 1.0)
+        end
+
+        picker._buttons    = {}
+        picker._buttonPool = {}
+
+        frame._lariasHeaderPicker = picker
+        return picker
+    end
+
+    local function ReleasePickerButtons(picker)
+        if not (picker and picker._buttons and picker._buttonPool) then return end
+        for i = #picker._buttons, 1, -1 do
+            local btn = picker._buttons[i]
+            picker._buttons[i] = nil
+            if btn then
+                btn:Hide()
+                btn:ClearAllPoints()
+                btn:SetScript("OnClick",    nil)
+                btn:SetScript("OnMouseUp",  nil)
+                btn:SetScript("OnEnter",    nil)
+                btn:SetScript("OnLeave",    nil)
+                tinsert(picker._buttonPool, btn)
+            end
+        end
+    end
+
+    local function AcquirePickerButton(picker)
+        local btn = tremove(picker._buttonPool)
+        if not btn then
+            -- Parent directly to picker (no scroll child) so nothing intercepts clicks.
+            btn = CreateFrame("Button", nil, picker, "UIPanelButtonTemplate")
+            StyleMainTabButton(btn)
+            if btn.SetTextInsets then btn:SetTextInsets(10, 10, 0, 0) end
+            local tr = btn.Text or (btn.GetFontString and btn:GetFontString())
+            if tr then
+                if tr.SetJustifyH then tr:SetJustifyH("LEFT") end
+                if tr.SetJustifyV then tr:SetJustifyV("MIDDLE") end
+            end
+        end
+        btn:SetParent(picker)
+        btn:SetFrameStrata("TOOLTIP")
+        if picker.GetFrameLevel and btn.SetFrameLevel then
+            btn:SetFrameLevel((tonumber(picker:GetFrameLevel()) or 200) + 1)
+        end
+        if btn.Enable       then btn:Enable() end
+        if btn.EnableMouse  then btn:EnableMouse(true) end
+        btn:Show()
+
+        -- Text colour: white normally, yellow on hover.
+        local function SetTextColor(color)
+            local tr = btn.Text or (btn.GetFontString and btn:GetFontString())
+            if tr and tr.SetTextColor and color then
+                tr:SetTextColor(color.r, color.g, color.b, color.a or 1)
+            end
+        end
+        SetTextColor(Addon.THEME.text)
+        btn:SetScript("OnEnter", function() SetTextColor(Addon.THEME.header) end)
+        btn:SetScript("OnLeave", function() SetTextColor(Addon.THEME.text) end)
+
+        return btn
+    end
+
+    local function PopulateHeaderPicker()
+        local picker = EnsureHeaderPicker()
+        ReleasePickerButtons(picker)
+
+        local db   = Addon:EnsureDB()
+        local data = Addon.GetListData and Addon:GetListData() or {}
+
+        local PAD  = 8
+        local rowH = 24
+        local posY = -PAD
+
+        local function HandlePick(sectionId)
+            -- Work out old and new positions in the section order.
+            local order = Addon._order or {}
+            local oldStart = tostring(db.startAtSectionId or "")
+            local newStart = tostring(sectionId or "")
+
+            local oldIdx, newIdx = 0, 0
+            for i = 1, #order do
+                if order[i] == oldStart then oldIdx = i end
+                if order[i] == newStart then newIdx = i end
+            end
+
+            -- Going forward → check + collapse everything before the new start.
+            -- Going backward → uncheck + expand everything from new start up to old start.
+            if newIdx > oldIdx then
+                for i = (oldIdx == 0 and 1 or oldIdx), newIdx - 1 do
+                    local secId  = order[i]
+                    local secDef = Addon._sectionsById and Addon._sectionsById[secId]
+                    local items  = secDef and secDef.items or {}
+                    if type(db.checked) ~= "table" then db.checked = {} end
+                    for _, item in ipairs(items) do
+                        db.checked[secId .. ":" .. tostring(item.id)] = true
+                    end
+                    -- Also mark collapsed so it renders correctly without a full refresh pass.
+                    if type(db.collapsedSections) ~= "table" then db.collapsedSections = {} end
+                    db.collapsedSections[secId] = true
+                end
+            elseif newIdx < oldIdx then
+                -- Uncheck + expand every section from new start through the old start (inclusive),
+                -- so a completed current week is also cleared when jumping backwards.
+                local fromIdx = (newIdx == 0 and 1 or newIdx)
+                for i = fromIdx, oldIdx do
+                    local secId  = order[i]
+                    local secDef = Addon._sectionsById and Addon._sectionsById[secId]
+                    local items  = secDef and secDef.items or {}
+                    -- Clear checked state.
+                    if type(db.checked) == "table" then
+                        for _, item in ipairs(items) do
+                            db.checked[secId .. ":" .. tostring(item.id)] = nil
+                        end
+                    end
+                    -- Clear collapsed state so the section expands and items are visible.
+                    if type(db.collapsedSections) == "table" then
+                        db.collapsedSections[secId] = nil
+                    end
+                end
+            end
+
+            db.startAtSectionId = newStart
+
+            if picker and picker.Hide then picker:Hide() end
+            if scrollFrame and scrollFrame.SetVerticalScroll then
+                scrollFrame:SetVerticalScroll(0)
+            end
+            if Addon.RequestRefresh then
+                Addon:RequestRefresh()
+            elseif Addon.Refresh then
+                Addon:Refresh()
+            end
+        end
+
+        local rowW = 160  -- initial; will be widened to fit content below
+
+        if type(data) == "table" then
+            for i = 1, #data do
+                local section = data[i]
+                if type(section) == "table" then
+                    local id    = section.id
+                    local label = ExtractMonthRangeLabel(section.title or id or "")
+                    if label == "" then label = tostring(id or i) end
+
+                    local btn = AcquirePickerButton(picker)
+                    btn:ClearAllPoints()
+                    btn:SetPoint("TOPLEFT", picker, "TOPLEFT", PAD, posY)
+                    btn:SetHeight(rowH)
+                    btn:SetText(label)
+
+                    local capturedId = id
+                    btn:SetScript("OnClick", function() HandlePick(capturedId) end)
+
+                    tinsert(picker._buttons, btn)
+                    posY = posY - rowH
+                end
+            end
+        end
+
+        local totalH = -posY + PAD
+        picker:SetHeight(max(40, totalH))
+
+        -- Size width to longest label, deferred one frame so GetStringWidth is valid.
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, function()
+                if not (picker and picker.IsShown and picker:IsShown()) then return end
+                local bestW = 120
+                for _, b in ipairs(picker._buttons) do
+                    local tr = b.Text or (b.GetFontString and b:GetFontString())
+                    local w
+                    if tr then
+                        if tr.GetUnboundedStringWidth then
+                            w = tonumber(tr:GetUnboundedStringWidth())
+                        elseif tr.GetStringWidth then
+                            w = tonumber(tr:GetStringWidth())
+                        end
+                    end
+                    if (not w or w <= 0) and b.GetTextWidth then
+                        w = tonumber(b:GetTextWidth())
+                    end
+                    if w and w > bestW then bestW = w end
+                end
+
+                local newW = max(160, min(520, math.ceil(bestW + PAD * 4 + 24)))
+                picker:SetWidth(newW)
+                for _, b in ipairs(picker._buttons) do
+                    if b.SetWidth then b:SetWidth(newW - PAD * 2) end
+                end
+            end)
+        end
+
+        -- Apply initial button widths too (before deferred resize).
+        for _, b in ipairs(picker._buttons) do
+            if b.SetWidth then b:SetWidth(rowW) end
+        end
+    end
+
+    -- Allow refresh routines to repopulate the headers panel when list data changes.
+    Addon._PopulateHeaderPicker = PopulateHeaderPicker
+
+    changeWeekBtn:SetScript("OnClick", function()
+        local picker = EnsureHeaderPicker()
+        if picker and picker.IsShown and picker:IsShown() then
+            picker:Hide()
+            return
+        end
+        picker:ClearAllPoints()
+        picker:SetPoint("TOPRIGHT", changeWeekBtn, "BOTTOMRIGHT", 0, -6)
+        picker:Show()
+
+        -- Populate after show so widths are correct and buttons are fully clickable.
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, PopulateHeaderPicker)
+        else
+            PopulateHeaderPicker()
+        end
+    end)
 
     scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
     scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", Addon.UI.padOuterX, -Addon.UI.scrollTop)
