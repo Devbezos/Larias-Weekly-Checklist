@@ -12,6 +12,11 @@ on:
       - develop
       - release/**
       - hotfix/**
+    tags-ignore:
+      # Prevent the bot's own tag push from re-triggering this workflow.
+      # Without this, pushing v*-alpha would re-fire the workflow, causing a
+      # second run that races with the original and can loop indefinitely.
+      - '**'
   workflow_dispatch:
     inputs:
       target_branch:
