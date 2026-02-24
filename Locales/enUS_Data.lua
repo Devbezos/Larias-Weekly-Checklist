@@ -64,7 +64,7 @@ local DATASET = {
         id = "season_1_week_1_mar_17_heroic_week",
         title = "Season 1 Week 1 - Mar 17 - Heroic Week",
         items = {
-            { id = "do_not_spend_heroic_or_mythic_crests", text = "Do NOT spend Heroic or Mythic crests" },
+            { id = "do_not_spend_any_crests_until_told_to_do_so", text = "Do not spend any Crests until told to do so" },
             { id = "do_lfr_for_tier_pieces_check_guide_for_why", text = "Do LFR for tier pieces (check guide for why)" },
             { id = "complete_a_world_tour_of_m0_dungeons_rewards_champ_ilvl", text = "Complete a World Tour of M0 dungeons - rewards champ ilvl" },
             { id = "kill_world_boss_for_champ_ilvl", text = "Kill World Boss for champ ilvl" },
@@ -100,7 +100,7 @@ local DATASET = {
         title = "Week 3 - Mar 31 - Final Raid Opens",
         items = {
             { id = "open_vault_272_myth_item_upgrade_after_crafting", text = "Open vault (272+ myth item) - upgrade after crafting" },
-            { id = "craft_2h_mythic_weapon_5_6_285_see_note_in_text_guide", text = "Craft 2H mythic weapon (5/6 285) - see note in text guide" },
+            { id = "craft_items_see_guide_for_2_paths_to_pick", text = "Craft items - see guide for 2 paths to pick" },
             { id = "if_no_4p_do_lfr_for_tier_pieces_check_guide_for_why", text = "If no 4p, do LFR for tier pieces (check guide for why)" },
             { id = "farm_12s_for_vault_crests", text = "Farm +12s for vault + crests" },
             { id = "heroic_upgrade_2_of_your_4_6_269_items_to_6_6_276_for_80_heroic_crests", text = "Heroic: Upgrade 2 of your 4/6 269 items to 6/6 276 for 80 Heroic Crests" },
@@ -163,4 +163,3 @@ local DATASET = {
 }
 
 reg.data[LOCALE] = DATASET
-

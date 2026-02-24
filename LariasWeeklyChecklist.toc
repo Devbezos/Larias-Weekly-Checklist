@@ -2,7 +2,7 @@
 ## Title: Larias's Weekly Checklist
 ## Notes: Weekly checklist with collapsible weeks
 ## Author: Larias
-## Version: 1.0.18
+## Version: 1.0.19
 ## SavedVariablesPerCharacter: LariasWeeklyChecklistDBPC
 ## SavedVariables: LariasWeeklyChecklistDB
 ## OptionalDeps: LariasWeeklyChecklist_Localization
