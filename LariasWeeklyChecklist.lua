@@ -1285,44 +1285,70 @@ UpdateSectionVisuals = function(sectionFrame, sectionId)
     UpdateSectionHeight(sectionFrame, collapsed)
 end
 
-local function SyncAllDataAndFrames()
-    -- Core refresh routine:
-    -- - Detect dataset changes (by signature)
-    -- - Rebuild index tables if needed
-    -- - Reuse pooled frames/checkboxes
-    -- - Apply per-section visuals (collapsed/complete/hidden)
-    local database = Addon:EnsureDB()
+-- Picker layout constants. Defined at file scope so any layout change
+-- is a single edit rather than a hunt through PopulateHeaderPicker.
+local PICKER_PAD        = 8   -- padding inside the picker frame (px)
+local PICKER_ROW_HEIGHT = 24  -- height of each week-row button (px)
+local PICKER_ROW_WIDTH  = 160 -- initial button width; deferred resize will widen to fit
 
-    local data = Addon:GetListData()
-    local sig = CalcDataSig(data)
+-- Strips the "current week" indicator prefix and returns only the date range
+-- portion before the first hyphen separator (e.g. "Jan 1" from "Jan 1 - Jan 7").
+-- Pure function: no upvalue dependencies, safe to call from any scope.
+local function ExtractMonthRangeLabel(label)
+    label = tostring(label or "")
+    local s = label:gsub("^%s*>%s*", ""):gsub("^%s+", "")
+    if s == "" then return label end
+    -- Everything before the first hyphen (" - " preferred, else first "-").
+    local hyphenA = s:find("%s%-%s") or s:find("%-")
+    if not hyphenA then return s end
+    local out = s:sub(1, hyphenA - 1):gsub("%s+$", "")
+    return out ~= "" and out or s
+end
 
-    local dataChanged = (Addon._dataSig ~= sig) or (not Addon._sectionsById) or (not next(Addon._sectionsById))
-    if dataChanged then
-        Addon._sectionsById = {}
-        Addon._order = {}
-        for i = 1, #data do
-            local section = data[i]
-            Addon._sectionsById[section.id] = section
-            Addon._order[i] = section.id
-        end
+-- Sets the text colour on a picker row button. Defined once at file scope rather
+-- than as an anonymous closure per button so no extra allocation happens on reuse.
+-- Pure function: no upvalue dependencies.
+local function SetPickerButtonTextColor(btn, color)
+    local tr = btn.Text or (btn.GetFontString and btn:GetFontString())
+    if tr and tr.SetTextColor and color then
+        tr:SetTextColor(color.r, color.g, color.b, color.a or 1)
+    end
+end
 
-        for i = #Addon._activeSections, 1, -1 do
-            ReleaseSectionFrame(Addon._activeSections[i])
-            Addon._activeSections[i] = nil
-        end
-        Addon._dataSig = sig
+-- Rebuilds _sectionsById, _order, and _dataSig when the dataset signature
+-- changes. Releases all active section frames so SyncSectionPool starts clean.
+-- Returns true if the data changed (callers use this to decide checkbox resync).
+local function RebuildDataIndex(data, sig)
+    local changed = (Addon._dataSig ~= sig)
+                 or (not Addon._sectionsById)
+                 or (not next(Addon._sectionsById))
+    if not changed then return false end
 
-        if frame and frame._lariasHeaderPicker and Addon._PopulateHeaderPicker then
-            Addon._PopulateHeaderPicker()
-        end
+    Addon._sectionsById = {}
+    Addon._order        = {}
+    for i = 1, #data do
+        local section = data[i]
+        Addon._sectionsById[section.id] = section
+        Addon._order[i]                 = section.id
     end
 
-    Wipe(Addon._sectionsIndexById)
+    for i = #Addon._activeSections, 1, -1 do
+        ReleaseSectionFrame(Addon._activeSections[i])
+        Addon._activeSections[i] = nil
+    end
+    Addon._dataSig = sig
 
-    local want = #Addon._order
-    local haveBefore = #Addon._activeSections
+    if frame and frame._lariasHeaderPicker and Addon._PopulateHeaderPicker then
+        Addon._PopulateHeaderPicker()
+    end
+    return true
+end
+
+-- Acquires or releases pooled section frames so _activeSections has exactly
+-- 'want' entries. 'haveBefore' is the count before this call (used by the
+-- caller to decide which frames need a full checkbox resync).
+local function SyncSectionPool(want, haveBefore)
     local have = haveBefore
-
     if have > want then
         for i = have, want + 1, -1 do
             ReleaseSectionFrame(Addon._activeSections[i])
@@ -1333,15 +1359,19 @@ local function SyncAllDataAndFrames()
             Addon._activeSections[i] = AcquireSectionFrame()
         end
     end
+end
 
+-- Binds each active section frame to its section ID, syncs checkboxes for
+-- new/changed sections, and applies collapsed/complete/hidden visuals.
+-- child: the scroll child frame, passed explicitly to avoid an implicit upvalue.
+local function ApplySectionVisuals(want, haveBefore, dataChanged, database, child)
     local needCheckboxResync = dataChanged
-
     for i = 1, want do
-        local sectionId = Addon._order[i]
+        local sectionId    = Addon._order[i]
         local sectionFrame = Addon._activeSections[i]
-        sectionFrame:SetParent(scrollChild)
-        sectionFrame._sectionId = sectionId
-        sectionFrame._index = i
+        sectionFrame:SetParent(child)
+        sectionFrame._sectionId             = sectionId
+        sectionFrame._index                 = i
         Addon._sectionsIndexById[sectionId] = i
 
         if needCheckboxResync or i > haveBefore then
@@ -1352,8 +1382,22 @@ local function SyncAllDataAndFrames()
         sectionFrame._header:SetScript("OnClick", OnHeaderClick)
 
         UpdateSectionVisuals(sectionFrame, sectionId)
-
     end
+end
+
+local function SyncAllDataAndFrames()
+    local database = Addon:EnsureDB()
+    local data     = Addon:GetListData()
+    if not data then return end  -- data not ready yet (addon still initialising)
+    local sig         = CalcDataSig(data)
+    local dataChanged = RebuildDataIndex(data, sig)
+
+    Wipe(Addon._sectionsIndexById)
+    local want       = #Addon._order
+    local haveBefore = #Addon._activeSections
+
+    SyncSectionPool(want, haveBefore)
+    ApplySectionVisuals(want, haveBefore, dataChanged, database, scrollChild)
 end
 
 function Addon:RequestRefresh()
@@ -1433,6 +1477,15 @@ function Addon:CreateFrame()
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+    -- Hide the week picker whenever the main frame is hidden (close button,
+    -- Toggle(), ESC, or any other dismiss path). The picker is parented to
+    -- UIParent so it won't hide automatically when the main frame does.
+    frame:SetScript("OnHide", function()
+        local picker = frame._lariasHeaderPicker
+        if picker and picker.IsShown and picker:IsShown() then
+            picker:Hide()
+        end
+    end)
     frame:Hide()
 
     if UISpecialFrames and frame.GetName then
@@ -1563,17 +1616,8 @@ function Addon:CreateFrame()
     -- sections between the new and old start (so you can redo them).
     -- Implemented WITHOUT a scrollframe — buttons sit directly on the picker frame
     -- so nothing intercepts mouse clicks.
-
-    local function ExtractMonthRangeLabel(label)
-        label = tostring(label or "")
-        local s = label:gsub("^%s*>%s*", ""):gsub("^%s+", "")
-        if s == "" then return label end
-        -- Everything before the first hyphen (" - " preferred, else first "-").
-        local hyphenA = s:find("%s%-%s") or s:find("%-")
-        if not hyphenA then return s end
-        local out = s:sub(1, hyphenA - 1):gsub("%s+$", "")
-        return out ~= "" and out or s
-    end
+    -- ExtractMonthRangeLabel and SetPickerButtonTextColor are file-level locals
+    -- (defined above SyncAllDataAndFrames) because they have no closure dependencies.
 
     local function EnsureHeaderPicker()
         if frame._lariasHeaderPicker then
@@ -1618,10 +1662,9 @@ function Addon:CreateFrame()
             if btn then
                 btn:Hide()
                 btn:ClearAllPoints()
-                btn:SetScript("OnClick",    nil)
-                btn:SetScript("OnMouseUp",  nil)
-                btn:SetScript("OnEnter",    nil)
-                btn:SetScript("OnLeave",    nil)
+                btn:SetScript("OnClick",  nil)
+                btn:SetScript("OnEnter", nil)
+                btn:SetScript("OnLeave", nil)
                 tinsert(picker._buttonPool, btn)
             end
         end
@@ -1632,6 +1675,9 @@ function Addon:CreateFrame()
         if not btn then
             -- Parent directly to picker (no scroll child) so nothing intercepts clicks.
             btn = CreateFrame("Button", nil, picker, "UIPanelButtonTemplate")
+            -- Strata only needs to be set at creation; children don't auto-inherit
+            -- from their parent in WoW, so we set it explicitly once here.
+            btn:SetFrameStrata("TOOLTIP")
             StyleMainTabButton(btn)
             if btn.SetTextInsets then btn:SetTextInsets(10, 10, 0, 0) end
             local tr = btn.Text or (btn.GetFontString and btn:GetFontString())
@@ -1640,8 +1686,7 @@ function Addon:CreateFrame()
                 if tr.SetJustifyV then tr:SetJustifyV("MIDDLE") end
             end
         end
-        btn:SetParent(picker)
-        btn:SetFrameStrata("TOOLTIP")
+        -- Frame level can shift between reuses (picker level may change), so always refresh it.
         if picker.GetFrameLevel and btn.SetFrameLevel then
             btn:SetFrameLevel((tonumber(picker:GetFrameLevel()) or 200) + 1)
         end
@@ -1650,92 +1695,83 @@ function Addon:CreateFrame()
         btn:Show()
 
         -- Text colour: white normally, yellow on hover.
-        local function SetTextColor(color)
-            local tr = btn.Text or (btn.GetFontString and btn:GetFontString())
-            if tr and tr.SetTextColor and color then
-                tr:SetTextColor(color.r, color.g, color.b, color.a or 1)
-            end
-        end
-        SetTextColor(Addon.THEME.text)
-        btn:SetScript("OnEnter", function() SetTextColor(Addon.THEME.header) end)
-        btn:SetScript("OnLeave", function() SetTextColor(Addon.THEME.text) end)
+        SetPickerButtonTextColor(btn, Addon.THEME.text)
+        btn:SetScript("OnEnter", function() SetPickerButtonTextColor(btn, Addon.THEME.header) end)
+        btn:SetScript("OnLeave", function() SetPickerButtonTextColor(btn, Addon.THEME.text) end)
 
         return btn
+    end
+
+    -- Applies a week jump: checks+collapses sections going forward, or
+    -- unchecks+expands them going backward. Extracted from PopulateHeaderPicker
+    -- so it can be read and reasoned about independently.
+    -- sf: the main scroll frame, passed explicitly to avoid an implicit upvalue.
+    local function HandlePick(sectionId, sf)
+        local db       = Addon:EnsureDB()
+        local picker   = EnsureHeaderPicker()
+        local order    = Addon._order or {}
+        local oldStart = tostring(db.startAtSectionId or "")
+        local newStart = tostring(sectionId or "")
+
+        local oldIdx, newIdx = 0, 0
+        for i = 1, #order do
+            if order[i] == oldStart then oldIdx = i end
+            if order[i] == newStart then newIdx = i end
+        end
+
+        -- Going forward → check + collapse everything before the new start.
+        -- Going backward → uncheck + expand everything from new start through
+        -- the old start (inclusive, so a completed current week is also cleared).
+        if newIdx > oldIdx then
+            -- Ensure both tables exist once before the loop, not on every iteration.
+            if type(db.checked)          ~= "table" then db.checked          = {} end
+            if type(db.collapsedSections) ~= "table" then db.collapsedSections = {} end
+            for i = (oldIdx == 0 and 1 or oldIdx), newIdx - 1 do
+                local secId  = order[i]
+                local secDef = Addon._sectionsById and Addon._sectionsById[secId]
+                local items  = secDef and secDef.items or {}
+                for _, item in ipairs(items) do
+                    db.checked[secId .. ":" .. tostring(item.id)] = true
+                end
+                db.collapsedSections[secId] = true
+            end
+        elseif newIdx < oldIdx then
+            -- Hoist existence checks: if either table is absent there is nothing to clear.
+            local checked   = type(db.checked)          == "table" and db.checked          or nil
+            local collapsed = type(db.collapsedSections) == "table" and db.collapsedSections or nil
+            local fromIdx   = (newIdx == 0 and 1 or newIdx)
+            for i = fromIdx, oldIdx do
+                local secId  = order[i]
+                local secDef = Addon._sectionsById and Addon._sectionsById[secId]
+                local items  = secDef and secDef.items or {}
+                if checked then
+                    for _, item in ipairs(items) do
+                        checked[secId .. ":" .. tostring(item.id)] = nil
+                    end
+                end
+                if collapsed then collapsed[secId] = nil end
+            end
+        end
+
+        db.startAtSectionId = newStart
+
+        if picker and picker.Hide then picker:Hide() end
+        if sf and sf.SetVerticalScroll then
+            sf:SetVerticalScroll(0)
+        end
+        if Addon.RequestRefresh then
+            Addon:RequestRefresh()
+        elseif Addon.Refresh then
+            Addon:Refresh()
+        end
     end
 
     local function PopulateHeaderPicker()
         local picker = EnsureHeaderPicker()
         ReleasePickerButtons(picker)
 
-        local db   = Addon:EnsureDB()
         local data = Addon.GetListData and Addon:GetListData() or {}
-
-        local PAD  = 8
-        local rowH = 24
-        local posY = -PAD
-
-        local function HandlePick(sectionId)
-            -- Work out old and new positions in the section order.
-            local order = Addon._order or {}
-            local oldStart = tostring(db.startAtSectionId or "")
-            local newStart = tostring(sectionId or "")
-
-            local oldIdx, newIdx = 0, 0
-            for i = 1, #order do
-                if order[i] == oldStart then oldIdx = i end
-                if order[i] == newStart then newIdx = i end
-            end
-
-            -- Going forward → check + collapse everything before the new start.
-            -- Going backward → uncheck + expand everything from new start up to old start.
-            if newIdx > oldIdx then
-                for i = (oldIdx == 0 and 1 or oldIdx), newIdx - 1 do
-                    local secId  = order[i]
-                    local secDef = Addon._sectionsById and Addon._sectionsById[secId]
-                    local items  = secDef and secDef.items or {}
-                    if type(db.checked) ~= "table" then db.checked = {} end
-                    for _, item in ipairs(items) do
-                        db.checked[secId .. ":" .. tostring(item.id)] = true
-                    end
-                    -- Also mark collapsed so it renders correctly without a full refresh pass.
-                    if type(db.collapsedSections) ~= "table" then db.collapsedSections = {} end
-                    db.collapsedSections[secId] = true
-                end
-            elseif newIdx < oldIdx then
-                -- Uncheck + expand every section from new start through the old start (inclusive),
-                -- so a completed current week is also cleared when jumping backwards.
-                local fromIdx = (newIdx == 0 and 1 or newIdx)
-                for i = fromIdx, oldIdx do
-                    local secId  = order[i]
-                    local secDef = Addon._sectionsById and Addon._sectionsById[secId]
-                    local items  = secDef and secDef.items or {}
-                    -- Clear checked state.
-                    if type(db.checked) == "table" then
-                        for _, item in ipairs(items) do
-                            db.checked[secId .. ":" .. tostring(item.id)] = nil
-                        end
-                    end
-                    -- Clear collapsed state so the section expands and items are visible.
-                    if type(db.collapsedSections) == "table" then
-                        db.collapsedSections[secId] = nil
-                    end
-                end
-            end
-
-            db.startAtSectionId = newStart
-
-            if picker and picker.Hide then picker:Hide() end
-            if scrollFrame and scrollFrame.SetVerticalScroll then
-                scrollFrame:SetVerticalScroll(0)
-            end
-            if Addon.RequestRefresh then
-                Addon:RequestRefresh()
-            elseif Addon.Refresh then
-                Addon:Refresh()
-            end
-        end
-
-        local rowW = 160  -- initial; will be widened to fit content below
+        local posY = -PICKER_PAD
 
         if type(data) == "table" then
             for i = 1, #data do
@@ -1747,23 +1783,26 @@ function Addon:CreateFrame()
 
                     local btn = AcquirePickerButton(picker)
                     btn:ClearAllPoints()
-                    btn:SetPoint("TOPLEFT", picker, "TOPLEFT", PAD, posY)
-                    btn:SetHeight(rowH)
+                    btn:SetPoint("TOPLEFT", picker, "TOPLEFT", PICKER_PAD, posY)
+                    btn:SetHeight(PICKER_ROW_HEIGHT)
                     btn:SetText(label)
 
                     local capturedId = id
-                    btn:SetScript("OnClick", function() HandlePick(capturedId) end)
+                    btn:SetScript("OnClick", function() HandlePick(capturedId, scrollFrame) end)
 
                     tinsert(picker._buttons, btn)
-                    posY = posY - rowH
+                    posY = posY - PICKER_ROW_HEIGHT
                 end
             end
         end
 
-        local totalH = -posY + PAD
+        local totalH = -posY + PICKER_PAD
         picker:SetHeight(max(40, totalH))
 
-        -- Size width to longest label, deferred one frame so GetStringWidth is valid.
+        -- WoW does not compute FontString widths until the frame has been laid out
+        -- on-screen for at least one frame tick; calling GetStringWidth immediately
+        -- after Show() returns 0. Deferring via C_Timer.After(0, ...) lets the
+        -- engine perform its layout pass first so we get real pixel widths.
         if C_Timer and C_Timer.After then
             C_Timer.After(0, function()
                 if not (picker and picker.IsShown and picker:IsShown()) then return end
@@ -1784,17 +1823,17 @@ function Addon:CreateFrame()
                     if w and w > bestW then bestW = w end
                 end
 
-                local newW = max(160, min(520, math.ceil(bestW + PAD * 4 + 24)))
+                local newW = max(160, min(520, math.ceil(bestW + PICKER_PAD * 4 + 24)))
                 picker:SetWidth(newW)
                 for _, b in ipairs(picker._buttons) do
-                    if b.SetWidth then b:SetWidth(newW - PAD * 2) end
+                    if b.SetWidth then b:SetWidth(newW - PICKER_PAD * 2) end
                 end
             end)
         end
 
         -- Apply initial button widths too (before deferred resize).
         for _, b in ipairs(picker._buttons) do
-            if b.SetWidth then b:SetWidth(rowW) end
+            if b.SetWidth then b:SetWidth(PICKER_ROW_WIDTH) end
         end
     end
 
