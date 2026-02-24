@@ -1639,12 +1639,14 @@ function Addon:CreateFrame()
             Mixin(picker, BackdropTemplateMixin)
         end
 
-        picker:SetFrameStrata("TOOLTIP")
+        -- HIGH strata keeps picker above the main frame (MEDIUM) while allowing
+        -- other addons at DIALOG/TOOLTIP strata to correctly appear in front.
+        -- TOOLTIP was too aggressive and caused the picker to float above unrelated windows.
+        picker:SetFrameStrata("HIGH")
         picker:SetClampedToScreen(true)
         picker:SetSize(200, 40)
         picker:Hide()
         if picker.SetToplevel then picker:SetToplevel(true) end
-        -- Assign a very high frame level so it renders above the main window.
         if picker.SetFrameLevel then picker:SetFrameLevel(200) end
 
         Addon:ApplyTheme(picker)
@@ -1654,6 +1656,21 @@ function Addon:CreateFrame()
 
         picker._buttons    = {}
         picker._buttonPool = {}
+
+        -- Fullscreen invisible button sitting just below the picker in z-order.
+        -- Catches any click outside the picker and closes it, matching the
+        -- standard WoW dropdown close-on-outside-click pattern.
+        local catcher = CreateFrame("Button", nil, UIParent)
+        catcher:SetAllPoints(UIParent)
+        catcher:SetFrameStrata("HIGH")
+        catcher:SetFrameLevel(199)  -- directly below picker (200) and its buttons (201)
+        catcher:EnableMouse(true)
+        catcher:Hide()
+        catcher:SetScript("OnClick", function() picker:Hide() end)
+
+        -- Tie catcher lifetime to the picker so nothing else needs to manage it.
+        picker:SetScript("OnShow", function() catcher:Show() end)
+        picker:SetScript("OnHide", function() catcher:Hide() end)
 
         frame._lariasHeaderPicker = picker
         return picker
@@ -1680,9 +1697,8 @@ function Addon:CreateFrame()
         if not btn then
             -- Parent directly to picker (no scroll child) so nothing intercepts clicks.
             btn = CreateFrame("Button", nil, picker, "UIPanelButtonTemplate")
-            -- Strata only needs to be set at creation; children don't auto-inherit
-            -- from their parent in WoW, so we set it explicitly once here.
-            btn:SetFrameStrata("TOOLTIP")
+            -- HIGH matches the picker strata; set once at creation (not inherited automatically).
+            btn:SetFrameStrata("HIGH")
             StyleMainTabButton(btn)
             if btn.SetTextInsets then btn:SetTextInsets(10, 10, 0, 0) end
             local tr = btn.Text or (btn.GetFontString and btn:GetFontString())
