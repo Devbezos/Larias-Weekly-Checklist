@@ -95,6 +95,14 @@ function Addon:InitOptionsTab(frame, optionsPanel)
 
     frame._lariasOptResetBtn = resetBtn
 
+    local localizationHint = optionsPanel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    localizationHint:SetPoint("TOPLEFT", resetBtn, "BOTTOMLEFT", 0, -10)
+    localizationHint:SetWidth(420)
+    localizationHint:SetJustifyH("LEFT")
+    localizationHint:SetJustifyV("TOP")
+    localizationHint:Hide()
+    frame._lariasOptLocalizationHint = localizationHint
+
     if self.UpdateOptionsLocalizedUI then
         self:UpdateOptionsLocalizedUI()
     end
@@ -139,5 +147,16 @@ function Addon:UpdateOptionsLocalizedUI()
     local resetBtn = frame._lariasOptResetBtn
     if resetBtn and resetBtn.SetText then
         resetBtn:SetText(L.RESET_BUTTON or "Reset")
+    end
+
+    local hint = frame._lariasOptLocalizationHint
+    if hint and hint.SetText then
+        if Addon.ShouldShowLocalizationCompanionHint and Addon:ShouldShowLocalizationCompanionHint() then
+            hint:SetText(Addon.LOCALIZATION_COMPANION_HINT_TEXT or "Tip: For non-English translations, install the optional addon 'LariasWeeklyChecklist_Localization'.")
+            hint:Show()
+        else
+            hint:SetText("")
+            hint:Hide()
+        end
     end
 end

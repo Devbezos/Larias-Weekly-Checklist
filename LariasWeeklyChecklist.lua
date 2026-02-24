@@ -204,6 +204,49 @@ function Addon:Debugf(rateKey, fmt, ...)
 end
 
 local LOCALIZATION_ADDON_NAME = "LariasWeeklyChecklist_Localization"
+Addon.LOCALIZATION_COMPANION_HINT_TEXT = Addon.LOCALIZATION_COMPANION_HINT_TEXT
+    or "Tip: For non-English translations, install the optional addon 'LariasWeeklyChecklist: Localization'."
+
+function Addon:IsLocalizationCompanionLoaded()
+    if type(C_AddOns) == "table" and type(C_AddOns.IsAddOnLoaded) == "function" then
+        return C_AddOns.IsAddOnLoaded(LOCALIZATION_ADDON_NAME)
+    end
+    if type(IsAddOnLoaded) == "function" then
+        return IsAddOnLoaded(LOCALIZATION_ADDON_NAME)
+    end
+    return false
+end
+
+function Addon:HasNonEnUSLocaleTables()
+    local reg = GetLocaleRegistry()
+    local strings = reg and reg.strings or nil
+    local data = reg and reg.data or nil
+
+    if type(strings) == "table" then
+        for k, v in pairs(strings) do
+            if k ~= "enUS" and type(v) == "table" then
+                return true
+            end
+        end
+    end
+    if type(data) == "table" then
+        for k, v in pairs(data) do
+            if k ~= "enUS" and type(v) == "table" then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
+function Addon:ShouldShowLocalizationCompanionHint()
+    local client = (GetLocale and GetLocale()) or "enUS"
+    if tostring(client) == "enUS" then return false end
+    if self:IsLocalizationCompanionLoaded() then return false end
+    if self:HasNonEnUSLocaleTables() then return false end
+    return true
+end
 
 -- Session-only locale override set by slash command.
 -- This intentionally does NOT persist across /reload or relog.
@@ -266,6 +309,11 @@ local function SetupMinimapIcon()
             tooltip:AddLine(L.DISPLAY_NAME or addonName, 1, 0.82, 0)
             tooltip:AddLine(L.MINIMAP_TOOLTIP_LEFT_CLICK_TOGGLE or "", 1, 1, 1)
             tooltip:AddLine(L.MINIMAP_TOOLTIP_RIGHT_CLICK_OPTIONS or "", 1, 1, 1)
+
+            if Addon.ShouldShowLocalizationCompanionHint and Addon:ShouldShowLocalizationCompanionHint() then
+                tooltip:AddLine(" ")
+                tooltip:AddLine(Addon.LOCALIZATION_COMPANION_HINT_TEXT, 0.9, 0.9, 0.9)
+            end
         end,
     })
     
@@ -1497,6 +1545,15 @@ function Addon:ToggleCommand(input)
     if cmd == "locale" or cmd == "lang" then
         if not self.SetLocaleOverride then
             self:Print("Locale override is not available in this build.")
+            return
+        end
+
+        -- Locale overrides are intended to work with the optional localization companion addon.
+        -- If it's not installed, the command would appear to do nothing, so explain why.
+        if self.IsLocalizationCompanionLoaded and self.HasNonEnUSLocaleTables
+            and (not self:IsLocalizationCompanionLoaded())
+            and (not self:HasNonEnUSLocaleTables()) then
+            self:Print("Locale overrides require the optional companion addon 'LariasWeeklyChecklist_Localization' to be installed.")
             return
         end
 
