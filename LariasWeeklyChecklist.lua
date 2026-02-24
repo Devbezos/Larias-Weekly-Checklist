@@ -204,6 +204,49 @@ function Addon:Debugf(rateKey, fmt, ...)
 end
 
 local LOCALIZATION_ADDON_NAME = "LariasWeeklyChecklist_Localization"
+Addon.LOCALIZATION_COMPANION_HINT_TEXT = Addon.LOCALIZATION_COMPANION_HINT_TEXT
+    or "Tip: For non-English translations, install the optional addon 'LariasWeeklyChecklist: Localization'."
+
+function Addon:IsLocalizationCompanionLoaded()
+    if type(C_AddOns) == "table" and type(C_AddOns.IsAddOnLoaded) == "function" then
+        return C_AddOns.IsAddOnLoaded(LOCALIZATION_ADDON_NAME)
+    end
+    if type(IsAddOnLoaded) == "function" then
+        return IsAddOnLoaded(LOCALIZATION_ADDON_NAME)
+    end
+    return false
+end
+
+function Addon:HasNonEnUSLocaleTables()
+    local reg = GetLocaleRegistry()
+    local strings = reg and reg.strings or nil
+    local data = reg and reg.data or nil
+
+    if type(strings) == "table" then
+        for k, v in pairs(strings) do
+            if k ~= "enUS" and type(v) == "table" then
+                return true
+            end
+        end
+    end
+    if type(data) == "table" then
+        for k, v in pairs(data) do
+            if k ~= "enUS" and type(v) == "table" then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
+function Addon:ShouldShowLocalizationCompanionHint()
+    local client = (GetLocale and GetLocale()) or "enUS"
+    if tostring(client) == "enUS" then return false end
+    if self:IsLocalizationCompanionLoaded() then return false end
+    if self:HasNonEnUSLocaleTables() then return false end
+    return true
+end
 
 -- Session-only locale override set by slash command.
 -- This intentionally does NOT persist across /reload or relog.
@@ -266,6 +309,11 @@ local function SetupMinimapIcon()
             tooltip:AddLine(L.DISPLAY_NAME or addonName, 1, 0.82, 0)
             tooltip:AddLine(L.MINIMAP_TOOLTIP_LEFT_CLICK_TOGGLE or "", 1, 1, 1)
             tooltip:AddLine(L.MINIMAP_TOOLTIP_RIGHT_CLICK_OPTIONS or "", 1, 1, 1)
+
+            if Addon.ShouldShowLocalizationCompanionHint and Addon:ShouldShowLocalizationCompanionHint() then
+                tooltip:AddLine(" ")
+                tooltip:AddLine(Addon.LOCALIZATION_COMPANION_HINT_TEXT, 0.9, 0.9, 0.9)
+            end
         end,
     })
     
@@ -312,6 +360,10 @@ function Addon:OnEnable()
         self._cachedListLocaleCode = nil
         self._cachedListData = nil
         self:ApplyLocaleOverride()
+    end
+
+    if self.PruneObsoleteSavedState then
+        self:PruneObsoleteSavedState()
     end
     
     -- Version announce happens in CommsOnEnable.
@@ -364,6 +416,70 @@ function Addon:EnsureDB()
         SetupAddonDB()
     end
     return self.db.profile
+end
+
+-- Remove stale saved-state entries (checked items / collapsed sections) that no longer
+-- correspond to any known section/item IDs in the current dataset.
+-- This keeps SavedVariables from accumulating garbage across data/ID refactors.
+function Addon:PruneObsoleteSavedState()
+    if self._svPrunedThisSession then return end
+    self._svPrunedThisSession = true
+
+    local db = self:EnsureDB()
+    if type(db) ~= "table" then return end
+    if type(db.checked) ~= "table" and type(db.collapsedSections) ~= "table" then
+        return
+    end
+
+    if type(self.GetListData) ~= "function" then return end
+    local data = self:GetListData()
+    if type(data) ~= "table" then return end
+
+    local validSections = {}
+    local validItemKeys = {}
+
+    local function MakeKey(sectionId, itemId)
+        return tostring(sectionId) .. ":" .. tostring(itemId)
+    end
+
+    for _, section in ipairs(data) do
+        if type(section) == "table" and type(section.id) == "string" then
+            validSections[section.id] = true
+            local items = section.items
+            if type(items) == "table" then
+                for _, item in ipairs(items) do
+                    if type(item) == "table" and type(item.id) == "string" then
+                        validItemKeys[MakeKey(section.id, item.id)] = true
+                    end
+                end
+            end
+        end
+    end
+
+    local removedChecked = 0
+    local removedCollapsed = 0
+
+    if type(db.checked) == "table" then
+        for k in pairs(db.checked) do
+            if not validItemKeys[k] then
+                db.checked[k] = nil
+                removedChecked = removedChecked + 1
+            end
+        end
+    end
+
+    if type(db.collapsedSections) == "table" then
+        for k in pairs(db.collapsedSections) do
+            if not validSections[k] then
+                db.collapsedSections[k] = nil
+                removedCollapsed = removedCollapsed + 1
+            end
+        end
+    end
+
+    if (removedChecked > 0 or removedCollapsed > 0) and self.Debugf then
+        self:Debugf("sv_prune", "Pruned SV: checked=%d collapsed=%d", removedChecked, removedCollapsed)
+    end
 end
 
 -- Pick the best locale code to use (session override first, else client locale).
@@ -1462,10 +1578,22 @@ function Addon:Toggle()
     end
 end
 
--- Register console commands using AceConsole
+-- Register slash commands.
+-- NOTE: We intentionally register /lcl as a second alias of the *same* command
+-- name to avoid collisions with other addons that may use a generic "LCL"
+-- SlashCmdList entry.
 function Addon:RegisterConsoleCommands()
-    self:RegisterChatCommand("larias", "ToggleCommand")
-    self:RegisterChatCommand("lcl", "ToggleCommand")
+    if type(SlashCmdList) ~= "table" then
+        return
+    end
+
+    SLASH_LARIASWEEKLYCHECKLIST1 = "/larias"
+    SLASH_LARIASWEEKLYCHECKLIST2 = "/lcl"
+
+    local addon = self
+    SlashCmdList["LARIASWEEKLYCHECKLIST"] = function(input)
+        addon:ToggleCommand(input)
+    end
 end
 
 function Addon:ToggleCommand(input)
@@ -1497,6 +1625,15 @@ function Addon:ToggleCommand(input)
     if cmd == "locale" or cmd == "lang" then
         if not self.SetLocaleOverride then
             self:Print("Locale override is not available in this build.")
+            return
+        end
+
+        -- Locale overrides are intended to work with the optional localization companion addon.
+        -- If it's not installed, the command would appear to do nothing, so explain why.
+        if self.IsLocalizationCompanionLoaded and self.HasNonEnUSLocaleTables
+            and (not self:IsLocalizationCompanionLoaded())
+            and (not self:HasNonEnUSLocaleTables()) then
+            self:Print("Locale overrides require the optional companion addon 'LariasWeeklyChecklist_Localization' to be installed.")
             return
         end
 
