@@ -161,5 +161,5 @@ local DATASET = {
         },
     },
 }
- 
+
 reg.data[LOCALE] = DATASET
