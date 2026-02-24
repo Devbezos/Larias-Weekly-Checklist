@@ -39,18 +39,6 @@ local function DeserializeCommMessage(message)
             return decoded
         end
     end
-
-    -- Back-compat with old wire format.
-    if message == "Q" then
-        return { t = "Q" }
-    end
-    if message:sub(1, 2) == "V:" then
-        local v = Trim(message:sub(3))
-        if v ~= "" then
-            return { t = "V", v = v }
-        end
-    end
-
     return nil
 end
 
@@ -159,22 +147,15 @@ function Addon:BroadcastVersion(force)
 
     local myVersion = self:GetMyVersion()
     if myVersion == "" then return end
-
-    local payloadLegacy = "V:" .. myVersion
     local payloadStructured = SerializeCommMessage({ t = "V", v = myVersion })
+    if not payloadStructured then return end
 
     local channel = GetGroupChannel()
     if channel then
-        SafeSendCommMessage(payloadLegacy, channel)
-        if payloadStructured then
-            SafeSendCommMessage(payloadStructured, channel)
-        end
+        SafeSendCommMessage(payloadStructured, channel)
     end
     if IsInGuild and IsInGuild() then
-        SafeSendCommMessage(payloadLegacy, "GUILD")
-        if payloadStructured then
-            SafeSendCommMessage(payloadStructured, "GUILD")
-        end
+        SafeSendCommMessage(payloadStructured, "GUILD")
     end
 
     if not force then
@@ -190,21 +171,15 @@ function Addon:RequestVersions(force)
         end
     end
 
-    local payloadLegacy = "Q"
     local payloadStructured = SerializeCommMessage({ t = "Q" })
+    if not payloadStructured then return end
 
     local channel = GetGroupChannel()
     if channel then
-        SafeSendCommMessage(payloadLegacy, channel)
-        if payloadStructured then
-            SafeSendCommMessage(payloadStructured, channel)
-        end
+        SafeSendCommMessage(payloadStructured, channel)
     end
     if IsInGuild and IsInGuild() then
-        SafeSendCommMessage(payloadLegacy, "GUILD")
-        if payloadStructured then
-            SafeSendCommMessage(payloadStructured, "GUILD")
-        end
+        SafeSendCommMessage(payloadStructured, "GUILD")
     end
 
     if not force then

@@ -39,12 +39,25 @@ end
 
 -- Initialize all constants on the new Addon object
 do
+    local function DeepCopyTable(src, seen)
+        if type(src) ~= "table" then return src end
+        seen = seen or {}
+        if seen[src] then return seen[src] end
+
+        local dst = {}
+        seen[src] = dst
+        for k, v in pairs(src) do
+            dst[DeepCopyTable(k, seen)] = DeepCopyTable(v, seen)
+        end
+        return dst
+    end
+
     function Addon:InitConstants(addonNameInput)
         addonNameInput = addonNameInput or addonName
 
         local locale = self.L or {}
 
-        -- Group core constants into objects (tables) while keeping legacy fields for compatibility.
+        -- Group core constants into objects (tables).
         self.CONSTANTS = self.CONSTANTS or {}
         self.CONSTANTS.names = self.CONSTANTS.names or {}
         local names = self.CONSTANTS.names
@@ -52,12 +65,10 @@ do
         if names.displayName == nil then names.displayName = locale.DISPLAY_NAME or addonNameInput end
         if names.dbName == nil then names.dbName = "LariasWeeklyChecklistDBPC" end
         if names.accountDbName == nil then names.accountDbName = "LariasWeeklyChecklistDB" end
-        if names.listDataKey == nil then names.listDataKey = (addonNameInput .. "_LIST_DATA") end
 
         self.DISPLAY_NAME = self.DISPLAY_NAME or names.displayName
         self._DB_NAME = self._DB_NAME or names.dbName
         self._ACCOUNT_DB_NAME = self._ACCOUNT_DB_NAME or names.accountDbName
-        self._LIST_DATA_KEY = self._LIST_DATA_KEY or names.listDataKey
 
         self.CONSTANTS.theme = self.CONSTANTS.theme or self.THEME or {
             bg      = { r = 0.10, g = 0.10, b = 0.10, a = 0.65 },
@@ -100,26 +111,17 @@ do
 
         -- Optional user overrides (IDs, tracking settings, etc.)
         -- Loaded from `LariasWeeklyChecklist_Constants.lua` via _G["<addonName>_CONSTANTS"].
-        local function DeepCopy(src)
-            if type(src) ~= "table" then return src end
-            local out = {}
-            for k, v in pairs(src) do
-                out[k] = DeepCopy(v)
-            end
-            return out
-        end
-
         local constantsKey = tostring(addonNameInput or addonName) .. "_CONSTANTS"
         local constants = _G and _G[constantsKey]
         local trackingConstants
         if type(constants) == "table" then
-            trackingConstants = (type(constants.TRACKING) == "table") and constants.TRACKING or constants
+            trackingConstants = constants
         end
 
         if type(trackingConstants) == "table" then
             -- Constants are authoritative: replace the whole tracking table.
             -- This makes "remove a key" (e.g. commenting out an ID) take effect immediately.
-            self.TRACKING = DeepCopy(trackingConstants)
+            self.TRACKING = DeepCopyTable(trackingConstants)
         else
             -- If the constants file is missing or failed to load, we don't silently invent IDs.
             -- Leave defaults as-is and print a single warning.
@@ -131,13 +133,7 @@ do
             end
         end
 
-        -- Ensure common shape for downstream code.
-        self.TRACKING.questIDs = self.TRACKING.questIDs or {}
-
-        -- If constants are missing, create a single safe fallback.
-        if next(self.TRACKING) == nil then
-            self.TRACKING.questIDs = {}
-        end
+        -- Optional keys may be missing; the tracking UI tolerates that.
     end
 
     Addon:InitConstants(addonName)
@@ -202,7 +198,6 @@ local function SetupAddonDB()
             showGreatVault = true,
             showCurrency = true,
             debug = false,
-            localeOverride = "auto",
             collapsedSections = {},
             checked = {},
         },
@@ -640,11 +635,6 @@ end
 local function IsItemChecked(sectionId, itemId, db)
     db = db or Addon:EnsureDB()
     return db.checked[Key(sectionId, itemId)] and true or false
-end
-
-local function SetItemChecked(sectionId, itemId, checked, db)
-    db = db or Addon:EnsureDB()
-    db.checked[Key(sectionId, itemId)] = checked and true or nil
 end
 
 local function IsSectionCollapsed(sectionId, db)

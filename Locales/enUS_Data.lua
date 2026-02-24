@@ -5,10 +5,7 @@ NOTE: This is the canonical enUS dataset; other locales must keep IDs identical
 so completion tracking stays consistent across locales.
 ]]
 
-local addonName = ...
-local locale = (GetLocale and GetLocale()) or nil
 local LOCALE = "enUS"
-local listKey = addonName .. "_LIST_DATA"
 
 local LOCALE_REGISTRY_KEY = "LARIASWEEKLYCHECKLIST_LOCALE_REGISTRY"
 
@@ -167,8 +164,3 @@ local DATASET = {
 
 reg.data[LOCALE] = DATASET
 
--- Back-compat: only set the legacy global dataset when the client locale matches.
--- Locale override uses `reg.data[LOCALE]` and should not require a matching client locale.
-if locale == LOCALE then
-    _G[listKey] = DATASET
-end

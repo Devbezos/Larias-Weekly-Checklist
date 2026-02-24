@@ -35,10 +35,6 @@ end
 
 Addon.TRACKING = Addon.TRACKING or {}
 
-local function GetActiveTrackingProfile()
-    return Addon.TRACKING
-end
-
 local function SafeRegisterEvent(frame, eventName)
     if not (frame and eventName) then return false end
     local ok = pcall(frame.RegisterEvent, frame, eventName)
@@ -191,8 +187,7 @@ end
 local RIGHT_LINE_COUNT = 10
 
 local function GetCrestAchievementID(i)
-    local profile = GetActiveTrackingProfile()
-    local ach = profile and profile.crestAchievementIDs
+    local ach = Addon.TRACKING and Addon.TRACKING.crestAchievementIDs
     if type(ach) ~= "table" then return nil end
 
     if ach[1] ~= nil then
@@ -205,160 +200,44 @@ local function GetCrestAchievementID(i)
     return nil
 end
 
-local function FirstWord(s)
-    if not s then return nil end
-    s = tostring(s)
-    local firstWord = s:match("^(%S+)")
-    if firstWord and firstWord ~= "" then return firstWord end
-    return nil
-end
-
-local function SplitWords(s)
-    if not s then return {} end
-    s = tostring(s)
-    local out = {}
-    for w in s:gmatch("%S+") do
-        out[#out + 1] = w
-    end
-    return out
-end
-
-local function CommonPrefixLen(wordsList)
-    local minLen
-    for i = 1, #wordsList do
-        local words = wordsList[i]
-        local wordCount = type(words) == "table" and #words or 0
-        if wordCount > 0 then
-            if not minLen or wordCount < minLen then minLen = wordCount end
-        end
-    end
-    if not minLen or minLen <= 0 then return 0 end
-
-    local prefix = 0
-    for idx = 1, minLen do
-        local base
-        for i = 1, #wordsList do
-            local words = wordsList[i]
-            if type(words) == "table" and #words > 0 then
-                local cur = tostring(words[idx] or "")
-                if cur == "" then return prefix end
-                cur = cur:lower()
-                if base == nil then
-                    base = cur
-                elseif base ~= cur then
-                    return prefix
-                end
-            end
-        end
-        prefix = idx
-    end
-    return prefix
-end
-
-local function CommonSuffixLen(wordsList)
-    local minLen
-    for i = 1, #wordsList do
-        local words = wordsList[i]
-        local wordCount = type(words) == "table" and #words or 0
-        if wordCount > 0 then
-            if not minLen or wordCount < minLen then minLen = wordCount end
-        end
-    end
-    if not minLen or minLen <= 0 then return 0 end
-
-    local suffix = 0
-    for back = 1, minLen do
-        local base
-        for i = 1, #wordsList do
-            local words = wordsList[i]
-            if type(words) == "table" and #words > 0 then
-                local wordIndex = (#words - back) + 1
-                local cur = tostring(words[wordIndex] or "")
-                if cur == "" then return suffix end
-                cur = cur:lower()
-                if base == nil then
-                    base = cur
-                elseif base ~= cur then
-                    return suffix
-                end
-            end
-        end
-        suffix = back
-    end
-    return suffix
-end
-
-local function BuildUniqueWordDisplayNames(names, count)
-    local function CapitalizeWords(s)
-        if type(s) ~= "string" or s == "" then return s end
-        return (s:gsub("(%S)(%S*)", function(a, b)
-            return a:upper() .. b
-        end))
-    end
-
-    local wordsList = {}
-    local out = {}
-    count = tonumber(count) or 0
-    for i = 1, count do
-        local name = names and names[i]
-        if type(name) == "string" and name ~= "" then
-            wordsList[#wordsList + 1] = SplitWords(name)
-        end
-    end
-
-    local prefixLen = CommonPrefixLen(wordsList)
-    local suffixLen = CommonSuffixLen(wordsList)
-
-    for i = 1, count do
-        local name = names and names[i]
-        if type(name) == "string" and name ~= "" then
-            local words = SplitWords(name)
-            local startIdx = prefixLen + 1
-            local endIdx = #words - suffixLen
-
-            local unique
-            if startIdx <= endIdx then
-                unique = table.concat(words, " ", startIdx, endIdx)
-            end
-
-            if not unique or unique == "" then
-                unique = FirstWord(name) or name
-            end
-            out[i] = CapitalizeWords(unique)
-        else
-            out[i] = nil
-        end
-    end
-    return out
-end
-
 local function FormatCurrencyProgressParts(currencyID)
     if not currencyID or not C_CurrencyInfo or not C_CurrencyInfo.GetCurrencyInfo then return nil end
     local info = C_CurrencyInfo.GetCurrencyInfo(currencyID)
     if not info then return nil end
 
-    local prefix = L.TRACKING_CURRENCY_FALLBACK_PREFIX
-    if type(prefix) ~= "string" then prefix = "" end
-    local name = info.name or (prefix .. tostring(currencyID))
     local qty = info.quantity or 0
     local weeklyMax = info.maxWeeklyQuantity
     local maxQty = info.maxQuantity
 
-    if weeklyMax and weeklyMax > 0 then return name, qty, weeklyMax end
-    if maxQty and maxQty > 0 then return name, qty, maxQty end
-    return name, qty, 0
+    if weeklyMax and weeklyMax > 0 then return qty, weeklyMax end
+    if maxQty and maxQty > 0 then return qty, maxQty end
+    return qty, 0
 end
 
-local function CountItemInBags(itemID)
-    if not itemID then return 0 end
-    -- Use C_Item.GetItemCount if available (Dragonflight+), else fallback
-    if C_Item and C_Item.GetItemCount then
-        return C_Item.GetItemCount(itemID, true) or 0
+local function GetCrestLabelText(currencyID)
+    local idNum = tonumber(currencyID)
+    local nameMap = L.TRACKING_CREST_NAMES_BY_ID
+    if type(nameMap) == "table" then
+        local name = nameMap[idNum or currencyID]
+        if type(name) == "string" and name ~= "" then
+            if name:sub(-1) == ":" then return name end
+            return name .. ":"
+        end
     end
-    if GetItemCount then
-        return GetItemCount(itemID, true) or 0
+
+    local fmt = L.TRACKING_CREST_ID_LABEL_FMT
+    if type(fmt) == "string" and fmt ~= "" then
+        local out = fmt:format(tostring(currencyID))
+        if out:sub(-1) == ":" then return out end
+        return out .. ":"
     end
-    return 0
+
+    local base = L.TRACKING_CREST_LABEL
+    if type(base) ~= "string" or base == "" then base = "Crest:" end
+    if base:sub(-1) == ":" then
+        return base .. " " .. tostring(currencyID) .. ":"
+    end
+    return base .. ": " .. tostring(currencyID) .. ":"
 end
 
 local function DetectCrestCurrencyIDsFromList()
@@ -492,15 +371,6 @@ local function IsActivityComplete(activity)
     return false
 end
 
-local function ColorForGVProgress(complete, total)
-    complete = tonumber(complete) or 0
-    total = tonumber(total) or 0
-    if total <= 0 then return COLORS.dim end
-    if complete <= 0 then return COLORS.red end
-    if complete >= total then return COLORS.green end
-    return COLORS.yellow
-end
-
 local function MakeGVHeader(label)
     return ColorWrap(COLORS.dim, label)
 end
@@ -537,59 +407,6 @@ local function MakeGVIlvlsRow(ilvls, maxPossible, parts)
         end
     end
     return tconcat(parts, " ")
-end
-
-local function SummarizeVaultType(allActivities, desiredType, ilvls)
-    local total, complete, maxPossible = 0, 0, 0
-    ilvls = ilvls or {}
-    Wipe(ilvls)
-
-    for idx = 1, #allActivities do
-        local activity = allActivities[idx]
-        if activity and activity.type == desiredType then
-            total = total + 1
-            if IsActivityComplete(activity) then
-                complete = complete + 1
-                local ilvl = GetActivityRewardIlvl(activity)
-                if not ilvl or ilvl <= 0 then
-                    ilvl = GetExampleRewardIlvlForActivity(activity)
-                end
-                ilvls[#ilvls + 1] = ilvl
-                if ilvl and ilvl > maxPossible then maxPossible = ilvl end
-            else
-                ilvls[#ilvls + 1] = 0
-            end
-        end
-    end
-
-    return complete, total, maxPossible
-end
-
-local function SummarizeVaultOther(allActivities, excludedTypes, ilvls)
-    local total, complete, maxPossible = 0, 0, 0
-    ilvls = ilvls or {}
-    Wipe(ilvls)
-
-    for idx = 1, #allActivities do
-        local activity = allActivities[idx]
-        local activityType = activity and activity.type
-        if activity and not (excludedTypes and excludedTypes[activityType]) then
-            total = total + 1
-            if IsActivityComplete(activity) then
-                complete = complete + 1
-                local ilvl = GetActivityRewardIlvl(activity)
-                if not ilvl or ilvl <= 0 then
-                    ilvl = GetExampleRewardIlvlForActivity(activity)
-                end
-                ilvls[#ilvls + 1] = ilvl
-                if ilvl > maxPossible then maxPossible = ilvl end
-            else
-                ilvls[#ilvls + 1] = 0
-            end
-        end
-    end
-
-    return complete, total, maxPossible
 end
 
 local function GetGreatVaultBlockLines()
@@ -691,8 +508,7 @@ local function GetGreatVaultBlockLines()
 end
 
 local function GetSparksParts()
-    local profile = GetActiveTrackingProfile()
-    local id = profile and profile.sparkCurrencyID
+    local id = Addon.TRACKING and Addon.TRACKING.sparkCurrencyID
     if not (id and tonumber(id) and tonumber(id) > 0) then
         -- Disabled/unconfigured.
         return "", ""
@@ -700,7 +516,7 @@ local function GetSparksParts()
 
     local label = ColorWrap(COLORS.dim, L.TRACKING_SPARKS_LABEL or "")
     if id and tonumber(id) and tonumber(id) > 0 then
-        local _, cur, c = FormatCurrencyProgressParts(id)
+        local cur, c = FormatCurrencyProgressParts(id)
         cur = cur or 0
         c = tonumber(c) or 0
 
@@ -731,8 +547,7 @@ local function GetSparksLine()
 end
 
 local function GetTrackedQuestID(key)
-    local profile = GetActiveTrackingProfile()
-    local q = profile and profile.questIDs and profile.questIDs[key]
+    local q = Addon.TRACKING and Addon.TRACKING.questIDs and Addon.TRACKING.questIDs[key]
     q = tonumber(q) or 0
     if q <= 0 then return nil end
     return q
@@ -782,8 +597,8 @@ local function GetWeeklyPreyParts()
 end
 
 local function GetCrestTradeBatches(profile)
-    profile = profile or GetActiveTrackingProfile() or {}
-    local batch = profile.crestTradeBatch
+    local p = profile or Addon.TRACKING or {}
+    local batch = p.crestTradeBatch
     local lower
     local higher
 
@@ -804,12 +619,12 @@ local function GetCrestTradeBatches(profile)
 end
 
 local function GetCrestLines()
-    local profile = GetActiveTrackingProfile()
-    if not profile then return { "", "", "", "" } end
+    local tracking = Addon.TRACKING
+    if not tracking then return { "", "", "", "" } end
 
     -- Respect the configured crestCurrencyIDs order; only auto-detect if none are configured.
-    if not profile._crestIDsDetected then
-        local ids = profile.crestCurrencyIDs
+    if not tracking._crestIDsDetected then
+        local ids = tracking.crestCurrencyIDs
         local hasConfigured = false
         if type(ids) == "table" and ids[1] ~= nil and #ids > 0 then
             hasConfigured = true
@@ -818,13 +633,13 @@ local function GetCrestLines()
         if not hasConfigured then
             local detected = DetectCrestCurrencyIDsFromList()
             if detected then
-                profile.crestCurrencyIDs = detected
+                tracking.crestCurrencyIDs = detected
             end
         end
-        profile._crestIDsDetected = true
+        tracking._crestIDsDetected = true
     end
 
-    local ids = profile.crestCurrencyIDs or {}
+    local ids = tracking.crestCurrencyIDs or {}
     local crestCount
     if type(ids) == "table" and ids[1] ~= nil then
         crestCount = #ids
@@ -834,7 +649,7 @@ local function GetCrestLines()
     end
 
     if crestCount <= 0 then crestCount = 4 end
-    local cache = profile._crestCache
+    local cache = tracking._crestCache
     if not cache or cache.count ~= crestCount then
         cache = {
             count = crestCount,
@@ -848,7 +663,7 @@ local function GetCrestLines()
             effective = {},
             gained = {},
         }
-        profile._crestCache = cache
+        tracking._crestCache = cache
     end
 
     local out = cache.out
@@ -860,18 +675,16 @@ local function GetCrestLines()
         valueOut[i] = ""
     end
 
-    local batchLower, batchHigher = GetCrestTradeBatches(profile)
+    local batchLower, batchHigher = GetCrestTradeBatches(tracking)
     local crest = cache
 
     for i = 1, crestCount do
         local id = ids[i]
         if id then
-            local name, cur, cap = FormatCurrencyProgressParts(id)
-            crest.name[i] = name
+            local cur, cap = FormatCurrencyProgressParts(id)
             crest.cur[i] = tonumber(cur) or 0
             crest.cap[i] = tonumber(cap) or 0
         else
-            crest.name[i] = nil
             crest.cur[i] = 0
             crest.cap[i] = 0
         end
@@ -907,35 +720,8 @@ local function GetCrestLines()
     for i = 1, crestCount do
         local id = ids[i]
         if id then
-            local name = crest.name[i]
-            if name then
-                local displayNames = crest._displayNames
-                if type(displayNames) ~= "table" or displayNames._count ~= crestCount then
-                    displayNames = { _count = crestCount }
-                    crest._displayNames = displayNames
-                end
-
-                local sigParts = crest._displaySigParts
-                if type(sigParts) ~= "table" then
-                    sigParts = {}
-                    crest._displaySigParts = sigParts
-                end
-                local sig = ""
-                for si = 1, crestCount do
-                    local n = crest.name[si] or ""
-                    sigParts[si] = n
-                end
-                sig = table.concat(sigParts, "|")
-
-                if crest._displaySig ~= sig then
-                    local computed = BuildUniqueWordDisplayNames(crest.name, crestCount)
-                    for di = 1, crestCount do
-                        displayNames[di] = computed[di]
-                    end
-                    crest._displaySig = sig
-                end
-
-                local displayName = displayNames[i] or name
+            local labelText = GetCrestLabelText(id)
+            if labelText then
                 local cur = crest.cur[i]
                 local cap = crest.cap[i]
 
@@ -963,7 +749,7 @@ local function GetCrestLines()
                     end
                 end
 
-                local lbl = ColorWrap(COLORS.dim, tostring(displayName) .. ":") .. tradeUp
+                local lbl = ColorWrap(COLORS.dim, tostring(labelText)) .. tradeUp
                 local val = ColorWrap(color, xy)
                 labelOut[i] = lbl
                 valueOut[i] = val
@@ -991,11 +777,10 @@ end
 local function GetCatalystParts()
     local cur, cap
 
-    local profile = GetActiveTrackingProfile()
-    local id = profile and profile.catalystCurrencyID
+    local id = Addon.TRACKING and Addon.TRACKING.catalystCurrencyID
     local hasConfiguredID = (id and tonumber(id) and tonumber(id) > 0) and true or false
     if hasConfiguredID then
-        local _, qty, c = FormatCurrencyProgressParts(id)
+        local qty, c = FormatCurrencyProgressParts(id)
         cur = tonumber(qty)
         cap = tonumber(c)
     end
@@ -1281,9 +1066,8 @@ function Addon:UpdateTracking()
 
     local crests
     if type(TrackingUI.right.line1) == "table" then
-        local profile = GetActiveTrackingProfile()
         GetCrestLines()
-        local cache = profile and profile._crestCache
+        local cache = Addon.TRACKING and Addon.TRACKING._crestCache
         local lbl = cache and cache.label or nil
         local val = cache and cache.value or nil
         local crestCount = (cache and tonumber(cache.count)) or 4
