@@ -3,7 +3,12 @@ name: Deploy Alpha
 on:
   push:
     branches:
+      # Auto-deploy alphas only from long-lived branches.
+      # (Short-lived feature branches should not mint tags/releases automatically.)
       - main
+      - develop
+      - release/**
+      - hotfix/**
   workflow_dispatch:
     inputs:
       target_branch:
