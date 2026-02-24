@@ -2,8 +2,13 @@ name: Deploy Alpha
 
 on:
   push:
-    branches:
+    branches-ignore:
+      # Auto-deploy alphas only from NON long-lived branches.
+      # (Long-lived branches like main/release/hotfix should not mint alpha tags.)
       - main
+      - develop
+      - release/**
+      - hotfix/**
   workflow_dispatch:
     inputs:
       target_branch:

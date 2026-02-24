@@ -1,9 +1,21 @@
+-- Main addon entry point.
+-- Responsibilities:
+-- - Initialize locale registry + apply locale overlay.
+-- - Load tracking/constants.
+-- - Build and refresh the checklist UI (list + options + tracking panel).
+--
+-- Design goal: keep runtime behavior event-driven and avoid per-frame work.
 local addonName = ...
 local Addon = LibStub("AceAddon-3.0"):NewAddon(addonName, "AceEvent-3.0", "AceConsole-3.0", "AceTimer-3.0", "AceComm-3.0", "AceBucket-3.0")
 _G[addonName] = Addon
 
+-- Shared global registry used by both the main addon and the optional
+-- localization companion addon. Locale files register into this table.
 local LOCALE_REGISTRY_KEY = "LARIASWEEKLYCHECKLIST_LOCALE_REGISTRY"
 
+-- Ensure the global locale registry exists and has the expected shape.
+-- reg.strings[locale] = localized UI strings
+-- reg.data[locale] = checklist dataset
 local function GetLocaleRegistry()
     local reg = _G[LOCALE_REGISTRY_KEY]
     if type(reg) ~= "table" then
@@ -15,6 +27,7 @@ local function GetLocaleRegistry()
     return reg
 end
 
+-- Safe frame visibility check (works across different object shapes).
 local function IsFrameShown(frameObj)
     return frameObj and frameObj.IsShown and frameObj:IsShown()
 end
@@ -39,6 +52,8 @@ end
 
 -- Initialize all constants on the new Addon object
 do
+    -- Deep copy with cycle detection.
+    -- Used to avoid mutating the exported constants table by accident.
     local function DeepCopyTable(src, seen)
         if type(src) ~= "table" then return src end
         seen = seen or {}
@@ -52,6 +67,9 @@ do
         return dst
     end
 
+    -- Load tracking/constants from the constants file and apply defaults.
+    -- NOTE: this intentionally replaces Addon.TRACKING as a whole to make
+    -- "remove a key" edits in the constants file take effect immediately.
     function Addon:InitConstants(addonNameInput)
         addonNameInput = addonNameInput or addonName
 
@@ -152,10 +170,13 @@ local CreateFrame = CreateFrame
 
 Addon._debugRate = Addon._debugRate or {}
 
+-- Debug is an opt-in flag stored in SavedVariables.
 function Addon:IsDebugEnabled()
     return self.db and self.db.profile and self.db.profile.debug and true or false
 end
 
+-- Rate-limited printf-style debug output.
+-- rateKey: if provided, suppress repeats for ~2s.
 function Addon:Debugf(rateKey, fmt, ...)
     if not self:IsDebugEnabled() then return end
 
@@ -296,6 +317,7 @@ function Addon:OnEnable()
     -- Version announce happens in CommsOnEnable.
 end
 
+-- Called when *any* addon loads; we only care about the localization companion.
 function Addon:OnAddonLoaded(_, loadedName)
     if loadedName ~= LOCALIZATION_ADDON_NAME then return end
 
@@ -344,6 +366,8 @@ function Addon:EnsureDB()
     return self.db.profile
 end
 
+-- Pick the best locale code to use (session override first, else client locale).
+-- If the requested locale has no registered strings/data, fall back to enUS.
 function Addon:GetEffectiveLocaleCode()
     local override = tostring(self._sessionLocaleOverride or "auto")
 
@@ -363,6 +387,8 @@ function Addon:GetEffectiveLocaleCode()
     return "enUS"
 end
 
+-- Apply the effective locale to Addon.L.
+-- Strategy: enUS base + selected overlay; never leave Addon.L empty.
 function Addon:ApplyLocaleOverride()
     local reg = GetLocaleRegistry()
     local strings = reg and reg.strings
@@ -410,6 +436,7 @@ function Addon:ApplyLocaleOverride()
     end
 end
 
+-- Set a session-only locale override (does not persist to SavedVariables).
 function Addon:SetLocaleOverride(value)
     value = tostring(value or "auto")
     if value == "" then value = "auto" end
@@ -436,6 +463,7 @@ function Addon:SetLocaleOverride(value)
     end
 end
 
+-- Show the main window and switch to Options tab.
 function Addon:OpenOptions()
     self:CreateFrame()
 
@@ -457,6 +485,8 @@ function Addon:OpenOptions()
     end
 end
 
+-- Tab switching for the main window.
+-- tabId: 1 = list, 2 = options.
 function Addon:SelectMainTab(tabId)
     self:CreateFrame()
     if not frame then return end
@@ -540,6 +570,8 @@ function Addon:SelectMainTab(tabId)
     end
 end
 
+-- Return the checklist dataset for the current effective locale.
+-- This is cached by locale code because the dataset is static per session.
 function Addon:GetListData()
     local reg = GetLocaleRegistry()
     local dataByLocale = reg and reg.data
@@ -568,6 +600,8 @@ function Addon:GetListData()
     return {}
 end
 
+-- Update UI elements whose text depends on locale.
+-- Called after locale is (re)applied and after frame creation.
 function Addon:UpdateLocalizedUI()
     if not frame then return end
 
@@ -596,6 +630,7 @@ function Addon:UpdateLocalizedUI()
     end
 end
 
+-- Apply the shared theme backdrop to a frame.
 function Addon:ApplyTheme(frameObj)
     if not frameObj or not frameObj.SetBackdrop then return end
     frameObj:SetBackdrop({
@@ -608,6 +643,9 @@ function Addon:ApplyTheme(frameObj)
     frameObj:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, Addon.THEME.bg.a)
     frameObj:SetBackdropBorderColor(Addon.THEME.border.r, Addon.THEME.border.g, Addon.THEME.border.b, Addon.THEME.border.a)
 end
+
+-- Recompute the scroll frame anchors.
+-- The list needs to shift upward when the tracking panel is visible.
 function Addon:ApplyScrollLayout()
     if not (frame and scrollFrame) then return end
     local db = self:EnsureDB()
@@ -626,6 +664,8 @@ function Addon:ApplyScrollLayout()
 end
 
 local function Key(sectionId, itemId)
+    -- Stable key for SavedVariables.checked.
+    -- Kept as a string so it's easy to inspect/clear in SV files.
     if type(sectionId) == "string" and type(itemId) == "string" then
         return sectionId .. ":" .. itemId
     end
@@ -633,21 +673,25 @@ local function Key(sectionId, itemId)
 end
 
 local function IsItemChecked(sectionId, itemId, db)
+    -- Query persisted checked state for an item.
     db = db or Addon:EnsureDB()
     return db.checked[Key(sectionId, itemId)] and true or false
 end
 
 local function IsSectionCollapsed(sectionId, db)
+    -- Query persisted collapsed state for a section.
     db = db or Addon:EnsureDB()
     return db.collapsedSections[sectionId] or false
 end
 
 local function SetSectionCollapsed(sectionId, collapsed, db)
+    -- Persist collapse state.
     db = db or Addon:EnsureDB()
     db.collapsedSections[sectionId] = collapsed and true or nil
 end
 
 local function IsSectionCompleteById(sectionId, db)
+    -- A section is complete if every item is checked.
     local section = Addon._sectionsById[sectionId]
     if not section then return false end
 
@@ -662,6 +706,7 @@ local function IsSectionCompleteById(sectionId, db)
     return true
 end
 
+-- UI pooling: we reuse section frames and checkboxes to avoid allocations during refresh.
 local function AcquireSectionFrame()
     local sectionFrame = tremove(Addon._sectionPool)
     if sectionFrame then
@@ -695,6 +740,7 @@ local function AcquireSectionFrame()
 end
 
 local function ReleaseSectionFrame(sectionFrame)
+    -- Return a section frame (and its checkboxes) to the pool.
     if not sectionFrame then return end
     sectionFrame:Hide()
     sectionFrame:ClearAllPoints()
@@ -720,6 +766,7 @@ local function ReleaseSectionFrame(sectionFrame)
 end
 
 local function AcquireCheckbox(parentSectionFrame)
+    -- Acquire (or create) a checkbox row for an item.
     local checkbox = tremove(Addon._checkboxPool)
     if checkbox then
         checkbox:SetParent(parentSectionFrame)
@@ -758,6 +805,7 @@ end
 local UpdateSectionVisuals
 
 local function ComputeHeaderHeight(sectionFrame, headerTextWidth)
+    -- Header height is dynamic based on text wrapping.
     sectionFrame._title:SetWidth(headerTextWidth)
     local textHeight = 0
     if sectionFrame._title.GetStringHeight then
@@ -769,6 +817,7 @@ local function ComputeHeaderHeight(sectionFrame, headerTextWidth)
 end
 
 local function LayoutItems(sectionFrame, collapsed)
+    -- Stack item rows under the header; hide when collapsed.
     local posY = -(sectionFrame._headerBlockHeight or (Addon.UI.headerMinH + Addon.UI.headerBottomPad))
     local totalHeight = 0
     local checkboxes = sectionFrame._checkboxes
@@ -785,6 +834,7 @@ local function LayoutItems(sectionFrame, collapsed)
 end
 
 local function UpdateSectionHeight(sectionFrame, collapsed)
+    -- Section height is header + optional items height.
     local totalHeight = (sectionFrame._headerBlockHeight or (Addon.UI.headerMinH + Addon.UI.headerBottomPad))
     if not collapsed then
         totalHeight = totalHeight + (sectionFrame._itemsHeight or 0)
@@ -793,6 +843,7 @@ local function UpdateSectionHeight(sectionFrame, collapsed)
 end
 
 local function LayoutFrom(startIndex)
+    -- Re-anchor sections starting at startIndex to avoid O(n) layout on every click.
     local posY = -Addon.UI.sectionTopPad
     local paddingX = Addon.UI.sectionInsetX
 
@@ -833,6 +884,8 @@ function Addon:IsListComplete(db)
 end
 
 function Addon:UpdateCompletionEasterEgg(db)
+    -- Fun cosmetic: show pig icon when everything is done.
+    -- Also hides the scrollbar when the list is complete.
     if not (frame and scrollFrame) then return end
 
     db = db or self:EnsureDB()
@@ -934,6 +987,7 @@ local function CalcDataSig(data)
 end
 
 local function SetHeaderText(sectionFrame, sectionId, complete)
+    -- Compose the section header text; uses locale strings for DONE prefix.
     local section = Addon._sectionsById[sectionId]
     if complete == nil then
         complete = IsSectionCompleteById(sectionId)
@@ -945,6 +999,7 @@ local function SetHeaderText(sectionFrame, sectionId, complete)
 end
 
 local function OnCheckboxClick(selfBtn)
+    -- Item click handler: update saved state, collapse/hide completed sections, relayout.
     local database = Addon:EnsureDB()
     local checked = selfBtn:GetChecked() and true or nil
     database.checked[selfBtn._dbKey or Key(selfBtn._sectionId, selfBtn._itemId)] = checked
@@ -983,6 +1038,7 @@ local function OnCheckboxClick(selfBtn)
 end
 
 local function OnHeaderClick(header)
+    -- Header click handler toggles collapsed state and relayouts.
     local sectionFrame = header and header._sectionFrame
     if not sectionFrame then return end
     local sectionId = sectionFrame._sectionId
@@ -994,6 +1050,8 @@ local function OnHeaderClick(header)
 end
 
 local function SyncCheckboxesForSection(sectionFrame, sectionId, db)
+    -- Ensure the section frame has exactly one checkbox per item.
+    -- This is only called when data changes or when new frames are created.
     local section = Addon._sectionsById[sectionId]
     local items = (section and section.items) or {}
 
@@ -1080,6 +1138,11 @@ UpdateSectionVisuals = function(sectionFrame, sectionId)
 end
 
 local function SyncAllDataAndFrames()
+    -- Core refresh routine:
+    -- - Detect dataset changes (by signature)
+    -- - Rebuild index tables if needed
+    -- - Reuse pooled frames/checkboxes
+    -- - Apply per-section visuals (collapsed/complete/hidden)
     local database = Addon:EnsureDB()
 
     local data = Addon:GetListData()
@@ -1142,6 +1205,7 @@ local function SyncAllDataAndFrames()
 end
 
 function Addon:RequestRefresh()
+    -- Queue a refresh to run soon (next tick). Multiple requests coalesce.
     if not frame then return end
     if self._refreshQueued then return end
     self._refreshQueued = true
@@ -1161,6 +1225,7 @@ function Addon:RequestRefresh()
 end
 
 function Addon:Refresh()
+    -- Refresh visible UI: list layout, completion state, and tracking panel.
     if not frame then return end
     if not IsFrameShown(frame) then return end
 
@@ -1199,6 +1264,7 @@ function Addon:Refresh()
 end
 
 function Addon:CreateFrame()
+    -- Lazily build the UI (created on first toggle/open).
     if frame then return end
 
     frame = CreateFrame("Frame", "LariasWeeklyChecklistFrame", UIParent)
@@ -1244,6 +1310,8 @@ function Addon:CreateFrame()
     local tab2Name = frameName and (frameName .. "Tab2") or nil
 
     local function StyleMainTabButton(tabButton)
+        -- Strip Blizzard textures and apply our theme colors.
+        -- Some client builds error if SetNormalTexture(nil) is used, so we hide textures instead.
         if not tabButton then return end
 
         if not tabButton.SetBackdrop and BackdropTemplateMixin and Mixin then
@@ -1373,6 +1441,7 @@ function Addon:CreateFrame()
 end
 
 function Addon:Toggle()
+    -- Main entry point for showing/hiding the addon window.
     self:CreateFrame()
     if frame:IsShown() then
         frame:Hide()
@@ -1400,6 +1469,7 @@ function Addon:RegisterConsoleCommands()
 end
 
 function Addon:ToggleCommand(input)
+    -- Slash command parser.
     input = tostring(input or "")
     input = input:gsub("^%s+", ""):gsub("%s+$", "")
 
