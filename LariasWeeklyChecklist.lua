@@ -361,6 +361,10 @@ function Addon:OnEnable()
         self._cachedListData = nil
         self:ApplyLocaleOverride()
     end
+
+    if self.PruneObsoleteSavedState then
+        self:PruneObsoleteSavedState()
+    end
     
     -- Version announce happens in CommsOnEnable.
 end
@@ -412,6 +416,70 @@ function Addon:EnsureDB()
         SetupAddonDB()
     end
     return self.db.profile
+end
+
+-- Remove stale saved-state entries (checked items / collapsed sections) that no longer
+-- correspond to any known section/item IDs in the current dataset.
+-- This keeps SavedVariables from accumulating garbage across data/ID refactors.
+function Addon:PruneObsoleteSavedState()
+    if self._svPrunedThisSession then return end
+    self._svPrunedThisSession = true
+
+    local db = self:EnsureDB()
+    if type(db) ~= "table" then return end
+    if type(db.checked) ~= "table" and type(db.collapsedSections) ~= "table" then
+        return
+    end
+
+    if type(self.GetListData) ~= "function" then return end
+    local data = self:GetListData()
+    if type(data) ~= "table" then return end
+
+    local validSections = {}
+    local validItemKeys = {}
+
+    local function MakeKey(sectionId, itemId)
+        return tostring(sectionId) .. ":" .. tostring(itemId)
+    end
+
+    for _, section in ipairs(data) do
+        if type(section) == "table" and type(section.id) == "string" then
+            validSections[section.id] = true
+            local items = section.items
+            if type(items) == "table" then
+                for _, item in ipairs(items) do
+                    if type(item) == "table" and type(item.id) == "string" then
+                        validItemKeys[MakeKey(section.id, item.id)] = true
+                    end
+                end
+            end
+        end
+    end
+
+    local removedChecked = 0
+    local removedCollapsed = 0
+
+    if type(db.checked) == "table" then
+        for k in pairs(db.checked) do
+            if not validItemKeys[k] then
+                db.checked[k] = nil
+                removedChecked = removedChecked + 1
+            end
+        end
+    end
+
+    if type(db.collapsedSections) == "table" then
+        for k in pairs(db.collapsedSections) do
+            if not validSections[k] then
+                db.collapsedSections[k] = nil
+                removedCollapsed = removedCollapsed + 1
+            end
+        end
+    end
+
+    if (removedChecked > 0 or removedCollapsed > 0) and self.Debugf then
+        self:Debugf("sv_prune", "Pruned SV: checked=%d collapsed=%d", removedChecked, removedCollapsed)
+    end
 end
 
 -- Pick the best locale code to use (session override first, else client locale).
