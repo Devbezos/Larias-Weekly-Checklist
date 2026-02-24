@@ -93,65 +93,33 @@ do
         }
         self.UI = self.UI or self.CONSTANTS.ui
 
-        self.CONSTANTS.tracking = self.CONSTANTS.tracking or self.TRACKING or {}
-        self.TRACKING = self.TRACKING or self.CONSTANTS.tracking
-
-        self.TRACKING.profiles = self.TRACKING.profiles or {}
-        self.TRACKING.profileDisplayNames = self.TRACKING.profileDisplayNames or {
-            tww = "tww",
-            midnight = "midnight",
-        }
-
-        if self.TRACKING.midnightMinLevel == nil then
-            self.TRACKING.midnightMinLevel = 90
-        end
-
-        -- Midnight early access go-live (Thu Feb 26, 2026 6pm EST).
-        -- Stored as UTC Unix time for comparison with GetServerTime().
-        if self.TRACKING.midnightEarlyAccessUnix == nil then
-            self.TRACKING.midnightEarlyAccessUnix = 1772146800
-        end
+        self.TRACKING = self.TRACKING or {}
 
         -- Tracking IDs are sourced from `LariasWeeklyChecklist_Constants.lua`.
         -- This keeps one obvious edit spot for currency/achievement/quest IDs.
 
-        -- Optional user overrides (IDs, tracking profiles, etc.)
-        -- Loaded from `LariasWeeklyChecklist_Constants.lua` which defines a global table:
-        --   _G["<addonName>_USER_CONSTANTS"] = { TRACKING = { ... } }
-        local function IsArrayLike(t)
-            if type(t) ~= "table" then return false end
-            local maxIndex = 0
-            for k, _ in pairs(t) do
-                if type(k) ~= "number" then return false end
-                if k < 1 or k % 1 ~= 0 then return false end
-                if k > maxIndex then maxIndex = k end
-            end
-            return maxIndex == #t
-        end
-
-        local function DeepMerge(dst, src)
-            if type(dst) ~= "table" or type(src) ~= "table" then return end
+        -- Optional user overrides (IDs, tracking settings, etc.)
+        -- Loaded from `LariasWeeklyChecklist_Constants.lua` via _G["<addonName>_CONSTANTS"].
+        local function DeepCopy(src)
+            if type(src) ~= "table" then return src end
+            local out = {}
             for k, v in pairs(src) do
-                if type(v) == "table" then
-                    if IsArrayLike(v) then
-                        local out = {}
-                        for i = 1, #v do out[i] = v[i] end
-                        dst[k] = out
-                    else
-                        if type(dst[k]) ~= "table" then dst[k] = {} end
-                        DeepMerge(dst[k], v)
-                    end
-                else
-                    dst[k] = v
-                end
+                out[k] = DeepCopy(v)
             end
+            return out
         end
 
         local constantsKey = tostring(addonNameInput or addonName) .. "_CONSTANTS"
-        local userConstantsKey = tostring(addonNameInput or addonName) .. "_USER_CONSTANTS" -- backward compat
-        local constants = _G and (_G[constantsKey] or _G[userConstantsKey])
-        if type(constants) == "table" and type(constants.TRACKING) == "table" then
-            DeepMerge(self.TRACKING, constants.TRACKING)
+        local constants = _G and _G[constantsKey]
+        local trackingConstants
+        if type(constants) == "table" then
+            trackingConstants = (type(constants.TRACKING) == "table") and constants.TRACKING or constants
+        end
+
+        if type(trackingConstants) == "table" then
+            -- Constants are authoritative: replace the whole tracking table.
+            -- This makes "remove a key" (e.g. commenting out an ID) take effect immediately.
+            self.TRACKING = DeepCopy(trackingConstants)
         else
             -- If the constants file is missing or failed to load, we don't silently invent IDs.
             -- Leave defaults as-is and print a single warning.
@@ -164,14 +132,11 @@ do
         end
 
         -- Ensure common shape for downstream code.
-        self.TRACKING.profiles = self.TRACKING.profiles or {}
-        for _, key in ipairs({ "tww", "midnight" }) do
-            local profile = self.TRACKING.profiles[key]
-            if type(profile) ~= "table" then
-                profile = {}
-                self.TRACKING.profiles[key] = profile
-            end
-            profile.questIDs = profile.questIDs or {}
+        self.TRACKING.questIDs = self.TRACKING.questIDs or {}
+
+        -- If constants are missing, create a single safe fallback.
+        if next(self.TRACKING) == nil then
+            self.TRACKING.questIDs = {}
         end
     end
 

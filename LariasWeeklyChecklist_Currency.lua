@@ -36,31 +36,7 @@ end
 Addon.TRACKING = Addon.TRACKING or {}
 
 local function GetActiveTrackingProfile()
-    local tracking = Addon.TRACKING
-    local profiles = tracking and tracking.profiles
-    local tww = profiles and profiles.tww
-    local midnight = profiles and profiles.midnight
-
-    -- Prefer a time-based switch so the profile flips automatically at launch.
-    local launchUnix = tracking and tonumber(tracking.midnightEarlyAccessUnix)
-    if launchUnix and launchUnix > 0 and GetServerTime then
-        local now = tonumber(GetServerTime())
-        if now and now >= launchUnix then
-            return midnight or tww or tracking
-        end
-        return tww or tracking
-    end
-
-    local threshold = (tracking and tonumber(tracking.midnightMinLevel)) or 90
-    local level = 0
-    if UnitLevel then
-        level = tonumber(UnitLevel("player")) or 0
-    end
-
-    if level >= threshold then
-        return midnight or tww or tracking
-    end
-    return tww or tracking
+    return Addon.TRACKING
 end
 
 local function SafeRegisterEvent(frame, eventName)
