@@ -2,6 +2,12 @@ name: Deploy Stable
 
 on:
   workflow_dispatch:
+    inputs:
+      force:
+        description: "Force a stable release even if no relevant changes were detected"
+        required: false
+        type: boolean
+        default: false
   schedule:
     - cron: "0 * * * *"   # runs every hour on the hour (UTC)
 
@@ -46,6 +52,8 @@ jobs:
 
       - name: Commit (and release only on spreadsheet change or WoW major/minor bump)
         id: commitstep
+        env:
+          FORCE_DEPLOY: ${{ github.event.inputs.force || 'false' }}
         run: |
           set -euo pipefail
 
@@ -59,6 +67,8 @@ jobs:
           DATA_CHANGED=false
           TOC_CHANGED=false
 
+          FORCE_DEPLOY="${FORCE_DEPLOY:-false}"
+
           if ! git diff --quiet -- "$DATA_FILE"; then
             DATA_CHANGED=true
           fi
@@ -67,7 +77,7 @@ jobs:
           fi
 
           # Nothing changed.
-          if [ "$DATA_CHANGED" = "false" ] && [ "$TOC_CHANGED" = "false" ]; then
+          if [ "$DATA_CHANGED" = "false" ] && [ "$TOC_CHANGED" = "false" ] && [ "$FORCE_DEPLOY" != "true" ]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "released=false" >> "$GITHUB_OUTPUT"
             exit 0
@@ -93,7 +103,9 @@ jobs:
           fi
 
           SHOULD_RELEASE=false
-          if [ "$DATA_CHANGED" = "true" ] || [ "$WOW_MAJOR_MINOR_CHANGED" = "true" ]; then
+          if [ "$FORCE_DEPLOY" = "true" ]; then
+            SHOULD_RELEASE=true
+          elif [ "$DATA_CHANGED" = "true" ] || [ "$WOW_MAJOR_MINOR_CHANGED" = "true" ]; then
             SHOULD_RELEASE=true
           fi
 
