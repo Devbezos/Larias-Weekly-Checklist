@@ -1,3 +1,11 @@
+-- Addon communications + update notice logic.
+--
+-- Message format:
+-- - Structured tables serialized via AceSerializer and prefixed with "S:".
+-- - t = message type ("Q" query, "V" version)
+--
+-- Performance:
+-- - Broadcast/query/reply are throttled (timers) to avoid chat spam.
 local addonName = ...
 local Addon = _G[addonName]
 if not Addon then return end
@@ -14,10 +22,15 @@ local broadcastTimerActive = false
 local replyTimerActive = false
 local queryTimerActive = false
 
+-- Trim helper for metadata/version parsing.
 local function Trim(s)
     return tostring(s or ""):gsub("^%s+", ""):gsub("%s+$", "")
 end
 
+-- Version handling notes:
+-- - We only care about prompting updates for "live" releases.
+-- - Remote prerelease versions (e.g. "1.0.18-alpha") are ignored for prompting.
+-- - Numeric comparison is required (string compare breaks: "1.0.10" vs "1.0.2").
 local function NormalizeVersionString(v)
     v = Trim(v)
     -- Drop any trailing metadata after whitespace (e.g., "1.0.0 (foo)").
@@ -57,6 +70,8 @@ local function ParseVersionNumbers(v)
 end
 
 local function CompareVersions(versionA, versionB)
+    -- Compare only numeric components of the *live* versions.
+    -- (Prereleases are filtered out earlier, and build metadata is ignored.)
     local aNums = ParseVersionNumbers(versionA)
     local bNums = ParseVersionNumbers(versionB)
     if not aNums and not bNums then return 0 end
@@ -75,6 +90,8 @@ local function CompareVersions(versionA, versionB)
 end
 
 local function SerializeCommMessage(tbl)
+    -- Serialize a structured payload and prepend a small discriminator.
+    -- Returns nil if serialization fails (or AceSerializer missing).
     if not (AceSerializer and AceSerializer.Serialize) then return nil end
     if type(tbl) ~= "table" then return nil end
 
@@ -86,6 +103,7 @@ local function SerializeCommMessage(tbl)
 end
 
 local function DeserializeCommMessage(message)
+    -- Parse a structured payload produced by SerializeCommMessage.
     if type(message) ~= "string" then return nil end
 
     if message:sub(1, #COMM_SERIAL_PREFIX) == COMM_SERIAL_PREFIX and AceSerializer and AceSerializer.Deserialize then
@@ -99,6 +117,7 @@ local function DeserializeCommMessage(message)
 end
 
 local function SafeSendCommMessage(msg, channel)
+    -- Guarded send: comms should never hard-error.
     if not channel or channel == "" then return end
     if Addon and Addon.SendCommMessage then
         pcall(Addon.SendCommMessage, Addon, Addon.COMM_PREFIX, msg, channel)
@@ -106,6 +125,7 @@ local function SafeSendCommMessage(msg, channel)
 end
 
 local function GetGroupChannel()
+    -- Prefer instance chat when applicable; otherwise raid/party.
     local instCat = (LE_PARTY_CATEGORY_INSTANCE ~= nil) and LE_PARTY_CATEGORY_INSTANCE or 2
     if IsInGroup and IsInGroup(instCat) then return "INSTANCE_CHAT" end
     if IsInRaid and IsInRaid() then return "RAID" end
@@ -114,6 +134,7 @@ local function GetGroupChannel()
 end
 
 local function GetAddonVersion(name)
+    -- Read version from addon metadata.
     if C_AddOns and C_AddOns.GetAddOnMetadata then
         return tostring(C_AddOns.GetAddOnMetadata(name, "Version") or "")
     end
@@ -124,6 +145,7 @@ local function GetAddonVersion(name)
 end
 
 function Addon:GetMyVersion()
+    -- Cached in CommsOnEnable.
     return self._myVersion or ""
 end
 
@@ -132,6 +154,7 @@ local function IsVersionNewer(versionA, versionB)
 end
 
 function Addon:ShouldShowUpdateNotice()
+    -- Update notice is driven by the newest *live* version seen on comms.
     local database = self:EnsureDB()
     local myVersion = self:GetMyVersion()
     -- If the user is on a prerelease build, don't nag about updates.
@@ -144,11 +167,13 @@ function Addon:ShouldShowUpdateNotice()
 end
 
 function Addon:DismissUpdateNotice()
+    -- Remember the newest seen version as dismissed (until a newer one is seen).
     local database = self:EnsureDB()
     database._dismissedRemoteVersion = tostring(database._newestSeenRemoteVersion or "")
 end
 
 function Addon:EnsureUpdatePopup()
+    -- Register the StaticPopup dialog once.
     if self._updatePopupRegistered then return end
     self._updatePopupRegistered = true
 
@@ -174,6 +199,7 @@ function Addon:EnsureUpdatePopup()
 end
 
 function Addon:ShowUpdatePopupIfNeeded()
+    -- Show at most once per window-open to avoid spam.
     if not self:ShouldShowUpdateNotice() then return end
     if self._updatePopupShownThisOpen then return end
 
@@ -195,6 +221,8 @@ function Addon:ShowUpdatePopupIfNeeded()
 end
 
 function Addon:BroadcastVersion(force)
+    -- Broadcast our version to group/guild.
+    -- force=true bypasses the broadcast throttle.
     if not force then
         if broadcastTimerActive then
             return
@@ -221,6 +249,7 @@ function Addon:BroadcastVersion(force)
 end
 
 function Addon:RequestVersions(force)
+    -- Ask others to reply with their version (they reply after a small random delay).
     if not force then
         if queryTimerActive then
             return
@@ -245,6 +274,8 @@ function Addon:RequestVersions(force)
 end
 
 function Addon:OnAddonMessage(prefix, message, sender)
+    -- AceComm entry point (also used by OnCommReceived).
+    -- We ignore non-structured messages to avoid legacy/backcompat complexity.
     if prefix ~= self.COMM_PREFIX then return end
     if type(message) ~= "string" then return end
 
@@ -254,6 +285,7 @@ function Addon:OnAddonMessage(prefix, message, sender)
     end
 
     if decoded.t == "Q" then
+        -- Query received: reply with version (throttled; delay jitter to avoid bursts).
         if replyTimerActive then
             return
         end
@@ -284,6 +316,7 @@ function Addon:OnAddonMessage(prefix, message, sender)
     if myVersion == "" then return end
 
     if sender and sender ~= "" and UnitName then
+        -- Ignore our own messages ("player" name can be realm-qualified).
         local me = UnitName("player")
         if me and me ~= "" then
             local senderName = sender
@@ -307,10 +340,12 @@ function Addon:OnAddonMessage(prefix, message, sender)
 end
 
 function Addon:OnCommReceived(prefix, messageText, _, sender)
+    -- AceComm callback signature includes an unused distribution parameter.
     self:OnAddonMessage(prefix, messageText, sender)
 end
 
 function Addon:CommsOnEnable()
+    -- Called from Addon:OnEnable.
     self._myVersion = GetAddonVersion(addonName)
 
     if self.RegisterComm then

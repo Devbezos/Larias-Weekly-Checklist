@@ -1,3 +1,10 @@
+-- Tracking / currency side-panel logic.
+--
+-- Design goals:
+-- - Event-driven only (no per-frame updates)
+-- - Throttled update funnel to avoid spam from rapid events
+-- - Rows collapse cleanly when configured IDs are 0
+-- - Crest display names are locale-driven
 local addonName = ...
 local Addon = _G[addonName]
 if not Addon then return end
@@ -19,10 +26,12 @@ local floor, max, abs = math.floor, math.max, math.abs
 local tinsert, tremove, tconcat, tsort = table.insert, table.remove, table.concat, table.sort
 
 local function IsFrameShown(frameObj)
+    -- Safe IsShown wrapper; treats missing frames as hidden.
     return frameObj and frameObj.IsShown and frameObj:IsShown()
 end
 
 local function Wipe(tableToWipe)
+    -- nil-safe wipe compatible with both retail/classic.
     if not tableToWipe then return end
     if wipe then
         wipe(tableToWipe)
@@ -36,12 +45,15 @@ end
 Addon.TRACKING = Addon.TRACKING or {}
 
 local function SafeRegisterEvent(frame, eventName)
+    -- Some events aren’t present on all client versions; register defensively.
     if not (frame and eventName) then return false end
     local ok = pcall(frame.RegisterEvent, frame, eventName)
     return ok and true or false
 end
 
 function Addon:ConfigureTrackingEvents(parentFrame, showGreatVault, showCurrency)
+    -- Subscribe to the minimal event set needed for the tracking panel.
+    -- We only schedule updates while the tracking UI is visible.
     trackingEventFrame = trackingEventFrame or CreateFrame("Frame")
     trackingEventFrame:UnregisterAllEvents()
 
@@ -73,6 +85,8 @@ function Addon:ConfigureTrackingEvents(parentFrame, showGreatVault, showCurrency
             local isMainFrameVisible = IsFrameShown(parentFrame)
             local isTrackingPanelVisible = IsFrameShown(Addon._trackingFrame)
             if isMainFrameVisible and isTrackingPanelVisible then
+                -- Never run per-frame: we update on relevant events only,
+                -- and then funnel through a throttle (see RequestTrackingUpdate).
                 Addon:RequestTrackingUpdate()
             end
         end)
@@ -124,9 +138,13 @@ local COLORS = {
     dim    = "ffbfbfbf",
 }
 
-local function ColorWrap(hex, txt) return ("|c%s%s|r"):format(hex, tostring(txt or "")) end
+local function ColorWrap(hex, txt)
+    -- Wrap a string in WoW color codes.
+    return ("|c%s%s|r"):format(hex, tostring(txt or ""))
+end
 
 local function SetTextIfChanged(fontString, text)
+    -- Avoid repeated SetText calls (triggers layout + renders).
     if not fontString then return end
     text = text or ""
     if fontString._lariasText ~= text then
@@ -136,12 +154,14 @@ local function SetTextIfChanged(fontString, text)
 end
 
 local function IsNonEmptyText(text)
+    -- Treat color-coded strings with only whitespace as empty.
     if type(text) ~= "string" then return false end
     text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
     return text:match("%S") ~= nil
 end
 
 local function SetShownIfChanged(region, shown)
+    -- Avoid redundant Show/Hide calls.
     if not (region and region.IsShown and region.SetShown) then return end
     local want = shown and true or false
     if region:IsShown() ~= want then
@@ -150,12 +170,14 @@ local function SetShownIfChanged(region, shown)
 end
 
 local function IsMainFrameOnListTab()
+    -- Tracking panel only shows on the main list tab.
     local main = _G and _G["LariasWeeklyChecklistFrame"]
     local selectedTab = main and tonumber(main._lariasSelectedTab)
     return (selectedTab == nil) or (selectedTab == 1)
 end
 
 local function FormatXY(currentAmount, maxAmount)
+    -- Standard progress format with infinity fallback when there is no max.
     currentAmount = tonumber(currentAmount) or 0
     maxAmount = tonumber(maxAmount) or 0
     if maxAmount > 0 then return ("%d/%d"):format(currentAmount, maxAmount) end
@@ -165,6 +187,7 @@ local function FormatXY(currentAmount, maxAmount)
 end
 
 local function ColorForXY(currentAmount, maxAmount)
+    -- Progress coloring: 0 => red, complete => green, otherwise yellow.
     currentAmount = tonumber(currentAmount) or 0
     maxAmount = tonumber(maxAmount) or 0
     if currentAmount <= 0 then return COLORS.red end
@@ -173,6 +196,7 @@ local function ColorForXY(currentAmount, maxAmount)
 end
 
 local function IsAchievementCompleteSafe(achievementID)
+    -- Achievement APIs vary across client versions; keep this resilient.
     if not achievementID then return false end
     if C_AchievementInfo and C_AchievementInfo.IsAchievementComplete then
         return C_AchievementInfo.IsAchievementComplete(achievementID) and true or false
@@ -187,6 +211,7 @@ end
 local RIGHT_LINE_COUNT = 10
 
 local function GetCrestAchievementID(i)
+    -- Crest achievement mapping is index-based (aligned with crestCurrencyIDs).
     local ach = Addon.TRACKING and Addon.TRACKING.crestAchievementIDs
     if type(ach) ~= "table" then return nil end
 
@@ -201,6 +226,7 @@ local function GetCrestAchievementID(i)
 end
 
 local function FormatCurrencyProgressParts(currencyID)
+    -- Returns (qty, cap) where cap is weekly max or total max.
     if not currencyID or not C_CurrencyInfo or not C_CurrencyInfo.GetCurrencyInfo then return nil end
     local info = C_CurrencyInfo.GetCurrencyInfo(currencyID)
     if not info then return nil end
@@ -215,6 +241,7 @@ local function FormatCurrencyProgressParts(currencyID)
 end
 
 local function GetCrestLabelText(currencyID)
+    -- Locale-driven crest name with stable fallbacks when untranslated/unknown.
     local idNum = tonumber(currencyID)
     local nameMap = L.TRACKING_CREST_NAMES_BY_ID
     if type(nameMap) == "table" then
@@ -241,6 +268,8 @@ local function GetCrestLabelText(currencyID)
 end
 
 local function DetectCrestCurrencyIDsFromList()
+    -- Fallback heuristic: scan the currency list for a localized substring.
+    -- Used only if explicit IDs weren’t provided via constants.
     if not (C_CurrencyInfo and C_CurrencyInfo.GetCurrencyListSize and C_CurrencyInfo.GetCurrencyListInfo and C_CurrencyInfo.GetCurrencyListLink) then
         return nil
     end
@@ -273,6 +302,7 @@ local function DetectCrestCurrencyIDsFromList()
 end
 
 local function BottomFor(obj)
+    -- Compute bottom-most extent (in pixels) for a UI element with a base Y.
     if not obj then return 0 end
     if obj.IsShown and not IsFrameShown(obj) then return 0 end
 
@@ -285,6 +315,7 @@ local function BottomFor(obj)
 end
 
 local function GetIlvlFromItemLink(itemLink)
+    -- Prefer detailed ilvl, fall back to item info.
     if not itemLink then return 0 end
     if GetDetailedItemLevelInfo then
         local ilvl = GetDetailedItemLevelInfo(itemLink)
@@ -298,6 +329,7 @@ local function GetIlvlFromItemLink(itemLink)
 end
 
 local function EnsureItemDataLoaded(itemLink)
+    -- Triggers async item data load to improve later ilvl resolution.
     if not itemLink then return false end
     if not (C_Item and C_Item.RequestLoadItemDataByID) then return false end
     local itemID = tonumber(tostring(itemLink):match("item:(%d+)"))
@@ -307,6 +339,7 @@ local function EnsureItemDataLoaded(itemLink)
 end
 
 local function GetExampleRewardIlvlForActivity(activityInfo)
+    -- Use example reward links when we can’t determine ilvl from the reward table.
     if not (activityInfo and C_WeeklyRewards and C_WeeklyRewards.GetExampleRewardItemHyperlinks) then return 0 end
     local activityID = activityInfo.id or activityInfo.activityID
     if not activityID then return 0 end
@@ -324,6 +357,7 @@ local function GetExampleRewardIlvlForActivity(activityInfo)
 end
 
 local function GetActivityRewardIlvl(activityInfo)
+    -- Extract best-known ilvl from a weekly reward activity.
     if not (activityInfo and activityInfo.rewards) then return 0 end
 
     local canWeeklyLink = (C_WeeklyRewards and C_WeeklyRewards.GetItemHyperlink)
@@ -349,6 +383,7 @@ local function GetActivityRewardIlvl(activityInfo)
 end
 
 local function IsActivityComplete(activity)
+    -- Compatibility shim: activities have used multiple field shapes over time.
     if not activity then return false end
     if type(activity.isComplete) == "boolean" then return activity.isComplete end
     if type(activity.isCompleted) == "boolean" then return activity.isCompleted end
@@ -372,10 +407,12 @@ local function IsActivityComplete(activity)
 end
 
 local function MakeGVHeader(label)
+    -- GV headers are dimmed for readability.
     return ColorWrap(COLORS.dim, label)
 end
 
 local function MakeGVThresholdsString(complete, total, thresholds, parts)
+    -- Render thresholds with per-threshold completion coloring.
     complete = tonumber(complete) or 0
     total = tonumber(total) or 0
     parts = parts or {}
@@ -395,6 +432,7 @@ local function MakeGVThresholdsString(complete, total, thresholds, parts)
 end
 
 local function MakeGVIlvlsRow(ilvls, maxPossible, parts)
+    -- Render ilvls, highlighting the best possible value.
     parts = parts or {}
     Wipe(parts)
     for i = 1, #ilvls do
@@ -410,6 +448,8 @@ local function MakeGVIlvlsRow(ilvls, maxPossible, parts)
 end
 
 local function GetGreatVaultBlockLines()
+    -- Returns 6 lines representing GV raid/dungeons blocks.
+    -- Uses a reusable cache table to minimize allocations during throttled updates.
     local cache = Addon.TRACKING._gvCache
     if not cache then
         cache = {
@@ -507,6 +547,7 @@ local function GetGreatVaultBlockLines()
     return out
 end
 
+-- Sparks row: currency progress with weekly/total cap semantics.
 local function GetSparksParts()
     local id = Addon.TRACKING and Addon.TRACKING.sparkCurrencyID
     if not (id and tonumber(id) and tonumber(id) > 0) then
@@ -538,6 +579,7 @@ local function GetSparksParts()
     return label, ColorWrap(COLORS.red, L.TRACKING_NA or "")
 end
 
+-- Legacy layout helper that combines GetSparksParts into one line string.
 local function GetSparksLine()
     local label, value = GetSparksParts()
     if not IsNonEmptyText(label) and not IsNonEmptyText(value) then
@@ -546,6 +588,7 @@ local function GetSparksLine()
     return label .. " " .. (value or "")
 end
 
+-- Tracking config lookup: resolve a quest ID from a key.
 local function GetTrackedQuestID(key)
     local q = Addon.TRACKING and Addon.TRACKING.questIDs and Addon.TRACKING.questIDs[key]
     q = tonumber(q) or 0
@@ -553,6 +596,7 @@ local function GetTrackedQuestID(key)
     return q
 end
 
+-- Quest row: returns (label,value) as colored text based on completion.
 local function GetQuestDoneParts(labelText, questKey, opts)
     local questID = GetTrackedQuestID(questKey)
     if not questID then
@@ -585,6 +629,7 @@ local function GetQuestDoneParts(labelText, questKey, opts)
     return label, ColorWrap(COLORS.red, L.TRACKING_NA or "")
 end
 
+-- Convenience wrappers for specific weekly quest rows.
 local function GetDelversBountyParts()
     return GetQuestDoneParts(L.TRACKING_QUEST_DELVERS_BOUNTY or "", "delversBounty", { as01 = true })
 end
@@ -596,6 +641,7 @@ local function GetWeeklyPreyParts()
     return GetQuestDoneParts(L.TRACKING_QUEST_WEEKLY_PREY or "", "weeklyPrey", { as01 = true })
 end
 
+-- Crest trade-up math depends on the configured batch sizes.
 local function GetCrestTradeBatches(profile)
     local p = profile or Addon.TRACKING or {}
     local batch = p.crestTradeBatch
@@ -638,6 +684,7 @@ local function EnsureCrestIDsDetected(tracking)
 end
 
 local function GetCrestIDsAndCount(tracking)
+    -- Crest currency IDs are expected to be an ordered list.
     local ids = tracking.crestCurrencyIDs or {}
     local crestCount
     if type(ids) == "table" and ids[1] ~= nil then
@@ -652,6 +699,9 @@ local function GetCrestIDsAndCount(tracking)
 end
 
 local function EnsureCrestCache(tracking, crestCount)
+    -- We keep a cache on TRACKING for two reasons:
+    -- 1) avoid allocating new tables every refresh (events can burst), and
+    -- 2) allow UI update code to reference stable arrays for label/value.
     local cache = tracking._crestCache
     if not cache or cache.count ~= crestCount then
         cache = {
@@ -672,6 +722,7 @@ local function EnsureCrestCache(tracking, crestCount)
 end
 
 local function ResetCrestOutput(cache, crestCount)
+    -- Zero output buffers without reallocating arrays.
     local out = cache.out
     local labelOut = cache.label
     local valueOut = cache.value
@@ -684,6 +735,7 @@ local function ResetCrestOutput(cache, crestCount)
 end
 
 local function PopulateCrestCurCap(cache, ids, crestCount)
+    -- Populate raw crest currency quantities/caps.
     for i = 1, crestCount do
         local id = ids[i]
         if id then
@@ -698,6 +750,7 @@ local function PopulateCrestCurCap(cache, ids, crestCount)
 end
 
 local function PopulateCrestUnlocked(cache, crestCount)
+    -- Populate unlock state using crest achievements.
     for i = 1, crestCount do
         local achievementID = GetCrestAchievementID(i)
         cache.unlocked[i] = achievementID and IsAchievementCompleteSafe(achievementID) or false
@@ -705,6 +758,7 @@ local function PopulateCrestUnlocked(cache, crestCount)
 end
 
 local function ComputeCrestTradeup(cache, crestCount, batchLower, batchHigher)
+    -- Compute trade-up from lower tiers into higher tiers based on unlocks.
     local highestTradeTarget
     for i = crestCount, 2, -1 do
         if cache.unlocked[i - 1] then
@@ -731,6 +785,8 @@ local function ComputeCrestTradeup(cache, crestCount, batchLower, batchHigher)
 end
 
 local function GetCrestLines()
+    -- Produces crest rows for the right column.
+    -- Returns: combined lines, label-only lines, value-only lines, crestCount.
     local tracking = Addon.TRACKING
     if not tracking then return { "", "", "", "" } end
 
@@ -801,10 +857,15 @@ local function GetCrestLines()
         end
     end
 
+    -- Return both combined "line" strings and the split label/value parts.
+    -- The split form is used by the modern right-column layout (paired labels/values)
+    -- and avoids callers reaching into the internal cache table directly.
     return out, labelOut, valueOut, crestCount
 end
 
 local function GetCatalystParts()
+    -- Catalyst charges row.
+    -- Hides entirely when no configured ID and C_Catalyst is unavailable.
     local cur, cap
 
     local id = Addon.TRACKING and Addon.TRACKING.catalystCurrencyID
@@ -853,6 +914,7 @@ local function GetCatalystParts()
     return ColorWrap(COLORS.dim, L.TRACKING_CATALYST_LABEL or ""), ColorWrap(color, ("%d"):format(cur))
 end
 
+-- Legacy layout helper that combines GetCatalystParts into one line string.
 local function GetCatalystLine()
     local label, value = GetCatalystParts()
     if not IsNonEmptyText(label) and not IsNonEmptyText(value) then
@@ -862,6 +924,7 @@ local function GetCatalystLine()
 end
 
 local function ComputeWantTrackingPanel(db)
+    -- Decide whether the tracking panel should be shown at all.
     local wantPanel = (db.showGreatVault or db.showCurrency) and true or false
     if wantPanel and not IsMainFrameOnListTab() then
         wantPanel = false
@@ -870,6 +933,7 @@ local function ComputeWantTrackingPanel(db)
 end
 
 local function EnsureTrackingPanelCreatedIfNeeded(wantPanel)
+    -- Lazily create the panel (only when needed and on the correct tab).
     if not wantPanel or Addon._trackingFrame then return end
     local main = _G["LariasWeeklyChecklistFrame"]
     if main then
@@ -879,6 +943,7 @@ local function EnsureTrackingPanelCreatedIfNeeded(wantPanel)
 end
 
 local function ApplyGreatVaultLines(lines)
+    -- Write left column (Great Vault) lines and collapse empties.
     SetTextIfChanged(TrackingUI.left.line1, lines[1])
     SetTextIfChanged(TrackingUI.left.line2, lines[2])
     SetTextIfChanged(TrackingUI.left.line3, lines[3])
@@ -897,6 +962,7 @@ local function ApplyGreatVaultLines(lines)
 end
 
 local function SetRightRowPair(i, rowLabel, rowValue)
+    -- Write a {label,value} row and hide it if empty.
     local row = TrackingUI.right["line" .. tostring(i)]
     if not (row and row.label and row.value) then return end
     rowLabel = rowLabel or ""
@@ -908,6 +974,8 @@ local function SetRightRowPair(i, rowLabel, rowValue)
 end
 
 local function ApplyRightColumnAsPairs()
+    -- Modern layout: right column rows are {frame,label,value} pairs.
+    -- We collapse empty rows so ID=0 or missing data doesn't leave vertical gaps.
     local _, labelLines, valueLines, crestCount = GetCrestLines()
     crestCount = tonumber(crestCount) or 4
 
@@ -944,6 +1012,8 @@ local function ApplyRightColumnAsPairs()
 end
 
 local function ApplyRightColumnAsLines()
+    -- Legacy layout: right column is a list of FontStrings.
+    -- We still set shown/hidden to avoid blank space.
     local crestLines = GetCrestLines()
     SetTextIfChanged(TrackingUI.right.line1, crestLines[1])
     SetTextIfChanged(TrackingUI.right.line2, crestLines[2])
@@ -975,6 +1045,7 @@ local function ApplyRightColumnAsLines()
 end
 
 local function ResizeTrackingPanelToContent(addon)
+    -- Auto-size the tracking panel height to the actual visible content.
     local trackingFrame = addon._trackingFrame
     if not (trackingFrame and trackingFrame.GetHeight and trackingFrame.SetHeight) then return end
 
@@ -1018,6 +1089,7 @@ local function ResizeTrackingPanelToContent(addon)
 end
 
 function Addon:CreateTrackingPanel(parentFrame)
+    -- Build the tracking panel UI (left: Great Vault, right: currency rows).
     if self._trackingFrame then return end
     local db = self:EnsureDB()
 
@@ -1151,6 +1223,7 @@ function Addon:CreateTrackingPanel(parentFrame)
 end
 
 function Addon:ApplyTrackingPanelOptions()
+    -- Re-layout / show/hide columns when options change.
     local trackingFrame = self._trackingFrame
     if not trackingFrame then return end
 
@@ -1209,6 +1282,7 @@ function Addon:ApplyTrackingPanelOptions()
 end
 
 function Addon:UpdateTracking()
+    -- Main throttled entry point: reconcile desired visibility, then render content.
     local db = self:EnsureDB()
 
     local wantPanel = ComputeWantTrackingPanel(db)
@@ -1235,6 +1309,7 @@ function Addon:UpdateTracking()
 end
 
 function Addon:SetTrackingVisible(show)
+    -- Convenience toggle used by options UI.
     local db = self:EnsureDB()
     local want = show and true or false
     db.showGreatVault = want
