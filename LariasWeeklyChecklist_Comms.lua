@@ -18,6 +18,62 @@ local function Trim(s)
     return tostring(s or ""):gsub("^%s+", ""):gsub("%s+$", "")
 end
 
+local function NormalizeVersionString(v)
+    v = Trim(v)
+    -- Drop any trailing metadata after whitespace (e.g., "1.0.0 (foo)").
+    v = v:gsub("%s.*$", "")
+    -- Common tag prefix.
+    if v:match("^[vV]%d") then
+        v = v:sub(2)
+    end
+    return v
+end
+
+local function StripBuildAndPrerelease(v)
+    v = NormalizeVersionString(v)
+    if v == "" then return "" end
+    -- Ignore build metadata and prerelease suffixes for ordering.
+    v = v:match("^([^+]+)") or v
+    local main = v:match("^(.-)%-") or v
+    return main
+end
+
+local function IsLiveVersion(v)
+    v = NormalizeVersionString(v)
+    if v == "" then return false end
+    v = v:match("^([^+]+)") or v
+    return not v:find("%-")
+end
+
+local function ParseVersionNumbers(v)
+    local main = StripBuildAndPrerelease(v)
+    if main == "" then return nil end
+    local nums = {}
+    for n in tostring(main):gmatch("%d+") do
+        nums[#nums + 1] = tonumber(n) or 0
+    end
+    if #nums == 0 then return nil end
+    return nums
+end
+
+local function CompareVersions(versionA, versionB)
+    local aNums = ParseVersionNumbers(versionA)
+    local bNums = ParseVersionNumbers(versionB)
+    if not aNums and not bNums then return 0 end
+    if not aNums then return -1 end
+    if not bNums then return 1 end
+
+    local maxLen = (#aNums > #bNums) and #aNums or #bNums
+    for i = 1, maxLen do
+        local av = aNums[i] or 0
+        local bv = bNums[i] or 0
+        if av ~= bv then
+            return (av > bv) and 1 or -1
+        end
+    end
+    return 0
+end
+
 local function SerializeCommMessage(tbl)
     if not (AceSerializer and AceSerializer.Serialize) then return nil end
     if type(tbl) ~= "table" then return nil end
@@ -72,14 +128,14 @@ function Addon:GetMyVersion()
 end
 
 local function IsVersionNewer(versionA, versionB)
-    versionA = Trim(versionA)
-    versionB = Trim(versionB)
-    return versionA > versionB
+    return CompareVersions(versionA, versionB) > 0
 end
 
 function Addon:ShouldShowUpdateNotice()
     local database = self:EnsureDB()
     local myVersion = self:GetMyVersion()
+    -- If the user is on a prerelease build, don't nag about updates.
+    if myVersion == "" or not IsLiveVersion(myVersion) then return false end
     local newestSeenVersion = tostring(database._newestSeenRemoteVersion or "")
     if newestSeenVersion == "" or myVersion == "" then return false end
     if not IsVersionNewer(newestSeenVersion, myVersion) then return false end
@@ -216,8 +272,13 @@ function Addon:OnAddonMessage(prefix, message, sender)
         return
     end
 
-    local remoteVersion = Trim(decoded.v)
+    local remoteVersion = NormalizeVersionString(decoded.v)
     if remoteVersion == "" then return end
+
+    -- Only consider live (non-prerelease) remote versions for update prompting.
+    if not IsLiveVersion(remoteVersion) then
+        return
+    end
 
     local myVersion = self:GetMyVersion()
     if myVersion == "" then return end
