@@ -24,7 +24,6 @@ local STRINGS = {
 	OPTIONS_SHOW_CURRENCY = "Show Currency",
 
 	HIDE_COMPLETED_WEEKS = "Hide completed weeks",
-	OPTIONS_BUTTON = "Options",
 	RESET_BUTTON = "Reset",
 	DONE_PREFIX = "[Done] ",
 
@@ -57,10 +56,7 @@ local STRINGS = {
 
 	TRACKING_CATALYST_LABEL = "Catalyst:",
 
-	TRACKING_CURRENCY_FALLBACK_PREFIX = "Currency ",
-	TRACKING_CREST_MATCH_SUBSTRING = "crest",
 	TRACKING_INF = "INF",
-	MINIMAP_TOOLTIP_TEXT = "Left-click to toggle the checklist",
 
 	MINIMAP_TOOLTIP_LEFT_CLICK_TOGGLE = "Left-click: Toggle checklist",
 	MINIMAP_TOOLTIP_RIGHT_CLICK_OPTIONS = "Right-click: Options",
