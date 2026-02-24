@@ -81,6 +81,7 @@ function Addon:InitOptionsTab(frame, optionsPanel)
             dbForReset.collapsedSections = {}
         end
         dbForReset.hideCompletedSections = true
+        dbForReset.startAtSectionId = ""
 
         if Addon.SyncOptionsTabControls then
             Addon:SyncOptionsTabControls()
