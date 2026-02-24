@@ -4,14 +4,11 @@ import re
 import sys
 from pathlib import Path
 
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1iK2SZUcz_ljnkdTG7KW6pqfzaUDuSgnlh1HupcLrkus/edit?gid=53744607"
-
 HEADER_PREFIX_RE = re.compile(r"^\s*(Early Access|Pre-Season|Season|Week(?:s)?)\b", re.IGNORECASE)
 
 MONTHS = r"(Jan|January|Feb|February|Mar|March|Apr|April|May|Jun|June|Jul|July|Aug|August|Sep|Sept|September|Oct|October|Nov|November|Dec|December)"
 MONTH_DAY_RE = re.compile(rf"\b{MONTHS}\s+\d{{1,2}}\b", re.IGNORECASE)
 
-LEADING_LUA_BLOCK_COMMENT_RE = re.compile(r"\A--\[\[.*?\]\]\s*", re.DOTALL)
 
 def wow_safe_text(s: str) -> str:
     # common replacements for WoW-safe output
@@ -54,13 +51,6 @@ def is_section_header(text: str) -> bool:
 
 def detect_newline(text: str) -> str:
     return "\r\n" if "\r\n" in text else "\n"
-
-
-def extract_leading_block_comment(text: str) -> str | None:
-    m = LEADING_LUA_BLOCK_COMMENT_RE.match(text)
-    if not m:
-        return None
-    return m.group(0)
 
 
 def build_enus_data_header() -> list[str]:
@@ -107,10 +97,7 @@ def main(csv_in: str, lua_out: str) -> None:
 
     out.extend(build_enus_data_header())
 
-    out.append("local addonName = ...")
-    out.append("local locale = (GetLocale and GetLocale()) or nil")
     out.append('local LOCALE = "enUS"')
-    out.append('local listKey = addonName .. "_LIST_DATA"')
     out.append("")
     out.append('local LOCALE_REGISTRY_KEY = "LARIASWEEKLYCHECKLIST_LOCALE_REGISTRY"')
     out.append("")
@@ -136,12 +123,6 @@ def main(csv_in: str, lua_out: str) -> None:
     out.append("}")
     out.append("")
     out.append("reg.data[LOCALE] = DATASET")
-    out.append("")
-    out.append("-- Back-compat: only set the legacy global dataset when the client locale matches.")
-    out.append("-- Locale override uses `reg.data[LOCALE]` and should not require a matching client locale.")
-    out.append('if locale == LOCALE then')
-    out.append("    _G[listKey] = DATASET")
-    out.append("end")
     out.append("")
 
     new_text = nl.join(out)

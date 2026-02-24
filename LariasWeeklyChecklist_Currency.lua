@@ -35,24 +35,6 @@ end
 
 Addon.TRACKING = Addon.TRACKING or {}
 
-local function GetActiveTrackingProfile()
-    local tracking = Addon.TRACKING
-    local profiles = tracking and tracking.profiles
-    local tww = profiles and profiles.tww
-    local midnight = profiles and profiles.midnight
-
-    local threshold = (tracking and tonumber(tracking.midnightMinLevel)) or 90
-    local level = 0
-    if UnitLevel then
-        level = tonumber(UnitLevel("player")) or 0
-    end
-
-    if level >= threshold then
-        return midnight or tww or tracking
-    end
-    return tww or tracking
-end
-
 local function SafeRegisterEvent(frame, eventName)
     if not (frame and eventName) then return false end
     local ok = pcall(frame.RegisterEvent, frame, eventName)
@@ -205,8 +187,7 @@ end
 local RIGHT_LINE_COUNT = 10
 
 local function GetCrestAchievementID(i)
-    local profile = GetActiveTrackingProfile()
-    local ach = profile and profile.crestAchievementIDs
+    local ach = Addon.TRACKING and Addon.TRACKING.crestAchievementIDs
     if type(ach) ~= "table" then return nil end
 
     if ach[1] ~= nil then
@@ -219,160 +200,44 @@ local function GetCrestAchievementID(i)
     return nil
 end
 
-local function FirstWord(s)
-    if not s then return nil end
-    s = tostring(s)
-    local firstWord = s:match("^(%S+)")
-    if firstWord and firstWord ~= "" then return firstWord end
-    return nil
-end
-
-local function SplitWords(s)
-    if not s then return {} end
-    s = tostring(s)
-    local out = {}
-    for w in s:gmatch("%S+") do
-        out[#out + 1] = w
-    end
-    return out
-end
-
-local function CommonPrefixLen(wordsList)
-    local minLen
-    for i = 1, #wordsList do
-        local words = wordsList[i]
-        local wordCount = type(words) == "table" and #words or 0
-        if wordCount > 0 then
-            if not minLen or wordCount < minLen then minLen = wordCount end
-        end
-    end
-    if not minLen or minLen <= 0 then return 0 end
-
-    local prefix = 0
-    for idx = 1, minLen do
-        local base
-        for i = 1, #wordsList do
-            local words = wordsList[i]
-            if type(words) == "table" and #words > 0 then
-                local cur = tostring(words[idx] or "")
-                if cur == "" then return prefix end
-                cur = cur:lower()
-                if base == nil then
-                    base = cur
-                elseif base ~= cur then
-                    return prefix
-                end
-            end
-        end
-        prefix = idx
-    end
-    return prefix
-end
-
-local function CommonSuffixLen(wordsList)
-    local minLen
-    for i = 1, #wordsList do
-        local words = wordsList[i]
-        local wordCount = type(words) == "table" and #words or 0
-        if wordCount > 0 then
-            if not minLen or wordCount < minLen then minLen = wordCount end
-        end
-    end
-    if not minLen or minLen <= 0 then return 0 end
-
-    local suffix = 0
-    for back = 1, minLen do
-        local base
-        for i = 1, #wordsList do
-            local words = wordsList[i]
-            if type(words) == "table" and #words > 0 then
-                local wordIndex = (#words - back) + 1
-                local cur = tostring(words[wordIndex] or "")
-                if cur == "" then return suffix end
-                cur = cur:lower()
-                if base == nil then
-                    base = cur
-                elseif base ~= cur then
-                    return suffix
-                end
-            end
-        end
-        suffix = back
-    end
-    return suffix
-end
-
-local function BuildUniqueWordDisplayNames(names, count)
-    local function CapitalizeWords(s)
-        if type(s) ~= "string" or s == "" then return s end
-        return (s:gsub("(%S)(%S*)", function(a, b)
-            return a:upper() .. b
-        end))
-    end
-
-    local wordsList = {}
-    local out = {}
-    count = tonumber(count) or 0
-    for i = 1, count do
-        local name = names and names[i]
-        if type(name) == "string" and name ~= "" then
-            wordsList[#wordsList + 1] = SplitWords(name)
-        end
-    end
-
-    local prefixLen = CommonPrefixLen(wordsList)
-    local suffixLen = CommonSuffixLen(wordsList)
-
-    for i = 1, count do
-        local name = names and names[i]
-        if type(name) == "string" and name ~= "" then
-            local words = SplitWords(name)
-            local startIdx = prefixLen + 1
-            local endIdx = #words - suffixLen
-
-            local unique
-            if startIdx <= endIdx then
-                unique = table.concat(words, " ", startIdx, endIdx)
-            end
-
-            if not unique or unique == "" then
-                unique = FirstWord(name) or name
-            end
-            out[i] = CapitalizeWords(unique)
-        else
-            out[i] = nil
-        end
-    end
-    return out
-end
-
 local function FormatCurrencyProgressParts(currencyID)
     if not currencyID or not C_CurrencyInfo or not C_CurrencyInfo.GetCurrencyInfo then return nil end
     local info = C_CurrencyInfo.GetCurrencyInfo(currencyID)
     if not info then return nil end
 
-    local prefix = L.TRACKING_CURRENCY_FALLBACK_PREFIX
-    if type(prefix) ~= "string" then prefix = "" end
-    local name = info.name or (prefix .. tostring(currencyID))
     local qty = info.quantity or 0
     local weeklyMax = info.maxWeeklyQuantity
     local maxQty = info.maxQuantity
 
-    if weeklyMax and weeklyMax > 0 then return name, qty, weeklyMax end
-    if maxQty and maxQty > 0 then return name, qty, maxQty end
-    return name, qty, 0
+    if weeklyMax and weeklyMax > 0 then return qty, weeklyMax end
+    if maxQty and maxQty > 0 then return qty, maxQty end
+    return qty, 0
 end
 
-local function CountItemInBags(itemID)
-    if not itemID then return 0 end
-    -- Use C_Item.GetItemCount if available (Dragonflight+), else fallback
-    if C_Item and C_Item.GetItemCount then
-        return C_Item.GetItemCount(itemID, true) or 0
+local function GetCrestLabelText(currencyID)
+    local idNum = tonumber(currencyID)
+    local nameMap = L.TRACKING_CREST_NAMES_BY_ID
+    if type(nameMap) == "table" then
+        local name = nameMap[idNum or currencyID]
+        if type(name) == "string" and name ~= "" then
+            if name:sub(-1) == ":" then return name end
+            return name .. ":"
+        end
     end
-    if GetItemCount then
-        return GetItemCount(itemID, true) or 0
+
+    local fmt = L.TRACKING_CREST_ID_LABEL_FMT
+    if type(fmt) == "string" and fmt ~= "" then
+        local out = fmt:format(tostring(currencyID))
+        if out:sub(-1) == ":" then return out end
+        return out .. ":"
     end
-    return 0
+
+    local base = L.TRACKING_CREST_LABEL
+    if type(base) ~= "string" or base == "" then base = "Crest:" end
+    if base:sub(-1) == ":" then
+        return base .. " " .. tostring(currencyID) .. ":"
+    end
+    return base .. ": " .. tostring(currencyID) .. ":"
 end
 
 local function DetectCrestCurrencyIDsFromList()
@@ -506,15 +371,6 @@ local function IsActivityComplete(activity)
     return false
 end
 
-local function ColorForGVProgress(complete, total)
-    complete = tonumber(complete) or 0
-    total = tonumber(total) or 0
-    if total <= 0 then return COLORS.dim end
-    if complete <= 0 then return COLORS.red end
-    if complete >= total then return COLORS.green end
-    return COLORS.yellow
-end
-
 local function MakeGVHeader(label)
     return ColorWrap(COLORS.dim, label)
 end
@@ -551,59 +407,6 @@ local function MakeGVIlvlsRow(ilvls, maxPossible, parts)
         end
     end
     return tconcat(parts, " ")
-end
-
-local function SummarizeVaultType(allActivities, desiredType, ilvls)
-    local total, complete, maxPossible = 0, 0, 0
-    ilvls = ilvls or {}
-    Wipe(ilvls)
-
-    for idx = 1, #allActivities do
-        local activity = allActivities[idx]
-        if activity and activity.type == desiredType then
-            total = total + 1
-            if IsActivityComplete(activity) then
-                complete = complete + 1
-                local ilvl = GetActivityRewardIlvl(activity)
-                if not ilvl or ilvl <= 0 then
-                    ilvl = GetExampleRewardIlvlForActivity(activity)
-                end
-                ilvls[#ilvls + 1] = ilvl
-                if ilvl and ilvl > maxPossible then maxPossible = ilvl end
-            else
-                ilvls[#ilvls + 1] = 0
-            end
-        end
-    end
-
-    return complete, total, maxPossible
-end
-
-local function SummarizeVaultOther(allActivities, excludedTypes, ilvls)
-    local total, complete, maxPossible = 0, 0, 0
-    ilvls = ilvls or {}
-    Wipe(ilvls)
-
-    for idx = 1, #allActivities do
-        local activity = allActivities[idx]
-        local activityType = activity and activity.type
-        if activity and not (excludedTypes and excludedTypes[activityType]) then
-            total = total + 1
-            if IsActivityComplete(activity) then
-                complete = complete + 1
-                local ilvl = GetActivityRewardIlvl(activity)
-                if not ilvl or ilvl <= 0 then
-                    ilvl = GetExampleRewardIlvlForActivity(activity)
-                end
-                ilvls[#ilvls + 1] = ilvl
-                if ilvl > maxPossible then maxPossible = ilvl end
-            else
-                ilvls[#ilvls + 1] = 0
-            end
-        end
-    end
-
-    return complete, total, maxPossible
 end
 
 local function GetGreatVaultBlockLines()
@@ -705,11 +508,15 @@ local function GetGreatVaultBlockLines()
 end
 
 local function GetSparksParts()
+    local id = Addon.TRACKING and Addon.TRACKING.sparkCurrencyID
+    if not (id and tonumber(id) and tonumber(id) > 0) then
+        -- Disabled/unconfigured.
+        return "", ""
+    end
+
     local label = ColorWrap(COLORS.dim, L.TRACKING_SPARKS_LABEL or "")
-    local profile = GetActiveTrackingProfile()
-    local id = profile and profile.sparkCurrencyID
     if id and tonumber(id) and tonumber(id) > 0 then
-        local _, cur, c = FormatCurrencyProgressParts(id)
+        local cur, c = FormatCurrencyProgressParts(id)
         cur = cur or 0
         c = tonumber(c) or 0
 
@@ -727,28 +534,33 @@ local function GetSparksParts()
         return label, ColorWrap(color, xy)
     end
 
+    -- If we have an ID but cannot read it, treat as unavailable.
     return label, ColorWrap(COLORS.red, L.TRACKING_NA or "")
 end
 
 local function GetSparksLine()
     local label, value = GetSparksParts()
+    if not IsNonEmptyText(label) and not IsNonEmptyText(value) then
+        return ""
+    end
     return label .. " " .. (value or "")
 end
 
 local function GetTrackedQuestID(key)
-    local profile = GetActiveTrackingProfile()
-    local q = profile and profile.questIDs and profile.questIDs[key]
+    local q = Addon.TRACKING and Addon.TRACKING.questIDs and Addon.TRACKING.questIDs[key]
     q = tonumber(q) or 0
     if q <= 0 then return nil end
     return q
 end
 
 local function GetQuestDoneParts(labelText, questKey, opts)
-    local label = ColorWrap(COLORS.dim, labelText)
     local questID = GetTrackedQuestID(questKey)
     if not questID then
-        return label, ColorWrap(COLORS.dim, "?")
+        -- Disabled/unconfigured.
+        return "", ""
     end
+
+    local label = ColorWrap(COLORS.dim, labelText)
 
     opts = opts or {}
     local doneText = opts.doneText
@@ -785,8 +597,8 @@ local function GetWeeklyPreyParts()
 end
 
 local function GetCrestTradeBatches(profile)
-    profile = profile or GetActiveTrackingProfile() or {}
-    local batch = profile.crestTradeBatch
+    local p = profile or Addon.TRACKING or {}
+    local batch = p.crestTradeBatch
     local lower
     local higher
 
@@ -806,28 +618,27 @@ local function GetCrestTradeBatches(profile)
     return lower, higher
 end
 
-local function GetCrestLines()
-    local profile = GetActiveTrackingProfile()
-    if not profile then return { "", "", "", "" } end
+local function EnsureCrestIDsDetected(tracking)
+    if tracking._crestIDsDetected then return end
 
     -- Respect the configured crestCurrencyIDs order; only auto-detect if none are configured.
-    if not profile._crestIDsDetected then
-        local ids = profile.crestCurrencyIDs
-        local hasConfigured = false
-        if type(ids) == "table" and ids[1] ~= nil and #ids > 0 then
-            hasConfigured = true
-        end
-
-        if not hasConfigured then
-            local detected = DetectCrestCurrencyIDsFromList()
-            if detected then
-                profile.crestCurrencyIDs = detected
-            end
-        end
-        profile._crestIDsDetected = true
+    local ids = tracking.crestCurrencyIDs
+    local hasConfigured = false
+    if type(ids) == "table" and ids[1] ~= nil and #ids > 0 then
+        hasConfigured = true
     end
 
-    local ids = profile.crestCurrencyIDs or {}
+    if not hasConfigured then
+        local detected = DetectCrestCurrencyIDsFromList()
+        if detected then
+            tracking.crestCurrencyIDs = detected
+        end
+    end
+    tracking._crestIDsDetected = true
+end
+
+local function GetCrestIDsAndCount(tracking)
+    local ids = tracking.crestCurrencyIDs or {}
     local crestCount
     if type(ids) == "table" and ids[1] ~= nil then
         crestCount = #ids
@@ -837,7 +648,11 @@ local function GetCrestLines()
     end
 
     if crestCount <= 0 then crestCount = 4 end
-    local cache = profile._crestCache
+    return ids, crestCount
+end
+
+local function EnsureCrestCache(tracking, crestCount)
+    local cache = tracking._crestCache
     if not cache or cache.count ~= crestCount then
         cache = {
             count = crestCount,
@@ -851,9 +666,12 @@ local function GetCrestLines()
             effective = {},
             gained = {},
         }
-        profile._crestCache = cache
+        tracking._crestCache = cache
     end
+    return cache
+end
 
+local function ResetCrestOutput(cache, crestCount)
     local out = cache.out
     local labelOut = cache.label
     local valueOut = cache.value
@@ -862,83 +680,78 @@ local function GetCrestLines()
         labelOut[i] = ""
         valueOut[i] = ""
     end
+    return out, labelOut, valueOut
+end
 
-    local batchLower, batchHigher = GetCrestTradeBatches(profile)
-    local crest = cache
-
+local function PopulateCrestCurCap(cache, ids, crestCount)
     for i = 1, crestCount do
         local id = ids[i]
         if id then
-            local name, cur, cap = FormatCurrencyProgressParts(id)
-            crest.name[i] = name
-            crest.cur[i] = tonumber(cur) or 0
-            crest.cap[i] = tonumber(cap) or 0
+            local cur, cap = FormatCurrencyProgressParts(id)
+            cache.cur[i] = tonumber(cur) or 0
+            cache.cap[i] = tonumber(cap) or 0
         else
-            crest.name[i] = nil
-            crest.cur[i] = 0
-            crest.cap[i] = 0
+            cache.cur[i] = 0
+            cache.cap[i] = 0
         end
     end
+end
 
+local function PopulateCrestUnlocked(cache, crestCount)
     for i = 1, crestCount do
         local achievementID = GetCrestAchievementID(i)
-        crest.unlocked[i] = achievementID and IsAchievementCompleteSafe(achievementID) or false
+        cache.unlocked[i] = achievementID and IsAchievementCompleteSafe(achievementID) or false
     end
+end
 
+local function ComputeCrestTradeup(cache, crestCount, batchLower, batchHigher)
     local highestTradeTarget
     for i = crestCount, 2, -1 do
-        if crest.unlocked[i - 1] then
+        if cache.unlocked[i - 1] then
             highestTradeTarget = i
             break
         end
     end
 
-    local effective = crest.effective
-    local gained = crest.gained
-    effective[1] = crest.cur[1] or 0
+    local effective = cache.effective
+    local gained = cache.gained
+    effective[1] = cache.cur[1] or 0
     gained[1] = 0
     for i = 2, crestCount do
         local prevAmt = tonumber(effective[i - 1]) or 0
         local tradeFromPrev = 0
-        if crest.unlocked[i - 1] then
+        if cache.unlocked[i - 1] then
             tradeFromPrev = floor(prevAmt / batchLower) * batchHigher
         end
         gained[i] = tradeFromPrev
-        effective[i] = (crest.cur[i] or 0) + tradeFromPrev
+        effective[i] = (cache.cur[i] or 0) + tradeFromPrev
     end
+
+    return highestTradeTarget, gained
+end
+
+local function GetCrestLines()
+    local tracking = Addon.TRACKING
+    if not tracking then return { "", "", "", "" } end
+
+    EnsureCrestIDsDetected(tracking)
+    local ids, crestCount = GetCrestIDsAndCount(tracking)
+    local cache = EnsureCrestCache(tracking, crestCount)
+    local out, labelOut, valueOut = ResetCrestOutput(cache, crestCount)
+
+    local batchLower, batchHigher = GetCrestTradeBatches(tracking)
+    local crest = cache
+
+    PopulateCrestCurCap(crest, ids, crestCount)
+    PopulateCrestUnlocked(crest, crestCount)
+    local highestTradeTarget, gained = ComputeCrestTradeup(crest, crestCount, batchLower, batchHigher)
+    local effective = crest.effective
 
     for i = 1, crestCount do
         local id = ids[i]
         if id then
-            local name = crest.name[i]
-            if name then
-                local displayNames = crest._displayNames
-                if type(displayNames) ~= "table" or displayNames._count ~= crestCount then
-                    displayNames = { _count = crestCount }
-                    crest._displayNames = displayNames
-                end
-
-                local sigParts = crest._displaySigParts
-                if type(sigParts) ~= "table" then
-                    sigParts = {}
-                    crest._displaySigParts = sigParts
-                end
-                local sig = ""
-                for si = 1, crestCount do
-                    local n = crest.name[si] or ""
-                    sigParts[si] = n
-                end
-                sig = table.concat(sigParts, "|")
-
-                if crest._displaySig ~= sig then
-                    local computed = BuildUniqueWordDisplayNames(crest.name, crestCount)
-                    for di = 1, crestCount do
-                        displayNames[di] = computed[di]
-                    end
-                    crest._displaySig = sig
-                end
-
-                local displayName = displayNames[i] or name
+            local labelText = GetCrestLabelText(id)
+            if labelText then
                 local cur = crest.cur[i]
                 local cap = crest.cap[i]
 
@@ -966,7 +779,7 @@ local function GetCrestLines()
                     end
                 end
 
-                local lbl = ColorWrap(COLORS.dim, tostring(displayName) .. ":") .. tradeUp
+                local lbl = ColorWrap(COLORS.dim, tostring(labelText)) .. tradeUp
                 local val = ColorWrap(color, xy)
                 labelOut[i] = lbl
                 valueOut[i] = val
@@ -988,16 +801,16 @@ local function GetCrestLines()
         end
     end
 
-    return out
+    return out, labelOut, valueOut, crestCount
 end
 
 local function GetCatalystParts()
     local cur, cap
 
-    local profile = GetActiveTrackingProfile()
-    local id = profile and profile.catalystCurrencyID
-    if id and tonumber(id) and tonumber(id) > 0 then
-        local _, qty, c = FormatCurrencyProgressParts(id)
+    local id = Addon.TRACKING and Addon.TRACKING.catalystCurrencyID
+    local hasConfiguredID = (id and tonumber(id) and tonumber(id) > 0) and true or false
+    if hasConfiguredID then
+        local qty, c = FormatCurrencyProgressParts(id)
         cur = tonumber(qty)
         cap = tonumber(c)
     end
@@ -1022,6 +835,11 @@ local function GetCatalystParts()
     cur = tonumber(cur)
     cap = tonumber(cap)
     if not cur then
+        -- If no ID is configured and we couldn't detect via C_Catalyst, hide the row entirely.
+        if not hasConfiguredID then
+            return "", ""
+        end
+
         return ColorWrap(COLORS.dim, L.TRACKING_CATALYST_LABEL or ""), ColorWrap(COLORS.red, L.TRACKING_NA or "")
     end
 
@@ -1037,7 +855,166 @@ end
 
 local function GetCatalystLine()
     local label, value = GetCatalystParts()
+    if not IsNonEmptyText(label) and not IsNonEmptyText(value) then
+        return ""
+    end
     return label .. " " .. (value or "")
+end
+
+local function ComputeWantTrackingPanel(db)
+    local wantPanel = (db.showGreatVault or db.showCurrency) and true or false
+    if wantPanel and not IsMainFrameOnListTab() then
+        wantPanel = false
+    end
+    return wantPanel
+end
+
+local function EnsureTrackingPanelCreatedIfNeeded(wantPanel)
+    if not wantPanel or Addon._trackingFrame then return end
+    local main = _G["LariasWeeklyChecklistFrame"]
+    if main then
+        Addon:CreateTrackingPanel(main)
+        Addon:ApplyScrollLayout()
+    end
+end
+
+local function ApplyGreatVaultLines(lines)
+    SetTextIfChanged(TrackingUI.left.line1, lines[1])
+    SetTextIfChanged(TrackingUI.left.line2, lines[2])
+    SetTextIfChanged(TrackingUI.left.line3, lines[3])
+    SetTextIfChanged(TrackingUI.left.line4, lines[4])
+    SetTextIfChanged(TrackingUI.left.line5, lines[5])
+    SetTextIfChanged(TrackingUI.left.line6, lines[6])
+
+    SetShownIfChanged(TrackingUI.left.line1, IsNonEmptyText(lines[1]))
+    SetShownIfChanged(TrackingUI.left.line2, IsNonEmptyText(lines[2]))
+    SetShownIfChanged(TrackingUI.left.line3, IsNonEmptyText(lines[3]))
+    SetShownIfChanged(TrackingUI.left.line4, IsNonEmptyText(lines[4]))
+    SetShownIfChanged(TrackingUI.left.line5, IsNonEmptyText(lines[5]))
+    SetShownIfChanged(TrackingUI.left.line6, IsNonEmptyText(lines[6]))
+    SetShownIfChanged(TrackingUI.left.raidUnderline, TrackingUI.left.line1 and TrackingUI.left.line1:IsShown())
+    SetShownIfChanged(TrackingUI.left.dungeonsUnderline, TrackingUI.left.line4 and TrackingUI.left.line4:IsShown())
+end
+
+local function SetRightRowPair(i, rowLabel, rowValue)
+    local row = TrackingUI.right["line" .. tostring(i)]
+    if not (row and row.label and row.value) then return end
+    rowLabel = rowLabel or ""
+    rowValue = rowValue or ""
+    SetTextIfChanged(row.label, rowLabel)
+    SetTextIfChanged(row.value, rowValue)
+    local showRow = IsNonEmptyText(rowLabel) or IsNonEmptyText(rowValue)
+    SetShownIfChanged(row.frame or row.label, showRow)
+end
+
+local function ApplyRightColumnAsPairs()
+    local _, labelLines, valueLines, crestCount = GetCrestLines()
+    crestCount = tonumber(crestCount) or 4
+
+    local idx = 1
+    local function AddRow(rowLabel, rowValue)
+        if idx > RIGHT_LINE_COUNT then return end
+        rowLabel = rowLabel or ""
+        rowValue = rowValue or ""
+        if IsNonEmptyText(rowLabel) or IsNonEmptyText(rowValue) then
+            SetRightRowPair(idx, rowLabel, rowValue)
+            idx = idx + 1
+        end
+    end
+
+    for i = 1, crestCount do
+        AddRow(labelLines and labelLines[i] or "", valueLines and valueLines[i] or "")
+    end
+
+    local cLbl, cVal = GetCatalystParts()
+    AddRow(cLbl, cVal)
+
+    local sLbl, sVal = GetSparksParts()
+    AddRow(sLbl, sVal)
+
+    local bLbl, bVal = GetDelversBountyParts()
+    AddRow(bLbl, bVal)
+
+    local pLbl, pVal = GetWeeklyPreyParts()
+    AddRow(pLbl, pVal)
+
+    for i = idx, RIGHT_LINE_COUNT do
+        SetRightRowPair(i, "", "")
+    end
+end
+
+local function ApplyRightColumnAsLines()
+    local crestLines = GetCrestLines()
+    SetTextIfChanged(TrackingUI.right.line1, crestLines[1])
+    SetTextIfChanged(TrackingUI.right.line2, crestLines[2])
+    SetTextIfChanged(TrackingUI.right.line3, crestLines[3])
+    SetTextIfChanged(TrackingUI.right.line4, crestLines[4])
+    if TrackingUI.right.line5 then
+        SetTextIfChanged(TrackingUI.right.line5, GetCatalystLine())
+    end
+    if TrackingUI.right.line6 then
+        SetTextIfChanged(TrackingUI.right.line6, GetSparksLine())
+    end
+    if TrackingUI.right.line7 then
+        local bLbl, bVal = GetDelversBountyParts()
+        SetTextIfChanged(TrackingUI.right.line7, (bLbl or "") .. " " .. (bVal or ""))
+    end
+    if TrackingUI.right.line8 then
+        local pLbl, pVal = GetWeeklyPreyParts()
+        SetTextIfChanged(TrackingUI.right.line8, (pLbl or "") .. " " .. (pVal or ""))
+    end
+
+    SetShownIfChanged(TrackingUI.right.line1, IsNonEmptyText(crestLines[1]))
+    SetShownIfChanged(TrackingUI.right.line2, IsNonEmptyText(crestLines[2]))
+    SetShownIfChanged(TrackingUI.right.line3, IsNonEmptyText(crestLines[3]))
+    SetShownIfChanged(TrackingUI.right.line4, IsNonEmptyText(crestLines[4]))
+    if TrackingUI.right.line5 then SetShownIfChanged(TrackingUI.right.line5, IsNonEmptyText(TrackingUI.right.line5._lariasText or "")) end
+    if TrackingUI.right.line6 then SetShownIfChanged(TrackingUI.right.line6, IsNonEmptyText(TrackingUI.right.line6._lariasText or "")) end
+    if TrackingUI.right.line7 then SetShownIfChanged(TrackingUI.right.line7, IsNonEmptyText(TrackingUI.right.line7._lariasText or "")) end
+    if TrackingUI.right.line8 then SetShownIfChanged(TrackingUI.right.line8, IsNonEmptyText(TrackingUI.right.line8._lariasText or "")) end
+end
+
+local function ResizeTrackingPanelToContent(addon)
+    local trackingFrame = addon._trackingFrame
+    if not (trackingFrame and trackingFrame.GetHeight and trackingFrame.SetHeight) then return end
+
+    local bottomLeft = 0
+    bottomLeft = max(bottomLeft, BottomFor(TrackingUI.left.line1))
+    bottomLeft = max(bottomLeft, BottomFor(TrackingUI.left.line2))
+    bottomLeft = max(bottomLeft, BottomFor(TrackingUI.left.line3))
+    bottomLeft = max(bottomLeft, BottomFor(TrackingUI.left.line4))
+    bottomLeft = max(bottomLeft, BottomFor(TrackingUI.left.line5))
+    bottomLeft = max(bottomLeft, BottomFor(TrackingUI.left.line6))
+
+    local bottomRight = 0
+    for i = 1, RIGHT_LINE_COUNT do
+        local row = TrackingUI.right["line" .. tostring(i)]
+        if type(row) == "table" then
+            bottomRight = max(bottomRight, BottomFor(row.frame or row.label))
+        else
+            bottomRight = max(bottomRight, BottomFor(row))
+        end
+    end
+
+    local contentH = max(bottomLeft, bottomRight)
+    local topOffset = 32
+    local bottomPad = 10
+    local minH = 90
+    local targetH = max(minH, topOffset + contentH + bottomPad)
+
+    local curH = tonumber(trackingFrame:GetHeight()) or 0
+    if math.abs(curH - targetH) <= 1 then return end
+
+    trackingFrame:SetHeight(targetH)
+    if trackingFrame._lariasLeftCol and trackingFrame._lariasLeftCol.SetHeight then
+        trackingFrame._lariasLeftCol:SetHeight(max(1, targetH - 40))
+    end
+    if trackingFrame._lariasRightCol and trackingFrame._lariasRightCol.SetHeight then
+        trackingFrame._lariasRightCol:SetHeight(max(1, targetH - 40))
+    end
+    if addon.ApplyScrollLayout then
+        addon:ApplyScrollLayout()
+    end
 end
 
 function Addon:CreateTrackingPanel(parentFrame)
@@ -1234,18 +1211,8 @@ end
 function Addon:UpdateTracking()
     local db = self:EnsureDB()
 
-    local wantPanel = (db.showGreatVault or db.showCurrency) and true or false
-    if wantPanel and not IsMainFrameOnListTab() then
-        wantPanel = false
-    end
-
-    if wantPanel and not self._trackingFrame then
-        local main = _G["LariasWeeklyChecklistFrame"]
-        if main then
-            self:CreateTrackingPanel(main)
-            self:ApplyScrollLayout()
-        end
-    end
+    local wantPanel = ComputeWantTrackingPanel(db)
+    EnsureTrackingPanelCreatedIfNeeded(wantPanel)
 
     if self.ApplyTrackingPanelOptions then
         self:ApplyTrackingPanelOptions()
@@ -1256,137 +1223,15 @@ function Addon:UpdateTracking()
         return
     end
 
-    local greatVaultLines = GetGreatVaultBlockLines()
-    SetTextIfChanged(TrackingUI.left.line1, greatVaultLines[1])
-    SetTextIfChanged(TrackingUI.left.line2, greatVaultLines[2])
-    SetTextIfChanged(TrackingUI.left.line3, greatVaultLines[3])
-    SetTextIfChanged(TrackingUI.left.line4, greatVaultLines[4])
-    SetTextIfChanged(TrackingUI.left.line5, greatVaultLines[5])
-    SetTextIfChanged(TrackingUI.left.line6, greatVaultLines[6])
+    ApplyGreatVaultLines(GetGreatVaultBlockLines())
 
-    SetShownIfChanged(TrackingUI.left.line1, IsNonEmptyText(greatVaultLines[1]))
-    SetShownIfChanged(TrackingUI.left.line2, IsNonEmptyText(greatVaultLines[2]))
-    SetShownIfChanged(TrackingUI.left.line3, IsNonEmptyText(greatVaultLines[3]))
-    SetShownIfChanged(TrackingUI.left.line4, IsNonEmptyText(greatVaultLines[4]))
-    SetShownIfChanged(TrackingUI.left.line5, IsNonEmptyText(greatVaultLines[5]))
-    SetShownIfChanged(TrackingUI.left.line6, IsNonEmptyText(greatVaultLines[6]))
-    SetShownIfChanged(TrackingUI.left.raidUnderline, TrackingUI.left.line1 and TrackingUI.left.line1:IsShown())
-    SetShownIfChanged(TrackingUI.left.dungeonsUnderline, TrackingUI.left.line4 and TrackingUI.left.line4:IsShown())
-
-    local crests
     if type(TrackingUI.right.line1) == "table" then
-        local profile = GetActiveTrackingProfile()
-        GetCrestLines()
-        local cache = profile and profile._crestCache
-        local lbl = cache and cache.label or nil
-        local val = cache and cache.value or nil
-        local crestCount = (cache and tonumber(cache.count)) or 4
-
-        local function SetRow(i, rowLabel, rowValue)
-            local row = TrackingUI.right["line" .. tostring(i)]
-            if not (row and row.label and row.value) then return end
-            rowLabel = rowLabel or ""
-            rowValue = rowValue or ""
-            SetTextIfChanged(row.label, rowLabel)
-            SetTextIfChanged(row.value, rowValue)
-            local showRow = IsNonEmptyText(rowLabel) or IsNonEmptyText(rowValue)
-            SetShownIfChanged(row.frame or row.label, showRow)
-        end
-
-        for i = 1, crestCount do
-            SetRow(i, lbl and lbl[i] or "", val and val[i] or "")
-        end
-
-        local idx = crestCount + 1
-        local cLbl, cVal = GetCatalystParts()
-        SetRow(idx, cLbl, cVal)
-
-        idx = idx + 1
-        local sLbl, sVal = GetSparksParts()
-        SetRow(idx, sLbl, sVal)
-
-        idx = idx + 1
-        local bLbl, bVal = GetDelversBountyParts()
-        SetRow(idx, bLbl, bVal)
-
-        idx = idx + 1
-        local pLbl, pVal = GetWeeklyPreyParts()
-        SetRow(idx, pLbl, pVal)
-
-        for i = idx + 1, RIGHT_LINE_COUNT do
-            SetRow(i, "", "")
-        end
+        ApplyRightColumnAsPairs()
     else
-        crests = GetCrestLines()
-        SetTextIfChanged(TrackingUI.right.line1, crests[1])
-        SetTextIfChanged(TrackingUI.right.line2, crests[2])
-        SetTextIfChanged(TrackingUI.right.line3, crests[3])
-        SetTextIfChanged(TrackingUI.right.line4, crests[4])
-        if TrackingUI.right.line5 then
-            SetTextIfChanged(TrackingUI.right.line5, GetCatalystLine())
-        end
-        if TrackingUI.right.line6 then
-            SetTextIfChanged(TrackingUI.right.line6, GetSparksLine())
-        end
-        if TrackingUI.right.line7 then
-            local bLbl, bVal = GetDelversBountyParts()
-            SetTextIfChanged(TrackingUI.right.line7, (bLbl or "") .. " " .. (bVal or ""))
-        end
-        if TrackingUI.right.line8 then
-            local pLbl, pVal = GetWeeklyPreyParts()
-            SetTextIfChanged(TrackingUI.right.line8, (pLbl or "") .. " " .. (pVal or ""))
-        end
-
-        SetShownIfChanged(TrackingUI.right.line1, IsNonEmptyText(crests[1]))
-        SetShownIfChanged(TrackingUI.right.line2, IsNonEmptyText(crests[2]))
-        SetShownIfChanged(TrackingUI.right.line3, IsNonEmptyText(crests[3]))
-        SetShownIfChanged(TrackingUI.right.line4, IsNonEmptyText(crests[4]))
-        if TrackingUI.right.line5 then SetShownIfChanged(TrackingUI.right.line5, IsNonEmptyText(TrackingUI.right.line5._lariasText or "")) end
-        if TrackingUI.right.line6 then SetShownIfChanged(TrackingUI.right.line6, IsNonEmptyText(TrackingUI.right.line6._lariasText or "")) end
-        if TrackingUI.right.line7 then SetShownIfChanged(TrackingUI.right.line7, IsNonEmptyText(TrackingUI.right.line7._lariasText or "")) end
-        if TrackingUI.right.line8 then SetShownIfChanged(TrackingUI.right.line8, IsNonEmptyText(TrackingUI.right.line8._lariasText or "")) end
+        ApplyRightColumnAsLines()
     end
 
-    local trackingFrame = self._trackingFrame
-    if trackingFrame and trackingFrame.GetHeight and trackingFrame.SetHeight then
-        local bottomLeft = 0
-        bottomLeft = max(bottomLeft, BottomFor(TrackingUI.left.line1))
-        bottomLeft = max(bottomLeft, BottomFor(TrackingUI.left.line2))
-        bottomLeft = max(bottomLeft, BottomFor(TrackingUI.left.line3))
-        bottomLeft = max(bottomLeft, BottomFor(TrackingUI.left.line4))
-        bottomLeft = max(bottomLeft, BottomFor(TrackingUI.left.line5))
-        bottomLeft = max(bottomLeft, BottomFor(TrackingUI.left.line6))
-
-        local bottomRight = 0
-        for i = 1, RIGHT_LINE_COUNT do
-            local row = TrackingUI.right["line" .. tostring(i)]
-            if type(row) == "table" then
-                bottomRight = max(bottomRight, BottomFor(row.frame or row.label))
-            else
-                bottomRight = max(bottomRight, BottomFor(row))
-            end
-        end
-
-        local contentH = max(bottomLeft, bottomRight)
-        local topOffset = 32
-        local bottomPad = 10
-        local minH = 90
-        local targetH = max(minH, topOffset + contentH + bottomPad)
-
-        local curH = tonumber(trackingFrame:GetHeight()) or 0
-        if math.abs(curH - targetH) > 1 then
-            trackingFrame:SetHeight(targetH)
-            if trackingFrame._lariasLeftCol and trackingFrame._lariasLeftCol.SetHeight then
-                trackingFrame._lariasLeftCol:SetHeight(max(1, targetH - 40))
-            end
-            if trackingFrame._lariasRightCol and trackingFrame._lariasRightCol.SetHeight then
-                trackingFrame._lariasRightCol:SetHeight(max(1, targetH - 40))
-            end
-            if self.ApplyScrollLayout then
-                self:ApplyScrollLayout()
-            end
-        end
-    end
+    ResizeTrackingPanelToContent(self)
 end
 
 function Addon:SetTrackingVisible(show)
