@@ -108,8 +108,6 @@ local STRINGS = {
 
 	ILVLREF_DELVE_TIER_FMT     = "T%d",
 
-
-
 	SLASH_USAGE_TOGGLE = "Usage: /larias or /lcl to toggle the checklist",
 	SLASH_USAGE_LOCALE = "Usage: /larias locale auto|enUS|deDE|esES|esMX|frFR|itIT|ptBR|ruRU",
 	SLASH_LOCALE_SET_FMT = "Locale override set to %s (effective: %s)",

@@ -109,8 +109,6 @@ local function AutoFitCols(cols, rows)
     return cols
 end
 
-
-
 -- Color-code an ilvl number string by its crest tier.
 local function IlvlColor(s)
     local n = tonumber(s)

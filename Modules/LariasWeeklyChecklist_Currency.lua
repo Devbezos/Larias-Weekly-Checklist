@@ -48,7 +48,7 @@ local function SafeRegisterEvent(frame, eventName)
     -- Some events aren’t present on all client versions; register defensively.
     if not (frame and eventName) then return false end
     local ok = pcall(frame.RegisterEvent, frame, eventName)
-    return ok and true or false
+    return ok
 end
 
 function Addon:ConfigureTrackingEvents(parentFrame, showGreatVault, showCurrency)
