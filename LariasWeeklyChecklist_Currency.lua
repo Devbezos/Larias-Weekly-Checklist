@@ -94,6 +94,14 @@ function Addon:ConfigureTrackingEvents(parentFrame, showGreatVault, showCurrency
 end
 
 function Addon:RequestTrackingUpdate()
+    -- Lazily embed AceBucket-3.0 if available. Same defensive pattern as
+    -- AceComm in Comms.lua: not embedded at NewAddon time to avoid crashing
+    -- the main chunk when another addon's Ace3 build omits this library.
+    if not self.RegisterBucketMessage then
+        local aceBucket = LibStub and LibStub("AceBucket-3.0", true)
+        if aceBucket then aceBucket:Embed(self) end
+    end
+
     -- Throttle updates to run at most once every 0.2 seconds to prevent spam
     -- from rapid events like bag updates or currency changes.
     if self.RegisterBucketMessage and self.SendMessage then
@@ -1279,6 +1287,9 @@ function Addon:ApplyTrackingPanelOptions()
         rightTitle:ClearAllPoints()
         rightTitle:SetPoint("TOP", rightCol, "TOP", 0, 24)
     end
+
+    -- Scroll frame must be re-anchored whenever the panel is shown/resized.
+    if self.ApplyScrollLayout then self:ApplyScrollLayout() end
 end
 
 function Addon:UpdateTracking()

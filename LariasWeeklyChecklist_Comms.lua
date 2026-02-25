@@ -348,6 +348,14 @@ function Addon:CommsOnEnable()
     -- Called from Addon:OnEnable.
     self._myVersion = GetAddonVersion(addonName)
 
+    -- Embed AceComm-3.0 now if it is available.  We defer this from NewAddon
+    -- so a missing or overridden library does not crash the main chunk and
+    -- break slash commands for everyone.
+    local aceComm = LibStub and LibStub("AceComm-3.0", true)
+    if aceComm and not self.RegisterComm then
+        aceComm:Embed(self)
+    end
+
     if self.RegisterComm then
         self:RegisterComm(self.COMM_PREFIX)
     end
