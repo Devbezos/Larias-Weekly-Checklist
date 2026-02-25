@@ -4,67 +4,47 @@ if not Addon then return end
 
 -- ── Character profile helpers ────────────────────────────────────────────────
 
--- Returns a stable per-character key: always "CharName - RealmName".
--- Deliberately does NOT use db:GetCurrentProfile() because that returns the
--- AceDB *profile name* (e.g. "Default") which can be shared across characters.
-function Addon:GetCurrentProfileKey()
-    local name  = (UnitName    and UnitName("player"))   or ""
-    local realm = (GetRealmName and GetRealmName())      or ""
-    if name ~= "" and realm ~= "" then return name .. " - " .. realm end
-    if name ~= "" then return name end
-    -- Last resort: ask AceDB.
-    if self.db and self.db.GetCurrentProfile then return self.db:GetCurrentProfile() end
-    return ""
-end
-
 -- Returns a sorted list of all characters that have ever logged in with the addon.
--- Uses AceDB's internal sv.profileKeys table which maps "CharName - Realm" -> profileName,
--- giving us a real per-character list regardless of shared profile set-up.
+-- Primary source: AceDB's sv.profileKeys (populated on every login automatically).
+-- Secondary: global.chars keys (in case a char only has the new-format data).
 function Addon:GetCharProfileKeys()
+    local seen = {}
+    local keys = {}
+
     local sv = self.db and self.db.sv
-    -- AceDB-3.0 stores sv.profileKeys = { ["CharName - Realm"] = profileName }
     if sv and sv.profileKeys then
-        local keys = {}
         for charKey in pairs(sv.profileKeys) do
-            tinsert(keys, charKey)
+            if not seen[charKey] then
+                seen[charKey] = true
+                tinsert(keys, charKey)
+            end
         end
-        table.sort(keys)
-        return keys
     end
-    -- Fallback: iterate raw profile data keys.
-    if self.db and self.db.profiles then
-        local keys = {}
-        for k in pairs(self.db.profiles) do tinsert(keys, k) end
-        table.sort(keys)
-        return keys
+
+    -- Also include any chars that exist in global.chars but not in sv.profileKeys.
+    local chars = self.db and self.db.global and self.db.global.chars
+    if chars then
+        for charKey in pairs(chars) do
+            if not seen[charKey] then
+                seen[charKey] = true
+                tinsert(keys, charKey)
+            end
+        end
     end
-    return {}
+
+    table.sort(keys)
+    return keys
 end
 
 -- Switches the viewed character.  profileKey=nil means own character.
--- Looks up the AceDB profile name for the target character via sv.profileKeys
--- so this works even when multiple characters share a profile like "Default".
+-- Character data lives in db.global.chars[key] so no profile switching is
+-- needed \u2014 just update _viewingChar and refresh the UI.
 function Addon:SetViewingChar(profileKey)
     local ownKey = self:GetCurrentProfileKey()
-
-    -- Capture own profile name before any SetProfile call.
-    -- AceDB overwrites sv.profileKeys[ownKey] whenever SetProfile is called,
-    -- so we cannot rely on that table to restore our own profile later.
-    if not self._ownProfileName then
-        self._ownProfileName = self.db:GetCurrentProfile()
-    end
-
     if profileKey == nil or profileKey == ownKey then
         self._viewingChar = nil
-        self.db:SetProfile(self._ownProfileName)
-        -- Reset so it's re-captured fresh if the user reloads/relogs.
-        self._ownProfileName = nil
     else
         self._viewingChar = profileKey
-        -- Switch to whatever AceDB profile this other character uses.
-        local sv = self.db and self.db.sv
-        local targetProfile = (sv and sv.profileKeys and sv.profileKeys[profileKey]) or profileKey
-        self.db:SetProfile(targetProfile)
     end
     if self._cpUpdateLabel then self._cpUpdateLabel() end
     if self.RequestRefresh then self:RequestRefresh() else self:Refresh() end
@@ -227,6 +207,8 @@ function Addon:InitCharPickerUI(frame, styleFunc)
         btn:Show()
         return btn
     end
+
+    local function Populate()
         local p       = EnsurePanel()
         ReleaseBtns(p)
         local ownKey  = Addon:GetCurrentProfileKey()
@@ -369,7 +351,7 @@ function Addon:InitCharPickerUI(frame, styleFunc)
                 end
             end)
         end
-    end
+    end  -- end Populate
 
     -- ── OnClick for the header button ─────────────────────────────────────────
     local function OnPickerBtnClick()

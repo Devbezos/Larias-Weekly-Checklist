@@ -3,7 +3,6 @@
 ## Notes: Weekly checklist with collapsible weeks
 ## Author: Larias
 ## Version: 1.0.22
-## SavedVariablesPerCharacter: LariasWeeklyChecklistDBPC
 ## SavedVariables: LariasWeeklyChecklistDB
 ## OptionalDeps: LariasWeeklyChecklist_Localization
 ## IconTexture: Interface\AddOns\LariasWeeklyChecklist\Media\icon

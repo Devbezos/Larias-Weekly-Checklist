@@ -211,6 +211,21 @@ local function BuildIlvlRefWindow()
           crestShort = L.ILVLREF_CREST_MYTH },
     }
 
+    -- Populate a quick lookup so IC/I can resolve by id string (e.g. "ADV", "VET").
+    local TIER_MAP = {}
+    for _, t in ipairs(TIERS) do TIER_MAP[t.id] = t end
+
+    -- I("ADV", 2)  → integer ilvl  (ilvlBase + RANK_OFFSETS[rank])
+    -- IC("ADV", 2) → colored string ready for display
+    local function I(id, rank)
+        local t = TIER_MAP[id]
+        return t.ilvlBase + RANK_OFFSETS[rank]
+    end
+    local function IC(id, rank)
+        local t = TIER_MAP[id]
+        return t.color .. (t.ilvlBase + RANK_OFFSETS[rank]) .. R
+    end
+
     local function makeTrackRow(tier, rank, nextTier)
         local ilvl      = tier.ilvlBase + RANK_OFFSETS[rank]
         local isOverlap = (rank >= 5) and (nextTier ~= nil)
@@ -248,56 +263,56 @@ local function BuildIlvlRefWindow()
         end
     end
 
-    -- Crafted item levels
+    -- Crafted item levels  (quality n = tier base + RANK_OFFSETS[n])
     local CRAFTED = {
-        { "|A:Professions-Icon-Quality-Tier1:14:14|a", ADV..("220")..R, VET..("233")..R, CHAMP..("246")..R, HERO..("259")..R, MYTH..("272")..R },
-        { "|A:Professions-Icon-Quality-Tier2:14:14|a", ADV..("224")..R, VET..("237")..R, CHAMP..("250")..R, HERO..("263")..R, MYTH..("276")..R },
-        { "|A:Professions-Icon-Quality-Tier3:14:14|a", ADV..("227")..R, VET..("240")..R, CHAMP..("253")..R, HERO..("266")..R, MYTH..("279")..R },
-        { "|A:Professions-Icon-Quality-Tier4:14:14|a", ADV..("230")..R, VET..("243")..R, CHAMP..("256")..R, HERO..("269")..R, MYTH..("282")..R },
-        { "|A:Professions-Icon-Quality-Tier5:14:14|a", ADV..("233")..R, VET..("246")..R, CHAMP..("259")..R, HERO..("272")..R, MYTH..("285")..R },
+        { "|A:Professions-Icon-Quality-Tier1:14:14|a", IC("ADV",1), IC("VET",1), IC("CHAMP",1), IC("HERO",1), IC("MYTH",1) },
+        { "|A:Professions-Icon-Quality-Tier2:14:14|a", IC("ADV",2), IC("VET",2), IC("CHAMP",2), IC("HERO",2), IC("MYTH",2) },
+        { "|A:Professions-Icon-Quality-Tier3:14:14|a", IC("ADV",3), IC("VET",3), IC("CHAMP",3), IC("HERO",3), IC("MYTH",3) },
+        { "|A:Professions-Icon-Quality-Tier4:14:14|a", IC("ADV",4), IC("VET",4), IC("CHAMP",4), IC("HERO",4), IC("MYTH",4) },
+        { "|A:Professions-Icon-Quality-Tier5:14:14|a", IC("ADV",5), IC("VET",5), IC("CHAMP",5), IC("HERO",5), IC("MYTH",5) },
     }
 
     -- Dungeon item levels
     local DUNGEONS = {
-        { L.ILVLREF_DUNGEON_PRE_HEROIC, ADV.."224"..R,  "?"            },
-        { L.ILVLREF_DUNGEON_HEROIC,     ADV.."230"..R,  VET.."243"..R  },
-        { L.ILVLREF_DUNGEON_PRE_MYTHIC, VET.."240"..R,  "?"            },
-        { L.ILVLREF_DUNGEON_MYTHIC,     CHAMP.."246"..R, CHAMP.."256"..R },
-        { "M2",  CHAMP.."250"..R, HERO.."259"..R  },
-        { "M3",  CHAMP.."250"..R, HERO.."259"..R  },
-        { "M4",  CHAMP.."253"..R, HERO.."263"..R  },
-        { "M5",  CHAMP.."256"..R, HERO.."263"..R  },
-        { "M6",  HERO.."259"..R,  HERO.."266"..R  },
-        { "M7",  HERO.."259"..R,  HERO.."269"..R  },
-        { "M8",  HERO.."263"..R,  HERO.."269"..R  },
-        { "M9",  HERO.."263"..R,  HERO.."269"..R  },
-        { "M10", HERO.."266"..R,  MYTH.."272"..R  },
-        { "M11", HERO.."266"..R,  MYTH.."272"..R  },
-        { "M12", HERO.."266"..R,  MYTH.."272"..R  },
+        { L.ILVLREF_DUNGEON_PRE_HEROIC, IC("ADV",2),   "?"           },
+        { L.ILVLREF_DUNGEON_HEROIC,     IC("ADV",4),   IC("VET",4)   },
+        { L.ILVLREF_DUNGEON_PRE_MYTHIC, IC("VET",3),   "?"           },
+        { L.ILVLREF_DUNGEON_MYTHIC,     IC("CHAMP",1), IC("CHAMP",4) },
+        { "M2",  IC("CHAMP",2), IC("HERO",1)  },
+        { "M3",  IC("CHAMP",2), IC("HERO",1)  },
+        { "M4",  IC("CHAMP",3), IC("HERO",2)  },
+        { "M5",  IC("CHAMP",4), IC("HERO",2)  },
+        { "M6",  IC("HERO",1),  IC("HERO",3)  },
+        { "M7",  IC("HERO",1),  IC("HERO",4)  },
+        { "M8",  IC("HERO",2),  IC("HERO",4)  },
+        { "M9",  IC("HERO",2),  IC("HERO",4)  },
+        { "M10", IC("HERO",3),  IC("MYTH",1)  },
+        { "M11", IC("HERO",3),  IC("MYTH",1)  },
+        { "M12", IC("HERO",3),  IC("MYTH",1)  },
     }
 
-    -- Raid item levels
+    -- Raid item levels  (each difficulty = one tier across boss columns 1–4)
     local RAID = {
-        { L.ILVLREF_RAID_LFR,    VET.."233"..R,   VET.."237"..R,   VET.."240"..R,   CHAMP.."243"..R },
-        { L.ILVLREF_RAID_NORMAL,  CHAMP.."246"..R, CHAMP.."250"..R, CHAMP.."253"..R, HERO.."256"..R  },
-        { L.ILVLREF_RAID_HEROIC,  HERO.."259"..R,  HERO.."263"..R,  HERO.."266"..R,  MYTH.."269"..R  },
-        { L.ILVLREF_RAID_MYTHIC,  MYTH.."272"..R,  MYTH.."276"..R,  MYTH.."279"..R,  MYTH.."282"..R  },
+        { L.ILVLREF_RAID_LFR,    IC("VET",1),   IC("VET",2),   IC("VET",3),   IC("VET",4)   },
+        { L.ILVLREF_RAID_NORMAL,  IC("CHAMP",1), IC("CHAMP",2), IC("CHAMP",3), IC("CHAMP",4) },
+        { L.ILVLREF_RAID_HEROIC,  IC("HERO",1),  IC("HERO",2),  IC("HERO",3),  IC("HERO",4)  },
+        { L.ILVLREF_RAID_MYTHIC,  IC("MYTH",1),  IC("MYTH",2),  IC("MYTH",3),  IC("MYTH",4)  },
     }
 
     -- Bountiful Delve item levels
     local tFmt = L.ILVLREF_DELVE_TIER_FMT
     local DELVES = {
-        { tFmt:format(1),  ADV.."220"..R,   "-",             VET.."233"..R   },
-        { tFmt:format(2),  ADV.."224"..R,   "-",             VET.."237"..R   },
-        { tFmt:format(3),  ADV.."227"..R,   "-",             VET.."240"..R   },
-        { tFmt:format(4),  ADV.."230"..R,   VET.."237"..R,   VET.."243"..R   },
-        { tFmt:format(5),  VET.."233"..R,   VET.."243"..R,   CHAMP.."246"..R },
-        { tFmt:format(6),  VET.."237"..R,   CHAMP.."250"..R, CHAMP.."253"..R },
-        { tFmt:format(7),  CHAMP.."250"..R, CHAMP.."256"..R, CHAMP.."256"..R },
-        { tFmt:format(8),  CHAMP.."250"..R, HERO.."259"..R,  HERO.."259"..R  },
-        { tFmt:format(9),  CHAMP.."250"..R, HERO.."259"..R,  HERO.."259"..R  },
-        { tFmt:format(10), CHAMP.."250"..R, HERO.."259"..R,  HERO.."259"..R  },
-        { tFmt:format(11), CHAMP.."250"..R, HERO.."259"..R,  HERO.."259"..R  },
+        { tFmt:format(1),  IC("ADV",1),   "-",           IC("VET",1)   },
+        { tFmt:format(2),  IC("ADV",2),   "-",           IC("VET",2)   },
+        { tFmt:format(3),  IC("ADV",3),   "-",           IC("VET",3)   },
+        { tFmt:format(4),  IC("ADV",4),   IC("VET",2),   IC("VET",4)   },
+        { tFmt:format(5),  IC("VET",1),   IC("VET",4),   IC("CHAMP",1) },
+        { tFmt:format(6),  IC("VET",2),   IC("CHAMP",2), IC("CHAMP",3) },
+        { tFmt:format(7),  IC("CHAMP",2), IC("CHAMP",4), IC("CHAMP",4) },
+        { tFmt:format(8),  IC("CHAMP",2), IC("HERO",1),  IC("HERO",1)  },
+        { tFmt:format(9),  IC("CHAMP",2), IC("HERO",1),  IC("HERO",1)  },
+        { tFmt:format(10), IC("CHAMP",2), IC("HERO",1),  IC("HERO",1)  },
+        { tFmt:format(11), IC("CHAMP",2), IC("HERO",1),  IC("HERO",1)  },
     }
 
     -- Pre-fit column widths and compute dynamic window width ----------------

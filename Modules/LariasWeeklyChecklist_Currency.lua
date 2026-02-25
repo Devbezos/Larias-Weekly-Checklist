@@ -46,11 +46,14 @@ end
 
 Addon.TRACKING = Addon.TRACKING or {}
 
--- Returns true when the current character has previously saved tracking data.
--- Used to decide whether background event-driven snapshot updates should run.
+-- Returns true when the logged-in character has previously saved tracking data.
+-- Intentionally bypasses _viewingChar so it always reflects the OWN character;
+-- used to decide whether background event-driven snapshot updates should run.
 function Addon:HasTrackingSnapshot()
-    local prof = self.db and self.db.profile
-    local snap = prof and prof.trackingSnapshot
+    if not (self.db and self.db.global) then return false end
+    local ownKey = self:GetCurrentProfileKey()
+    local cdb    = self.db.global.chars and self.db.global.chars[ownKey]
+    local snap   = cdb and cdb.trackingSnapshot
     return snap ~= nil and (snap.leftLines ~= nil or snap.rightRows ~= nil)
 end
 

@@ -104,8 +104,11 @@ function Addon:InitOptionsTab(frame, optionsPanel)
     end)
     frame._lariasOptShowCharPickerBtn = showCharPickerCheck
 
+    -- ── Right column anchor ──────────────────────────────────────────────────
+    local RIGHT_COL_X = 216
+
     local resetBtn = CreateFrame("Button", nil, optionsPanel, "UIPanelButtonTemplate")
-    resetBtn:SetPoint("TOPLEFT", showCharPickerCheck, "BOTTOMLEFT", 0, -12)
+    resetBtn:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", RIGHT_COL_X, -6)
     resetBtn:SetSize(108, 22)
     if Addon._styleActionButton then
         Addon._styleActionButton(resetBtn)
@@ -182,7 +185,7 @@ function Addon:InitOptionsTab(frame, optionsPanel)
 
     -- UI Scale slider -------------------------------------------------------
     local scaleTitle = optionsPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    scaleTitle:SetPoint("TOPLEFT", resetBtn, "BOTTOMLEFT", 0, -18)
+    scaleTitle:SetPoint("TOPLEFT", resetBtn, "BOTTOMLEFT", 0, -14)
     frame._lariasOptScaleTitleFS = scaleTitle
 
     local scaleSlider = CreateFrame("Slider", "LariasWeeklyChecklistScaleSlider", optionsPanel, "OptionsSliderTemplate")
@@ -229,20 +232,20 @@ function Addon:InitOptionsTab(frame, optionsPanel)
 
     -- Hidden characters section ----------------------------------------------
     local hiddenCharsTitle = optionsPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    hiddenCharsTitle:SetPoint("TOPLEFT", scaleSlider, "BOTTOMLEFT", -6, -18)
+    hiddenCharsTitle:SetPoint("TOPLEFT", scaleSlider, "BOTTOMLEFT", -6, -14)
     frame._lariasOptHiddenCharsTitle = hiddenCharsTitle
 
     local hiddenCharsPanel = CreateFrame("Frame", nil, optionsPanel)
     hiddenCharsPanel:SetPoint("TOPLEFT", hiddenCharsTitle, "BOTTOMLEFT", 0, -4)
-    hiddenCharsPanel:SetWidth(280)
+    hiddenCharsPanel:SetWidth(210)
     hiddenCharsPanel:SetHeight(20)
     hiddenCharsPanel._rows = {}
     frame._lariasOptHiddenCharsPanel = hiddenCharsPanel
     -- -------------------------------------------------------------------------
 
     local localizationHint = optionsPanel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-    localizationHint:SetPoint("TOPLEFT", resetBtn, "BOTTOMLEFT", 0, -10)
-    localizationHint:SetWidth(420)
+    localizationHint:SetPoint("TOPLEFT", showCharPickerCheck, "BOTTOMLEFT", 6, -10)
+    localizationHint:SetWidth(200)
     localizationHint:SetJustifyH("LEFT")
     localizationHint:SetJustifyV("TOP")
     localizationHint:Hide()
@@ -267,6 +270,8 @@ function Addon:RefreshHiddenCharsList()
     local gdb = self.db and self.db.global
     local hiddenChars = gdb and gdb.hiddenChars or {}
     local ROW_H = 22
+    local BTN_W = 20
+    local PAD   = 4
 
     -- Collect and sort hidden keys.
     local hidden = {}
@@ -278,7 +283,6 @@ function Addon:RefreshHiddenCharsList()
     panel._rows = panel._rows or {}
 
     if #hidden == 0 then
-        -- Hide all rows and show a "none" label.
         for _, row in ipairs(panel._rows) do row:Hide() end
         if not panel._noneLabel then
             local lbl = panel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
@@ -295,29 +299,42 @@ function Addon:RefreshHiddenCharsList()
 
     for i, key in ipairs(hidden) do
         local charName = (key:match("^(.-)%s*%-") or key):gsub("^%s+",""):gsub("%s+$","")
-        if charName == "" then charName = key end
+        local realm    = (key:match("%-%s*(.+)$") or ""):gsub("^%s+",""):gsub("%s+$","")
+        local displayText
+        if realm ~= "" then
+            displayText = charName .. " - " .. realm
+        else
+            displayText = key
+        end
 
         local row = panel._rows[i]
         if not row then
             row = CreateFrame("Frame", nil, panel)
             panel._rows[i] = row
 
-            local nameFS = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-            nameFS:SetPoint("LEFT", row, "LEFT", 0, 0)
-            nameFS:SetWidth(170)
-            if nameFS.SetJustifyH then nameFS:SetJustifyH("LEFT") end
-            if nameFS.SetWordWrap then nameFS:SetWordWrap(false) end
-            row._nameFS = nameFS
+            -- Checkmark button (unhide action)
+            local checkBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+            checkBtn:SetSize(BTN_W, BTN_W)
+            checkBtn:SetPoint("LEFT", row, "LEFT", 0, 0)
+            if Addon._styleActionButton then Addon._styleActionButton(checkBtn) end
+            local checkTR = checkBtn.Text or (checkBtn.GetFontString and checkBtn:GetFontString())
+            if checkTR then
+                if checkTR.SetJustifyH then checkTR:SetJustifyH("CENTER") end
+            end
+            checkBtn:SetText("|cFF00FF00\226\156\147|r")  -- green checkmark ✓
+            row._checkBtn = checkBtn
 
-            local unhideBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-            unhideBtn:SetSize(70, 18)
-            unhideBtn:SetPoint("LEFT", nameFS, "RIGHT", 6, 0)
-            if Addon._styleActionButton then Addon._styleActionButton(unhideBtn) end
-            row._unhideBtn = unhideBtn
+            -- Name + realm fontstring  (aligns flush with panel left after button)
+            local nameFS = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+            nameFS:SetPoint("LEFT", checkBtn, "RIGHT", PAD, 0)
+            nameFS:SetWidth(panel:GetWidth() - BTN_W - PAD * 2)
+            if nameFS.SetJustifyH then nameFS:SetJustifyH("LEFT") end
+            if nameFS.SetWordWrap  then nameFS:SetWordWrap(false)  end
+            row._nameFS = nameFS
         end
 
         row:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, -(ROW_H * (i - 1)))
-        row:SetSize(260, ROW_H)
+        row:SetSize(panel:GetWidth(), ROW_H)
         row:Show()
 
         local classToken = gdb and gdb.charClasses and gdb.charClasses[key]
@@ -326,12 +343,11 @@ function Addon:RefreshHiddenCharsList()
             local cc = RAID_CLASS_COLORS and RAID_CLASS_COLORS[classToken]
             if cc then r, g, b = cc.r, cc.g, cc.b end
         end
-        row._nameFS:SetText(charName)
+        row._nameFS:SetText(displayText)
         row._nameFS:SetTextColor(r, g, b, 1)
 
-        row._unhideBtn:SetText(L.OPTIONS_UNHIDE_BTN or "Unhide")
         local _key = key
-        row._unhideBtn:SetScript("OnClick", function()
+        row._checkBtn:SetScript("OnClick", function()
             local gdbU = Addon.db and Addon.db.global
             if gdbU and gdbU.hiddenChars then
                 gdbU.hiddenChars[_key] = nil
@@ -347,6 +363,8 @@ function Addon:RefreshHiddenCharsList()
 
     panel:SetHeight(math.max(ROW_H, ROW_H * #hidden))
 end
+
+function Addon:SyncOptionsTabControls()
     local frame = GetMainFrame()
     if not frame then return end
 

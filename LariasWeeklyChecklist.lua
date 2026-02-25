@@ -86,11 +86,9 @@ do
         local names = self.CONSTANTS.names
 
         if names.displayName == nil then names.displayName = locale.DISPLAY_NAME or addonNameInput end
-        if names.dbName == nil then names.dbName = "LariasWeeklyChecklistDBPC" end
         if names.accountDbName == nil then names.accountDbName = "LariasWeeklyChecklistDB" end
 
         self.DISPLAY_NAME = self.DISPLAY_NAME or names.displayName
-        self._DB_NAME = self._DB_NAME or names.dbName
         self._ACCOUNT_DB_NAME = self._ACCOUNT_DB_NAME or names.accountDbName
 
         self.CONSTANTS.theme = self.CONSTANTS.theme or self.THEME or {
@@ -175,9 +173,12 @@ local CreateFrame = CreateFrame
 
 Addon._debugRate = Addon._debugRate or {}
 
--- Debug is an opt-in flag stored in SavedVariables.
+-- Debug is an opt-in flag stored in per-character saved variables.
 function Addon:IsDebugEnabled()
-    return self.db and self.db.profile and self.db.profile.debug and true or false
+    if not (self.db and self.db.global) then return false end
+    local ownKey = self:GetCurrentProfileKey()
+    local cdb = self.db.global.chars and self.db.global.chars[ownKey]
+    return cdb and cdb.debug and true or false
 end
 
 -- Rate-limited printf-style debug output.
@@ -257,83 +258,112 @@ end
 -- This intentionally does NOT persist across /reload or relog.
 -- Addon._sessionLocaleOverride is set by the /larias locale command.
 
+-- Default values applied to each character's data block on first access.
+-- Keys with false/nil defaults are omitted here; the inline logic in EnsureDB
+-- uses "if == nil" checks to stay concise.
+local CHAR_DEFAULTS = {
+    hideCompletedSections = true,
+    showGreatVault        = true,
+    showCurrency          = true,
+    showChangeWeekBtn     = true,
+    showIlvlRefBtn        = true,
+    showCharPickerBtn     = true,
+    debug                 = false,
+    startAtSectionId      = "",
+}
+
 -- Set up database with AceDB
 local function SetupAddonDB()
     if Addon.db then return end
-    
+
     local defaults = {
-        profile = {
-            hideCompletedSections = true,
-            showGreatVault = true,
-            showCurrency = true,
-            showChangeWeekBtn = true,
-            showIlvlRefBtn = true,
-            showCharPickerBtn = true,
-            debug = false,
-            -- When set, only show sections at/after this sectionId in the list.
-            -- Nil/empty means show all sections.
-            startAtSectionId = "",
-            collapsedSections = {},
-            checked = {},
-            -- Snapshot of rendered currency/vault strings saved each time the
-            -- panel updates.  Used by the character picker to display another
-            -- character's tracking data without live API access.
-            trackingSnapshot = {},
-        },
+        profile = {},  -- intentionally empty; all data lives in global
         global = {
             _newestSeenRemoteVersion = "",
-            _newestSeenRemoteSender = "",
-            _dismissedRemoteVersion = "",
-            mainFramePos = false,
-            ilvlRefPos = false,
-            charClasses = {},  -- [profileKey] = classToken (e.g. "WARRIOR")
-            hiddenChars = {},  -- [profileKey] = true (hidden from char picker dropdown)
+            _newestSeenRemoteSender  = "",
+            _dismissedRemoteVersion  = "",
+            -- Account-wide UI state (shared across all characters on this account).
+            mainFramePos  = false,
+            mainFrameSize = false,
+            ilvlRefPos    = false,
+            ilvlRefSize   = false,
+            uiScalePct    = 100,
+            charClasses   = {},  -- [profileKey] = classToken (e.g. "WARRIOR")
+            hiddenChars   = {},  -- [profileKey] = true (hidden from char picker dropdown)
+            -- Per-character data, each keyed by "CharName - Realm".
+            -- Holds checked items, collapsed sections, preferences, snapshot, etc.
+            chars = {},
         },
     }
-    
-    -- nil default: new characters get a profile named "CharName - Realm",
-    -- giving each character their own data out of the box.
-    -- (Passing true used to force everyone onto "Default", sharing all data.)
+
+    -- nil default: AceDB still gives each character their own profile slot
+    -- (used only for sv.profileKeys enumeration). All actual data is in global.chars.
     Addon.db = LibStub("AceDB-3.0"):New(addonName .. "DB", defaults)
 end
 
--- Ensure the logged-in character has their own AceDB profile, not one shared
--- with other characters.  Called from OnEnable after the DB is ready.
--- If two or more characters share the same profile (the old "Default" situation)
--- we copy the shared data into a new per-character profile so each character
--- gets an independent starting state.
-local function MigrateToPerCharProfile()
-    if not (Addon.db and Addon.db.sv) then return end
-    local sv          = Addon.db.sv
-    local charKey     = Addon:GetCurrentProfileKey()   -- "CharName - Realm"
-    local currentProf = Addon.db:GetCurrentProfile()
+-- One-time migration: copy per-character data from the old AceDB profile system
+-- into the new global.chars[profileKey] structure.
+-- Stores a _migrated=true sentinel inside each character's chars entry so each
+-- character is migrated exactly once regardless of who logs in first.
+-- IMPORTANT: must be called before any EnsureDB() call so that the chars entry
+-- doesn't already exist from EnsureDB's inline-defaults path.
+local function MigrateProfileDataToGlobalChars()
+    if not (Addon.db and Addon.db.global) then return end
+    local ownKey = Addon:GetCurrentProfileKey()
+    if ownKey == "" then return end
 
-    -- Already on a per-char profile — nothing to do.
-    if currentProf == charKey then return end
+    local chars = Addon.db.global.chars
+    if not chars then return end
 
-    -- Count how many characters share the current profile.
-    local sharedCount = 0
-    if sv.profileKeys then
-        for _, profName in pairs(sv.profileKeys) do
-            if profName == currentProf then sharedCount = sharedCount + 1 end
-        end
+    -- Per-character sentinel: already migrated if the flag is set.
+    chars[ownKey] = chars[ownKey] or {}
+    local cdb = chars[ownKey]
+    if cdb._migrated then return end
+    cdb._migrated = true
+
+    -- Pull whatever is in the old profile for this character.
+    local oldProf = Addon.db and Addon.db.profile
+    if not oldProf then return end
+
+    local function shallowCopy(src, dest)
+        if type(src) ~= "table" then return end
+        for k, v in pairs(src) do dest[k] = v end
     end
 
-    -- Only migrate if more than one character is on this profile.
-    if sharedCount <= 1 then return end
+    if type(oldProf.checked) == "table" and next(oldProf.checked) then
+        cdb.checked = {}
+        shallowCopy(oldProf.checked, cdb.checked)
+    end
+    if type(oldProf.collapsedSections) == "table" and next(oldProf.collapsedSections) then
+        cdb.collapsedSections = {}
+        shallowCopy(oldProf.collapsedSections, cdb.collapsedSections)
+    end
+    if type(oldProf.startAtSectionId) == "string" and oldProf.startAtSectionId ~= "" then
+        cdb.startAtSectionId = oldProf.startAtSectionId
+    end
+    if type(oldProf.trackingSnapshot) == "table" and next(oldProf.trackingSnapshot) then
+        cdb.trackingSnapshot = {}
+        shallowCopy(oldProf.trackingSnapshot, cdb.trackingSnapshot)
+    end
+    -- Preferences
+    for _, k in ipairs({ "hideCompletedSections", "showGreatVault", "showCurrency",
+                         "showChangeWeekBtn", "showIlvlRefBtn", "showCharPickerBtn", "debug" }) do
+        if oldProf[k] ~= nil then cdb[k] = oldProf[k] end
+    end
 
-    -- Create the new per-character profile (AceDB copies defaults on creation).
-    Addon.db:SetProfile(charKey)
-    -- Copy the existing shared data so settings (show/hide toggles etc.) carry over,
-    -- but clear the list progress data — checked boxes and collapsed sections are
-    -- per-character and shouldn't be inherited from a shared profile.
-    Addon.db:CopyProfile(currentProf, true)  -- true = silent (no callbacks)
-    if Addon.db.profile.checked then
-        wipe(Addon.db.profile.checked)
-    end
-    if Addon.db.profile.collapsedSections then
-        wipe(Addon.db.profile.collapsedSections)
-    end
+    -- Wipe old profile data now that everything has been copied to global.chars.
+    -- This prevents duplicate storage in SavedVariables.
+    oldProf.checked           = nil
+    oldProf.collapsedSections = nil
+    oldProf.startAtSectionId  = nil
+    oldProf.trackingSnapshot  = nil
+    oldProf.hideCompletedSections = nil
+    oldProf.showGreatVault    = nil
+    oldProf.showCurrency      = nil
+    oldProf.showChangeWeekBtn = nil
+    oldProf.showIlvlRefBtn    = nil
+    oldProf.showCharPickerBtn = nil
+    oldProf.debug             = nil
 end
 
 -- Set up LibDataBroker and LibDBIcon for minimap icon
@@ -378,15 +408,8 @@ local function SetupMinimapIcon()
         end,
     })
     
-    icon:Register(addonName, dataObject, (Addon.db and Addon.db.profile and Addon.db.profile.minimap) or {})
-end
-
--- Enable minimap icon by default
-local function EnsureMinimapIcon()
-    if not Addon.db or not Addon.db.profile then return end
-    if Addon.db.profile.minimap == nil then
-        Addon.db.profile.minimap = { hide = false }
-    end
+    local minimapCfg = {}
+    icon:Register(addonName, dataObject, minimapCfg)
 end
 
 -- Initialize AceDB and minimap icon on addon load
@@ -395,7 +418,6 @@ function Addon:OnInitialize()
     if self.ApplyLocaleOverride then
         self:ApplyLocaleOverride()
     end
-    EnsureMinimapIcon()
     SetupMinimapIcon()
 end
 
@@ -423,18 +445,13 @@ function Addon:OnEnable()
         self:ApplyLocaleOverride()
     end
 
+    -- One-time migration: move old AceDB profile data into global.chars[ownKey].
+    -- Must run BEFORE PruneObsoleteSavedState (which calls EnsureDB and creates
+    -- the chars entry, which would make the migration think it already ran).
+    MigrateProfileDataToGlobalChars()
+
     if self.PruneObsoleteSavedState then
         self:PruneObsoleteSavedState()
-    end
-
-    -- Ensure this character has their own profile (migrates away from shared
-    -- "Default" profile that older versions put every character on).
-    MigrateToPerCharProfile()
-
-    -- Cache the own profile name NOW, before any viewer-switch SetProfile calls
-    -- could corrupt sv.profileKeys[ownKey]. SetViewingChar uses this to restore.
-    if self.db then
-        self._ownProfileName = self.db:GetCurrentProfile()
     end
 
     -- If this character already has snapshot data from a previous session,
@@ -489,11 +506,36 @@ Addon._sectionsById = Addon._sectionsById or {}
 Addon._order = Addon._order or {}
 Addon._sectionsIndexById = Addon._sectionsIndexById or {}
 
+-- Returns a stable per-character key: always "CharName - RealmName".
+-- Lives in the main file so it is available before any module loads.
+function Addon:GetCurrentProfileKey()
+    local name  = (UnitName    and UnitName("player"))   or ""
+    local realm = (GetRealmName and GetRealmName())      or ""
+    if name ~= "" and realm ~= "" then return name .. " - " .. realm end
+    if name ~= "" then return name end
+    return ""
+end
+
 function Addon:EnsureDB()
     if not self.db then
         SetupAddonDB()
     end
-    return self.db.profile
+    -- All per-character data lives in db.global.chars[key].  When viewing
+    -- another character (_viewingChar is set) return their data; otherwise
+    -- return the logged-in character's data.
+    local key   = self._viewingChar or self:GetCurrentProfileKey()
+    local chars = self.db.global.chars
+    if not chars[key] then chars[key] = {} end
+    local cdb = chars[key]
+    -- Apply defaults on first access (avoids relying on AceDB metatable defaults
+    -- for nested tables inside global).
+    for k, v in pairs(CHAR_DEFAULTS) do
+        if cdb[k] == nil then cdb[k] = v end
+    end
+    if cdb.checked           == nil then cdb.checked           = {} end
+    if cdb.collapsedSections == nil then cdb.collapsedSections = {} end
+    if cdb.trackingSnapshot  == nil then cdb.trackingSnapshot  = {} end
+    return cdb
 end
 
 -- Remove stale saved-state entries (checked items / collapsed sections) that no longer
