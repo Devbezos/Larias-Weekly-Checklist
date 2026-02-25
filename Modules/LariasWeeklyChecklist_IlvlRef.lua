@@ -347,15 +347,32 @@ local function BuildIlvlRefWindow()
         end
     end
 
-    win:SetSize(WIN_W, WIN_H)
+    local _savedIlvlSize = Addon.db and Addon.db.global and Addon.db.global.ilvlRefSize
+    local initWinW = (_savedIlvlSize and tonumber(_savedIlvlSize.w) or 0)
+    local initWinH = (_savedIlvlSize and tonumber(_savedIlvlSize.h) or 0)
+    if initWinW < WIN_W then initWinW = WIN_W end
+    if initWinH < 150   then initWinH = WIN_H end  -- use default height on first open
+    win:SetSize(initWinW, initWinH)
     local _savedIlvlPos = Addon.db and Addon.db.global and Addon.db.global.ilvlRefPos
     if _savedIlvlPos and _savedIlvlPos.x and _savedIlvlPos.y then
         win:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", _savedIlvlPos.x, _savedIlvlPos.y)
     else
-        win:SetPoint("CENTER", UIParent, "CENTER", 260, 0)  -- offset right so it doesn't cover the checklist
+        -- Default: snap to the right edge of the main checklist frame, same Y.
+        local mf = Addon._mainFrame
+        if mf then
+            win:SetPoint("TOPLEFT", mf, "TOPRIGHT", 4, 0)
+        else
+            win:SetPoint("CENTER", UIParent, "CENTER", 260, 0)
+        end
     end
     win:SetClampedToScreen(true)
     win:SetMovable(true)
+    win:SetResizable(true)
+    if win.SetResizeBounds then
+        win:SetResizeBounds(WIN_W, 150)
+    elseif win.SetMinResize then
+        win:SetMinResize(WIN_W, 150)
+    end
     win:EnableMouse(true)
     win:RegisterForDrag("LeftButton")
     win:SetScript("OnDragStart", win.StartMoving)
@@ -401,47 +418,166 @@ local function BuildIlvlRefWindow()
         end
     end
 
-    -- Scroll frame
+    -- Scroll frame (auto-adapts to win size; content reflows instead of scaling)
     local sf = CreateFrame("ScrollFrame", nil, win, "UIPanelScrollFrameTemplate")
     sf:SetPoint("TOPLEFT",     win, "TOPLEFT",  PAD,     -SCROLLTOP)
     sf:SetPoint("BOTTOMRIGHT", win, "BOTTOMRIGHT", -(PAD + 22), PAD)
 
     local sc = CreateFrame("Frame", nil, sf)
-    -- Content width = window width - 2xPAD - scrollbar width (22)
-    sc:SetWidth(WIN_W - PAD * 2 - 22)
-    sc:SetHeight(1)
+    sc:SetSize(1, 1)
     sf:SetScrollChild(sc)
 
+    -- Build each section into its own sub-frame so ReflowIlvlSections can
+    -- reposition them without redrawing any content.
+    local COL_GAP = 20  -- horizontal gap between two columns when side-by-side
 
-    local posY = -4
+    local function BuildSection(headText, cols, rows)
+        local secFrame = CreateFrame("Frame", nil, sc)
+        local y = 0
+        y = SecHead(secFrame, y, headText)
+        y = GridTable(secFrame, y, cols, rows)
+        local h = -y
+        local w = tblW(cols)
+        secFrame:SetSize(w, h)
+        return secFrame, w, h
+    end
 
-    -- 1. Upgrade Tracks
-    posY = SecHead(sc, posY, L.ILVLREF_SEC_TRACKS)
-    posY = GridTable(sc, posY, trackCols, TRACKS)
-    posY = posY - SEC_GAP
+    local secTracks,  wTracks,  hTracks  = BuildSection(L.ILVLREF_SEC_TRACKS,   trackCols, TRACKS)
+    local secCrafted, wCrafted, hCrafted = BuildSection(L.ILVLREF_SEC_CRAFTED,   craftCols, CRAFTED)
+    local secDungs,   wDungs,   hDungs   = BuildSection(L.ILVLREF_SEC_DUNGEONS,  dungCols,  DUNGEONS)
+    local secRaid,    wRaid,    hRaid    = BuildSection(L.ILVLREF_SEC_RAID,       raidCols,  RAID)
+    local secDelves,  wDelves,  hDelves  = BuildSection(L.ILVLREF_SEC_DELVES,    delveCols, DELVES)
 
-    -- 2. Crafted Item Levels
-    posY = SecHead(sc, posY, L.ILVLREF_SEC_CRAFTED)
-    posY = GridTable(sc, posY, craftCols, CRAFTED)
-    posY = posY - SEC_GAP
+    -- Natural column widths for multi-column layouts
+    local wRight2 = math.max(wCrafted, wDungs, wRaid, wDelves)  -- 2-col: all right sections
+    local wMid    = math.max(wCrafted, wDungs)                   -- 3-col: middle column
+    local wRight3 = math.max(wRaid,    wDelves)                  -- 3-col: right column
 
-    -- 3. Dungeon Item Levels
-    posY = SecHead(sc, posY, L.ILVLREF_SEC_DUNGEONS)
-    posY = GridTable(sc, posY, dungCols, DUNGEONS)
-    posY = posY - SEC_GAP
+    -- Reposition all section sub-frames based on current window width.
+    -- 3-col: Tracks | Crafted+Dungeons | Raid+Delves
+    -- 2-col: Tracks | Crafted+Dungeons+Raid+Delves
+    -- 1-col: all stacked, scrollbar handles overflow
+    local _reflowing = false
+    local function ReflowIlvlSections()
+        if _reflowing then return end
+        _reflowing = true
 
-    -- 4. Raid Item Levels
-    posY = SecHead(sc, posY, L.ILVLREF_SEC_RAID)
-    posY = GridTable(sc, posY, raidCols, RAID)
-    posY = posY - SEC_GAP
+        local availW = win:GetWidth() - PAD * 2 - 22  -- subtract PAD each side + scrollbar
+        sc:SetWidth(math.max(1, availW))
 
-    -- 5. Bountiful Delve Item Levels
-    posY = SecHead(sc, posY, L.ILVLREF_SEC_DELVES)
-    posY = GridTable(sc, posY, delveCols, DELVES)
+        if availW >= wTracks + wMid + wRight3 + COL_GAP * 2 then
+            -- ── Three-column layout ────────────────────────────────────────────
+            secTracks:ClearAllPoints()
+            secTracks:SetPoint("TOPLEFT", sc, "TOPLEFT", 0, 0)
 
-    -- Set final scroll child height
-    local totalH = math.abs(posY) + PAD
-    sc:SetHeight(max(1, totalH))
+            local midX   = wTracks + COL_GAP
+            local rightX = midX + wMid + COL_GAP
+
+            local my = 0
+            for i, s in ipairs({ secCrafted, secDungs }) do
+                s:ClearAllPoints()
+                s:SetPoint("TOPLEFT", sc, "TOPLEFT", midX, my)
+                my = my - ({ hCrafted, hDungs })[i] - SEC_GAP
+            end
+
+            local ry = 0
+            for i, s in ipairs({ secRaid, secDelves }) do
+                s:ClearAllPoints()
+                s:SetPoint("TOPLEFT", sc, "TOPLEFT", rightX, ry)
+                ry = ry - ({ hRaid, hDelves })[i] - SEC_GAP
+            end
+
+            sc:SetHeight(max(1, math.max(hTracks, -my, -ry) + PAD))
+
+        elseif availW >= wTracks + wRight2 + COL_GAP then
+            -- ── Two-column layout ──────────────────────────────────────────────
+            secTracks:ClearAllPoints()
+            secTracks:SetPoint("TOPLEFT", sc, "TOPLEFT", 0, 0)
+
+            local rightX = wTracks + COL_GAP
+            local ry = 0
+            local rightSecs = { secCrafted, secDungs,   secRaid, secDelves }
+            local rightHs   = { hCrafted,  hDungs,     hRaid,   hDelves   }
+            for i, s in ipairs(rightSecs) do
+                s:ClearAllPoints()
+                s:SetPoint("TOPLEFT", sc, "TOPLEFT", rightX, ry)
+                ry = ry - rightHs[i] - SEC_GAP
+            end
+
+            sc:SetHeight(max(1, math.max(hTracks, -ry) + PAD))
+        else
+            -- ── Single-column layout ───────────────────────────────────────────
+            local allSecs = { secTracks,  secCrafted, secDungs, secRaid,  secDelves }
+            local allHs   = { hTracks,   hCrafted,   hDungs,   hRaid,    hDelves   }
+            local y = 0
+            for i, s in ipairs(allSecs) do
+                s:ClearAllPoints()
+                s:SetPoint("TOPLEFT", sc, "TOPLEFT", 0, y)
+                y = y - allHs[i] - SEC_GAP
+            end
+            sc:SetHeight(max(1, -y + PAD))
+        end
+
+        -- Apply UI scale (does not change logical dimensions, no OnSizeChanged).
+        local _scale = Addon.GetUIScale and Addon:GetUIScale() or 1.0
+        win:SetScale(_scale)
+
+        -- Enforce max size when content fits without scrolling.
+        -- Compare sc height directly against the actual rendered sf height to avoid
+        -- float rounding errors from indirect win-height calculations.
+        -- Use math.ceil on sc height so a fractional pixel never causes a false overflow.
+        -- _reflowing guard prevents the SetHeight call below from re-entering.
+        local _scH    = math.ceil(sc:GetHeight())
+        local _sfH    = sf:GetHeight()        -- actual rendered scroll frame height
+        local _idealH = SCROLLTOP + _scH + PAD
+        local _curW   = win:GetWidth()
+        local _sb = sf.ScrollBar
+        if _scH <= _sfH then
+            -- Content fits: snap height to content, lock both max width and max height.
+            win:SetHeight(_idealH)
+            if win.SetResizeBounds then
+                win:SetResizeBounds(WIN_W, 150, _curW, _idealH)
+            elseif win.SetMaxResize then
+                win:SetMaxResize(_curW, _idealH)
+            end
+            if _sb and _sb.Hide then _sb:Hide() end
+        else
+            -- Content overflows: free both dimensions, show scrollbar.
+            if win.SetResizeBounds then
+                win:SetResizeBounds(WIN_W, 150, 0, 0)
+            elseif win.SetMaxResize then
+                win:SetMaxResize(0, 0)
+            end
+            if _sb and _sb.Show then _sb:Show() end
+        end
+
+        _reflowing = false
+    end
+
+    win._ilvlReflow = ReflowIlvlSections
+    win._baseW = WIN_W  -- default window width (used by reset)
+    win._baseH = WIN_H  -- default window height (used by reset)
+    ReflowIlvlSections()  -- initial layout
+
+    win:SetScript("OnSizeChanged", function()
+        ReflowIlvlSections()
+    end)
+
+    local ilvlResizeBtn = CreateFrame("Button", nil, win)
+    ilvlResizeBtn:SetPoint("BOTTOMRIGHT", win, "BOTTOMRIGHT", -4, 4)
+    ilvlResizeBtn:SetSize(16, 16)
+    ilvlResizeBtn:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+    ilvlResizeBtn:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+    ilvlResizeBtn:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
+    ilvlResizeBtn:SetScript("OnMouseDown", function() win:StartSizing("BOTTOMRIGHT") end)
+    ilvlResizeBtn:SetScript("OnMouseUp", function()
+        win:StopMovingOrSizing()
+        ReflowIlvlSections()
+        local _gdb = Addon.db and Addon.db.global
+        if _gdb then
+            _gdb.ilvlRefSize = { w = win:GetWidth(), h = win:GetHeight() }
+        end
+    end)
 
     return win
 end

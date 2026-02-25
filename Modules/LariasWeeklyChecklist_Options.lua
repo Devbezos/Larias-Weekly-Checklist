@@ -109,6 +109,47 @@ function Addon:InitOptionsTab(frame, optionsPanel)
         end
         dbForReset.hideCompletedSections = true
         dbForReset.startAtSectionId = ""
+        dbForReset.showGreatVault    = true
+        dbForReset.showCurrency      = true
+        dbForReset.showChangeWeekBtn = true
+        dbForReset.showIlvlRefBtn    = true
+
+        -- Reset window positions, sizes, and scale back to defaults
+        local gdb = Addon.db and Addon.db.global
+        if gdb then
+            gdb.mainFramePos  = nil
+            gdb.mainFrameSize = nil
+            gdb.ilvlRefPos    = nil
+            gdb.ilvlRefSize   = nil
+            gdb.uiScalePct    = nil  -- resets to 100%
+        end
+
+        local mf = Addon._mainFrame
+        if mf then
+            mf:SetScale(1.0)
+            mf:ClearAllPoints()
+            mf:SetPoint("CENTER")
+            mf:SetSize(Addon.UI.frameW, Addon.UI.frameH)
+            if Addon.ApplyScrollLayout then Addon:ApplyScrollLayout() end
+        end
+
+        local iw = Addon._ilvlRefWindow
+        if iw then
+            iw:ClearAllPoints()
+            if mf then
+                iw:SetPoint("TOPLEFT", mf, "TOPRIGHT", 4, 0)
+            else
+                iw:SetPoint("CENTER", UIParent, "CENTER", 260, 0)
+            end
+            local bw = iw._baseW or Addon.UI.frameW
+            local bh = iw._baseH or 540
+            iw:SetSize(bw, bh)
+            if iw._ilvlReflow then iw._ilvlReflow() end
+        end
+
+        if Addon.LayoutHeaderButtons then
+            Addon:LayoutHeaderButtons()
+        end
 
         if Addon.SyncOptionsTabControls then
             Addon:SyncOptionsTabControls()
@@ -122,6 +163,40 @@ function Addon:InitOptionsTab(frame, optionsPanel)
     end)
 
     frame._lariasOptResetBtn = resetBtn
+
+    -- UI Scale slider -------------------------------------------------------
+    local scaleTitle = optionsPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    scaleTitle:SetPoint("TOPLEFT", resetBtn, "BOTTOMLEFT", 0, -18)
+    frame._lariasOptScaleTitleFS = scaleTitle
+
+    local scaleSlider = CreateFrame("Slider", "LariasWeeklyChecklistScaleSlider", optionsPanel, "OptionsSliderTemplate")
+    scaleSlider:SetPoint("TOPLEFT", scaleTitle, "BOTTOMLEFT", 6, -6)
+    scaleSlider:SetWidth(220)
+    scaleSlider:SetMinMaxValues(80, 120)
+    scaleSlider:SetValueStep(10)
+    local _initPct = (Addon.db and Addon.db.global and tonumber(Addon.db.global.uiScalePct)) or 100
+    scaleSlider:SetValue(math.max(80, math.min(120, _initPct)))
+    do
+        local lo  = _G["LariasWeeklyChecklistScaleSliderLow"]
+        local hi  = _G["LariasWeeklyChecklistScaleSliderHigh"]
+        local txt = _G["LariasWeeklyChecklistScaleSliderText"]
+        if lo  then lo:SetText("80%")  end
+        if hi  then hi:SetText("120%") end
+        if txt then txt:SetText("")    end  -- title managed separately
+    end
+    scaleSlider:SetScript("OnValueChanged", function(_, val)
+        val = math.floor(val / 10 + 0.5) * 10
+        local gdb = Addon.db and Addon.db.global
+        if gdb then gdb.uiScalePct = val end
+        local tf = GetMainFrame() and GetMainFrame()._lariasOptScaleTitleFS
+        if tf then
+            local L2 = Addon.L or {}
+            tf:SetText((L2.UI_SCALE_LABEL or "UI Scale") .. ": " .. val .. "%")
+        end
+        if Addon.ApplyUIScale then Addon:ApplyUIScale() end
+    end)
+    frame._lariasScaleSlider = scaleSlider
+    -- -----------------------------------------------------------------------
 
     local localizationHint = optionsPanel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
     localizationHint:SetPoint("TOPLEFT", resetBtn, "BOTTOMLEFT", 0, -10)
@@ -167,6 +242,12 @@ function Addon:SyncOptionsTabControls()
         showIlvlRefCheck:SetChecked(db.showIlvlRefBtn == false)
     end
 
+    local scaleSlider = frame._lariasScaleSlider
+    if scaleSlider and scaleSlider.SetValue then
+        local gdb = Addon.db and Addon.db.global
+        scaleSlider:SetValue((gdb and tonumber(gdb.uiScalePct)) or 100)
+    end
+
     if self.UpdateOptionsLocalizedUI then
         self:UpdateOptionsLocalizedUI()
     end
@@ -187,6 +268,13 @@ function Addon:UpdateOptionsLocalizedUI()
     local resetBtn = frame._lariasOptResetBtn
     if resetBtn and resetBtn.SetText then
         resetBtn:SetText(L.RESET_BUTTON or "Reset List")
+    end
+
+    local scaleTitleFS = frame._lariasOptScaleTitleFS
+    if scaleTitleFS then
+        local gdb = Addon.db and Addon.db.global
+        local pct = (gdb and tonumber(gdb.uiScalePct)) or 100
+        scaleTitleFS:SetText((L.UI_SCALE_LABEL or "UI Scale") .. ": " .. pct .. "%")
     end
 
     local hint = frame._lariasOptLocalizationHint

@@ -822,6 +822,27 @@ function Addon:ApplyScrollLayout()
     end
 
     scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -Addon.UI.scrollRight, Addon.UI.scrollBottom + extra)
+    frame:SetScale(self:GetUIScale())
+
+    if self._trackingFrame and self.ResizeTrackingCols then
+        self:ResizeTrackingCols()
+    end
+end
+
+function Addon:GetUIScale()
+    local pct = (self.db and self.db.global and tonumber(self.db.global.uiScalePct)) or 100
+    return math.max(0.8, math.min(1.2, pct / 100))
+end
+
+function Addon:ApplyUIScale()
+    -- Called when the slider changes; re-scales both windows and refreshes content.
+    local mf = self._mainFrame
+    if mf then
+        -- Scale is applied inside ApplyScrollLayout/Refresh; just trigger a refresh.
+        if self.RequestRefresh then self:RequestRefresh() end
+    end
+    local iw = self._ilvlRefWindow
+    if iw and iw._ilvlReflow then iw._ilvlReflow() end
 end
 
 local function Key(sectionId, itemId)
@@ -1475,6 +1496,8 @@ function Addon:Refresh()
 
     scrollChild:SetHeight(max(1, -posY + Addon.UI.sectionGap))
 
+    self:ApplyScrollLayout()
+
     if self.UpdateCompletionEasterEgg then
         self:UpdateCompletionEasterEgg()
     end
@@ -1495,6 +1518,11 @@ function Addon:CreateFrame()
     end
 
     frame:SetSize(Addon.UI.frameW, Addon.UI.frameH)
+    local _savedMainSize = Addon.db and Addon.db.global and Addon.db.global.mainFrameSize
+    if _savedMainSize then
+        if _savedMainSize.w then frame:SetWidth(_savedMainSize.w) end
+        if _savedMainSize.h then frame:SetHeight(_savedMainSize.h) end
+    end
     frame:SetClampedToScreen(true)
     local _savedMainPos = Addon.db and Addon.db.global and Addon.db.global.mainFramePos
     if _savedMainPos and _savedMainPos.x and _savedMainPos.y then
@@ -1503,6 +1531,12 @@ function Addon:CreateFrame()
         frame:SetPoint("CENTER")
     end
     frame:SetMovable(true)
+    frame:SetResizable(true)
+    if frame.SetResizeBounds then
+        frame:SetResizeBounds(320, 380)
+    elseif frame.SetMinResize then
+        frame:SetMinResize(320, 380)
+    end
     frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving)
@@ -1512,6 +1546,9 @@ function Addon:CreateFrame()
         if _gdb then
             _gdb.mainFramePos = { x = frame:GetLeft(), y = frame:GetBottom() }
         end
+    end)
+    frame:SetScript("OnSizeChanged", function()
+        Addon:ApplyScrollLayout()
     end)
     -- Hide the week picker whenever the main frame is hidden (close button,
     -- Toggle(), ESC, or any other dismiss path). The picker is parented to
@@ -1548,6 +1585,23 @@ function Addon:CreateFrame()
     local closeBtn = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
     closeBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -Addon.UI.closeInset, -Addon.UI.closeInset)
     closeBtn:SetScript("OnClick", function() frame:Hide() end)
+
+    local mainResizeBtn = CreateFrame("Button", nil, frame)
+    mainResizeBtn:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -4, 4)
+    mainResizeBtn:SetSize(16, 16)
+    mainResizeBtn:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+    mainResizeBtn:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+    mainResizeBtn:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
+    mainResizeBtn:SetScript("OnMouseDown", function() frame:StartSizing("BOTTOMRIGHT") end)
+    mainResizeBtn:SetScript("OnMouseUp", function()
+        frame:StopMovingOrSizing()
+        local _gdb = Addon.db and Addon.db.global
+        if _gdb then
+            _gdb.mainFrameSize = { w = frame:GetWidth(), h = frame:GetHeight() }
+        end
+        Addon:ApplyScrollLayout()
+        if Addon.RequestRefresh then Addon:RequestRefresh() end
+    end)
 
     local frameName = frame.GetName and frame:GetName() or nil
     local tab1Name = frameName and (frameName .. "Tab1") or nil
@@ -1994,7 +2048,29 @@ function Addon:CreateFrame()
                 Addon._ilvlRefWindow:Hide()
             end
         end
-    end
+
+        -- Minimum width: tabs on the left + gap + all visible right-side buttons.
+        -- tabInsetX (padOuterX+sectionInsetX=28) + tab1 (80) + gap (6) + tab2 (80) = 194
+        local _tabAreaW = (Addon.UI.padOuterX + Addon.UI.sectionInsetX) + 80 + 6 + 80
+        -- right side: closeInset (4) + close btn (32) + optional buttons
+        local _rightW   = Addon.UI.closeInset + 32
+        if showCW then _rightW = _rightW + 6 + 108 end
+        if showIR then _rightW = _rightW + 6 + 108 end
+        local _minW = _tabAreaW + 10 + _rightW  -- 10px breathing room between tabs and buttons
+        if frame.SetResizeBounds then
+            frame:SetResizeBounds(_minW, 200)
+        elseif frame.SetMinResize then
+            frame:SetMinResize(_minW, 200)
+        end
+        -- Snap existing width up if it's already narrower than the new minimum.
+        if frame:GetWidth() < _minW then
+            frame:SetWidth(_minW)
+            local _gdb = Addon.db and Addon.db.global
+            if _gdb and _gdb.mainFrameSize then
+                _gdb.mainFrameSize.w = _minW
+            end
+        end
+    end  -- LayoutHeaderButtons_
 
     Addon.LayoutHeaderButtons = function(self) LayoutHeaderButtons_() end
     LayoutHeaderButtons_()

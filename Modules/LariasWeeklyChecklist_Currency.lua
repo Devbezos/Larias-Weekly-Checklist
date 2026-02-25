@@ -1221,4 +1221,47 @@ function Addon:UpdateTracking()
     ResizeTrackingPanelToContent(self)
 end
 
+function Addon:ResizeTrackingCols()
+    -- Reflow column widths so they always fill the tracking frame's current width.
+    local tf = self._trackingFrame
+    if not tf then return end
+
+    local frameW  = tonumber(tf:GetWidth()) or Addon.UI.frameW
+    local padL    = tonumber(tf._lariasPadL)   or 10
+    local padR    = tonumber(tf._lariasPadR)   or 10
+    local colGap  = tonumber(tf._lariasColGap) or 12
+    local newColW = math.max(10, math.floor((frameW - padL - padR - colGap) / 2))
+
+    local leftCol  = tf._lariasLeftCol
+    local rightCol = tf._lariasRightCol
+
+    if leftCol  and leftCol.SetWidth  then leftCol:SetWidth(newColW)  end
+    if rightCol and rightCol.SetWidth then rightCol:SetWidth(newColW) end
+    if rightCol and leftCol then
+        rightCol:ClearAllPoints()
+        rightCol:SetPoint("TOPLEFT", leftCol, "TOPRIGHT", colGap, 0)
+    end
+
+    -- Keep left-column font strings constrained to the new column width.
+    local leftLineKeys = { "line1", "line2", "line3", "line4", "line5", "line6" }
+    for _, k in ipairs(leftLineKeys) do
+        local fs = TrackingUI.left[k]
+        if fs and fs.SetWidth then fs:SetWidth(newColW) end
+    end
+
+    -- Update title widths and anchors.
+    local leftTitle  = tf._lariasLeftTitle
+    local rightTitle = tf._lariasRightTitle
+    if leftTitle  and leftTitle.SetWidth  then leftTitle:SetWidth(newColW)  end
+    if rightTitle and rightTitle.SetWidth then
+        rightTitle:SetWidth(newColW)
+        if rightCol then
+            rightTitle:ClearAllPoints()
+            rightTitle:SetPoint("TOP", rightCol, "TOP", 0, 24)
+        end
+    end
+
+    tf._lariasColW = newColW
+end
+
 
