@@ -6,7 +6,12 @@
 --
 -- Design goal: keep runtime behavior event-driven and avoid per-frame work.
 local addonName = ...
-local Addon = LibStub("AceAddon-3.0"):NewAddon(addonName, "AceEvent-3.0", "AceConsole-3.0", "AceTimer-3.0", "AceComm-3.0", "AceBucket-3.0")
+-- NOTE: AceComm-3.0 and AceBucket-3.0 are intentionally NOT listed here.
+-- Embedding them at NewAddon time causes a hard Lua error if the library is
+-- missing or overshadowed by another addon's Ace3 build that omits them,
+-- which prevents the entire file from loading (including slash commands).
+-- AceComm is embedded conditionally in CommsOnEnable instead.
+local Addon = LibStub("AceAddon-3.0"):NewAddon(addonName, "AceEvent-3.0", "AceConsole-3.0", "AceTimer-3.0")
 _G[addonName] = Addon
 
 -- Shared global registry used by both the main addon and the optional
