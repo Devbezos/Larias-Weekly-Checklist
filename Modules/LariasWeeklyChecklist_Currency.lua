@@ -277,40 +277,6 @@ local function GetCrestLabelText(currencyID)
     return base .. ": " .. tostring(currencyID) .. ":"
 end
 
-local function DetectCrestCurrencyIDsFromList()
-    -- Fallback heuristic: scan the currency list for a localized substring.
-    -- Used only if explicit IDs weren’t provided via constants.
-    if not (C_CurrencyInfo and C_CurrencyInfo.GetCurrencyListSize and C_CurrencyInfo.GetCurrencyListInfo and C_CurrencyInfo.GetCurrencyListLink) then
-        return nil
-    end
-
-    local found = {}
-    local size = C_CurrencyInfo.GetCurrencyListSize() or 0
-    for i = 1, size do
-        local info = C_CurrencyInfo.GetCurrencyListInfo(i)
-        if info and not info.isHeader then
-            local name = tostring(info.name or "")
-            local needle = L.TRACKING_CREST_MATCH_SUBSTRING
-            needle = type(needle) == "string" and needle:lower() or ""
-            if needle ~= "" and name ~= "" and name:lower():find(needle, 1, true) then
-                local link = C_CurrencyInfo.GetCurrencyListLink(i)
-                local id = link and tonumber(tostring(link):match("currency:(%d+)"))
-                if id then
-                    found[#found + 1] = id
-                end
-            end
-        end
-    end
-
-    if #found < 4 then return nil end
-
-    local ids = {}
-    for i = 1, 4 do
-        ids[i] = found[i]
-    end
-    return ids
-end
-
 local function BottomFor(obj)
     -- Compute bottom-most extent (in pixels) for a UI element with a base Y.
     if not obj then return 0 end

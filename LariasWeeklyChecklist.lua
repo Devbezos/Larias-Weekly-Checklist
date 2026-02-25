@@ -1521,6 +1521,9 @@ function Addon:CreateFrame()
         if picker and picker.IsShown and picker:IsShown() then
             picker:Hide()
         end
+        if Addon._ilvlRefWindow and Addon._ilvlRefWindow.IsShown and Addon._ilvlRefWindow:IsShown() then
+            Addon._ilvlRefWindow:Hide()
+        end
     end)
     frame:Hide()
 
@@ -1987,6 +1990,9 @@ function Addon:CreateFrame()
             btn:Show()
         elseif ilvlRefBtn then
             ilvlRefBtn:Hide()
+            if Addon._ilvlRefWindow and Addon._ilvlRefWindow.IsShown and Addon._ilvlRefWindow:IsShown() then
+                Addon._ilvlRefWindow:Hide()
+            end
         end
     end
 

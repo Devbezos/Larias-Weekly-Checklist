@@ -231,7 +231,7 @@ local function BuildIlvlRefWindow()
         local crestCell
         if rank == 6 and nextTier then
             crestCell = tier.color .. tier.crestShort .. R
-                     .. " - (|cFFFF2020DO NOT USE " .. nextTier.id .. " CRESTS|r)"
+                     .. " - (|cFFFF2020" .. (L.ILVLREF_DO_NOT_USE_CRESTS_FMT or "DO NOT USE %s CRESTS"):format(nextTier.crest) .. "|r)"
         else
             crestCell = tier.color .. tier.crest .. R
         end
