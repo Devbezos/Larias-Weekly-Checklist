@@ -255,7 +255,7 @@ end
 
 -- Session-only locale override set by slash command.
 -- This intentionally does NOT persist across /reload or relog.
-Addon._sessionLocaleOverride = Addon._sessionLocaleOverride
+-- Addon._sessionLocaleOverride is set by the /larias locale command.
 
 -- Set up database with AceDB
 local function SetupAddonDB()
@@ -279,6 +279,8 @@ local function SetupAddonDB()
             _newestSeenRemoteVersion = "",
             _newestSeenRemoteSender = "",
             _dismissedRemoteVersion = "",
+            mainFramePos = false,
+            ilvlRefPos = false,
         },
     }
     
@@ -634,7 +636,7 @@ function Addon:SelectMainTab(tabId)
             tabButton:Enable()
         end
 
-        if tabButton._lariasTabStyled and tabButton.SetBackdropColor and tabButton.SetBackdropBorderColor then
+        if tabButton._lariasTabStyled and tabButton.SetBackdropColor then
             local bg = Addon.THEME.bg
             local baseAlpha = tonumber(bg.a) or 1
             local alpha
@@ -645,8 +647,22 @@ function Addon:SelectMainTab(tabId)
             end
             tabButton:SetBackdropColor(bg.r, bg.g, bg.b, alpha)
 
-            local borderColor = selected and Addon.THEME.header or Addon.THEME.border
-            tabButton:SetBackdropBorderColor(borderColor.r, borderColor.g, borderColor.b, borderColor.a)
+            if tabButton._lariasNavTab then
+                -- Nav tabs: show/hide the underline indicator; keep border invisible.
+                if tabButton._lariasTabIndicator then
+                    if selected then
+                        tabButton._lariasTabIndicator:Show()
+                    else
+                        tabButton._lariasTabIndicator:Hide()
+                    end
+                end
+                if tabButton.SetBackdropBorderColor then
+                    tabButton:SetBackdropBorderColor(0, 0, 0, 0)
+                end
+            elseif tabButton.SetBackdropBorderColor then
+                local borderColor = selected and Addon.THEME.header or Addon.THEME.border
+                tabButton:SetBackdropBorderColor(borderColor.r, borderColor.g, borderColor.b, borderColor.a)
+            end
         end
 
         local textRegion = tabButton.Text or (tabButton.GetFontString and tabButton:GetFontString())
@@ -921,9 +937,6 @@ local function AcquireCheckbox(parentSectionFrame)
         checkbox:Show()
     else
         checkbox = CreateFrame("CheckButton", nil, parentSectionFrame, "UICheckButtonTemplate")
-    end
-
-    do
         local boxSize = 32
         local function PinTexture(tex)
             if not tex then return end
@@ -931,7 +944,6 @@ local function AcquireCheckbox(parentSectionFrame)
             tex:SetSize(boxSize, boxSize)
             tex:SetPoint("LEFT", checkbox, "LEFT", 0, 0)
         end
-
         PinTexture(checkbox.GetNormalTexture and checkbox:GetNormalTexture())
         PinTexture(checkbox.GetPushedTexture and checkbox:GetPushedTexture())
         PinTexture(checkbox.GetHighlightTexture and checkbox:GetHighlightTexture())
@@ -1417,17 +1429,19 @@ function Addon:RequestRefresh()
     if self._refreshQueued then return end
     self._refreshQueued = true
 
-    local function Run()
-        self._refreshQueued = nil
-        if self.Refresh then
-            self:Refresh()
+    if not self._refreshRunner then
+        self._refreshRunner = function()
+            self._refreshQueued = nil
+            if self.Refresh then
+                self:Refresh()
+            end
         end
     end
 
     if C_Timer and C_Timer.After then
-        C_Timer.After(0, Run)
+        C_Timer.After(0, self._refreshRunner)
     else
-        Run()
+        self._refreshRunner()
     end
 end
 
@@ -1482,12 +1496,23 @@ function Addon:CreateFrame()
 
     frame:SetSize(Addon.UI.frameW, Addon.UI.frameH)
     frame:SetClampedToScreen(true)
-    frame:SetPoint("CENTER")
+    local _savedMainPos = Addon.db and Addon.db.global and Addon.db.global.mainFramePos
+    if _savedMainPos and _savedMainPos.x and _savedMainPos.y then
+        frame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", _savedMainPos.x, _savedMainPos.y)
+    else
+        frame:SetPoint("CENTER")
+    end
     frame:SetMovable(true)
     frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving)
-    frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+    frame:SetScript("OnDragStop", function()
+        frame:StopMovingOrSizing()
+        local _gdb = Addon.db and Addon.db.global
+        if _gdb then
+            _gdb.mainFramePos = { x = frame:GetLeft(), y = frame:GetBottom() }
+        end
+    end)
     -- Hide the week picker whenever the main frame is hidden (close button,
     -- Toggle(), ESC, or any other dismiss path). The picker is parented to
     -- UIParent so it won't hide automatically when the main frame does.
@@ -1587,6 +1612,29 @@ function Addon:CreateFrame()
 
         tabButton._lariasTabStyled = true
     end
+    Addon._styleActionButton = StyleMainTabButton
+
+    -- Nav tabs (List/Options): flat, no visible border, coloured underline when active.
+    local function StyleNavTabButton(tabButton)
+        StyleMainTabButton(tabButton)
+        -- Hide the border so tabs look flat.
+        if tabButton.SetBackdropBorderColor then
+            tabButton:SetBackdropBorderColor(0, 0, 0, 0)
+        end
+        -- 2 px underline indicator at the bottom edge.
+        if tabButton.CreateTexture and not tabButton._lariasTabIndicator then
+            local bar = tabButton:CreateTexture(nil, "OVERLAY")
+            bar:SetHeight(2)
+            bar:SetPoint("BOTTOMLEFT",  tabButton, "BOTTOMLEFT",  2, 0)
+            bar:SetPoint("BOTTOMRIGHT", tabButton, "BOTTOMRIGHT", -2, 0)
+            bar:SetColorTexture(
+                Addon.THEME.header.r, Addon.THEME.header.g,
+                Addon.THEME.header.b, Addon.THEME.header.a)
+            bar:Hide()
+            tabButton._lariasTabIndicator = bar
+        end
+        tabButton._lariasNavTab = true
+    end
 
     local listTab = CreateFrame("Button", tab1Name, frame, "UIPanelButtonTemplate")
     listTab:SetID(1)
@@ -1596,7 +1644,7 @@ function Addon:CreateFrame()
     -- Tabs should sit *inside* the window.
     local tabInsetX = (Addon.UI.padOuterX or 0) + (Addon.UI.sectionInsetX or 0)
     listTab:SetPoint("TOPLEFT", frame, "TOPLEFT", tabInsetX, -Addon.UI.padOuterTop)
-    StyleMainTabButton(listTab)
+    StyleNavTabButton(listTab)
     listTab:SetScript("OnClick", function(selfBtn)
         Addon:SelectMainTab(selfBtn:GetID())
     end)
@@ -1607,7 +1655,7 @@ function Addon:CreateFrame()
     optionsTab:SetSize(80, 22)
     optionsTab:ClearAllPoints()
     optionsTab:SetPoint("LEFT", listTab, "RIGHT", 6, 0)
-    StyleMainTabButton(optionsTab)
+    StyleNavTabButton(optionsTab)
     optionsTab:SetScript("OnClick", function(selfBtn)
         Addon:SelectMainTab(selfBtn:GetID())
     end)
@@ -1822,10 +1870,17 @@ function Addon:CreateFrame()
         local data = Addon.GetListData and Addon:GetListData() or {}
         local posY = -PICKER_PAD
 
+        -- Determine the current week's id so we can skip it in the list.
+        local db0       = Addon:EnsureDB()
+        local currentId = tostring(db0.startAtSectionId or "")
+        if currentId == "" and Addon._order and Addon._order[1] then
+            currentId = tostring(Addon._order[1])
+        end
+
         if type(data) == "table" then
             for i = 1, #data do
                 local section = data[i]
-                if type(section) == "table" then
+                if type(section) == "table" and tostring(section.id or "") ~= currentId then
                     local id    = section.id
                     local label = ExtractMonthRangeLabel(section.title or id or "")
                     if label == "" then label = tostring(id or i) end

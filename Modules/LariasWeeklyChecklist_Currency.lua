@@ -217,6 +217,8 @@ local function IsAchievementCompleteSafe(achievementID)
 end
 
 local RIGHT_LINE_COUNT = 10
+local RIGHT_ROW_KEYS = {}
+for _i = 1, RIGHT_LINE_COUNT do RIGHT_ROW_KEYS[_i] = "line" .. _i end
 
 local function GetCrestAchievementID(i)
     -- Crest achievement mapping is index-based (aligned with crestCurrencyIDs).
@@ -455,6 +457,8 @@ local function MakeGVIlvlsRow(ilvls, maxPossible, parts)
     return tconcat(parts, " ")
 end
 
+local GV_TYPE_MPLUS = (Enum and Enum.WeeklyRewardChestActivityType and Enum.WeeklyRewardChestActivityType.MythicPlus) or 1
+local GV_TYPE_RAID  = (Enum and Enum.WeeklyRewardChestActivityType and Enum.WeeklyRewardChestActivityType.Raid) or 3
 local function GetGreatVaultBlockLines()
     -- Returns 6 lines representing GV raid/dungeons blocks.
     -- Uses a reusable cache table to minimize allocations during throttled updates.
@@ -464,11 +468,7 @@ local function GetGreatVaultBlockLines()
             out = { "", "", "", "", "", "" },
             rIlvls = {},
             mIlvls = {},
-            wIlvls = {},
             parts = {},
-            excluded = {},
-            lastRaidType = nil,
-            lastMplusType = nil,
         }
         Addon.TRACKING._gvCache = cache
     end
@@ -493,8 +493,8 @@ local function GetGreatVaultBlockLines()
         return out
     end
 
-    local TYPE_MPLUS = (Enum and Enum.WeeklyRewardChestActivityType and Enum.WeeklyRewardChestActivityType.MythicPlus) or 1
-    local TYPE_RAID  = (Enum and Enum.WeeklyRewardChestActivityType and Enum.WeeklyRewardChestActivityType.Raid) or 3
+    local TYPE_MPLUS = GV_TYPE_MPLUS
+    local TYPE_RAID  = GV_TYPE_RAID
 
     Wipe(cache.rIlvls)
     Wipe(cache.mIlvls)
@@ -564,36 +564,22 @@ local function GetSparksParts()
     end
 
     local label = ColorWrap(COLORS.dim, L.TRACKING_SPARKS_LABEL or "")
-    if id and tonumber(id) and tonumber(id) > 0 then
-        local cur, c = FormatCurrencyProgressParts(id)
-        cur = cur or 0
-        c = tonumber(c) or 0
+    local cur, c = FormatCurrencyProgressParts(id)
+    cur = cur or 0
+    c = tonumber(c) or 0
 
-        local xy
-        local color
-        if c > 0 then
-            xy = FormatXY(cur, c)
-            color = ColorForXY(cur, c)
-        else
-            local inf = L.TRACKING_INF
-            if type(inf) ~= "string" or inf == "" then inf = "∞" end
-            xy = ("%d/%s"):format(tonumber(cur) or 0, inf)
-            color = ((tonumber(cur) or 0) <= 0) and COLORS.red or COLORS.yellow
-        end
-        return label, ColorWrap(color, xy)
+    local xy
+    local color
+    if c > 0 then
+        xy = FormatXY(cur, c)
+        color = ColorForXY(cur, c)
+    else
+        local inf = L.TRACKING_INF
+        if type(inf) ~= "string" or inf == "" then inf = "∞" end
+        xy = ("%d/%s"):format(tonumber(cur) or 0, inf)
+        color = ((tonumber(cur) or 0) <= 0) and COLORS.red or COLORS.yellow
     end
-
-    -- If we have an ID but cannot read it, treat as unavailable.
-    return label, ColorWrap(COLORS.red, L.TRACKING_NA or "")
-end
-
--- Legacy layout helper that combines GetSparksParts into one line string.
-local function GetSparksLine()
-    local label, value = GetSparksParts()
-    if not IsNonEmptyText(label) and not IsNonEmptyText(value) then
-        return ""
-    end
-    return label .. " " .. (value or "")
+    return label, ColorWrap(color, xy)
 end
 
 -- Tracking config lookup: resolve a quest ID from a key.
@@ -674,20 +660,7 @@ end
 
 local function EnsureCrestIDsDetected(tracking)
     if tracking._crestIDsDetected then return end
-
-    -- Respect the configured crestCurrencyIDs order; only auto-detect if none are configured.
-    local ids = tracking.crestCurrencyIDs
-    local hasConfigured = false
-    if type(ids) == "table" and ids[1] ~= nil and #ids > 0 then
-        hasConfigured = true
-    end
-
-    if not hasConfigured then
-        local detected = DetectCrestCurrencyIDsFromList()
-        if detected then
-            tracking.crestCurrencyIDs = detected
-        end
-    end
+    -- crestCurrencyIDs are always supplied by constants; mark as resolved.
     tracking._crestIDsDetected = true
 end
 
@@ -922,15 +895,6 @@ local function GetCatalystParts()
     return ColorWrap(COLORS.dim, L.TRACKING_CATALYST_LABEL or ""), ColorWrap(color, ("%d"):format(cur))
 end
 
--- Legacy layout helper that combines GetCatalystParts into one line string.
-local function GetCatalystLine()
-    local label, value = GetCatalystParts()
-    if not IsNonEmptyText(label) and not IsNonEmptyText(value) then
-        return ""
-    end
-    return label .. " " .. (value or "")
-end
-
 local function ComputeWantTrackingPanel(db)
     -- Decide whether the tracking panel should be shown at all.
     local wantPanel = (db.showGreatVault or db.showCurrency) and true or false
@@ -971,7 +935,7 @@ end
 
 local function SetRightRowPair(i, rowLabel, rowValue)
     -- Write a {label,value} row and hide it if empty.
-    local row = TrackingUI.right["line" .. tostring(i)]
+    local row = TrackingUI.right[RIGHT_ROW_KEYS[i]]
     if not (row and row.label and row.value) then return end
     rowLabel = rowLabel or ""
     rowValue = rowValue or ""
@@ -988,68 +952,44 @@ local function ApplyRightColumnAsPairs()
     crestCount = tonumber(crestCount) or 4
 
     local idx = 1
-    local function AddRow(rowLabel, rowValue)
-        if idx > RIGHT_LINE_COUNT then return end
-        rowLabel = rowLabel or ""
-        rowValue = rowValue or ""
+
+    for i = 1, crestCount do
+        if idx > RIGHT_LINE_COUNT then break end
+        local rowLabel = (labelLines and labelLines[i]) or ""
+        local rowValue = (valueLines and valueLines[i]) or ""
         if IsNonEmptyText(rowLabel) or IsNonEmptyText(rowValue) then
             SetRightRowPair(idx, rowLabel, rowValue)
             idx = idx + 1
         end
     end
 
-    for i = 1, crestCount do
-        AddRow(labelLines and labelLines[i] or "", valueLines and valueLines[i] or "")
+    local cLbl, cVal = GetCatalystParts()
+    cLbl = cLbl or ""; cVal = cVal or ""
+    if idx <= RIGHT_LINE_COUNT and (IsNonEmptyText(cLbl) or IsNonEmptyText(cVal)) then
+        SetRightRowPair(idx, cLbl, cVal); idx = idx + 1
     end
 
-    local cLbl, cVal = GetCatalystParts()
-    AddRow(cLbl, cVal)
-
     local sLbl, sVal = GetSparksParts()
-    AddRow(sLbl, sVal)
+    sLbl = sLbl or ""; sVal = sVal or ""
+    if idx <= RIGHT_LINE_COUNT and (IsNonEmptyText(sLbl) or IsNonEmptyText(sVal)) then
+        SetRightRowPair(idx, sLbl, sVal); idx = idx + 1
+    end
 
     local bLbl, bVal = GetDelversBountyParts()
-    AddRow(bLbl, bVal)
+    bLbl = bLbl or ""; bVal = bVal or ""
+    if idx <= RIGHT_LINE_COUNT and (IsNonEmptyText(bLbl) or IsNonEmptyText(bVal)) then
+        SetRightRowPair(idx, bLbl, bVal); idx = idx + 1
+    end
 
     local pLbl, pVal = GetWeeklyPreyParts()
-    AddRow(pLbl, pVal)
+    pLbl = pLbl or ""; pVal = pVal or ""
+    if idx <= RIGHT_LINE_COUNT and (IsNonEmptyText(pLbl) or IsNonEmptyText(pVal)) then
+        SetRightRowPair(idx, pLbl, pVal); idx = idx + 1
+    end
 
     for i = idx, RIGHT_LINE_COUNT do
         SetRightRowPair(i, "", "")
     end
-end
-
-local function ApplyRightColumnAsLines()
-    -- Legacy layout: right column is a list of FontStrings.
-    -- We still set shown/hidden to avoid blank space.
-    local crestLines = GetCrestLines()
-    SetTextIfChanged(TrackingUI.right.line1, crestLines[1])
-    SetTextIfChanged(TrackingUI.right.line2, crestLines[2])
-    SetTextIfChanged(TrackingUI.right.line3, crestLines[3])
-    SetTextIfChanged(TrackingUI.right.line4, crestLines[4])
-    if TrackingUI.right.line5 then
-        SetTextIfChanged(TrackingUI.right.line5, GetCatalystLine())
-    end
-    if TrackingUI.right.line6 then
-        SetTextIfChanged(TrackingUI.right.line6, GetSparksLine())
-    end
-    if TrackingUI.right.line7 then
-        local bLbl, bVal = GetDelversBountyParts()
-        SetTextIfChanged(TrackingUI.right.line7, (bLbl or "") .. " " .. (bVal or ""))
-    end
-    if TrackingUI.right.line8 then
-        local pLbl, pVal = GetWeeklyPreyParts()
-        SetTextIfChanged(TrackingUI.right.line8, (pLbl or "") .. " " .. (pVal or ""))
-    end
-
-    SetShownIfChanged(TrackingUI.right.line1, IsNonEmptyText(crestLines[1]))
-    SetShownIfChanged(TrackingUI.right.line2, IsNonEmptyText(crestLines[2]))
-    SetShownIfChanged(TrackingUI.right.line3, IsNonEmptyText(crestLines[3]))
-    SetShownIfChanged(TrackingUI.right.line4, IsNonEmptyText(crestLines[4]))
-    if TrackingUI.right.line5 then SetShownIfChanged(TrackingUI.right.line5, IsNonEmptyText(TrackingUI.right.line5._lariasText or "")) end
-    if TrackingUI.right.line6 then SetShownIfChanged(TrackingUI.right.line6, IsNonEmptyText(TrackingUI.right.line6._lariasText or "")) end
-    if TrackingUI.right.line7 then SetShownIfChanged(TrackingUI.right.line7, IsNonEmptyText(TrackingUI.right.line7._lariasText or "")) end
-    if TrackingUI.right.line8 then SetShownIfChanged(TrackingUI.right.line8, IsNonEmptyText(TrackingUI.right.line8._lariasText or "")) end
 end
 
 local function ResizeTrackingPanelToContent(addon)
@@ -1067,7 +1007,7 @@ local function ResizeTrackingPanelToContent(addon)
 
     local bottomRight = 0
     for i = 1, RIGHT_LINE_COUNT do
-        local row = TrackingUI.right["line" .. tostring(i)]
+        local row = TrackingUI.right[RIGHT_ROW_KEYS[i]]
         if type(row) == "table" then
             bottomRight = max(bottomRight, BottomFor(row.frame or row.label))
         else
@@ -1310,34 +1250,9 @@ function Addon:UpdateTracking()
 
     ApplyGreatVaultLines(GetGreatVaultBlockLines())
 
-    if type(TrackingUI.right.line1) == "table" then
-        ApplyRightColumnAsPairs()
-    else
-        ApplyRightColumnAsLines()
-    end
+    ApplyRightColumnAsPairs()
 
     ResizeTrackingPanelToContent(self)
 end
 
-function Addon:SetTrackingVisible(show)
-    -- Convenience toggle used by options UI.
-    local db = self:EnsureDB()
-    local want = show and true or false
-    db.showGreatVault = want
-    db.showCurrency = want
-
-    if (db.showGreatVault or db.showCurrency) and not self._trackingFrame then
-        local main = _G["LariasWeeklyChecklistFrame"]
-        if main then
-            self:CreateTrackingPanel(main)
-        end
-    end
-
-    if self._trackingFrame then
-        self._trackingFrame:SetShown((db.showGreatVault or db.showCurrency) and true or false)
-    end
-
-    self:ApplyScrollLayout()
-    if self.Refresh then self:Refresh() end
-end
 

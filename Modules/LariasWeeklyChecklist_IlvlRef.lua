@@ -9,7 +9,6 @@ if not Addon then return end
 local CreateFrame = CreateFrame
 local max = math.max
 
--- â"€â"€ Layout constants â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 local WIN_W    = 620   -- popup window width
 local WIN_H    = 540   -- popup window height
 local PAD      = 14    -- outer content padding
@@ -19,7 +18,6 @@ local HDR_H    = 22    -- section heading height
 local SUBHDR_H = 18    -- column sub-header height
 local SCROLLTOP = 32   -- pixels from win top to scroll frame
 
--- â"€â"€ Crest color escape codes â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 local ADV   = "|cFF1EFF00"   -- Adventurer  (green)
 local VET   = "|cFF0070DD"   -- Veteran     (blue)
 local CHAMP = "|cFFA335EE"   -- Champion    (purple)
@@ -27,7 +25,6 @@ local HERO  = "|cFFFF8000"   -- Hero        (orange)
 local MYTH  = "|cFFFFD100"   -- Myth/Gilded (gold)
 local R     = "|r"
 
--- â"€â"€ Build helpers â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 -- Create a FontString anchored at (x, posY) from parent's TOPLEFT.
 -- fontObj, r/g/b/a, w, align are optional.
@@ -112,7 +109,6 @@ local function AutoFitCols(cols, rows)
     return cols
 end
 
--- â"€â"€ Main window builder â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 
 -- Color-code an ilvl number string by its crest tier.
@@ -194,36 +190,65 @@ local function GridTable(parent, posY, cols, rows)
 end
 
 local function BuildIlvlRefWindow()
-    -- â"€â"€ Localised data tables (built here so Addon.L is available) â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
     local L = Addon.L
-    local _or = " " .. (L.ILVLREF_OR or "or") .. " "
 
-    -- Midnight Season 1 upgrade tracks (20 crests per step)
-    -- { ilvl (color-coded), track name, crest needed (color-coded) }
-    local TRACKS = {
-        { ADV.."220"..R,   ADV..(L.ILVLREF_TRACK_ADV1        or "Adventurer 1")..R,           ADV..(L.ILVLREF_CREST_ADV  or "Adventurer")..R                                                                  },
-        { ADV.."224"..R,   ADV..(L.ILVLREF_TRACK_ADV2        or "Adventurer 2")..R,           ADV..(L.ILVLREF_CREST_ADV  or "Adventurer")..R                                                                  },
-        { ADV.."227"..R,   ADV..(L.ILVLREF_TRACK_ADV3        or "Adventurer 3")..R,           ADV..(L.ILVLREF_CREST_ADV  or "Adventurer")..R                                                                  },
-        { ADV.."230"..R,   ADV..(L.ILVLREF_TRACK_ADV4        or "Adventurer 4")..R,           ADV..(L.ILVLREF_CREST_ADV  or "Adventurer")..R                                                                  },
-        { VET.."233"..R,   DualTrack(L.ILVLREF_TRACK_ADV5_VET1 or "Adventurer 5 / Veteran 1", ADV, VET), ADV..(L.ILVLREF_CREST_ADV  or "Adventurer")..R                                                               },
-        { VET.."237"..R,   DualTrack(L.ILVLREF_TRACK_ADV6_VET2 or "Adventurer 6 / Veteran 2", ADV, VET), ADV..(L.ILVLREF_CREST_ADV_SHORT or "Adv")..R.." - (".."|cFFFF2020DO NOT USE VET CRESTS|r"..")" },
-        { VET.."240"..R,   VET..(L.ILVLREF_TRACK_VET3        or "Veteran 3")..R,              VET..(L.ILVLREF_CREST_VET  or "Veteran")..R                                                                    },
-        { VET.."243"..R,   VET..(L.ILVLREF_TRACK_VET4        or "Veteran 4")..R,              VET..(L.ILVLREF_CREST_VET  or "Veteran")..R                                                                    },
-        { CHAMP.."246"..R,   DualTrack(L.ILVLREF_TRACK_VET5_CHAMP1 or "Veteran 5 / Champion 1", VET, CHAMP), VET..(L.ILVLREF_CREST_VET  or "Veteran")..R                                                                   },
-        { CHAMP.."250"..R,   DualTrack(L.ILVLREF_TRACK_VET6_CHAMP2 or "Veteran 6 / Champion 2", VET, CHAMP), VET..(L.ILVLREF_CREST_VET_SHORT or "Vet")..R.." - (".."|cFFFF2020DO NOT USE CHAMP CRESTS|r"..")" },
-        { CHAMP.."253"..R, CHAMP..(L.ILVLREF_TRACK_CHAMP3       or "Champion 3")..R,             CHAMP..(L.ILVLREF_CREST_CHAMP or "Champion")..R                                                               },
-        { CHAMP.."256"..R, CHAMP..(L.ILVLREF_TRACK_CHAMP4       or "Champion 4")..R,             CHAMP..(L.ILVLREF_CREST_CHAMP or "Champion")..R                                                               },
-        { HERO.."259"..R, DualTrack(L.ILVLREF_TRACK_CHAMP5_HERO1 or "Champion 5 / Hero 1", CHAMP, HERO),   CHAMP..(L.ILVLREF_CREST_CHAMP or "Champion")..R                                                               },
-        { HERO.."263"..R, DualTrack(L.ILVLREF_TRACK_CHAMP6_HERO2 or "Champion 6 / Hero 2", CHAMP, HERO),   CHAMP..(L.ILVLREF_CREST_CHAMP_SHORT or "Champ")..R.." - (".."|cFFFF2020DO NOT USE HERO CRESTS|r"..")" },
-        { HERO.."266"..R,  HERO..(L.ILVLREF_TRACK_HERO3        or "Hero 3")..R,                HERO..(L.ILVLREF_CREST_HERO  or "Hero")..R                                                                     },
-        { HERO.."269"..R,  HERO..(L.ILVLREF_TRACK_HERO4        or "Hero 4")..R,                HERO..(L.ILVLREF_CREST_HERO  or "Hero")..R                                                                     },
-        { MYTH.."272"..R,  DualTrack(L.ILVLREF_TRACK_HERO5_MYTH1 or "Hero 5 / Myth 1", HERO, MYTH),       HERO..(L.ILVLREF_CREST_HERO  or "Hero")..R                                                                    },
-        { MYTH.."276"..R,  DualTrack(L.ILVLREF_TRACK_HERO6_MYTH2 or "Hero 6 / Myth 2", HERO, MYTH),       HERO..(L.ILVLREF_CREST_HERO or "Hero")..R.." - (".."|cFFFF2020DO NOT USE MYTH CRESTS|r"..")" },
-        { MYTH.."279"..R,  MYTH..(L.ILVLREF_TRACK_MYTH3        or "Myth 3")..R,                MYTH..(L.ILVLREF_CREST_MYTH  or "Myth")..R                                                                     },
-        { MYTH.."282"..R,  MYTH..(L.ILVLREF_TRACK_MYTH4        or "Myth 4")..R,                MYTH..(L.ILVLREF_CREST_MYTH  or "Myth")..R                                                                     },
-        { MYTH.."285"..R,  MYTH..(L.ILVLREF_TRACK_MYTH5        or "Myth 5")..R,                MYTH..(L.ILVLREF_CREST_MYTH  or "Myth")..R                                                                     },
-        { MYTH.."289"..R,  MYTH..(L.ILVLREF_TRACK_MYTH6        or "Myth 6")..R,                MYTH..(L.ILVLREF_CREST_MYTH  or "Myth")..R                                                                     },
+    -- ilvl at rank r = ilvlBase + RANK_OFFSETS[r]
+    local RANK_OFFSETS = { 0, 4, 7, 10, 13, 17 }
+
+    local TIERS = {
+        { id="ADV",   color=ADV,   ilvlBase=220,
+          crest      = L.ILVLREF_CREST_ADV,
+          crestShort = L.ILVLREF_CREST_ADV },
+        { id="VET",   color=VET,   ilvlBase=233,
+          crest      = L.ILVLREF_CREST_VET,
+          crestShort = L.ILVLREF_CREST_VET },
+        { id="CHAMP", color=CHAMP, ilvlBase=246,
+          crest      = L.ILVLREF_CREST_CHAMP,
+          crestShort = L.ILVLREF_CREST_CHAMP },
+        { id="HERO",  color=HERO,  ilvlBase=259,
+          crest      = L.ILVLREF_CREST_HERO,
+          crestShort = L.ILVLREF_CREST_HERO },
+        { id="MYTH",  color=MYTH,  ilvlBase=272,
+          crest      = L.ILVLREF_CREST_MYTH,
+          crestShort = L.ILVLREF_CREST_MYTH },
     }
+
+    local function makeTrackRow(tier, rank, nextTier)
+        local ilvl      = tier.ilvlBase + RANK_OFFSETS[rank]
+        local isOverlap = (rank >= 5) and (nextTier ~= nil)
+
+        local ilvlCell = (isOverlap and nextTier.color or tier.color) .. ilvl .. R
+
+        local nameCell
+        if isOverlap then
+            local nextRank = rank - 4
+            local lKey     = "ILVLREF_TRACK_" .. tier.id .. rank .. "_" .. nextTier.id .. nextRank
+            local fb       = tier.crest .. " " .. rank .. " / " .. nextTier.crest .. " " .. nextRank
+            nameCell = DualTrack(L[lKey] or fb, tier.color, nextTier.color)
+        else
+            local lKey = "ILVLREF_TRACK_" .. tier.id .. rank
+            nameCell   = tier.color .. (L[lKey] or tier.crest .. " " .. rank) .. R
+        end
+
+        local crestCell
+        if rank == 6 and nextTier then
+            crestCell = tier.color .. tier.crestShort .. R
+                     .. " - (|cFFFF2020DO NOT USE " .. nextTier.id .. " CRESTS|r)"
+        else
+            crestCell = tier.color .. tier.crest .. R
+        end
+
+        return { ilvlCell, nameCell, crestCell }
+    end
+
+    local TRACKS = {}
+    for ti, tier in ipairs(TIERS) do
+        local nextTier  = TIERS[ti + 1]
+        local startRank = (ti == 1) and 1 or 3
+        for rank = startRank, 6 do
+            table.insert(TRACKS, makeTrackRow(tier, rank, nextTier))
+        end
+    end
 
     -- Crafted item levels
     local CRAFTED = {
@@ -236,8 +261,10 @@ local function BuildIlvlRefWindow()
 
     -- Dungeon item levels
     local DUNGEONS = {
-        { L.ILVLREF_DUNGEON_HEROIC or "Heroic", ADV.."230"..R,   VET.."243"..R   },
-        { L.ILVLREF_DUNGEON_MYTHIC or "Mythic", CHAMP.."246"..R, CHAMP.."256"..R },
+        { L.ILVLREF_DUNGEON_PRE_HEROIC, ADV.."224"..R,  "?"            },
+        { L.ILVLREF_DUNGEON_HEROIC,     ADV.."230"..R,  VET.."243"..R  },
+        { L.ILVLREF_DUNGEON_PRE_MYTHIC, VET.."240"..R,  "?"            },
+        { L.ILVLREF_DUNGEON_MYTHIC,     CHAMP.."246"..R, CHAMP.."256"..R },
         { "M2",  CHAMP.."250"..R, HERO.."259"..R  },
         { "M3",  CHAMP.."250"..R, HERO.."259"..R  },
         { "M4",  CHAMP.."253"..R, HERO.."263"..R  },
@@ -253,14 +280,14 @@ local function BuildIlvlRefWindow()
 
     -- Raid item levels
     local RAID = {
-        { L.ILVLREF_RAID_LFR    or "LFR",    VET.."233"..R,   VET.."237"..R,   VET.."240"..R,   CHAMP.."243"..R },
-        { L.ILVLREF_RAID_NORMAL or "Normal",  CHAMP.."246"..R, CHAMP.."250"..R, CHAMP.."253"..R, HERO.."256"..R  },
-        { L.ILVLREF_RAID_HEROIC or "Heroic",  HERO.."259"..R,  HERO.."263"..R,  HERO.."266"..R,  MYTH.."269"..R  },
-        { L.ILVLREF_RAID_MYTHIC or "Mythic",  MYTH.."272"..R,  MYTH.."276"..R,  MYTH.."279"..R,  MYTH.."282"..R  },
+        { L.ILVLREF_RAID_LFR,    VET.."233"..R,   VET.."237"..R,   VET.."240"..R,   CHAMP.."243"..R },
+        { L.ILVLREF_RAID_NORMAL,  CHAMP.."246"..R, CHAMP.."250"..R, CHAMP.."253"..R, HERO.."256"..R  },
+        { L.ILVLREF_RAID_HEROIC,  HERO.."259"..R,  HERO.."263"..R,  HERO.."266"..R,  MYTH.."269"..R  },
+        { L.ILVLREF_RAID_MYTHIC,  MYTH.."272"..R,  MYTH.."276"..R,  MYTH.."279"..R,  MYTH.."282"..R  },
     }
 
     -- Bountiful Delve item levels
-    local tFmt = L.ILVLREF_DELVE_TIER_FMT or "T%d"
+    local tFmt = L.ILVLREF_DELVE_TIER_FMT
     local DELVES = {
         { tFmt:format(1),  ADV.."220"..R,   "-",             VET.."233"..R   },
         { tFmt:format(2),  ADV.."224"..R,   "-",             VET.."237"..R   },
@@ -275,38 +302,37 @@ local function BuildIlvlRefWindow()
         { tFmt:format(11), CHAMP.."250"..R, HERO.."259"..R,  HERO.."259"..R  },
     }
 
-    -- ── Frame ────────────────────────────────────────────────────────────────
     -- Pre-fit column widths and compute dynamic window width ----------------
     local trackCols = AutoFitCols({
-        { t = (L.ILVLREF_COL_ILVL         or "ilvl")           },
-        { t = (L.ILVLREF_COL_TRACK        or "Upgrade Tracks")  },
-        { t = (L.ILVLREF_COL_CREST_NEEDED or "Crests")          },
+        { t = L.ILVLREF_COL_ILVL           },
+        { t = L.ILVLREF_COL_TRACK  },
+        { t = L.ILVLREF_COL_CREST_NEEDED          },
     }, TRACKS)
     local craftCols = AutoFitCols({
-        { t = (L.ILVLREF_COL_QUALITY or "Quality")               },
-        { t = ADV..(L.ILVLREF_CREST_ADV_SHORT    or "Adv")..R    },
-        { t = VET..(L.ILVLREF_CREST_VET_SHORT    or "Vet")..R    },
-        { t = CHAMP..(L.ILVLREF_CREST_CHAMP_SHORT or "Champ")..R },
-        { t = HERO..(L.ILVLREF_CREST_HERO         or "Hero")..R  },
-        { t = MYTH..(L.ILVLREF_CREST_MYTH         or "Myth")..R  },
+        { t = L.ILVLREF_COL_QUALITY               },
+        { t = ADV..L.ILVLREF_CREST_ADV..R    },
+        { t = VET..L.ILVLREF_CREST_VET..R    },
+        { t = CHAMP..L.ILVLREF_CREST_CHAMP..R },
+        { t = HERO..L.ILVLREF_CREST_HERO..R  },
+        { t = MYTH..L.ILVLREF_CREST_MYTH..R  },
     }, CRAFTED)
     local dungCols = AutoFitCols({
-        { t = (L.ILVLREF_COL_SOURCE      or "Source")      },
-        { t = (L.ILVLREF_COL_END_LOOT    or "End Loot")    },
-        { t = (L.ILVLREF_COL_GREAT_VAULT or "Great Vault") },
+        { t = L.ILVLREF_COL_SOURCE      },
+        { t = L.ILVLREF_COL_END_LOOT    },
+        { t = L.ILVLREF_COL_GREAT_VAULT },
     }, DUNGEONS)
     local raidCols = AutoFitCols({
-        { t = (L.ILVLREF_COL_DIFFICULTY or "Difficulty") },
-        { t = (L.ILVLREF_COL_BOSS1      or "Early")      },
-        { t = (L.ILVLREF_COL_BOSS2      or "Mid")        },
-        { t = (L.ILVLREF_COL_BOSS3      or "Late")       },
-        { t = (L.ILVLREF_COL_BOSS4      or "End")        },
+        { t = L.ILVLREF_COL_DIFFICULTY },
+        { t = L.ILVLREF_COL_BOSS1      },
+        { t = L.ILVLREF_COL_BOSS2        },
+        { t = L.ILVLREF_COL_BOSS3       },
+        { t = L.ILVLREF_COL_BOSS4        },
     }, RAID)
     local delveCols = AutoFitCols({
-        { t = (L.ILVLREF_COL_TIER        or "Tier")        },
-        { t = (L.ILVLREF_COL_END_LOOT    or "End Loot")    },
-        { t = (L.ILVLREF_COL_MAP_DROP    or "Map Drop")    },
-        { t = (L.ILVLREF_COL_GREAT_VAULT or "Great Vault") },
+        { t = L.ILVLREF_COL_TIER        },
+        { t = L.ILVLREF_COL_END_LOOT    },
+        { t = L.ILVLREF_COL_MAP_DROP    },
+        { t = L.ILVLREF_COL_GREAT_VAULT },
     }, DELVES)
     local function tblW(c) return c[#c].x + c[#c].w end
     local contentW = math.max(tblW(trackCols), tblW(craftCols), tblW(dungCols),
@@ -324,13 +350,24 @@ local function BuildIlvlRefWindow()
     end
 
     win:SetSize(WIN_W, WIN_H)
-    win:SetPoint("CENTER", UIParent, "CENTER", 260, 0)  -- offset right so it doesn't cover the checklist
+    local _savedIlvlPos = Addon.db and Addon.db.global and Addon.db.global.ilvlRefPos
+    if _savedIlvlPos and _savedIlvlPos.x and _savedIlvlPos.y then
+        win:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", _savedIlvlPos.x, _savedIlvlPos.y)
+    else
+        win:SetPoint("CENTER", UIParent, "CENTER", 260, 0)  -- offset right so it doesn't cover the checklist
+    end
     win:SetClampedToScreen(true)
     win:SetMovable(true)
     win:EnableMouse(true)
     win:RegisterForDrag("LeftButton")
     win:SetScript("OnDragStart", win.StartMoving)
-    win:SetScript("OnDragStop",  win.StopMovingOrSizing)
+    win:SetScript("OnDragStop", function()
+        win:StopMovingOrSizing()
+        local _gdb = Addon.db and Addon.db.global
+        if _gdb then
+            _gdb.ilvlRefPos = { x = win:GetLeft(), y = win:GetBottom() }
+        end
+    end)
     win:SetFrameStrata("DIALOG")
     win:SetFrameLevel(100)
     win:Hide()
@@ -345,7 +382,7 @@ local function BuildIlvlRefWindow()
     titleFS:SetPoint("TOPLEFT", win, "TOPLEFT", PAD, -10)
     local th = Addon.THEME.header
     titleFS:SetTextColor(th.r, th.g, th.b, th.a)
-    titleFS:SetText(L.ILVLREF_WINDOW_TITLE or "Midnight Season 1 - Item Level Reference")
+    titleFS:SetText(L.ILVLREF_WINDOW_TITLE)
 
     -- Close button
     local closeBtn = CreateFrame("Button", nil, win, "UIPanelCloseButton")
@@ -377,32 +414,31 @@ local function BuildIlvlRefWindow()
     sc:SetHeight(1)
     sf:SetScrollChild(sc)
 
-    -- â"€â"€ Content â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
     local posY = -4
 
     -- 1. Upgrade Tracks
-    posY = SecHead(sc, posY, L.ILVLREF_SEC_TRACKS or "Upgrade Tracks  (20 crests per step)")
+    posY = SecHead(sc, posY, L.ILVLREF_SEC_TRACKS)
     posY = GridTable(sc, posY, trackCols, TRACKS)
     posY = posY - SEC_GAP
 
     -- 2. Crafted Item Levels
-    posY = SecHead(sc, posY, L.ILVLREF_SEC_CRAFTED or "Crafted Item Levels")
+    posY = SecHead(sc, posY, L.ILVLREF_SEC_CRAFTED)
     posY = GridTable(sc, posY, craftCols, CRAFTED)
     posY = posY - SEC_GAP
 
     -- 3. Dungeon Item Levels
-    posY = SecHead(sc, posY, L.ILVLREF_SEC_DUNGEONS or "Dungeon Item Levels")
+    posY = SecHead(sc, posY, L.ILVLREF_SEC_DUNGEONS)
     posY = GridTable(sc, posY, dungCols, DUNGEONS)
     posY = posY - SEC_GAP
 
     -- 4. Raid Item Levels
-    posY = SecHead(sc, posY, L.ILVLREF_SEC_RAID or "Approx. Midnight Raid Item Levels")
+    posY = SecHead(sc, posY, L.ILVLREF_SEC_RAID)
     posY = GridTable(sc, posY, raidCols, RAID)
     posY = posY - SEC_GAP
 
     -- 5. Bountiful Delve Item Levels
-    posY = SecHead(sc, posY, L.ILVLREF_SEC_DELVES or "Bountiful Delve Item Levels")
+    posY = SecHead(sc, posY, L.ILVLREF_SEC_DELVES)
     posY = GridTable(sc, posY, delveCols, DELVES)
 
     -- Set final scroll child height
@@ -412,7 +448,6 @@ local function BuildIlvlRefWindow()
     return win
 end
 
--- â"€â"€ Public API â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 function Addon:ToggleIlvlRefWindow()
     if self._ilvlRefWindow then
@@ -427,12 +462,6 @@ function Addon:ToggleIlvlRefWindow()
     -- Build on first use
     self._ilvlRefWindow = BuildIlvlRefWindow()
     self._ilvlRefWindow:Show()
-end
-
-function Addon:HideIlvlRefWindow()
-    if self._ilvlRefWindow and self._ilvlRefWindow:IsShown() then
-        self._ilvlRefWindow:Hide()
-    end
 end
 
 -- Called from UpdateLocalizedUI after a locale switch.

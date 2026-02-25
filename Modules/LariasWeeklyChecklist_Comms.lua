@@ -213,7 +213,7 @@ function Addon:ShowUpdatePopupIfNeeded()
     if type(L.UPDATE_AVAILABLE_FMT) == "string" and L.UPDATE_AVAILABLE_FMT ~= "" then
         popupText = string.format(L.UPDATE_AVAILABLE_FMT, tostring(displayName))
     else
-        popupText = (L.UPDATE_AVAILABLE_TEXT or L.UPDATE_AVAILABLE_TITLE or "")
+        popupText = (L.UPDATE_AVAILABLE_TEXT or "")
     end
 
     StaticPopup_Show("LARIASWEEKLYCHECKLIST_UPDATE", popupText)
