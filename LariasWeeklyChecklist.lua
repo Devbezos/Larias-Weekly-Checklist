@@ -738,6 +738,10 @@ function Addon:UpdateLocalizedUI()
         self:UpdateOptionsLocalizedUI()
     end
 
+    if self.RebuildIlvlRefWindow then
+        self:RebuildIlvlRefWindow()
+    end
+
     local optionsTab = frame._lariasTabOptions
     if optionsTab and optionsTab.SetText then
         optionsTab:SetText(L.TAB_OPTIONS or "Options")
@@ -751,6 +755,11 @@ function Addon:UpdateLocalizedUI()
     local changeWeekBtn = frame._lariasChangeWeekBtn
     if changeWeekBtn and changeWeekBtn.SetText then
         changeWeekBtn:SetText(L.CHANGE_WEEK_BUTTON or "Change Week")
+    end
+
+    local ilvlRefBtn = frame._lariasIlvlRefBtn
+    if ilvlRefBtn and ilvlRefBtn.SetText then
+        ilvlRefBtn:SetText(L.ILVLREF_BUTTON or "Item Levels")
     end
 
     local trackingFrame = self._trackingFrame
@@ -1580,7 +1589,7 @@ function Addon:CreateFrame()
     local listTab = CreateFrame("Button", tab1Name, frame, "UIPanelButtonTemplate")
     listTab:SetID(1)
     listTab:SetText(L.TAB_LIST or "")
-    listTab:SetSize(120, 28)
+    listTab:SetSize(80, 22)
     listTab:ClearAllPoints()
     -- Tabs should sit *inside* the window.
     local tabInsetX = (Addon.UI.padOuterX or 0) + (Addon.UI.sectionInsetX or 0)
@@ -1593,7 +1602,7 @@ function Addon:CreateFrame()
     local optionsTab = CreateFrame("Button", tab2Name, frame, "UIPanelButtonTemplate")
     optionsTab:SetID(2)
     optionsTab:SetText(L.TAB_OPTIONS or "")
-    optionsTab:SetSize(120, 28)
+    optionsTab:SetSize(80, 22)
     optionsTab:ClearAllPoints()
     optionsTab:SetPoint("LEFT", listTab, "RIGHT", 6, 0)
     StyleMainTabButton(optionsTab)
@@ -1610,6 +1619,17 @@ function Addon:CreateFrame()
     StyleMainTabButton(changeWeekBtn)
     changeWeekBtn:SetText(L.CHANGE_WEEK_BUTTON or "Change Week")
     frame._lariasChangeWeekBtn = changeWeekBtn
+
+    local ilvlRefBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    ilvlRefBtn:SetSize(108, 22)
+    ilvlRefBtn:ClearAllPoints()
+    ilvlRefBtn:SetPoint("RIGHT", changeWeekBtn, "LEFT", -6, 0)
+    StyleMainTabButton(ilvlRefBtn)
+    ilvlRefBtn:SetText(L.ILVLREF_BUTTON or "Item Levels")
+    ilvlRefBtn:SetScript("OnClick", function()
+        Addon:ToggleIlvlRefWindow()
+    end)
+    frame._lariasIlvlRefBtn = ilvlRefBtn
 
     -- Header picker: lets users jump to any week. Selecting a future week auto-checks
     -- all sections before it (they're "done"). Selecting a past week auto-unchecks
