@@ -295,7 +295,7 @@ local function SetupMinimapIcon()
     local dataObject = LDB:NewDataObject(addonName, {
         type = "data source",
         text = addonName,
-        icon = 135943, -- Gilded Crest icon
+        icon = "Interface\\AddOns\\LariasWeeklyChecklist\\Media\\icon",
         OnClick = function(_, button)
             if button == "LeftButton" then
                 -- If the addon is already open on the Options tab, left-click should

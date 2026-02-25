@@ -6,6 +6,7 @@
 ## SavedVariablesPerCharacter: LariasWeeklyChecklistDBPC
 ## SavedVariables: LariasWeeklyChecklistDB
 ## OptionalDeps: LariasWeeklyChecklist_Localization
+## IconTexture: Interface\AddOns\LariasWeeklyChecklist\Media\icon
 ## X-Wago-ID: mKOD5RGx
 ## X-Curse-Project-ID: 1448023
 
