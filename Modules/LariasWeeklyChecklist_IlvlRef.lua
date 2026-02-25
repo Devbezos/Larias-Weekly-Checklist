@@ -197,8 +197,6 @@ local function BuildIlvlRefWindow()
     -- â"€â"€ Localised data tables (built here so Addon.L is available) â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
     local L = Addon.L
     local _or = " " .. (L.ILVLREF_OR or "or") .. " "
-    local DIM  = "|cFF888888"   -- gray: visually de-emphasise the wasteful option
-    local WARN = "|cFFFF2020 - DO NOT DO THIS|r"
 
     -- Midnight Season 1 upgrade tracks (20 crests per step)
     -- { ilvl (color-coded), track name, crest needed (color-coded) }
@@ -207,20 +205,20 @@ local function BuildIlvlRefWindow()
         { ADV.."224"..R,   ADV..(L.ILVLREF_TRACK_ADV2        or "Adventurer 2")..R,           ADV..(L.ILVLREF_CREST_ADV  or "Adventurer")..R                                                                  },
         { ADV.."227"..R,   ADV..(L.ILVLREF_TRACK_ADV3        or "Adventurer 3")..R,           ADV..(L.ILVLREF_CREST_ADV  or "Adventurer")..R                                                                  },
         { ADV.."230"..R,   ADV..(L.ILVLREF_TRACK_ADV4        or "Adventurer 4")..R,           ADV..(L.ILVLREF_CREST_ADV  or "Adventurer")..R                                                                  },
-        { ADV.."233"..R,   DualTrack(L.ILVLREF_TRACK_ADV5_VET1 or "Adventurer 5 / Veteran 1", ADV, VET), ADV..(L.ILVLREF_CREST_ADV  or "Adventurer")..R                                                               },
-        { VET.."237"..R,   DualTrack(L.ILVLREF_TRACK_ADV6_VET2 or "Adventurer 6 / Veteran 2", ADV, VET), ADV..(L.ILVLREF_CREST_ADV_SHORT or "Adv")..R.." or ("..DIM..(L.ILVLREF_CREST_VET_SHORT or "Vet")..R..WARN..")" },
+        { VET.."233"..R,   DualTrack(L.ILVLREF_TRACK_ADV5_VET1 or "Adventurer 5 / Veteran 1", ADV, VET), ADV..(L.ILVLREF_CREST_ADV  or "Adventurer")..R                                                               },
+        { VET.."237"..R,   DualTrack(L.ILVLREF_TRACK_ADV6_VET2 or "Adventurer 6 / Veteran 2", ADV, VET), ADV..(L.ILVLREF_CREST_ADV_SHORT or "Adv")..R.." - (".."|cFFFF2020DO NOT USE VET CRESTS|r"..")" },
         { VET.."240"..R,   VET..(L.ILVLREF_TRACK_VET3        or "Veteran 3")..R,              VET..(L.ILVLREF_CREST_VET  or "Veteran")..R                                                                    },
         { VET.."243"..R,   VET..(L.ILVLREF_TRACK_VET4        or "Veteran 4")..R,              VET..(L.ILVLREF_CREST_VET  or "Veteran")..R                                                                    },
-        { VET.."246"..R,   DualTrack(L.ILVLREF_TRACK_VET5_CHAMP1 or "Veteran 5 / Champion 1", VET, CHAMP), VET..(L.ILVLREF_CREST_VET  or "Veteran")..R                                                                   },
-        { VET.."250"..R,   DualTrack(L.ILVLREF_TRACK_VET6_CHAMP2 or "Veteran 6 / Champion 2", VET, CHAMP), VET..(L.ILVLREF_CREST_VET_SHORT or "Vet")..R.." or ("..DIM..(L.ILVLREF_CREST_CHAMP_SHORT or "Champ")..R..WARN..")" },
+        { CHAMP.."246"..R,   DualTrack(L.ILVLREF_TRACK_VET5_CHAMP1 or "Veteran 5 / Champion 1", VET, CHAMP), VET..(L.ILVLREF_CREST_VET  or "Veteran")..R                                                                   },
+        { CHAMP.."250"..R,   DualTrack(L.ILVLREF_TRACK_VET6_CHAMP2 or "Veteran 6 / Champion 2", VET, CHAMP), VET..(L.ILVLREF_CREST_VET_SHORT or "Vet")..R.." - (".."|cFFFF2020DO NOT USE CHAMP CRESTS|r"..")" },
         { CHAMP.."253"..R, CHAMP..(L.ILVLREF_TRACK_CHAMP3       or "Champion 3")..R,             CHAMP..(L.ILVLREF_CREST_CHAMP or "Champion")..R                                                               },
         { CHAMP.."256"..R, CHAMP..(L.ILVLREF_TRACK_CHAMP4       or "Champion 4")..R,             CHAMP..(L.ILVLREF_CREST_CHAMP or "Champion")..R                                                               },
-        { CHAMP.."259"..R, DualTrack(L.ILVLREF_TRACK_CHAMP5_HERO1 or "Champion 5 / Hero 1", CHAMP, HERO),   CHAMP..(L.ILVLREF_CREST_CHAMP or "Champion")..R                                                               },
-        { CHAMP.."263"..R, DualTrack(L.ILVLREF_TRACK_CHAMP6_HERO2 or "Champion 6 / Hero 2", CHAMP, HERO),   CHAMP..(L.ILVLREF_CREST_CHAMP_SHORT or "Champ")..R.." or ("..DIM..(L.ILVLREF_CREST_HERO or "Hero")..R..WARN..")" },
+        { HERO.."259"..R, DualTrack(L.ILVLREF_TRACK_CHAMP5_HERO1 or "Champion 5 / Hero 1", CHAMP, HERO),   CHAMP..(L.ILVLREF_CREST_CHAMP or "Champion")..R                                                               },
+        { HERO.."263"..R, DualTrack(L.ILVLREF_TRACK_CHAMP6_HERO2 or "Champion 6 / Hero 2", CHAMP, HERO),   CHAMP..(L.ILVLREF_CREST_CHAMP_SHORT or "Champ")..R.." - (".."|cFFFF2020DO NOT USE HERO CRESTS|r"..")" },
         { HERO.."266"..R,  HERO..(L.ILVLREF_TRACK_HERO3        or "Hero 3")..R,                HERO..(L.ILVLREF_CREST_HERO  or "Hero")..R                                                                     },
         { HERO.."269"..R,  HERO..(L.ILVLREF_TRACK_HERO4        or "Hero 4")..R,                HERO..(L.ILVLREF_CREST_HERO  or "Hero")..R                                                                     },
-        { HERO.."272"..R,  DualTrack(L.ILVLREF_TRACK_HERO5_MYTH1 or "Hero 5 / Myth 1", HERO, MYTH),       HERO..(L.ILVLREF_CREST_HERO  or "Hero")..R                                                                    },
-        { HERO.."276"..R,  DualTrack(L.ILVLREF_TRACK_HERO6_MYTH2 or "Hero 6 / Myth 2", HERO, MYTH),       HERO..(L.ILVLREF_CREST_HERO or "Hero")..R.." or ("..DIM..(L.ILVLREF_CREST_MYTH or "Myth")..R..WARN..")" },
+        { MYTH.."272"..R,  DualTrack(L.ILVLREF_TRACK_HERO5_MYTH1 or "Hero 5 / Myth 1", HERO, MYTH),       HERO..(L.ILVLREF_CREST_HERO  or "Hero")..R                                                                    },
+        { MYTH.."276"..R,  DualTrack(L.ILVLREF_TRACK_HERO6_MYTH2 or "Hero 6 / Myth 2", HERO, MYTH),       HERO..(L.ILVLREF_CREST_HERO or "Hero")..R.." - (".."|cFFFF2020DO NOT USE MYTH CRESTS|r"..")" },
         { MYTH.."279"..R,  MYTH..(L.ILVLREF_TRACK_MYTH3        or "Myth 3")..R,                MYTH..(L.ILVLREF_CREST_MYTH  or "Myth")..R                                                                     },
         { MYTH.."282"..R,  MYTH..(L.ILVLREF_TRACK_MYTH4        or "Myth 4")..R,                MYTH..(L.ILVLREF_CREST_MYTH  or "Myth")..R                                                                     },
         { MYTH.."285"..R,  MYTH..(L.ILVLREF_TRACK_MYTH5        or "Myth 5")..R,                MYTH..(L.ILVLREF_CREST_MYTH  or "Myth")..R                                                                     },
@@ -229,53 +227,52 @@ local function BuildIlvlRefWindow()
 
     -- Crafted item levels
     local CRAFTED = {
-        { ADV..("220")..R, VET..("233")..R, CHAMP..("246")..R, HERO..("259")..R, MYTH..("272")..R },
-        { ADV..("224")..R, VET..("237")..R, CHAMP..("250")..R, HERO..("263")..R, MYTH..("276")..R },
-        { ADV..("227")..R, VET..("240")..R, CHAMP..("253")..R, HERO..("266")..R, MYTH..("279")..R },
-        { ADV..("230")..R, VET..("243")..R, CHAMP..("256")..R, HERO..("269")..R, MYTH..("282")..R },
-        { ADV..("233")..R, VET..("246")..R, CHAMP..("259")..R, HERO..("272")..R, MYTH..("285")..R },
+        { "|A:Professions-Icon-Quality-Tier1:14:14|a", ADV..("220")..R, VET..("233")..R, CHAMP..("246")..R, HERO..("259")..R, MYTH..("272")..R },
+        { "|A:Professions-Icon-Quality-Tier2:14:14|a", ADV..("224")..R, VET..("237")..R, CHAMP..("250")..R, HERO..("263")..R, MYTH..("276")..R },
+        { "|A:Professions-Icon-Quality-Tier3:14:14|a", ADV..("227")..R, VET..("240")..R, CHAMP..("253")..R, HERO..("266")..R, MYTH..("279")..R },
+        { "|A:Professions-Icon-Quality-Tier4:14:14|a", ADV..("230")..R, VET..("243")..R, CHAMP..("256")..R, HERO..("269")..R, MYTH..("282")..R },
+        { "|A:Professions-Icon-Quality-Tier5:14:14|a", ADV..("233")..R, VET..("246")..R, CHAMP..("259")..R, HERO..("272")..R, MYTH..("285")..R },
     }
 
     -- Dungeon item levels
-    local dungCrests = L.ILVLREF_DUNGEON_CRESTS or "Champ x"
     local DUNGEONS = {
-        { L.ILVLREF_DUNGEON_HEROIC or "Heroic", IlvlColor("230"), IlvlColor("243"), CHAMP..dungCrests..R },
-        { L.ILVLREF_DUNGEON_MYTHIC or "Mythic", IlvlColor("246"), IlvlColor("256"), CHAMP..dungCrests..R },
-        { "M2",  IlvlColor("250"), IlvlColor("259"), HERO..(L.ILVLREF_CREST_HERO or "Hero").."  x 10"..R },
-        { "M3",  IlvlColor("250"), IlvlColor("259"), HERO..(L.ILVLREF_CREST_HERO or "Hero").."  x 12"..R },
-        { "M4",  IlvlColor("253"), IlvlColor("263"), HERO..(L.ILVLREF_CREST_HERO or "Hero").."  x 14"..R },
-        { "M5",  IlvlColor("256"), IlvlColor("263"), HERO..(L.ILVLREF_CREST_HERO or "Hero").."  x 16"..R },
-        { "M6",  IlvlColor("259"), IlvlColor("266"), HERO..(L.ILVLREF_CREST_HERO or "Hero").."  x 18"..R },
-        { "M7",  IlvlColor("259"), IlvlColor("269"), MYTH..(L.ILVLREF_CREST_MYTH or "Myth").."  x 10"..R },
-        { "M8",  IlvlColor("263"), IlvlColor("269"), MYTH..(L.ILVLREF_CREST_MYTH or "Myth").."  x 12"..R },
-        { "M9",  IlvlColor("263"), IlvlColor("269"), MYTH..(L.ILVLREF_CREST_MYTH or "Myth").."  x 14"..R },
-        { "M10", IlvlColor("266"), IlvlColor("272"), MYTH..(L.ILVLREF_CREST_MYTH or "Myth").."  x 16"..R },
-        { "M11", IlvlColor("266"), IlvlColor("272"), MYTH..(L.ILVLREF_CREST_MYTH or "Myth").."  x 18"..R },
-        { "M12", IlvlColor("266"), IlvlColor("272"), MYTH..(L.ILVLREF_CREST_MYTH or "Myth").."  x 20"..R },
+        { L.ILVLREF_DUNGEON_HEROIC or "Heroic", ADV.."230"..R,   VET.."243"..R   },
+        { L.ILVLREF_DUNGEON_MYTHIC or "Mythic", CHAMP.."246"..R, CHAMP.."256"..R },
+        { "M2",  CHAMP.."250"..R, HERO.."259"..R  },
+        { "M3",  CHAMP.."250"..R, HERO.."259"..R  },
+        { "M4",  CHAMP.."253"..R, HERO.."263"..R  },
+        { "M5",  CHAMP.."256"..R, HERO.."263"..R  },
+        { "M6",  HERO.."259"..R,  HERO.."266"..R  },
+        { "M7",  HERO.."259"..R,  HERO.."269"..R  },
+        { "M8",  HERO.."263"..R,  HERO.."269"..R  },
+        { "M9",  HERO.."263"..R,  HERO.."269"..R  },
+        { "M10", HERO.."266"..R,  MYTH.."272"..R  },
+        { "M11", HERO.."266"..R,  MYTH.."272"..R  },
+        { "M12", HERO.."266"..R,  MYTH.."272"..R  },
     }
 
     -- Raid item levels
     local RAID = {
-        { L.ILVLREF_RAID_LFR    or "LFR",    IlvlColor("233"), IlvlColor("237"), IlvlColor("240"), IlvlColor("243") },
-        { L.ILVLREF_RAID_NORMAL or "Normal",  IlvlColor("246"), IlvlColor("250"), IlvlColor("253"), IlvlColor("256") },
-        { L.ILVLREF_RAID_HEROIC or "Heroic",  IlvlColor("259"), IlvlColor("263"), IlvlColor("266"), IlvlColor("269") },
-        { L.ILVLREF_RAID_MYTHIC or "Mythic",  IlvlColor("272"), IlvlColor("276"), IlvlColor("279"), IlvlColor("282") },
+        { L.ILVLREF_RAID_LFR    or "LFR",    VET.."233"..R,   VET.."237"..R,   VET.."240"..R,   CHAMP.."243"..R },
+        { L.ILVLREF_RAID_NORMAL or "Normal",  CHAMP.."246"..R, CHAMP.."250"..R, CHAMP.."253"..R, HERO.."256"..R  },
+        { L.ILVLREF_RAID_HEROIC or "Heroic",  HERO.."259"..R,  HERO.."263"..R,  HERO.."266"..R,  MYTH.."269"..R  },
+        { L.ILVLREF_RAID_MYTHIC or "Mythic",  MYTH.."272"..R,  MYTH.."276"..R,  MYTH.."279"..R,  MYTH.."282"..R  },
     }
 
     -- Bountiful Delve item levels
     local tFmt = L.ILVLREF_DELVE_TIER_FMT or "T%d"
     local DELVES = {
-        { tFmt:format(1),  IlvlColor("220"), "-",              IlvlColor("233") },
-        { tFmt:format(2),  IlvlColor("224"), "-",              IlvlColor("237") },
-        { tFmt:format(3),  IlvlColor("227"), "-",              IlvlColor("240") },
-        { tFmt:format(4),  IlvlColor("230"), IlvlColor("237"), IlvlColor("243") },
-        { tFmt:format(5),  IlvlColor("233"), IlvlColor("243"), IlvlColor("246") },
-        { tFmt:format(6),  IlvlColor("237"), IlvlColor("250"), IlvlColor("253") },
-        { tFmt:format(7),  IlvlColor("250"), IlvlColor("256"), IlvlColor("256") },
-        { tFmt:format(8),  IlvlColor("250"), IlvlColor("259"), IlvlColor("259") },
-        { tFmt:format(9),  IlvlColor("250"), IlvlColor("259"), IlvlColor("259") },
-        { tFmt:format(10), IlvlColor("250"), IlvlColor("259"), IlvlColor("259") },
-        { tFmt:format(11), IlvlColor("250"), IlvlColor("259"), IlvlColor("259") },
+        { tFmt:format(1),  ADV.."220"..R,   "-",             VET.."233"..R   },
+        { tFmt:format(2),  ADV.."224"..R,   "-",             VET.."237"..R   },
+        { tFmt:format(3),  ADV.."227"..R,   "-",             VET.."240"..R   },
+        { tFmt:format(4),  ADV.."230"..R,   VET.."237"..R,   VET.."243"..R   },
+        { tFmt:format(5),  VET.."233"..R,   VET.."243"..R,   CHAMP.."246"..R },
+        { tFmt:format(6),  VET.."237"..R,   CHAMP.."250"..R, CHAMP.."253"..R },
+        { tFmt:format(7),  CHAMP.."250"..R, CHAMP.."256"..R, CHAMP.."256"..R },
+        { tFmt:format(8),  CHAMP.."250"..R, HERO.."259"..R,  HERO.."259"..R  },
+        { tFmt:format(9),  CHAMP.."250"..R, HERO.."259"..R,  HERO.."259"..R  },
+        { tFmt:format(10), CHAMP.."250"..R, HERO.."259"..R,  HERO.."259"..R  },
+        { tFmt:format(11), CHAMP.."250"..R, HERO.."259"..R,  HERO.."259"..R  },
     }
 
     -- ── Frame ────────────────────────────────────────────────────────────────
@@ -286,6 +283,7 @@ local function BuildIlvlRefWindow()
         { t = (L.ILVLREF_COL_CREST_NEEDED or "Crests")          },
     }, TRACKS)
     local craftCols = AutoFitCols({
+        { t = (L.ILVLREF_COL_QUALITY or "Quality")               },
         { t = ADV..(L.ILVLREF_CREST_ADV_SHORT    or "Adv")..R    },
         { t = VET..(L.ILVLREF_CREST_VET_SHORT    or "Vet")..R    },
         { t = CHAMP..(L.ILVLREF_CREST_CHAMP_SHORT or "Champ")..R },
@@ -296,7 +294,6 @@ local function BuildIlvlRefWindow()
         { t = (L.ILVLREF_COL_SOURCE      or "Source")      },
         { t = (L.ILVLREF_COL_END_LOOT    or "End Loot")    },
         { t = (L.ILVLREF_COL_GREAT_VAULT or "Great Vault") },
-        { t = (L.ILVLREF_COL_CRESTS      or "Crests")      },
     }, DUNGEONS)
     local raidCols = AutoFitCols({
         { t = (L.ILVLREF_COL_DIFFICULTY or "Difficulty") },

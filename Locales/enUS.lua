@@ -22,8 +22,8 @@ local STRINGS = {
 
 	OPTIONS_SHOW_GREAT_VAULT = "Show Great Vault",
 	OPTIONS_SHOW_CURRENCY = "Show Currency",
-    OPTIONS_SHOW_CHANGE_WEEK_BTN = 'Show "Change Week" button',
-    OPTIONS_SHOW_ILVL_REF_BTN = 'Show "Ilvl Refs" button',
+    OPTIONS_SHOW_CHANGE_WEEK_BTN = 'Show Change Week button',
+    OPTIONS_SHOW_ILVL_REF_BTN = 'Show Ilvl Refs button',
 	RESET_BUTTON = "Reset",
 	DONE_PREFIX = "[Done] ",
 

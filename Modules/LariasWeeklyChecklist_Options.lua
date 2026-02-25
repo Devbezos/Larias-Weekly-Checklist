@@ -177,9 +177,9 @@ function Addon:UpdateOptionsLocalizedUI()
 
     SetCheckText(frame._lariasOptShowGreatVault, L.OPTIONS_SHOW_GREAT_VAULT or "Show Great Vault")
     SetCheckText(frame._lariasOptShowCurrency, L.OPTIONS_SHOW_CURRENCY or "Show Currency")
+    SetCheckText(frame._lariasOptShowChangeWeekBtn, L.OPTIONS_SHOW_CHANGE_WEEK_BTN or "Show Change Week button")
+    SetCheckText(frame._lariasOptShowIlvlRefBtn, L.OPTIONS_SHOW_ILVL_REF_BTN or "Show Item Levels button")
     SetCheckText(frame._lariasOptHideCompleted, L.HIDE_COMPLETED_WEEKS or "Hide completed weeks")
-    SetCheckText(frame._lariasOptShowChangeWeekBtn, L.OPTIONS_SHOW_CHANGE_WEEK_BTN or "Show \"Change Week\" button")
-    SetCheckText(frame._lariasOptShowIlvlRefBtn, L.OPTIONS_SHOW_ILVL_REF_BTN or "Show \"Item Levels\" button")
 
     local resetBtn = frame._lariasOptResetBtn
     if resetBtn and resetBtn.SetText then
