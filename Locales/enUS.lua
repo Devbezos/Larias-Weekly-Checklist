@@ -13,20 +13,26 @@ local L = reg.strings["enUS"]
 local STRINGS = {
 	DISPLAY_NAME = "Larias's Weekly Checklist",
 
+	-- Update popup
 	UPDATE_AVAILABLE_TEXT = "New version available",
 	UPDATE_AVAILABLE_FMT = "%s has an update available.\n\nPlease update the addon to the newest version.",
 
+	-- Shared buttons
 	BUTTON_OK = "OK",
 	BUTTON_CANCEL = "Cancel",
 
+	-- Options tab
 	OPTIONS_HIDE_GREAT_VAULT = "Hide Great Vault",
 	OPTIONS_HIDE_CURRENCY = "Hide Currency",
 	HIDE_COMPLETED_WEEKS = "Hide completed weeks",
 	OPTIONS_HIDE_CHANGE_WEEK_BTN = 'Hide Change Week button',
 	OPTIONS_HIDE_ILVL_REF_BTN = 'Hide Ilvl Refs button',
 	RESET_BUTTON = "Reset List",
+
+	-- List tab
 	DONE_PREFIX = "[Done] ",
 
+	-- Tracking panel
 	TRACKING_GREAT_VAULT_TITLE = "Great Vault",
 	TRACKING_CURRENCY_TITLE = "Currency",
 	TRACKING_GV_RAID = "Raid",
@@ -58,9 +64,11 @@ local STRINGS = {
 
 	TRACKING_INF = "INF",
 
+	-- Minimap tooltip
 	MINIMAP_TOOLTIP_LEFT_CLICK_TOGGLE = "Left-click: Toggle checklist",
 	MINIMAP_TOOLTIP_RIGHT_CLICK_OPTIONS = "Right-click: Options",
 
+	-- Main window
 	TAB_LIST = "List",
 	TAB_OPTIONS = "Options",
 	CHANGE_WEEK_BUTTON = "Change Week",
