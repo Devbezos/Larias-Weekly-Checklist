@@ -26,36 +26,8 @@ function Addon:InitOptionsTab(frame, optionsPanel)
 
     local db = self:EnsureDB()
 
-    local showGreatVaultCheck = CreateFrame("CheckButton", nil, optionsPanel, "UICheckButtonTemplate")
-    showGreatVaultCheck:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 6, -6)
-    showGreatVaultCheck:SetChecked(db.showGreatVault and true or false)
-    showGreatVaultCheck:SetScript("OnClick", function(selfBtn)
-        local dbForClick = Addon:EnsureDB()
-        dbForClick.showGreatVault = selfBtn:GetChecked() and true or false
-        if Addon.RequestRefresh then
-            Addon:RequestRefresh()
-        else
-            Addon:Refresh()
-        end
-    end)
-    frame._lariasOptShowGreatVault = showGreatVaultCheck
-
-    local showCurrencyCheck = CreateFrame("CheckButton", nil, optionsPanel, "UICheckButtonTemplate")
-    showCurrencyCheck:SetPoint("TOPLEFT", showGreatVaultCheck, "BOTTOMLEFT", 0, -8)
-    showCurrencyCheck:SetChecked(db.showCurrency and true or false)
-    showCurrencyCheck:SetScript("OnClick", function(selfBtn)
-        local dbForClick = Addon:EnsureDB()
-        dbForClick.showCurrency = selfBtn:GetChecked() and true or false
-        if Addon.RequestRefresh then
-            Addon:RequestRefresh()
-        else
-            Addon:Refresh()
-        end
-    end)
-    frame._lariasOptShowCurrency = showCurrencyCheck
-
     local hideCompletedCheck = CreateFrame("CheckButton", nil, optionsPanel, "UICheckButtonTemplate")
-    hideCompletedCheck:SetPoint("TOPLEFT", showCurrencyCheck, "BOTTOMLEFT", 0, -8)
+    hideCompletedCheck:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 6, -6)
     hideCompletedCheck:SetChecked(db.hideCompletedSections and true or false)
     hideCompletedCheck:SetScript("OnClick", function(selfBtn)
         local dbForClick = Addon:EnsureDB()
@@ -68,9 +40,64 @@ function Addon:InitOptionsTab(frame, optionsPanel)
     end)
     frame._lariasOptHideCompleted = hideCompletedCheck
 
-    local resetBtn = CreateFrame("Button", nil, optionsPanel, "GameMenuButtonTemplate")
-    resetBtn:SetPoint("TOPLEFT", hideCompletedCheck, "BOTTOMLEFT", 0, -12)
-    resetBtn:SetSize(120, 24)
+    local showGreatVaultCheck = CreateFrame("CheckButton", nil, optionsPanel, "UICheckButtonTemplate")
+    showGreatVaultCheck:SetPoint("TOPLEFT", hideCompletedCheck, "BOTTOMLEFT", 0, -8)
+    showGreatVaultCheck:SetChecked(not db.showGreatVault)
+    showGreatVaultCheck:SetScript("OnClick", function(selfBtn)
+        local dbForClick = Addon:EnsureDB()
+        dbForClick.showGreatVault = not selfBtn:GetChecked()
+        if Addon.RequestRefresh then
+            Addon:RequestRefresh()
+        else
+            Addon:Refresh()
+        end
+    end)
+    frame._lariasOptShowGreatVault = showGreatVaultCheck
+
+    local showCurrencyCheck = CreateFrame("CheckButton", nil, optionsPanel, "UICheckButtonTemplate")
+    showCurrencyCheck:SetPoint("TOPLEFT", showGreatVaultCheck, "BOTTOMLEFT", 0, -8)
+    showCurrencyCheck:SetChecked(not db.showCurrency)
+    showCurrencyCheck:SetScript("OnClick", function(selfBtn)
+        local dbForClick = Addon:EnsureDB()
+        dbForClick.showCurrency = not selfBtn:GetChecked()
+        if Addon.RequestRefresh then
+            Addon:RequestRefresh()
+        else
+            Addon:Refresh()
+        end
+    end)
+    frame._lariasOptShowCurrency = showCurrencyCheck
+
+    local showChangeWeekCheck = CreateFrame("CheckButton", nil, optionsPanel, "UICheckButtonTemplate")
+    showChangeWeekCheck:SetPoint("TOPLEFT", showCurrencyCheck, "BOTTOMLEFT", 0, -8)
+    showChangeWeekCheck:SetChecked(db.showChangeWeekBtn == false)
+    showChangeWeekCheck:SetScript("OnClick", function(selfBtn)
+        local dbForClick = Addon:EnsureDB()
+        dbForClick.showChangeWeekBtn = not selfBtn:GetChecked()
+        if Addon.LayoutHeaderButtons then
+            Addon:LayoutHeaderButtons()
+        end
+    end)
+    frame._lariasOptShowChangeWeekBtn = showChangeWeekCheck
+
+    local showIlvlRefCheck = CreateFrame("CheckButton", nil, optionsPanel, "UICheckButtonTemplate")
+    showIlvlRefCheck:SetPoint("TOPLEFT", showChangeWeekCheck, "BOTTOMLEFT", 0, -8)
+    showIlvlRefCheck:SetChecked(db.showIlvlRefBtn == false)
+    showIlvlRefCheck:SetScript("OnClick", function(selfBtn)
+        local dbForClick = Addon:EnsureDB()
+        dbForClick.showIlvlRefBtn = not selfBtn:GetChecked()
+        if Addon.LayoutHeaderButtons then
+            Addon:LayoutHeaderButtons()
+        end
+    end)
+    frame._lariasOptShowIlvlRefBtn = showIlvlRefCheck
+
+    local resetBtn = CreateFrame("Button", nil, optionsPanel, "UIPanelButtonTemplate")
+    resetBtn:SetPoint("TOPLEFT", showIlvlRefCheck, "BOTTOMLEFT", 0, -12)
+    resetBtn:SetSize(108, 22)
+    if Addon._styleActionButton then
+        Addon._styleActionButton(resetBtn)
+    end
     resetBtn:SetScript("OnClick", function()
         local dbForReset = Addon:EnsureDB()
         if wipe then
@@ -81,6 +108,7 @@ function Addon:InitOptionsTab(frame, optionsPanel)
             dbForReset.collapsedSections = {}
         end
         dbForReset.hideCompletedSections = true
+        dbForReset.startAtSectionId = ""
 
         if Addon.SyncOptionsTabControls then
             Addon:SyncOptionsTabControls()
@@ -116,17 +144,27 @@ function Addon:SyncOptionsTabControls()
 
     local showGreatVaultCheck = frame._lariasOptShowGreatVault
     if showGreatVaultCheck and showGreatVaultCheck.SetChecked then
-        showGreatVaultCheck:SetChecked(db.showGreatVault and true or false)
+        showGreatVaultCheck:SetChecked(not db.showGreatVault)
     end
 
     local showCurrencyCheck = frame._lariasOptShowCurrency
     if showCurrencyCheck and showCurrencyCheck.SetChecked then
-        showCurrencyCheck:SetChecked(db.showCurrency and true or false)
+        showCurrencyCheck:SetChecked(not db.showCurrency)
     end
 
     local hideCompletedCheck = frame._lariasOptHideCompleted
     if hideCompletedCheck and hideCompletedCheck.SetChecked then
         hideCompletedCheck:SetChecked(db.hideCompletedSections and true or false)
+    end
+
+    local showChangeWeekCheck = frame._lariasOptShowChangeWeekBtn
+    if showChangeWeekCheck and showChangeWeekCheck.SetChecked then
+        showChangeWeekCheck:SetChecked(db.showChangeWeekBtn == false)
+    end
+
+    local showIlvlRefCheck = frame._lariasOptShowIlvlRefBtn
+    if showIlvlRefCheck and showIlvlRefCheck.SetChecked then
+        showIlvlRefCheck:SetChecked(db.showIlvlRefBtn == false)
     end
 
     if self.UpdateOptionsLocalizedUI then
@@ -140,13 +178,15 @@ function Addon:UpdateOptionsLocalizedUI()
 
     local L = self.L or {}
 
-    SetCheckText(frame._lariasOptShowGreatVault, L.OPTIONS_SHOW_GREAT_VAULT or "Show Great Vault")
-    SetCheckText(frame._lariasOptShowCurrency, L.OPTIONS_SHOW_CURRENCY or "Show Currency")
     SetCheckText(frame._lariasOptHideCompleted, L.HIDE_COMPLETED_WEEKS or "Hide completed weeks")
+    SetCheckText(frame._lariasOptShowGreatVault, L.OPTIONS_HIDE_GREAT_VAULT or "Hide Great Vault")
+    SetCheckText(frame._lariasOptShowCurrency, L.OPTIONS_HIDE_CURRENCY or "Hide Currency")
+    SetCheckText(frame._lariasOptShowChangeWeekBtn, L.OPTIONS_HIDE_CHANGE_WEEK_BTN or "Hide Change Week button")
+    SetCheckText(frame._lariasOptShowIlvlRefBtn, L.OPTIONS_HIDE_ILVL_REF_BTN or "Hide Ilvl Refs button")
 
     local resetBtn = frame._lariasOptResetBtn
     if resetBtn and resetBtn.SetText then
-        resetBtn:SetText(L.RESET_BUTTON or "Reset")
+        resetBtn:SetText(L.RESET_BUTTON or "Reset List")
     end
 
     local hint = frame._lariasOptLocalizationHint

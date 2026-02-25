@@ -12,6 +12,11 @@ on:
       - develop
       - release/**
       - hotfix/**
+    tags-ignore:
+      # Prevent the bot's own tag push from re-triggering this workflow.
+      # Without this, pushing v*-alpha would re-fire the workflow, causing a
+      # second run that races with the original and can loop indefinitely.
+      - '**'
   workflow_dispatch:
     inputs:
       target_branch:
@@ -59,32 +64,44 @@ jobs:
           git fetch --tags --force
 
           # Versioning rules for alpha:
-          # - If the repo already has alpha tags, bump the latest alpha tag's 4th component (build).
-          # - Otherwise, bump the current stable PATCH once and start build at 1.
+          # - Parse MAJOR.MINOR.PATCH from the current stable .toc version.
+          # - If alpha tags exist AND their base MAJOR.MINOR.PATCH matches the
+          #   .toc version, bump only the BUILD (4th) component.
+          # - If the .toc version is AHEAD of the latest alpha tag (e.g. a stable
+          #   release was cut and the .toc was bumped), reset BUILD to 1 using
+          #   the .toc version as the base.
           # Examples:
-          #   1.0.16          -> 1.0.17.1-alpha
-          #   1.0.16.3-alpha  -> 1.0.16.4-alpha
+          #   toc=1.0.19, latest alpha=v1.0.19.5-alpha  -> 1.0.19.6-alpha
+          #   toc=1.0.20, latest alpha=v1.0.19.5-alpha  -> 1.0.20.1-alpha
+          #   toc=1.0.20, no alpha tags                 -> 1.0.20.1-alpha
+
+          # Parse MAJOR.MINOR.PATCH from the .toc (strip any pre-existing build component).
+          if [[ "${CURRENT:-}" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+            TOC_MAJOR="${BASH_REMATCH[1]}"
+            TOC_MINOR="${BASH_REMATCH[2]}"
+            TOC_PATCH="${BASH_REMATCH[3]}"
+          else
+            TOC_MAJOR=0; TOC_MINOR=0; TOC_PATCH=0
+          fi
 
           LATEST_ALPHA_TAG=$(git tag --list 'v*-alpha' --sort=-v:refname | head -n 1 || true)
           if [ -n "${LATEST_ALPHA_TAG:-}" ]; then
             BASE_VERSION="${LATEST_ALPHA_TAG#v}"
             BASE_VERSION="${BASE_VERSION%-alpha}"
-            IFS='.' read -r MAJOR MINOR PATCH BUILD <<< "$BASE_VERSION"
-            if [ -z "${BUILD:-}" ]; then BUILD=0; fi
-            BUILD=$((BUILD + 1))
-          else
-            # Parse only MAJOR.MINOR.PATCH from CURRENT; ignore any 4th component.
-            if [[ "${CURRENT:-}" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
-              MAJOR="${BASH_REMATCH[1]}"
-              MINOR="${BASH_REMATCH[2]}"
-              PATCH="${BASH_REMATCH[3]}"
+            IFS='.' read -r TAG_MAJOR TAG_MINOR TAG_PATCH TAG_BUILD <<< "$BASE_VERSION"
+            if [ -z "${TAG_BUILD:-}" ]; then TAG_BUILD=0; fi
+
+            # Compare tag base to .toc; if .toc is strictly ahead, start fresh.
+            if [ "$TOC_MAJOR" -gt "$TAG_MAJOR" ] ||
+               { [ "$TOC_MAJOR" -eq "$TAG_MAJOR" ] && [ "$TOC_MINOR" -gt "$TAG_MINOR" ]; } ||
+               { [ "$TOC_MAJOR" -eq "$TAG_MAJOR" ] && [ "$TOC_MINOR" -eq "$TAG_MINOR" ] && [ "$TOC_PATCH" -gt "$TAG_PATCH" ]; }; then
+              MAJOR=$TOC_MAJOR; MINOR=$TOC_MINOR; PATCH=$TOC_PATCH; BUILD=1
             else
-              MAJOR=0
-              MINOR=0
-              PATCH=0
+              MAJOR=$TAG_MAJOR; MINOR=$TAG_MINOR; PATCH=$TAG_PATCH
+              BUILD=$((TAG_BUILD + 1))
             fi
-            PATCH=$((PATCH + 1))
-            BUILD=1
+          else
+            MAJOR=$TOC_MAJOR; MINOR=$TOC_MINOR; PATCH=$TOC_PATCH; BUILD=1
           fi
 
           NEW_VERSION="$MAJOR.$MINOR.$PATCH.$BUILD"
