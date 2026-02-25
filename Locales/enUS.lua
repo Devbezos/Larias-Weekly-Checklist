@@ -26,7 +26,10 @@ local STRINGS = {
 	OPTIONS_HIDE_CURRENCY = "Hide Currency",
 	HIDE_COMPLETED_WEEKS = "Hide completed weeks",
 	OPTIONS_HIDE_CHANGE_WEEK_BTN = 'Hide Change Week button',
-	OPTIONS_HIDE_ILVL_REF_BTN = 'Hide Ilvl Refs button',
+	OPTIONS_HIDE_ILVL_REF_BTN = 'Hide Ilvl Refs button',	OPTIONS_HIDE_CHAR_SELECT = "Hide character select",
+	OPTIONS_HIDDEN_CHARS_TITLE = "Hidden characters:",
+	OPTIONS_HIDDEN_CHARS_NONE = "None",
+	OPTIONS_UNHIDE_BTN = "Unhide",
 	RESET_BUTTON = "Reset List",
 
 	-- List tab

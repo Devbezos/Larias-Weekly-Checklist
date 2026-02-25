@@ -24,6 +24,8 @@ local TrackingUI = { left = {}, right = {} }
 local tonumber, tostring, type = tonumber, tostring, type
 local floor, max, abs = math.floor, math.max, math.abs
 local tinsert, tremove, tconcat, tsort = table.insert, table.remove, table.concat, table.sort
+-- Forward declaration: defined later (after all data-gathering helpers).
+local ComputeSnapshotData
 
 local function IsFrameShown(frameObj)
     -- Safe IsShown wrapper; treats missing frames as hidden.
@@ -43,6 +45,14 @@ local function Wipe(tableToWipe)
 end
 
 Addon.TRACKING = Addon.TRACKING or {}
+
+-- Returns true when the current character has previously saved tracking data.
+-- Used to decide whether background event-driven snapshot updates should run.
+function Addon:HasTrackingSnapshot()
+    local prof = self.db and self.db.profile
+    local snap = prof and prof.trackingSnapshot
+    return snap ~= nil and (snap.leftLines ~= nil or snap.rightRows ~= nil)
+end
 
 local function SafeRegisterEvent(frame, eventName)
     -- Some events aren’t present on all client versions; register defensively.
@@ -79,18 +89,53 @@ function Addon:ConfigureTrackingEvents(parentFrame, showGreatVault, showCurrency
         trackingEventFrame:RegisterEvent("ITEM_DATA_LOAD_RESULT")
     end
 
-    if not trackingEventFrame._lariasOnEventSet then
-        trackingEventFrame._lariasOnEventSet = true
-        trackingEventFrame:SetScript("OnEvent", function()
-            local isMainFrameVisible = IsFrameShown(parentFrame)
-            local isTrackingPanelVisible = IsFrameShown(Addon._trackingFrame)
-            if isMainFrameVisible and isTrackingPanelVisible then
-                -- Never run per-frame: we update on relevant events only,
-                -- and then funnel through a throttle (see RequestTrackingUpdate).
-                Addon:RequestTrackingUpdate()
+    -- Always overwrite the handler so the parentFrame upvalue stays current;
+    -- OnEnable may call this with nil before the frame is created.
+    trackingEventFrame:SetScript("OnEvent", function()
+        local isMainFrameVisible = IsFrameShown(parentFrame)
+        local isTrackingPanelVisible = IsFrameShown(Addon._trackingFrame)
+        if isMainFrameVisible and isTrackingPanelVisible then
+            -- Normal path: panel is open, do a full UI update.
+            Addon:RequestTrackingUpdate()
+        elseif Addon:HasTrackingSnapshot() then
+            -- Background path: this character has prior snapshot data; keep it
+            -- fresh via background updates even while the panel is not open.
+            Addon:RequestBackgroundSnapshotUpdate()
+        end
+    end)
+end
+
+function Addon:RequestBackgroundSnapshotUpdate()
+    -- Throttled background snapshot save (fires when the panel is hidden but
+    -- the character already has snapshot data from a previous session).
+    if self._bgSnapshotPending then return end
+    self._bgSnapshotPending = true
+
+    if not self._bgSnapshotRunner then
+        local addon = self
+        self._bgSnapshotRunner = function()
+            addon._bgSnapshotPending = nil
+            if addon.UpdateSnapshotBackground then
+                addon:UpdateSnapshotBackground()
             end
-        end)
+        end
     end
+
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0.2, self._bgSnapshotRunner)
+    else
+        self._bgSnapshotRunner()
+    end
+end
+
+function Addon:UpdateSnapshotBackground()
+    -- Compute current data from WoW APIs and save to the profile snapshot
+    -- without rendering anything to the UI (frame may be hidden/uncreated).
+    if not self:HasTrackingSnapshot() then return end
+    local db = self:EnsureDB()
+    local snap = db.trackingSnapshot
+    if type(snap) ~= "table" then return end
+    ComputeSnapshotData(snap)
 end
 
 function Addon:RequestTrackingUpdate()
@@ -863,6 +908,13 @@ end
 
 local function ComputeWantTrackingPanel(db)
     -- Decide whether the tracking panel should be shown at all.
+    if Addon._viewingChar then
+        -- When viewing another character, only show the panel if we have a
+        -- stored snapshot for them (they've opened the addon at least once).
+        local snap = db.trackingSnapshot
+        local hasData = snap and (snap.leftLines ~= nil or snap.rightRows ~= nil)
+        return hasData and IsMainFrameOnListTab() and true or false
+    end
     local wantPanel = (db.showGreatVault or db.showCurrency) and true or false
     if wantPanel and not IsMainFrameOnListTab() then
         wantPanel = false
@@ -1126,7 +1178,9 @@ function Addon:CreateTrackingPanel(parentFrame)
             Addon:RequestTrackingUpdate()
         end)
         trackingFrame:SetScript("OnHide", function()
-            if trackingEventFrame then
+            -- Keep events registered if this character has snapshot data so
+            -- background updates continue even while the panel is not visible.
+            if trackingEventFrame and not Addon:HasTrackingSnapshot() then
                 trackingEventFrame:UnregisterAllEvents()
             end
         end)
@@ -1144,7 +1198,19 @@ function Addon:ApplyTrackingPanelOptions()
     local db = self:EnsureDB()
     local showGreatVault = db.showGreatVault and true or false
     local showCurrency = db.showCurrency and true or false
-    local wantPanel = (showGreatVault or showCurrency) and IsMainFrameOnListTab()
+
+    local wantPanel
+    if Addon._viewingChar then
+        -- For another character, derive visibility from their stored snapshot.
+        local snap = db.trackingSnapshot
+        wantPanel = snap and (snap.leftLines ~= nil or snap.rightRows ~= nil) and IsMainFrameOnListTab() and true or false
+        if wantPanel and snap then
+            showGreatVault = snap.leftLines ~= nil
+            showCurrency   = snap.rightRows ~= nil
+        end
+    else
+        wantPanel = (showGreatVault or showCurrency) and IsMainFrameOnListTab()
+    end
 
     trackingFrame:SetShown(wantPanel)
     if not wantPanel then
@@ -1155,7 +1221,10 @@ function Addon:ApplyTrackingPanelOptions()
         return
     end
 
-    self:ConfigureTrackingEvents(_G["LariasWeeklyChecklistFrame"], showGreatVault, showCurrency)
+    -- Only wire live events when showing the current player's data.
+    if not Addon._viewingChar then
+        self:ConfigureTrackingEvents(_G["LariasWeeklyChecklistFrame"], showGreatVault, showCurrency)
+    end
 
     local leftCol = trackingFrame._lariasLeftCol
     local rightCol = trackingFrame._lariasRightCol
@@ -1198,6 +1267,75 @@ function Addon:ApplyTrackingPanelOptions()
     if self.ApplyScrollLayout then self:ApplyScrollLayout() end
 end
 
+ComputeSnapshotData = function(snap)
+    -- Compute tracking data directly from WoW APIs and write into snap tables.
+    -- Used both after a live panel render and for background updates when the
+    -- panel is hidden. No UI frame required.
+
+    -- Left column: Great Vault (6 lines).
+    local gvLines = GetGreatVaultBlockLines()
+    snap.leftLines = snap.leftLines or {}
+    for i = 1, 6 do
+        snap.leftLines[i] = gvLines[i] or ""
+    end
+
+    -- Right column: same ordering as ApplyRightColumnAsPairs but writing to
+    -- snap.rightRows instead of TrackingUI font strings.
+    snap.rightRows = snap.rightRows or {}
+    local _, labelLines, valueLines, crestCount = GetCrestLines()
+    crestCount = tonumber(crestCount) or 4
+
+    local idx = 1
+    local function AddPair(lbl, val)
+        lbl = lbl or ""; val = val or ""
+        if idx <= RIGHT_LINE_COUNT and (IsNonEmptyText(lbl) or IsNonEmptyText(val)) then
+            snap.rightRows[idx] = snap.rightRows[idx] or {}
+            snap.rightRows[idx].label = lbl
+            snap.rightRows[idx].value = val
+            idx = idx + 1
+        end
+    end
+
+    for i = 1, crestCount do
+        if idx > RIGHT_LINE_COUNT then break end
+        AddPair((labelLines and labelLines[i]) or "", (valueLines and valueLines[i]) or "")
+    end
+
+    local cLbl, cVal = GetCatalystParts();     AddPair(cLbl, cVal)
+    local sLbl, sVal = GetSparksParts();        AddPair(sLbl, sVal)
+    local bLbl, bVal = GetDelversBountyParts(); AddPair(bLbl, bVal)
+    local pLbl, pVal = GetWeeklyPreyParts();    AddPair(pLbl, pVal)
+
+    -- Clear any now-unneeded trailing rows.
+    for i = idx, RIGHT_LINE_COUNT do
+        snap.rightRows[i] = snap.rightRows[i] or {}
+        snap.rightRows[i].label = ""
+        snap.rightRows[i].value = ""
+    end
+end
+
+local function SaveTrackingSnapshot(db)
+    local snap = db.trackingSnapshot
+    if type(snap) ~= "table" then
+        snap = {}
+        db.trackingSnapshot = snap
+    end
+    ComputeSnapshotData(snap)
+end
+
+local function RenderSnapshotIntoPanel(snap)
+    -- Apply stored strings from another character's snapshot into the panel UI.
+    if snap.leftLines then
+        ApplyGreatVaultLines(snap.leftLines)
+    end
+    if snap.rightRows then
+        for i = 1, RIGHT_LINE_COUNT do
+            local row = snap.rightRows[i]
+            SetRightRowPair(i, row and row.label or "", row and row.value or "")
+        end
+    end
+end
+
 function Addon:UpdateTracking()
     -- Main throttled entry point: reconcile desired visibility, then render content.
     local db = self:EnsureDB()
@@ -1214,11 +1352,25 @@ function Addon:UpdateTracking()
         return
     end
 
+    -- When viewing another character: render their stored snapshot instead of
+    -- calling live WoW APIs which only return the logged-in player's data.
+    if Addon._viewingChar then
+        local snap = db.trackingSnapshot
+        if snap then
+            RenderSnapshotIntoPanel(snap)
+            ResizeTrackingPanelToContent(self)
+        end
+        return
+    end
+
+    -- Normal path: read live WoW APIs for the current player.
     ApplyGreatVaultLines(GetGreatVaultBlockLines())
-
     ApplyRightColumnAsPairs()
-
     ResizeTrackingPanelToContent(self)
+
+    -- Persist the rendered output so the char picker can show it when another
+    -- character is viewing this one.
+    SaveTrackingSnapshot(db)
 end
 
 function Addon:ResizeTrackingCols()

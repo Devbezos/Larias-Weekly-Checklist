@@ -103,7 +103,7 @@ do
         self.THEME = self.THEME or self.CONSTANTS.theme
 
         self.CONSTANTS.ui = self.CONSTANTS.ui or self.UI or {
-            frameW = 520,
+            frameW = 600,
             frameH = 650,
             padOuterX = 14,
             padOuterTop = 10,
@@ -120,7 +120,7 @@ do
             headerTextExtraW = 28,
             itemMinH = 24,
             itemTextPad = 8,
-            itemTextWidth = 420,
+            itemTextWidth = 490,
             sectionInsetX = 14,
             trackH = 210,
             trackTopPad = 10,
@@ -268,12 +268,17 @@ local function SetupAddonDB()
             showCurrency = true,
             showChangeWeekBtn = true,
             showIlvlRefBtn = true,
+            showCharPickerBtn = true,
             debug = false,
             -- When set, only show sections at/after this sectionId in the list.
             -- Nil/empty means show all sections.
             startAtSectionId = "",
             collapsedSections = {},
             checked = {},
+            -- Snapshot of rendered currency/vault strings saved each time the
+            -- panel updates.  Used by the character picker to display another
+            -- character's tracking data without live API access.
+            trackingSnapshot = {},
         },
         global = {
             _newestSeenRemoteVersion = "",
@@ -281,10 +286,54 @@ local function SetupAddonDB()
             _dismissedRemoteVersion = "",
             mainFramePos = false,
             ilvlRefPos = false,
+            charClasses = {},  -- [profileKey] = classToken (e.g. "WARRIOR")
+            hiddenChars = {},  -- [profileKey] = true (hidden from char picker dropdown)
         },
     }
     
-    Addon.db = LibStub("AceDB-3.0"):New(addonName .. "DB", defaults, true)
+    -- nil default: new characters get a profile named "CharName - Realm",
+    -- giving each character their own data out of the box.
+    -- (Passing true used to force everyone onto "Default", sharing all data.)
+    Addon.db = LibStub("AceDB-3.0"):New(addonName .. "DB", defaults)
+end
+
+-- Ensure the logged-in character has their own AceDB profile, not one shared
+-- with other characters.  Called from OnEnable after the DB is ready.
+-- If two or more characters share the same profile (the old "Default" situation)
+-- we copy the shared data into a new per-character profile so each character
+-- gets an independent starting state.
+local function MigrateToPerCharProfile()
+    if not (Addon.db and Addon.db.sv) then return end
+    local sv          = Addon.db.sv
+    local charKey     = Addon:GetCurrentProfileKey()   -- "CharName - Realm"
+    local currentProf = Addon.db:GetCurrentProfile()
+
+    -- Already on a per-char profile — nothing to do.
+    if currentProf == charKey then return end
+
+    -- Count how many characters share the current profile.
+    local sharedCount = 0
+    if sv.profileKeys then
+        for _, profName in pairs(sv.profileKeys) do
+            if profName == currentProf then sharedCount = sharedCount + 1 end
+        end
+    end
+
+    -- Only migrate if more than one character is on this profile.
+    if sharedCount <= 1 then return end
+
+    -- Create the new per-character profile (AceDB copies defaults on creation).
+    Addon.db:SetProfile(charKey)
+    -- Copy the existing shared data so settings (show/hide toggles etc.) carry over,
+    -- but clear the list progress data — checked boxes and collapsed sections are
+    -- per-character and shouldn't be inherited from a shared profile.
+    Addon.db:CopyProfile(currentProf, true)  -- true = silent (no callbacks)
+    if Addon.db.profile.checked then
+        wipe(Addon.db.profile.checked)
+    end
+    if Addon.db.profile.collapsedSections then
+        wipe(Addon.db.profile.collapsedSections)
+    end
 end
 
 -- Set up LibDataBroker and LibDBIcon for minimap icon
@@ -377,7 +426,24 @@ function Addon:OnEnable()
     if self.PruneObsoleteSavedState then
         self:PruneObsoleteSavedState()
     end
-    
+
+    -- Ensure this character has their own profile (migrates away from shared
+    -- "Default" profile that older versions put every character on).
+    MigrateToPerCharProfile()
+
+    -- Cache the own profile name NOW, before any viewer-switch SetProfile calls
+    -- could corrupt sv.profileKeys[ownKey]. SetViewingChar uses this to restore.
+    if self.db then
+        self._ownProfileName = self.db:GetCurrentProfile()
+    end
+
+    -- If this character already has snapshot data from a previous session,
+    -- register tracking events immediately so their snapshot stays current
+    -- even if they never open the addon this session.
+    if self.ConfigureTrackingEvents and self.HasTrackingSnapshot and self:HasTrackingSnapshot() then
+        self:ConfigureTrackingEvents(nil, true, true)
+    end
+
     -- Version announce happens in CommsOnEnable.
 end
 
@@ -1562,6 +1628,19 @@ function Addon:CreateFrame()
             Addon._ilvlRefWindow:Hide()
         end
     end)
+    -- Record this character's class the first time the list is opened so the
+    -- character picker can colour-code entries. Intentionally deferred from
+    -- OnEnable so we never write shared global data before the user opens the
+    -- addon for the first time.
+    if self.db and self.db.global then
+        local _, classToken = UnitClass("player")
+        local profileKey    = self:GetCurrentProfileKey()   -- "CharName - Realm"
+        if classToken and profileKey and profileKey ~= "" then
+            self.db.global.charClasses = self.db.global.charClasses or {}
+            self.db.global.charClasses[profileKey] = classToken
+        end
+    end
+
     frame:Hide()
 
     if UISpecialFrames and frame.GetName then
@@ -1724,13 +1803,22 @@ function Addon:CreateFrame()
     local changeWeekBtn
     local ilvlRefBtn
 
+    -- Initialise character picker UI (defined in LariasWeeklyChecklist_CharPicker.lua).
+    if Addon.InitCharPickerUI then
+        Addon:InitCharPickerUI(frame, StyleMainTabButton)
+    end
+
+    local function EnsureCharPickerBtn_()
+        if Addon._cpEnsureBtn then return Addon._cpEnsureBtn() end
+    end
+
     local function EnsureChangeWeekBtn_()
         if changeWeekBtn then return changeWeekBtn end
         local btn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
         btn:SetSize(108, 22)
         StyleMainTabButton(btn)
         btn:SetText(L.CHANGE_WEEK_BUTTON or "Change Week")
-        changeWeekBtn          = btn
+        changeWeekBtn              = btn
         frame._lariasChangeWeekBtn = btn
         return btn
     end
@@ -2006,8 +2094,9 @@ function Addon:CreateFrame()
     -- Exposed as Addon:LayoutHeaderButtons() for the Options tab callbacks.
     local function LayoutHeaderButtons_()
         local dbLocal = Addon:EnsureDB()
-        local showCW  = dbLocal.showChangeWeekBtn ~= false
-        local showIR  = dbLocal.showIlvlRefBtn    ~= false
+        local showCW  = dbLocal.showChangeWeekBtn  ~= false
+        local showIR  = dbLocal.showIlvlRefBtn     ~= false
+        local showCP  = dbLocal.showCharPickerBtn  ~= false
 
         if showCW then
             local btn = EnsureChangeWeekBtn_()
@@ -2033,10 +2122,35 @@ function Addon:CreateFrame()
             changeWeekBtn:Hide()
         end
 
+        -- charPickerBtn: visibility controlled by showCharPickerBtn option.
+        local cpBtn = EnsureCharPickerBtn_()
+        if cpBtn then
+            if showCP then
+                cpBtn:SetScript("OnClick", function()
+                    if Addon._cpOnClick then Addon._cpOnClick() end
+                end)
+                cpBtn:ClearAllPoints()
+                if showCW and changeWeekBtn then
+                    cpBtn:SetPoint("RIGHT", changeWeekBtn, "LEFT", -6, 0)
+                else
+                    cpBtn:SetPoint("TOPRIGHT", closeBtn, "TOPLEFT", -6, -2)
+                end
+                if Addon._cpUpdateLabel then Addon._cpUpdateLabel() end
+                cpBtn:Show()
+            else
+                -- Return to own character before hiding the picker.
+                if Addon.SetViewingChar then Addon:SetViewingChar(nil) end
+                cpBtn:Hide()
+            end
+        end
+
         if showIR then
             local btn = EnsureIlvlRefBtn_()
             btn:ClearAllPoints()
-            if showCW and changeWeekBtn then
+            local cpBtn = EnsureCharPickerBtn_()
+            if cpBtn and cpBtn:IsShown() then
+                btn:SetPoint("RIGHT", cpBtn, "LEFT", -6, 0)
+            elseif showCW and changeWeekBtn then
                 btn:SetPoint("RIGHT", changeWeekBtn, "LEFT", -6, 0)
             else
                 btn:SetPoint("TOPRIGHT", closeBtn, "TOPLEFT", -6, -2)
@@ -2052,8 +2166,9 @@ function Addon:CreateFrame()
         -- Minimum width: tabs on the left + gap + all visible right-side buttons.
         -- tabInsetX (padOuterX+sectionInsetX=28) + tab1 (80) + gap (6) + tab2 (80) = 194
         local _tabAreaW = (Addon.UI.padOuterX + Addon.UI.sectionInsetX) + 80 + 6 + 80
-        -- right side: closeInset (4) + close btn (32) + optional buttons
-        local _rightW   = Addon.UI.closeInset + 32
+        -- right side: closeInset(4) + close(32) + optional charPickerBtn(6+108) + optional buttons
+        local _rightW = Addon.UI.closeInset + 32
+        if showCP then _rightW = _rightW + 6 + 108 end
         if showCW then _rightW = _rightW + 6 + 108 end
         if showIR then _rightW = _rightW + 6 + 108 end
         local _minW = _tabAreaW + 10 + _rightW  -- 10px breathing room between tabs and buttons

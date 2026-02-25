@@ -523,12 +523,12 @@ local function BuildIlvlRefWindow()
         win:SetScale(_scale)
 
         -- Enforce max size when content fits without scrolling.
-        -- Compare sc height directly against the actual rendered sf height to avoid
-        -- float rounding errors from indirect win-height calculations.
-        -- Use math.ceil on sc height so a fractional pixel never causes a false overflow.
-        -- _reflowing guard prevents the SetHeight call below from re-entering.
+        -- sf is anchored: TOPLEFT=(PAD, -SCROLLTOP), BOTTOMRIGHT=(-(PAD+22), PAD)
+        -- so sf effective height = win:GetHeight() - SCROLLTOP - PAD.
+        -- Compute this directly from win height to avoid reading sf:GetHeight() before
+        -- the layout engine has processed the frame (returns 0 on first call).
         local _scH    = math.ceil(sc:GetHeight())
-        local _sfH    = sf:GetHeight()        -- actual rendered scroll frame height
+        local _sfH    = math.floor(win:GetHeight() - SCROLLTOP - PAD)
         local _idealH = SCROLLTOP + _scH + PAD
         local _curW   = win:GetWidth()
         local _sb = sf.ScrollBar

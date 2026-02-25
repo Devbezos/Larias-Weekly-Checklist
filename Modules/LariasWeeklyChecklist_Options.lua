@@ -92,8 +92,20 @@ function Addon:InitOptionsTab(frame, optionsPanel)
     end)
     frame._lariasOptShowIlvlRefBtn = showIlvlRefCheck
 
+    local showCharPickerCheck = CreateFrame("CheckButton", nil, optionsPanel, "UICheckButtonTemplate")
+    showCharPickerCheck:SetPoint("TOPLEFT", showIlvlRefCheck, "BOTTOMLEFT", 0, -8)
+    showCharPickerCheck:SetChecked(db.showCharPickerBtn == false)
+    showCharPickerCheck:SetScript("OnClick", function(selfBtn)
+        local dbForClick = Addon:EnsureDB()
+        dbForClick.showCharPickerBtn = not selfBtn:GetChecked()
+        if Addon.LayoutHeaderButtons then
+            Addon:LayoutHeaderButtons()
+        end
+    end)
+    frame._lariasOptShowCharPickerBtn = showCharPickerCheck
+
     local resetBtn = CreateFrame("Button", nil, optionsPanel, "UIPanelButtonTemplate")
-    resetBtn:SetPoint("TOPLEFT", showIlvlRefCheck, "BOTTOMLEFT", 0, -12)
+    resetBtn:SetPoint("TOPLEFT", showCharPickerCheck, "BOTTOMLEFT", 0, -12)
     resetBtn:SetSize(108, 22)
     if Addon._styleActionButton then
         Addon._styleActionButton(resetBtn)
@@ -123,6 +135,10 @@ function Addon:InitOptionsTab(frame, optionsPanel)
             gdb.ilvlRefSize   = nil
             gdb.uiScalePct    = nil  -- resets to 100%
         end
+
+        -- Switch back to own character before resetting frames/controls
+        -- (so SyncOptionsTabControls and Refresh display own char's data).
+        if Addon.SetViewingChar then Addon:SetViewingChar(nil) end
 
         local mf = Addon._mainFrame
         if mf then
@@ -184,7 +200,7 @@ function Addon:InitOptionsTab(frame, optionsPanel)
         if hi  then hi:SetText("120%") end
         if txt then txt:SetText("")    end  -- title managed separately
     end
-    scaleSlider:SetScript("OnValueChanged", function(_, val)
+    local function ApplyScaleVal(val)
         val = math.floor(val / 10 + 0.5) * 10
         local gdb = Addon.db and Addon.db.global
         if gdb then gdb.uiScalePct = val end
@@ -194,9 +210,35 @@ function Addon:InitOptionsTab(frame, optionsPanel)
             tf:SetText((L2.UI_SCALE_LABEL or "UI Scale") .. ": " .. val .. "%")
         end
         if Addon.ApplyUIScale then Addon:ApplyUIScale() end
+    end
+    -- Update label while dragging; only apply scale on release to avoid
+    -- the window resizing jankily on every tick.
+    scaleSlider:SetScript("OnValueChanged", function(self_, val)
+        val = math.floor(val / 10 + 0.5) * 10
+        local tf = GetMainFrame() and GetMainFrame()._lariasOptScaleTitleFS
+        if tf then
+            local L2 = Addon.L or {}
+            tf:SetText((L2.UI_SCALE_LABEL or "UI Scale") .. ": " .. val .. "%")
+        end
+    end)
+    scaleSlider:SetScript("OnMouseUp", function(self_)
+        ApplyScaleVal(self_:GetValue())
     end)
     frame._lariasScaleSlider = scaleSlider
-    -- -----------------------------------------------------------------------
+    -- -------------------------------------------------------------------------
+
+    -- Hidden characters section ----------------------------------------------
+    local hiddenCharsTitle = optionsPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    hiddenCharsTitle:SetPoint("TOPLEFT", scaleSlider, "BOTTOMLEFT", -6, -18)
+    frame._lariasOptHiddenCharsTitle = hiddenCharsTitle
+
+    local hiddenCharsPanel = CreateFrame("Frame", nil, optionsPanel)
+    hiddenCharsPanel:SetPoint("TOPLEFT", hiddenCharsTitle, "BOTTOMLEFT", 0, -4)
+    hiddenCharsPanel:SetWidth(280)
+    hiddenCharsPanel:SetHeight(20)
+    hiddenCharsPanel._rows = {}
+    frame._lariasOptHiddenCharsPanel = hiddenCharsPanel
+    -- -------------------------------------------------------------------------
 
     local localizationHint = optionsPanel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
     localizationHint:SetPoint("TOPLEFT", resetBtn, "BOTTOMLEFT", 0, -10)
@@ -206,12 +248,105 @@ function Addon:InitOptionsTab(frame, optionsPanel)
     localizationHint:Hide()
     frame._lariasOptLocalizationHint = localizationHint
 
+    if Addon.RefreshHiddenCharsList then
+        Addon:RefreshHiddenCharsList()
+    end
+
     if self.UpdateOptionsLocalizedUI then
         self:UpdateOptionsLocalizedUI()
     end
 end
 
-function Addon:SyncOptionsTabControls()
+function Addon:RefreshHiddenCharsList()
+    local frame = GetMainFrame()
+    if not frame then return end
+    local panel = frame._lariasOptHiddenCharsPanel
+    if not panel then return end
+
+    local L = self.L or {}
+    local gdb = self.db and self.db.global
+    local hiddenChars = gdb and gdb.hiddenChars or {}
+    local ROW_H = 22
+
+    -- Collect and sort hidden keys.
+    local hidden = {}
+    for key, v in pairs(hiddenChars) do
+        if v then tinsert(hidden, key) end
+    end
+    table.sort(hidden)
+
+    panel._rows = panel._rows or {}
+
+    if #hidden == 0 then
+        -- Hide all rows and show a "none" label.
+        for _, row in ipairs(panel._rows) do row:Hide() end
+        if not panel._noneLabel then
+            local lbl = panel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+            lbl:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, 0)
+            panel._noneLabel = lbl
+        end
+        panel._noneLabel:SetText(L.OPTIONS_HIDDEN_CHARS_NONE or "None")
+        panel._noneLabel:Show()
+        panel:SetHeight(ROW_H)
+        return
+    end
+
+    if panel._noneLabel then panel._noneLabel:Hide() end
+
+    for i, key in ipairs(hidden) do
+        local charName = (key:match("^(.-)%s*%-") or key):gsub("^%s+",""):gsub("%s+$","")
+        if charName == "" then charName = key end
+
+        local row = panel._rows[i]
+        if not row then
+            row = CreateFrame("Frame", nil, panel)
+            panel._rows[i] = row
+
+            local nameFS = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+            nameFS:SetPoint("LEFT", row, "LEFT", 0, 0)
+            nameFS:SetWidth(170)
+            if nameFS.SetJustifyH then nameFS:SetJustifyH("LEFT") end
+            if nameFS.SetWordWrap then nameFS:SetWordWrap(false) end
+            row._nameFS = nameFS
+
+            local unhideBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+            unhideBtn:SetSize(70, 18)
+            unhideBtn:SetPoint("LEFT", nameFS, "RIGHT", 6, 0)
+            if Addon._styleActionButton then Addon._styleActionButton(unhideBtn) end
+            row._unhideBtn = unhideBtn
+        end
+
+        row:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, -(ROW_H * (i - 1)))
+        row:SetSize(260, ROW_H)
+        row:Show()
+
+        local classToken = gdb and gdb.charClasses and gdb.charClasses[key]
+        local r, g, b = 1, 1, 1
+        if classToken then
+            local cc = RAID_CLASS_COLORS and RAID_CLASS_COLORS[classToken]
+            if cc then r, g, b = cc.r, cc.g, cc.b end
+        end
+        row._nameFS:SetText(charName)
+        row._nameFS:SetTextColor(r, g, b, 1)
+
+        row._unhideBtn:SetText(L.OPTIONS_UNHIDE_BTN or "Unhide")
+        local _key = key
+        row._unhideBtn:SetScript("OnClick", function()
+            local gdbU = Addon.db and Addon.db.global
+            if gdbU and gdbU.hiddenChars then
+                gdbU.hiddenChars[_key] = nil
+            end
+            if Addon.RefreshHiddenCharsList then Addon:RefreshHiddenCharsList() end
+        end)
+    end
+
+    -- Hide any unused rows from a previous (longer) list.
+    for i = #hidden + 1, #panel._rows do
+        if panel._rows[i] then panel._rows[i]:Hide() end
+    end
+
+    panel:SetHeight(math.max(ROW_H, ROW_H * #hidden))
+end
     local frame = GetMainFrame()
     if not frame then return end
 
@@ -242,6 +377,15 @@ function Addon:SyncOptionsTabControls()
         showIlvlRefCheck:SetChecked(db.showIlvlRefBtn == false)
     end
 
+    local showCharPickerCheck = frame._lariasOptShowCharPickerBtn
+    if showCharPickerCheck and showCharPickerCheck.SetChecked then
+        showCharPickerCheck:SetChecked(db.showCharPickerBtn == false)
+    end
+
+    if self.RefreshHiddenCharsList then
+        self:RefreshHiddenCharsList()
+    end
+
     local scaleSlider = frame._lariasScaleSlider
     if scaleSlider and scaleSlider.SetValue then
         local gdb = Addon.db and Addon.db.global
@@ -264,6 +408,16 @@ function Addon:UpdateOptionsLocalizedUI()
     SetCheckText(frame._lariasOptShowCurrency, L.OPTIONS_HIDE_CURRENCY or "Hide Currency")
     SetCheckText(frame._lariasOptShowChangeWeekBtn, L.OPTIONS_HIDE_CHANGE_WEEK_BTN or "Hide Change Week button")
     SetCheckText(frame._lariasOptShowIlvlRefBtn, L.OPTIONS_HIDE_ILVL_REF_BTN or "Hide Ilvl Refs button")
+    SetCheckText(frame._lariasOptShowCharPickerBtn, L.OPTIONS_HIDE_CHAR_SELECT or "Hide character select")
+
+    local hiddenCharsTitle = frame._lariasOptHiddenCharsTitle
+    if hiddenCharsTitle and hiddenCharsTitle.SetText then
+        hiddenCharsTitle:SetText(L.OPTIONS_HIDDEN_CHARS_TITLE or "Hidden characters:")
+    end
+
+    if self.RefreshHiddenCharsList then
+        self:RefreshHiddenCharsList()
+    end
 
     local resetBtn = frame._lariasOptResetBtn
     if resetBtn and resetBtn.SetText then

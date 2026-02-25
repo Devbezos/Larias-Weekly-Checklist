@@ -14,18 +14,18 @@ local constantsKey = tostring(addonName or "") .. "_CONSTANTS"
 
 local tracking = {
     crestCurrencyIDs = {
-        3383,
-        3341,
-        3343,
-        3345,
-        3347,
+        3284--3383,
+        3286--3341,
+        3288--3343,
+        3290--3345,
+        --3347,
     },
     crestAchievementIDs = {
         61809,
         42767,
         72768,
         42769,
-        42770,
+        --42770,
     },
     sparkCurrencyID = 3212,
     catalystCurrencyID = 3378,
