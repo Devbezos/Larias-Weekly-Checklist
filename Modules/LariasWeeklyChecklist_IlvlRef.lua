@@ -1,4 +1,4 @@
--- LariasWeeklyChecklist_IlvlRef.lua
+﻿-- LariasWeeklyChecklist_IlvlRef.lua
 -- Standalone popup window: Midnight Season 1 item-level reference tables.
 -- Opened/closed via the "Item Levels" button in the main frame.
 
@@ -9,8 +9,8 @@ if not Addon then return end
 local CreateFrame = CreateFrame
 local max = math.max
 
--- â”€â”€ Layout constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-local WIN_W    = 490   -- popup window width
+-- â"€â"€ Layout constants â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
+local WIN_W    = 620   -- popup window width
 local WIN_H    = 540   -- popup window height
 local PAD      = 14    -- outer content padding
 local ROW_H    = 18    -- height of one data row
@@ -19,15 +19,15 @@ local HDR_H    = 22    -- section heading height
 local SUBHDR_H = 18    -- column sub-header height
 local SCROLLTOP = 32   -- pixels from win top to scroll frame
 
--- â”€â”€ Crest color escape codes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- â"€â"€ Crest color escape codes â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 local ADV   = "|cFF1EFF00"   -- Adventurer  (green)
 local VET   = "|cFF0070DD"   -- Veteran     (blue)
 local CHAMP = "|cFFA335EE"   -- Champion    (purple)
 local HERO  = "|cFFFF8000"   -- Hero        (orange)
-local MYTH  = "|cFFFF2020"   -- Myth/Gilded (red)
+local MYTH  = "|cFFFFD100"   -- Myth/Gilded (gold)
 local R     = "|r"
 
--- â”€â”€ Build helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- â"€â"€ Build helpers â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 -- Create a FontString anchored at (x, posY) from parent's TOPLEFT.
 -- fontObj, r/g/b/a, w, align are optional.
@@ -82,92 +82,240 @@ local function DataRow(parent, posY, cols)
     return posY - ROW_H
 end
 
--- â”€â”€ Main window builder â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- Measure visible pixel width of a string (strips WoW colour codes).
+local _mfs
+local function MeasureStr(text, fontObj)
+    if not _mfs then
+        _mfs = UIParent:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        _mfs:Hide()
+    end
+    if fontObj then _mfs:SetFontObject(fontObj) end
+    local plain = (text or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    _mfs:SetText(plain)
+    return _mfs:GetStringWidth()
+end
+
+-- Given cols ({t=header, [align=]}) and a rows 2-D array,
+-- measures each column's max content width and fills col.w + col.x in-place.
+local CELL_PAD = 10  -- 4 px left inset + right margin + buffer
+local function AutoFitCols(cols, rows)
+    for ci, col in ipairs(cols) do
+        local w = MeasureStr(col.t or "", "GameFontHighlightSmall")
+        for _, row in ipairs(rows) do
+            local cw = MeasureStr(row[ci] or "")
+            if cw > w then w = cw end
+        end
+        col.w = math.ceil(w) + CELL_PAD
+    end
+    local x = 0
+    for _, col in ipairs(cols) do col.x = x; x = x + col.w end
+    return cols
+end
+
+-- â"€â"€ Main window builder â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
+
+
+-- Color-code an ilvl number string by its crest tier.
+local function IlvlColor(s)
+    local n = tonumber(s)
+    if not n then return s end
+    if     n >= 279 then return MYTH ..s..R
+    elseif n >= 266 then return HERO ..s..R
+    elseif n >= 253 then return CHAMP..s..R
+    elseif n >= 237 then return VET  ..s..R
+    else                  return ADV  ..s..R
+    end
+end
+
+-- Color the two halves of a "Tier A / Tier B" track name independently.
+local function DualTrack(str, c1, c2)
+    local a, b = str:match("^(.+) / (.+)$")
+    if a and b then return c1..a..R.." / "..c2..b..R end
+    return c1..str..R
+end
+
+-- Draw a bordered grid table (header + data rows with column separators).
+-- cols = { {x, w, t, [align]} }  (x/w are cell boundaries; t = header text)
+-- rows = { {cell1, cell2, ...}, ... }
+-- Returns new posY.
+local GBOR = 0.55  -- outer border / header divider opacity multiplier
+local GLIN = 0.18  -- inner row / column line opacity multiplier
+local function GridTable(parent, posY, cols, rows)
+    local br = Addon.THEME.border
+    local tc = Addon.THEME.textDim
+    -- compute right edge of the table
+    local rightX = 0
+    for _, c in ipairs(cols) do
+        local e = (c.x or 0) + (c.w or 60)
+        if e > rightX then rightX = e end
+    end
+    local nRows  = #rows
+    local totalH = SUBHDR_H + ROW_H * nRows
+    local startY = posY
+
+    local function hline(y, mul)
+        local t = parent:CreateTexture(nil, "ARTWORK")
+        t:SetColorTexture(br.r, br.g, br.b, math.min(1, br.a * mul))
+        t:SetSize(rightX, 1)
+        t:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, y)
+    end
+    local function vline(x)
+        local t = parent:CreateTexture(nil, "ARTWORK")
+        t:SetColorTexture(br.r, br.g, br.b, math.min(1, br.a * GBOR))
+        t:SetSize(1, totalH)
+        t:SetPoint("TOPLEFT", parent, "TOPLEFT", x, startY)
+    end
+
+    -- top border
+    hline(startY, GBOR)
+    -- header cells (4 px left inset)
+    for _, col in ipairs(cols) do
+        FS(parent, (col.x or 0) + 4, startY - 2, col.t or "",
+           "GameFontHighlightSmall", tc.r, tc.g, tc.b, tc.a, (col.w or 60) - 6, col.align)
+    end
+    posY = startY - SUBHDR_H
+    hline(posY, GBOR)  -- strong line under header
+
+    -- data rows
+    for ri, row in ipairs(rows) do
+        for ci, col in ipairs(cols) do
+            FS(parent, (col.x or 0) + 4, posY - 2, row[ci] or "",
+               nil, nil, nil, nil, nil, (col.w or 60) - 6, col.align)
+        end
+        posY = posY - ROW_H
+        hline(posY, ri == nRows and GBOR or GLIN)
+    end
+
+    -- vertical borders: left edge of every column + right edge of last
+    for _, col in ipairs(cols) do vline(col.x or 0) end
+    vline(rightX)
+
+    return posY
+end
 
 local function BuildIlvlRefWindow()
-    -- â”€â”€ Localised data tables (built here so Addon.L is available) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    -- â"€â"€ Localised data tables (built here so Addon.L is available) â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
     local L = Addon.L
     local _or = " " .. (L.ILVLREF_OR or "or") .. " "
+    local DIM  = "|cFF888888"   -- gray: visually de-emphasise the wasteful option
+    local WARN = "|cFFFF2020 - DO NOT DO THIS|r"
 
     -- Midnight Season 1 upgrade tracks (20 crests per step)
     -- { ilvl (color-coded), track name, crest needed (color-coded) }
     local TRACKS = {
-        { ADV.."220"..R,   L.ILVLREF_TRACK_ADV1        or "Adventurer 1",           ADV..(L.ILVLREF_CREST_ADV  or "Adventurer")..R                                                                  },
-        { ADV.."224"..R,   L.ILVLREF_TRACK_ADV2        or "Adventurer 2",           ADV..(L.ILVLREF_CREST_ADV  or "Adventurer")..R                                                                  },
-        { ADV.."227"..R,   L.ILVLREF_TRACK_ADV3        or "Adventurer 3",           ADV..(L.ILVLREF_CREST_ADV  or "Adventurer")..R                                                                  },
-        { ADV.."230"..R,   L.ILVLREF_TRACK_ADV4        or "Adventurer 4",           ADV..(L.ILVLREF_CREST_ADV  or "Adventurer")..R                                                                  },
-        { ADV.."233"..R,   L.ILVLREF_TRACK_ADV5_VET1   or "Adventurer 5 / Veteran 1", ADV..(L.ILVLREF_CREST_ADV  or "Adventurer")..R                                                               },
-        { VET.."237"..R,   L.ILVLREF_TRACK_ADV6_VET2   or "Adventurer 6 / Veteran 2", ADV..(L.ILVLREF_CREST_ADV_SHORT or "Adv")..R.._or..VET..(L.ILVLREF_CREST_VET_SHORT or "Vet")..R           },
-        { VET.."240"..R,   L.ILVLREF_TRACK_VET3        or "Veteran 3",              VET..(L.ILVLREF_CREST_VET  or "Veteran")..R                                                                    },
-        { VET.."243"..R,   L.ILVLREF_TRACK_VET4        or "Veteran 4",              VET..(L.ILVLREF_CREST_VET  or "Veteran")..R                                                                    },
-        { VET.."246"..R,   L.ILVLREF_TRACK_VET5_CHAMP1 or "Veteran 5 / Champion 1", VET..(L.ILVLREF_CREST_VET  or "Veteran")..R                                                                   },
-        { VET.."250"..R,   L.ILVLREF_TRACK_VET6_CHAMP2 or "Veteran 6 / Champion 2", VET..(L.ILVLREF_CREST_VET_SHORT or "Vet")..R.._or..CHAMP..(L.ILVLREF_CREST_CHAMP_SHORT or "Champ")..R     },
-        { CHAMP.."253"..R, L.ILVLREF_TRACK_CHAMP3       or "Champion 3",             CHAMP..(L.ILVLREF_CREST_CHAMP or "Champion")..R                                                               },
-        { CHAMP.."256"..R, L.ILVLREF_TRACK_CHAMP4       or "Champion 4",             CHAMP..(L.ILVLREF_CREST_CHAMP or "Champion")..R                                                               },
-        { CHAMP.."259"..R, L.ILVLREF_TRACK_CHAMP5_HERO1 or "Champion 5 / Hero 1",   CHAMP..(L.ILVLREF_CREST_CHAMP or "Champion")..R                                                               },
-        { CHAMP.."263"..R, L.ILVLREF_TRACK_CHAMP6_HERO2 or "Champion 6 / Hero 2",   CHAMP..(L.ILVLREF_CREST_CHAMP_SHORT or "Champ")..R.._or..HERO..(L.ILVLREF_CREST_HERO or "Hero")..R         },
-        { HERO.."266"..R,  L.ILVLREF_TRACK_HERO3        or "Hero 3",                HERO..(L.ILVLREF_CREST_HERO  or "Hero")..R                                                                     },
-        { HERO.."269"..R,  L.ILVLREF_TRACK_HERO4        or "Hero 4",                HERO..(L.ILVLREF_CREST_HERO  or "Hero")..R                                                                     },
-        { HERO.."272"..R,  L.ILVLREF_TRACK_HERO5_MYTH1  or "Hero 5 / Myth 1",       HERO..(L.ILVLREF_CREST_HERO  or "Hero")..R                                                                    },
-        { HERO.."276"..R,  L.ILVLREF_TRACK_HERO6_MYTH2  or "Hero 6 / Myth 2",       HERO..(L.ILVLREF_CREST_HERO or "Hero")..R.._or..MYTH..(L.ILVLREF_CREST_MYTH or "Myth")..R                  },
-        { MYTH.."279"..R,  L.ILVLREF_TRACK_MYTH3        or "Myth 3",                MYTH..(L.ILVLREF_CREST_MYTH  or "Myth")..R                                                                     },
-        { MYTH.."282"..R,  L.ILVLREF_TRACK_MYTH4        or "Myth 4",                MYTH..(L.ILVLREF_CREST_MYTH  or "Myth")..R                                                                     },
-        { MYTH.."285"..R,  L.ILVLREF_TRACK_MYTH5        or "Myth 5",                MYTH..(L.ILVLREF_CREST_MYTH  or "Myth")..R                                                                     },
-        { MYTH.."289"..R,  L.ILVLREF_TRACK_MYTH6        or "Myth 6",                MYTH..(L.ILVLREF_CREST_MYTH  or "Myth")..R                                                                     },
+        { ADV.."220"..R,   ADV..(L.ILVLREF_TRACK_ADV1        or "Adventurer 1")..R,           ADV..(L.ILVLREF_CREST_ADV  or "Adventurer")..R                                                                  },
+        { ADV.."224"..R,   ADV..(L.ILVLREF_TRACK_ADV2        or "Adventurer 2")..R,           ADV..(L.ILVLREF_CREST_ADV  or "Adventurer")..R                                                                  },
+        { ADV.."227"..R,   ADV..(L.ILVLREF_TRACK_ADV3        or "Adventurer 3")..R,           ADV..(L.ILVLREF_CREST_ADV  or "Adventurer")..R                                                                  },
+        { ADV.."230"..R,   ADV..(L.ILVLREF_TRACK_ADV4        or "Adventurer 4")..R,           ADV..(L.ILVLREF_CREST_ADV  or "Adventurer")..R                                                                  },
+        { ADV.."233"..R,   DualTrack(L.ILVLREF_TRACK_ADV5_VET1 or "Adventurer 5 / Veteran 1", ADV, VET), ADV..(L.ILVLREF_CREST_ADV  or "Adventurer")..R                                                               },
+        { VET.."237"..R,   DualTrack(L.ILVLREF_TRACK_ADV6_VET2 or "Adventurer 6 / Veteran 2", ADV, VET), ADV..(L.ILVLREF_CREST_ADV_SHORT or "Adv")..R.." or ("..DIM..(L.ILVLREF_CREST_VET_SHORT or "Vet")..R..WARN..")" },
+        { VET.."240"..R,   VET..(L.ILVLREF_TRACK_VET3        or "Veteran 3")..R,              VET..(L.ILVLREF_CREST_VET  or "Veteran")..R                                                                    },
+        { VET.."243"..R,   VET..(L.ILVLREF_TRACK_VET4        or "Veteran 4")..R,              VET..(L.ILVLREF_CREST_VET  or "Veteran")..R                                                                    },
+        { VET.."246"..R,   DualTrack(L.ILVLREF_TRACK_VET5_CHAMP1 or "Veteran 5 / Champion 1", VET, CHAMP), VET..(L.ILVLREF_CREST_VET  or "Veteran")..R                                                                   },
+        { VET.."250"..R,   DualTrack(L.ILVLREF_TRACK_VET6_CHAMP2 or "Veteran 6 / Champion 2", VET, CHAMP), VET..(L.ILVLREF_CREST_VET_SHORT or "Vet")..R.." or ("..DIM..(L.ILVLREF_CREST_CHAMP_SHORT or "Champ")..R..WARN..")" },
+        { CHAMP.."253"..R, CHAMP..(L.ILVLREF_TRACK_CHAMP3       or "Champion 3")..R,             CHAMP..(L.ILVLREF_CREST_CHAMP or "Champion")..R                                                               },
+        { CHAMP.."256"..R, CHAMP..(L.ILVLREF_TRACK_CHAMP4       or "Champion 4")..R,             CHAMP..(L.ILVLREF_CREST_CHAMP or "Champion")..R                                                               },
+        { CHAMP.."259"..R, DualTrack(L.ILVLREF_TRACK_CHAMP5_HERO1 or "Champion 5 / Hero 1", CHAMP, HERO),   CHAMP..(L.ILVLREF_CREST_CHAMP or "Champion")..R                                                               },
+        { CHAMP.."263"..R, DualTrack(L.ILVLREF_TRACK_CHAMP6_HERO2 or "Champion 6 / Hero 2", CHAMP, HERO),   CHAMP..(L.ILVLREF_CREST_CHAMP_SHORT or "Champ")..R.." or ("..DIM..(L.ILVLREF_CREST_HERO or "Hero")..R..WARN..")" },
+        { HERO.."266"..R,  HERO..(L.ILVLREF_TRACK_HERO3        or "Hero 3")..R,                HERO..(L.ILVLREF_CREST_HERO  or "Hero")..R                                                                     },
+        { HERO.."269"..R,  HERO..(L.ILVLREF_TRACK_HERO4        or "Hero 4")..R,                HERO..(L.ILVLREF_CREST_HERO  or "Hero")..R                                                                     },
+        { HERO.."272"..R,  DualTrack(L.ILVLREF_TRACK_HERO5_MYTH1 or "Hero 5 / Myth 1", HERO, MYTH),       HERO..(L.ILVLREF_CREST_HERO  or "Hero")..R                                                                    },
+        { HERO.."276"..R,  DualTrack(L.ILVLREF_TRACK_HERO6_MYTH2 or "Hero 6 / Myth 2", HERO, MYTH),       HERO..(L.ILVLREF_CREST_HERO or "Hero")..R.." or ("..DIM..(L.ILVLREF_CREST_MYTH or "Myth")..R..WARN..")" },
+        { MYTH.."279"..R,  MYTH..(L.ILVLREF_TRACK_MYTH3        or "Myth 3")..R,                MYTH..(L.ILVLREF_CREST_MYTH  or "Myth")..R                                                                     },
+        { MYTH.."282"..R,  MYTH..(L.ILVLREF_TRACK_MYTH4        or "Myth 4")..R,                MYTH..(L.ILVLREF_CREST_MYTH  or "Myth")..R                                                                     },
+        { MYTH.."285"..R,  MYTH..(L.ILVLREF_TRACK_MYTH5        or "Myth 5")..R,                MYTH..(L.ILVLREF_CREST_MYTH  or "Myth")..R                                                                     },
+        { MYTH.."289"..R,  MYTH..(L.ILVLREF_TRACK_MYTH6        or "Myth 6")..R,                MYTH..(L.ILVLREF_CREST_MYTH  or "Myth")..R                                                                     },
     }
 
     -- Crafted item levels
     local CRAFTED = {
-        { "220", "220", "233", "246", "259", "272" },
-        { "224", "224", "237", "250", "263", "276" },
-        { "227", "227", "240", "253", "266", "279" },
-        { "230", "230", "243", "256", "269", "282" },
-        { "233", "233", "246", "259", "272", "285" },
+        { ADV..("220")..R, VET..("233")..R, CHAMP..("246")..R, HERO..("259")..R, MYTH..("272")..R },
+        { ADV..("224")..R, VET..("237")..R, CHAMP..("250")..R, HERO..("263")..R, MYTH..("276")..R },
+        { ADV..("227")..R, VET..("240")..R, CHAMP..("253")..R, HERO..("266")..R, MYTH..("279")..R },
+        { ADV..("230")..R, VET..("243")..R, CHAMP..("256")..R, HERO..("269")..R, MYTH..("282")..R },
+        { ADV..("233")..R, VET..("246")..R, CHAMP..("259")..R, HERO..("272")..R, MYTH..("285")..R },
     }
 
     -- Dungeon item levels
-    local dungCrests = L.ILVLREF_DUNGEON_CRESTS or "Champ crests"
+    local dungCrests = L.ILVLREF_DUNGEON_CRESTS or "Champ x"
     local DUNGEONS = {
-        { L.ILVLREF_DUNGEON_HEROIC or "Heroic", "230", "243", CHAMP..dungCrests..R },
-        { L.ILVLREF_DUNGEON_MYTHIC or "Mythic", "246", "256", CHAMP..dungCrests..R },
-        { "M2",  "250", "259", HERO..(L.ILVLREF_CREST_HERO or "Hero").."  Ã— 10"..R },
-        { "M3",  "250", "259", HERO..(L.ILVLREF_CREST_HERO or "Hero").."  Ã— 12"..R },
-        { "M4",  "253", "263", HERO..(L.ILVLREF_CREST_HERO or "Hero").."  Ã— 14"..R },
-        { "M5",  "256", "263", HERO..(L.ILVLREF_CREST_HERO or "Hero").."  Ã— 16"..R },
-        { "M6",  "259", "266", HERO..(L.ILVLREF_CREST_HERO or "Hero").."  Ã— 18"..R },
-        { "M7",  "259", "269", MYTH..(L.ILVLREF_CREST_MYTH or "Myth").."  Ã— 10"..R },
-        { "M8",  "263", "269", MYTH..(L.ILVLREF_CREST_MYTH or "Myth").."  Ã— 12"..R },
-        { "M9",  "263", "269", MYTH..(L.ILVLREF_CREST_MYTH or "Myth").."  Ã— 14"..R },
-        { "M10", "266", "272", MYTH..(L.ILVLREF_CREST_MYTH or "Myth").."  Ã— 16"..R },
-        { "M11", "266", "272", MYTH..(L.ILVLREF_CREST_MYTH or "Myth").."  Ã— 18"..R },
-        { "M12", "266", "272", MYTH..(L.ILVLREF_CREST_MYTH or "Myth").."  Ã— 20"..R },
+        { L.ILVLREF_DUNGEON_HEROIC or "Heroic", IlvlColor("230"), IlvlColor("243"), CHAMP..dungCrests..R },
+        { L.ILVLREF_DUNGEON_MYTHIC or "Mythic", IlvlColor("246"), IlvlColor("256"), CHAMP..dungCrests..R },
+        { "M2",  IlvlColor("250"), IlvlColor("259"), HERO..(L.ILVLREF_CREST_HERO or "Hero").."  x 10"..R },
+        { "M3",  IlvlColor("250"), IlvlColor("259"), HERO..(L.ILVLREF_CREST_HERO or "Hero").."  x 12"..R },
+        { "M4",  IlvlColor("253"), IlvlColor("263"), HERO..(L.ILVLREF_CREST_HERO or "Hero").."  x 14"..R },
+        { "M5",  IlvlColor("256"), IlvlColor("263"), HERO..(L.ILVLREF_CREST_HERO or "Hero").."  x 16"..R },
+        { "M6",  IlvlColor("259"), IlvlColor("266"), HERO..(L.ILVLREF_CREST_HERO or "Hero").."  x 18"..R },
+        { "M7",  IlvlColor("259"), IlvlColor("269"), MYTH..(L.ILVLREF_CREST_MYTH or "Myth").."  x 10"..R },
+        { "M8",  IlvlColor("263"), IlvlColor("269"), MYTH..(L.ILVLREF_CREST_MYTH or "Myth").."  x 12"..R },
+        { "M9",  IlvlColor("263"), IlvlColor("269"), MYTH..(L.ILVLREF_CREST_MYTH or "Myth").."  x 14"..R },
+        { "M10", IlvlColor("266"), IlvlColor("272"), MYTH..(L.ILVLREF_CREST_MYTH or "Myth").."  x 16"..R },
+        { "M11", IlvlColor("266"), IlvlColor("272"), MYTH..(L.ILVLREF_CREST_MYTH or "Myth").."  x 18"..R },
+        { "M12", IlvlColor("266"), IlvlColor("272"), MYTH..(L.ILVLREF_CREST_MYTH or "Myth").."  x 20"..R },
     }
 
     -- Raid item levels
     local RAID = {
-        { L.ILVLREF_RAID_LFR    or "LFR",    "233", "237", "240", "243" },
-        { L.ILVLREF_RAID_NORMAL or "Normal",  "246", "250", "253", "256" },
-        { HERO..(L.ILVLREF_RAID_HEROIC or "Heroic")..R, "259", "263", "266", "269" },
-        { MYTH..(L.ILVLREF_RAID_MYTHIC or "Mythic")..R, "272", "276", "279", "282" },
+        { L.ILVLREF_RAID_LFR    or "LFR",    IlvlColor("233"), IlvlColor("237"), IlvlColor("240"), IlvlColor("243") },
+        { L.ILVLREF_RAID_NORMAL or "Normal",  IlvlColor("246"), IlvlColor("250"), IlvlColor("253"), IlvlColor("256") },
+        { L.ILVLREF_RAID_HEROIC or "Heroic",  IlvlColor("259"), IlvlColor("263"), IlvlColor("266"), IlvlColor("269") },
+        { L.ILVLREF_RAID_MYTHIC or "Mythic",  IlvlColor("272"), IlvlColor("276"), IlvlColor("279"), IlvlColor("282") },
     }
 
     -- Bountiful Delve item levels
     local tFmt = L.ILVLREF_DELVE_TIER_FMT or "T%d"
     local DELVES = {
-        { tFmt:format(1),  "220", "â€“",   "233" },
-        { tFmt:format(2),  "224", "â€“",   "237" },
-        { tFmt:format(3),  "227", "â€“",   "240" },
-        { tFmt:format(4),  "230", "237", "243" },
-        { tFmt:format(5),  "233", "243", "246" },
-        { tFmt:format(6),  "237", "250", "253" },
-        { tFmt:format(7),  "250", "256", "256" },
-        { tFmt:format(8),  "â€“",   "â€“",   "â€“"   },
-        { tFmt:format(9),  "250", "259", "259" },
-        { tFmt:format(10), "â€“",   "â€“",   "â€“"   },
-        { tFmt:format(11), "â€“",   "â€“",   "â€“"   },
+        { tFmt:format(1),  IlvlColor("220"), "-",              IlvlColor("233") },
+        { tFmt:format(2),  IlvlColor("224"), "-",              IlvlColor("237") },
+        { tFmt:format(3),  IlvlColor("227"), "-",              IlvlColor("240") },
+        { tFmt:format(4),  IlvlColor("230"), IlvlColor("237"), IlvlColor("243") },
+        { tFmt:format(5),  IlvlColor("233"), IlvlColor("243"), IlvlColor("246") },
+        { tFmt:format(6),  IlvlColor("237"), IlvlColor("250"), IlvlColor("253") },
+        { tFmt:format(7),  IlvlColor("250"), IlvlColor("256"), IlvlColor("256") },
+        { tFmt:format(8),  IlvlColor("250"), IlvlColor("259"), IlvlColor("259") },
+        { tFmt:format(9),  IlvlColor("250"), IlvlColor("259"), IlvlColor("259") },
+        { tFmt:format(10), IlvlColor("250"), IlvlColor("259"), IlvlColor("259") },
+        { tFmt:format(11), IlvlColor("250"), IlvlColor("259"), IlvlColor("259") },
     }
 
     -- ── Frame ────────────────────────────────────────────────────────────────
+    -- Pre-fit column widths and compute dynamic window width ----------------
+    local trackCols = AutoFitCols({
+        { t = (L.ILVLREF_COL_ILVL         or "ilvl")           },
+        { t = (L.ILVLREF_COL_TRACK        or "Upgrade Tracks")  },
+        { t = (L.ILVLREF_COL_CREST_NEEDED or "Crests")          },
+    }, TRACKS)
+    local craftCols = AutoFitCols({
+        { t = ADV..(L.ILVLREF_CREST_ADV_SHORT    or "Adv")..R    },
+        { t = VET..(L.ILVLREF_CREST_VET_SHORT    or "Vet")..R    },
+        { t = CHAMP..(L.ILVLREF_CREST_CHAMP_SHORT or "Champ")..R },
+        { t = HERO..(L.ILVLREF_CREST_HERO         or "Hero")..R  },
+        { t = MYTH..(L.ILVLREF_CREST_MYTH         or "Myth")..R  },
+    }, CRAFTED)
+    local dungCols = AutoFitCols({
+        { t = (L.ILVLREF_COL_SOURCE      or "Source")      },
+        { t = (L.ILVLREF_COL_END_LOOT    or "End Loot")    },
+        { t = (L.ILVLREF_COL_GREAT_VAULT or "Great Vault") },
+        { t = (L.ILVLREF_COL_CRESTS      or "Crests")      },
+    }, DUNGEONS)
+    local raidCols = AutoFitCols({
+        { t = (L.ILVLREF_COL_DIFFICULTY or "Difficulty") },
+        { t = (L.ILVLREF_COL_BOSS1      or "Early")      },
+        { t = (L.ILVLREF_COL_BOSS2      or "Mid")        },
+        { t = (L.ILVLREF_COL_BOSS3      or "Late")       },
+        { t = (L.ILVLREF_COL_BOSS4      or "End")        },
+    }, RAID)
+    local delveCols = AutoFitCols({
+        { t = (L.ILVLREF_COL_TIER        or "Tier")        },
+        { t = (L.ILVLREF_COL_END_LOOT    or "End Loot")    },
+        { t = (L.ILVLREF_COL_MAP_DROP    or "Map Drop")    },
+        { t = (L.ILVLREF_COL_GREAT_VAULT or "Great Vault") },
+    }, DELVES)
+    local function tblW(c) return c[#c].x + c[#c].w end
+    local contentW = math.max(tblW(trackCols), tblW(craftCols), tblW(dungCols),
+                               tblW(raidCols), tblW(delveCols))
+    local WIN_W = contentW + PAD * 2 + 22  -- PAD each side + scrollbar
+
     local win
     if BackdropTemplateMixin then
         win = CreateFrame("Frame", "LariasIlvlRefFrame", UIParent, "BackdropTemplate")
@@ -200,7 +348,7 @@ local function BuildIlvlRefWindow()
     titleFS:SetPoint("TOPLEFT", win, "TOPLEFT", PAD, -10)
     local th = Addon.THEME.header
     titleFS:SetTextColor(th.r, th.g, th.b, th.a)
-    titleFS:SetText(L.ILVLREF_WINDOW_TITLE or "Midnight Season 1 \u2013 Item Level Reference")
+    titleFS:SetText(L.ILVLREF_WINDOW_TITLE or "Midnight Season 1 - Item Level Reference")
 
     -- Close button
     local closeBtn = CreateFrame("Button", nil, win, "UIPanelCloseButton")
@@ -227,129 +375,38 @@ local function BuildIlvlRefWindow()
     sf:SetPoint("BOTTOMRIGHT", win, "BOTTOMRIGHT", -(PAD + 22), PAD)
 
     local sc = CreateFrame("Frame", nil, sf)
-    -- Content width = window width - 2Ã—PAD - scrollbar width (22)
+    -- Content width = window width - 2xPAD - scrollbar width (22)
     sc:SetWidth(WIN_W - PAD * 2 - 22)
     sc:SetHeight(1)
     sf:SetScrollChild(sc)
 
-    -- â”€â”€ Content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    -- â"€â"€ Content â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
     local posY = -4
 
-    -- â”€â”€â”€ 1. Upgrade Tracks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    -- 1. Upgrade Tracks
     posY = SecHead(sc, posY, L.ILVLREF_SEC_TRACKS or "Upgrade Tracks  (20 crests per step)")
-
-    posY = ColHead(sc, posY, {
-        { x=0,   w=35,  t=(L.ILVLREF_COL_ILVL         or "ilvl")  },
-        { x=40,  w=190, t=(L.ILVLREF_COL_TRACK        or "Track") },
-        { x=235, w=165, t=(L.ILVLREF_COL_CREST_NEEDED or "Crest Needed") },
-    })
-
-    for _, row in ipairs(TRACKS) do
-        posY = DataRow(sc, posY, {
-            { x=0,   w=35,  t=row[1] },
-            { x=40,  w=190, t=row[2] },
-            { x=235, w=165, t=row[3] },
-        })
-    end
-
+    posY = GridTable(sc, posY, trackCols, TRACKS)
     posY = posY - SEC_GAP
-    posY = HRule(sc, posY)
-    posY = posY - 4
 
-    -- â”€â”€â”€ 2. Crafted Item Levels â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    -- 2. Crafted Item Levels
     posY = SecHead(sc, posY, L.ILVLREF_SEC_CRAFTED or "Crafted Item Levels")
-
-    posY = ColHead(sc, posY, {
-        { x=0,   w=45, t=(L.ILVLREF_COL_GEAR or "Gear")                           },
-        { x=50,  w=60, t=ADV..(L.ILVLREF_CREST_ADV_SHORT   or "Adv")..R           },
-        { x=115, w=60, t=VET..(L.ILVLREF_CREST_VET_SHORT   or "Vet")..R           },
-        { x=180, w=65, t=CHAMP..(L.ILVLREF_CREST_CHAMP_SHORT or "Champ")..R       },
-        { x=250, w=60, t=HERO..(L.ILVLREF_CREST_HERO        or "Hero")..R         },
-        { x=315, w=60, t=MYTH..(L.ILVLREF_CREST_MYTH        or "Myth")..R         },
-    })
-
-    for _, row in ipairs(CRAFTED) do
-        posY = DataRow(sc, posY, {
-            { x=0,   w=45, t=row[1] },
-            { x=50,  w=60, t=row[2] },
-            { x=115, w=60, t=row[3] },
-            { x=180, w=65, t=row[4] },
-            { x=250, w=60, t=row[5] },
-            { x=315, w=60, t=row[6] },
-        })
-    end
-
+    posY = GridTable(sc, posY, craftCols, CRAFTED)
     posY = posY - SEC_GAP
-    posY = HRule(sc, posY)
-    posY = posY - 4
 
-    -- â”€â”€â”€ 3. Dungeon Item Levels â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    -- 3. Dungeon Item Levels
     posY = SecHead(sc, posY, L.ILVLREF_SEC_DUNGEONS or "Dungeon Item Levels")
-
-    posY = ColHead(sc, posY, {
-        { x=0,   w=65,  t=(L.ILVLREF_COL_SOURCE     or "Source")     },
-        { x=70,  w=65,  t=(L.ILVLREF_COL_END_LOOT   or "End Loot")   },
-        { x=140, w=75,  t=(L.ILVLREF_COL_GREAT_VAULT or "Great Vault") },
-        { x=220, w=200, t=(L.ILVLREF_COL_CRESTS      or "Crests")     },
-    })
-
-    for _, row in ipairs(DUNGEONS) do
-        posY = DataRow(sc, posY, {
-            { x=0,   w=65,  t=row[1] },
-            { x=70,  w=65,  t=row[2] },
-            { x=140, w=75,  t=row[3] },
-            { x=220, w=200, t=row[4] },
-        })
-    end
-
+    posY = GridTable(sc, posY, dungCols, DUNGEONS)
     posY = posY - SEC_GAP
-    posY = HRule(sc, posY)
-    posY = posY - 4
 
-    -- â”€â”€â”€ 4. Raid Item Levels (approx.) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    -- 4. Raid Item Levels
     posY = SecHead(sc, posY, L.ILVLREF_SEC_RAID or "Approx. Midnight Raid Item Levels")
-
-    posY = ColHead(sc, posY, {
-        { x=0,   w=85, t=(L.ILVLREF_COL_DIFFICULTY or "Difficulty") },
-        { x=90,  w=65, t=(L.ILVLREF_COL_BOSS1      or "Early")      },
-        { x=160, w=65, t=(L.ILVLREF_COL_BOSS2      or "Mid")        },
-        { x=230, w=65, t=(L.ILVLREF_COL_BOSS3      or "Late")       },
-        { x=300, w=65, t=(L.ILVLREF_COL_BOSS4      or "End")        },
-    })
-
-    for _, row in ipairs(RAID) do
-        posY = DataRow(sc, posY, {
-            { x=0,   w=85, t=row[1] },
-            { x=90,  w=65, t=row[2] },
-            { x=160, w=65, t=row[3] },
-            { x=230, w=65, t=row[4] },
-            { x=300, w=65, t=row[5] },
-        })
-    end
-
+    posY = GridTable(sc, posY, raidCols, RAID)
     posY = posY - SEC_GAP
-    posY = HRule(sc, posY)
-    posY = posY - 4
 
-    -- â”€â”€â”€ 5. Bountiful Delve Item Levels â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    -- 5. Bountiful Delve Item Levels
     posY = SecHead(sc, posY, L.ILVLREF_SEC_DELVES or "Bountiful Delve Item Levels")
-
-    posY = ColHead(sc, posY, {
-        { x=0,   w=45, t=(L.ILVLREF_COL_TIER        or "Tier")        },
-        { x=50,  w=65, t=(L.ILVLREF_COL_END_LOOT    or "End Loot")    },
-        { x=120, w=65, t=(L.ILVLREF_COL_MAP_DROP     or "Map Drop")    },
-        { x=190, w=65, t=(L.ILVLREF_COL_GREAT_VAULT  or "Great Vault") },
-    })
-
-    for _, row in ipairs(DELVES) do
-        posY = DataRow(sc, posY, {
-            { x=0,   w=45, t=row[1] },
-            { x=50,  w=65, t=row[2] },
-            { x=120, w=65, t=row[3] },
-            { x=190, w=65, t=row[4] },
-        })
-    end
+    posY = GridTable(sc, posY, delveCols, DELVES)
 
     -- Set final scroll child height
     local totalH = math.abs(posY) + PAD
@@ -358,7 +415,7 @@ local function BuildIlvlRefWindow()
     return win
 end
 
--- â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- â"€â"€ Public API â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 function Addon:ToggleIlvlRefWindow()
     if self._ilvlRefWindow then

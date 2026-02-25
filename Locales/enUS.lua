@@ -1,4 +1,4 @@
-local LOCALE_REGISTRY_KEY = "LARIASWEEKLYCHECKLIST_LOCALE_REGISTRY"
+﻿local LOCALE_REGISTRY_KEY = "LARIASWEEKLYCHECKLIST_LOCALE_REGISTRY"
 
 local reg = _G[LOCALE_REGISTRY_KEY]
 if type(reg) ~= "table" then
@@ -22,8 +22,8 @@ local STRINGS = {
 
 	OPTIONS_SHOW_GREAT_VAULT = "Show Great Vault",
 	OPTIONS_SHOW_CURRENCY = "Show Currency",
-
-	HIDE_COMPLETED_WEEKS = "Hide completed weeks",
+    OPTIONS_SHOW_CHANGE_WEEK_BTN = 'Show "Change Week" button',
+    OPTIONS_SHOW_ILVL_REF_BTN = 'Show "Ilvl Refs" button',
 	RESET_BUTTON = "Reset",
 	DONE_PREFIX = "[Done] ",
 
@@ -64,10 +64,10 @@ local STRINGS = {
 	TAB_LIST = "List",
 	TAB_OPTIONS = "Options",
 	CHANGE_WEEK_BUTTON = "Change Week",
-	ILVLREF_BUTTON = "Item Levels",
+	ILVLREF_BUTTON = "Ilvl Refs",
 
 	-- Item level reference popup
-	ILVLREF_WINDOW_TITLE  = "Midnight Season 1 \u2013 Item Level Reference",
+	ILVLREF_WINDOW_TITLE  = "Midnight Season 1 Item Level Reference",
 	ILVLREF_OR            = "or",
 
 	ILVLREF_SEC_TRACKS    = "Upgrade Tracks  (20 crests per step)",
@@ -78,8 +78,8 @@ local STRINGS = {
 	ILVLREF_SEC_CRESTS    = "Dawncrest Types",
 
 	ILVLREF_COL_ILVL         = "ilvl",
-	ILVLREF_COL_TRACK        = "Track",
-	ILVLREF_COL_CREST_NEEDED = "Crest Needed",
+	ILVLREF_COL_TRACK        = "Upgrade Tracks",
+	ILVLREF_COL_CREST_NEEDED = "Crests",
 	ILVLREF_COL_GEAR         = "Gear",
 	ILVLREF_COL_SOURCE       = "Source",
 	ILVLREF_COL_END_LOOT     = "End Loot",
@@ -107,7 +107,7 @@ local STRINGS = {
 
 	ILVLREF_DUNGEON_HEROIC     = "Heroic",
 	ILVLREF_DUNGEON_MYTHIC     = "Mythic",
-	ILVLREF_DUNGEON_CRESTS     = "Champ crests",
+ILVLREF_DUNGEON_CRESTS     = "Champ x",
 
 	ILVLREF_RAID_LFR           = "LFR",
 	ILVLREF_RAID_NORMAL        = "Normal",

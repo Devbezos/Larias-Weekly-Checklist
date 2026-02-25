@@ -266,6 +266,8 @@ local function SetupAddonDB()
             hideCompletedSections = true,
             showGreatVault = true,
             showCurrency = true,
+            showChangeWeekBtn = true,
+            showIlvlRefBtn = true,
             debug = false,
             -- When set, only show sections at/after this sectionId in the list.
             -- Nil/empty means show all sections.
@@ -665,11 +667,6 @@ function Addon:SelectMainTab(tabId)
         scrollFrame:SetShown(showList)
     end
 
-    local changeWeekBtn = frame._lariasChangeWeekBtn
-    if changeWeekBtn and changeWeekBtn.SetShown then
-        changeWeekBtn:SetShown(showList)
-    end
-
     local picker = frame._lariasHeaderPicker
     if (not showList) and picker and picker.Hide then
         picker:Hide()
@@ -764,7 +761,7 @@ function Addon:UpdateLocalizedUI()
 
     local ilvlRefBtn = frame._lariasIlvlRefBtn
     if ilvlRefBtn and ilvlRefBtn.SetText then
-        ilvlRefBtn:SetText(L.ILVLREF_BUTTON or "Item Levels")
+        ilvlRefBtn:SetText(L.ILVLREF_BUTTON or "Ilvl Refs")
     end
 
     local trackingFrame = self._trackingFrame
@@ -1618,23 +1615,34 @@ function Addon:CreateFrame()
     frame._lariasTabList = listTab
     frame._lariasTabOptions = optionsTab
 
-    local changeWeekBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    changeWeekBtn:SetSize(108, 22)
-    changeWeekBtn:SetPoint("TOPRIGHT", closeBtn, "TOPLEFT", -6, -2)
-    StyleMainTabButton(changeWeekBtn)
-    changeWeekBtn:SetText(L.CHANGE_WEEK_BUTTON or "Change Week")
-    frame._lariasChangeWeekBtn = changeWeekBtn
+    -- Header buttons are created lazily so they use no memory when disabled.
+    local changeWeekBtn
+    local ilvlRefBtn
 
-    local ilvlRefBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    ilvlRefBtn:SetSize(108, 22)
-    ilvlRefBtn:ClearAllPoints()
-    ilvlRefBtn:SetPoint("RIGHT", changeWeekBtn, "LEFT", -6, 0)
-    StyleMainTabButton(ilvlRefBtn)
-    ilvlRefBtn:SetText(L.ILVLREF_BUTTON or "Item Levels")
-    ilvlRefBtn:SetScript("OnClick", function()
-        Addon:ToggleIlvlRefWindow()
-    end)
-    frame._lariasIlvlRefBtn = ilvlRefBtn
+    local function EnsureChangeWeekBtn_()
+        if changeWeekBtn then return changeWeekBtn end
+        local btn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+        btn:SetSize(108, 22)
+        StyleMainTabButton(btn)
+        btn:SetText(L.CHANGE_WEEK_BUTTON or "Change Week")
+        changeWeekBtn          = btn
+        frame._lariasChangeWeekBtn = btn
+        return btn
+    end
+
+    local function EnsureIlvlRefBtn_()
+        if ilvlRefBtn then return ilvlRefBtn end
+        local btn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+        btn:SetSize(108, 22)
+        StyleMainTabButton(btn)
+        btn:SetText(L.ILVLREF_BUTTON or "Ilvl Refs")
+        btn:SetScript("OnClick", function()
+            Addon:ToggleIlvlRefWindow()
+        end)
+        ilvlRefBtn             = btn
+        frame._lariasIlvlRefBtn = btn
+        return btn
+    end
 
     -- Header picker: lets users jump to any week. Selecting a future week auto-checks
     -- all sections before it (they're "done"). Selecting a past week auto-unchecks
@@ -1881,23 +1889,54 @@ function Addon:CreateFrame()
     -- Allow refresh routines to repopulate the headers panel when list data changes.
     Addon._PopulateHeaderPicker = PopulateHeaderPicker
 
-    changeWeekBtn:SetScript("OnClick", function()
-        local picker = EnsureHeaderPicker()
-        if picker and picker.IsShown and picker:IsShown() then
-            picker:Hide()
-            return
-        end
-        picker:ClearAllPoints()
-        picker:SetPoint("TOPRIGHT", changeWeekBtn, "BOTTOMRIGHT", 0, -6)
-        picker:Show()
+    -- LayoutHeaderButtons_: creates buttons on demand (zero memory if option
+    -- is disabled at load time) and positions them relative to closeBtn.
+    -- Exposed as Addon:LayoutHeaderButtons() for the Options tab callbacks.
+    local function LayoutHeaderButtons_()
+        local dbLocal = Addon:EnsureDB()
+        local showCW  = dbLocal.showChangeWeekBtn ~= false
+        local showIR  = dbLocal.showIlvlRefBtn    ~= false
 
-        -- Populate after show so widths are correct and buttons are fully clickable.
-        if C_Timer and C_Timer.After then
-            C_Timer.After(0, PopulateHeaderPicker)
-        else
-            PopulateHeaderPicker()
+        if showCW then
+            local btn = EnsureChangeWeekBtn_()
+            btn:SetScript("OnClick", function()
+                local p = EnsureHeaderPicker()
+                if p and p.IsShown and p:IsShown() then
+                    p:Hide()
+                    return
+                end
+                p:ClearAllPoints()
+                p:SetPoint("TOPRIGHT", changeWeekBtn, "BOTTOMRIGHT", 0, -6)
+                p:Show()
+                if C_Timer and C_Timer.After then
+                    C_Timer.After(0, PopulateHeaderPicker)
+                else
+                    PopulateHeaderPicker()
+                end
+            end)
+            btn:ClearAllPoints()
+            btn:SetPoint("TOPRIGHT", closeBtn, "TOPLEFT", -6, -2)
+            btn:Show()
+        elseif changeWeekBtn then
+            changeWeekBtn:Hide()
         end
-    end)
+
+        if showIR then
+            local btn = EnsureIlvlRefBtn_()
+            btn:ClearAllPoints()
+            if showCW and changeWeekBtn then
+                btn:SetPoint("RIGHT", changeWeekBtn, "LEFT", -6, 0)
+            else
+                btn:SetPoint("TOPRIGHT", closeBtn, "TOPLEFT", -6, -2)
+            end
+            btn:Show()
+        elseif ilvlRefBtn then
+            ilvlRefBtn:Hide()
+        end
+    end
+
+    Addon.LayoutHeaderButtons = function(self) LayoutHeaderButtons_() end
+    LayoutHeaderButtons_()
 
     scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
     scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", Addon.UI.padOuterX, -Addon.UI.scrollTop)
