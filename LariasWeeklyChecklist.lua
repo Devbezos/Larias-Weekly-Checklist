@@ -124,6 +124,7 @@ do
             trackTopPad = 10,
             sliderH = 20,
             sliderBottomPad = 4,
+            sliderTopPad = 4,
         }
         self.UI = self.UI or self.CONSTANTS.ui
 
@@ -292,6 +293,7 @@ local function SetupAddonDB()
             _dismissedRemoteVersion  = "",
             -- Account-wide UI state (shared across all characters on this account).
             mainFramePos  = false,
+            mainFrameWin  = false,  -- LibWindow-1.1 position+scale storage
             mainFrameSize = false,
             ilvlRefPos    = false,
             ilvlRefSize   = false,
@@ -847,8 +849,9 @@ function Addon:ApplyScrollLayout()
         local sliderShown  = sf and sf.IsShown and sf:IsShown()
         local sliderH      = sliderShown and (Addon.UI.sliderH         or 0) or 0
         local sliderBotPad = sliderShown and (Addon.UI.sliderBottomPad or 0) or 0
+        local sliderTopPad = sliderShown and (Addon.UI.sliderTopPad    or 0) or 0
         extra = trackingHeight + Addon.UI.trackTopPad
-              + sliderH + sliderBotPad - Addon.UI.scrollBottom
+              + sliderH + sliderBotPad + sliderTopPad - Addon.UI.scrollBottom
     end
 
     scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -Addon.UI.scrollRight, Addon.UI.scrollBottom + extra)
@@ -898,10 +901,31 @@ end
 
 function Addon:ApplyUIScale()
     local scale = self:GetUIScale()
-    -- Frame is BOTTOMLEFT-anchored so SetScale expands up+right only — no drift.
     if frame and frame.SetScale then
-        frame:SetSize(Addon.UI.frameW, Addon.UI.frameH)
-        frame:SetScale(scale)
+        -- Scale around the visual center: capture screen-absolute center coords
+        -- before scaling, apply SetScale, then re-anchor so the same screen pixel
+        -- sits at the center of the (now larger/smaller) frame.
+        -- Finally call LW.SavePosition so LibWindow's storage matches.
+        local oldScale = frame:GetScale()
+        local fl = frame:GetLeft()
+        local fb = frame:GetBottom()
+        local fw = frame:GetWidth()
+        local fh = frame:GetHeight()
+        if fl and fb and fw and fh then
+            local screenCX = (fl + fw / 2) * oldScale
+            local screenCY = (fb + fh / 2) * oldScale
+            local parent   = frame:GetParent() or UIParent
+            frame:SetScale(scale)
+            frame:ClearAllPoints()
+            frame:SetPoint("CENTER", parent, "CENTER",
+                (screenCX - parent:GetWidth()  / 2) / scale,
+                (screenCY - parent:GetHeight() / 2) / scale)
+            local LW = LibStub("LibWindow-1.1", true)
+            if LW then LW.SavePosition(frame) end
+        else
+            local LW = LibStub("LibWindow-1.1", true)
+            if LW then LW.SetScale(frame, scale) else frame:SetScale(scale) end
+        end
     end
     -- The ilvl ref window is parented to UIParent; scale it independently.
     local iw = self._ilvlRefWindow
@@ -926,7 +950,7 @@ function Addon:ApplyScaleSliderVisibility()
     if tf then
         local inset = Addon.UI.sectionInsetX or 14
         local botY  = show
-            and ((Addon.UI.sliderBottomPad or 4) + (Addon.UI.sliderH or 20))
+            and ((Addon.UI.sliderBottomPad or 4) + (Addon.UI.sliderH or 20) + (Addon.UI.sliderTopPad or 4))
             or  (Addon.UI.sliderBottomPad or 4)
         tf:ClearAllPoints()
         tf:SetPoint("BOTTOMLEFT",  tf:GetParent(), "BOTTOMLEFT",  inset,  botY)
@@ -1645,31 +1669,16 @@ function Addon:CreateFrame()
 
     frame:SetSize(Addon.UI.frameW, Addon.UI.frameH)
     frame:SetClampedToScreen(true)
-    local _savedMainPos = Addon.db and Addon.db.global and Addon.db.global.mainFramePos
-    if _savedMainPos and _savedMainPos.bl_x and _savedMainPos.bl_y then
-        frame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", _savedMainPos.bl_x, _savedMainPos.bl_y)
-    else
-        frame:SetPoint("CENTER")
-    end
+    -- Position and drag: LibWindow-1.1 saves/restores x/y/point/scale automatically.
+    -- RegisterConfig binds a db storage table; MakeDraggable wires OnDragStart/Stop
+    -- (which call SavePosition on drop); RestorePosition re-anchors to the saved spot.
+    local LW = LibStub("LibWindow-1.1")
+    Addon.db.global.mainFrameWin = Addon.db.global.mainFrameWin or {}
+    LW.RegisterConfig(frame, Addon.db.global.mainFrameWin)
     frame:SetMovable(true)
     frame:EnableMouse(true)
-    frame:RegisterForDrag("LeftButton")
-    frame:SetScript("OnDragStart", frame.StartMoving)
-    frame:SetScript("OnDragStop", function()
-        frame:StopMovingOrSizing()
-        -- Normalise to BOTTOMLEFT anchor: SetScale expands up+right from this
-        -- corner, so scaling never moves the visible bottom-left of the window.
-        local l = frame:GetLeft()
-        local b = frame:GetBottom()
-        frame:ClearAllPoints()
-        if l and b then
-            frame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", l, b)
-            local _gdb = Addon.db and Addon.db.global
-            if _gdb then _gdb.mainFramePos = { bl_x = l, bl_y = b } end
-        else
-            frame:SetPoint("CENTER")
-        end
-    end)
+    LW.MakeDraggable(frame)
+    LW.RestorePosition(frame)
     -- Hide the week picker whenever the main frame is hidden (close button,
     -- Toggle(), ESC, or any other dismiss path). The picker is parented to
     -- UIParent so it won't hide automatically when the main frame does.
@@ -2355,6 +2364,10 @@ function Addon:CreateFrame()
     if self.UpdateLocalizedUI then
         self:UpdateLocalizedUI()
     end
+
+    -- Restore persisted scale immediately so the frame never shows at 100%
+    -- on first open after a reload before the slider is touched.
+    if self.ApplyUIScale then self:ApplyUIScale() end
 
     if scrollFrame then scrollFrame:Show() end
 end

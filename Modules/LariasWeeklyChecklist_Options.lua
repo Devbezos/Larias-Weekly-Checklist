@@ -286,7 +286,8 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
     local L = self.L or {}
 
     -- Min label ("50%")
-    local minLbl = sf:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    local minLbl = sf:CreateFontString(nil, "OVERLAY")
+    minLbl:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
     minLbl:SetPoint("LEFT", sf, "LEFT", 0, 0)
     minLbl:SetWidth(MIN_LBL_W)
     minLbl:SetJustifyH("RIGHT")
@@ -314,7 +315,8 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
     thumbTex:SetAllPoints(thumb)
     thumbTex:SetColorTexture(txt.r, txt.g, txt.b, 0.9)
     -- Text inside the thumb (black on white so it's readable)
-    local thumbLbl = thumb:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    local thumbLbl = thumb:CreateFontString(nil, "OVERLAY")
+    thumbLbl:SetFont("Fonts\\FRIZQT__.TTF", 11, "")
     thumbLbl:SetAllPoints(thumb)
     thumbLbl:SetJustifyH("CENTER")
     thumbLbl:SetJustifyV("MIDDLE")
@@ -322,7 +324,8 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
     thumbLbl:SetTextColor(0, 0, 0, 1)
 
     -- Max label ("unc." for enUS, "150%" for other locales)
-    local maxLbl = sf:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    local maxLbl = sf:CreateFontString(nil, "OVERLAY")
+    maxLbl:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
     maxLbl:SetPoint("LEFT", trackCont, "RIGHT", GAP, 0)
     maxLbl:SetWidth(MAX_LBL_W)
     maxLbl:SetJustifyH("LEFT")
@@ -416,10 +419,7 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
         local pct = PctFromCursor()
         if not pct then return end
         UpdateVisuals(pct)
-        -- Live preview: frame is BOTTOMLEFT-anchored so SetScale expands up+right only.
-        local dragScale = math.max(0.5, math.min(1.5, math.floor(pct + 0.5) / 100))
-        local mf = Addon._mainFrame
-        if mf then mf:SetScale(dragScale) end
+        -- Scale is applied only on mouse release (OnMouseUp → SetPct).
     end)
 
     sf:SetScript("OnShow", function() UpdateVisuals(GetCurrentPct()) end)

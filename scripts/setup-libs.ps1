@@ -6,6 +6,7 @@ $Libs = @{
     "CallbackHandler-1.0" = "https://github.com/zerosnake0/CallbackHandler-1.0.git"
     "LibDataBroker-1.1" = "https://github.com/tekkub/libdatabroker-1-1.git"
     "LibDBIcon-1.0" = "https://github.com/zerosnake0/LibDBIcon-1.0.git"
+    "LibWindow-1.1" = "https://github.com/wowace-clone/LibWindow-1.1.git"
     "Ace3" = "https://github.com/WoWUIDev/Ace3.git"
 }
 
@@ -16,6 +17,7 @@ $LibSentinels = @{
 	"CallbackHandler-1.0" = "CallbackHandler-1.0.lua"
 	"LibDataBroker-1.1" = "LibDataBroker-1.1.lua"
 	"LibDBIcon-1.0" = "LibDBIcon-1.0.lua"
+	"LibWindow-1.1" = (Join-Path "LibWindow-1.1" "LibWindow-1.1.lua")
 	"Ace3" = (Join-Path "AceTimer-3.0" "AceTimer-3.0.lua")
 }
 

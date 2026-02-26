@@ -1129,9 +1129,9 @@ local function ApplyGreatVaultGrid(gridBlocks)
             local maxIlvl = block.maxIlvl  or 0
             for col = 1, 3 do
                 local slot    = block.slots and block.slots[col]
-                local thresh  = slot and slot.thresh or GV_THRESHOLDS[bi][col]
                 local ilvl    = slot and slot.ilvl   or 0
-                local unlocked = done >= thresh
+                -- done = number of completed vault slots; slot col is unlocked when done >= col
+                local unlocked = done >= col
                 -- Single cell: green for best reward, white for other unlocked, dim "-" locked.
                 grid.cells[col].bot:SetText(
                     (unlocked and ilvl > 0)
