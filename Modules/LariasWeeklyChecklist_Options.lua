@@ -27,7 +27,8 @@ function Addon:InitOptionsTab(frame, optionsPanel)
     local db = self:EnsureDB()
 
     local hideCompletedCheck = CreateFrame("CheckButton", nil, optionsPanel, "UICheckButtonTemplate")
-    hideCompletedCheck:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", 6, -6)
+    -- Anchor the first item to the TOP-center of the panel so the whole column is centered.
+    hideCompletedCheck:SetPoint("TOP", optionsPanel, "TOP", -100, -10)
     hideCompletedCheck:SetChecked(db.hideCompletedSections and true or false)
     hideCompletedCheck:SetScript("OnClick", function(selfBtn)
         local dbForClick = Addon:EnsureDB()
@@ -104,11 +105,7 @@ function Addon:InitOptionsTab(frame, optionsPanel)
     end)
     frame._lariasOptShowCharPickerBtn = showCharPickerCheck
 
-    -- ── Right column anchor ──────────────────────────────────────────────────
-    local RIGHT_COL_X = 216
-
     local resetBtn = CreateFrame("Button", nil, optionsPanel, "UIPanelButtonTemplate")
-    resetBtn:SetPoint("TOPLEFT", optionsPanel, "TOPLEFT", RIGHT_COL_X, -6)
     resetBtn:SetSize(108, 22)
     if Addon._styleActionButton then
         Addon._styleActionButton(resetBtn)
@@ -185,14 +182,14 @@ function Addon:InitOptionsTab(frame, optionsPanel)
 
     -- UI Scale slider -------------------------------------------------------
     local scaleTitle = optionsPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    scaleTitle:SetPoint("TOPLEFT", resetBtn, "BOTTOMLEFT", 0, -14)
+    scaleTitle:SetPoint("TOPLEFT", showCharPickerCheck, "BOTTOMLEFT", 0, -16)
     frame._lariasOptScaleTitleFS = scaleTitle
 
     local scaleSlider = CreateFrame("Slider", "LariasWeeklyChecklistScaleSlider", optionsPanel, "OptionsSliderTemplate")
     scaleSlider:SetPoint("TOPLEFT", scaleTitle, "BOTTOMLEFT", 6, -6)
     scaleSlider:SetWidth(220)
     scaleSlider:SetMinMaxValues(80, 120)
-    scaleSlider:SetValueStep(10)
+    scaleSlider:SetValueStep(1)
     local _initPct = (Addon.db and Addon.db.global and tonumber(Addon.db.global.uiScalePct)) or 100
     scaleSlider:SetValue(math.max(80, math.min(120, _initPct)))
     do
@@ -204,7 +201,7 @@ function Addon:InitOptionsTab(frame, optionsPanel)
         if txt then txt:SetText("")    end  -- title managed separately
     end
     local function ApplyScaleVal(val)
-        val = math.floor(val / 10 + 0.5) * 10
+        val = math.floor(val + 0.5)
         local gdb = Addon.db and Addon.db.global
         if gdb then gdb.uiScalePct = val end
         local tf = GetMainFrame() and GetMainFrame()._lariasOptScaleTitleFS
@@ -217,7 +214,7 @@ function Addon:InitOptionsTab(frame, optionsPanel)
     -- Update label while dragging; only apply scale on release to avoid
     -- the window resizing jankily on every tick.
     scaleSlider:SetScript("OnValueChanged", function(self_, val)
-        val = math.floor(val / 10 + 0.5) * 10
+        val = math.floor(val + 0.5)
         local tf = GetMainFrame() and GetMainFrame()._lariasOptScaleTitleFS
         if tf then
             local L2 = Addon.L or {}
@@ -235,16 +232,21 @@ function Addon:InitOptionsTab(frame, optionsPanel)
     hiddenCharsTitle:SetPoint("TOPLEFT", scaleSlider, "BOTTOMLEFT", -6, -14)
     frame._lariasOptHiddenCharsTitle = hiddenCharsTitle
 
-    local hiddenCharsPanel = CreateFrame("Frame", nil, optionsPanel)
-    hiddenCharsPanel:SetPoint("TOPLEFT", hiddenCharsTitle, "BOTTOMLEFT", 0, -4)
-    hiddenCharsPanel:SetWidth(210)
-    hiddenCharsPanel:SetHeight(20)
-    hiddenCharsPanel._rows = {}
-    frame._lariasOptHiddenCharsPanel = hiddenCharsPanel
+    local hiddenCharsTriggerBtn = CreateFrame("Button", nil, optionsPanel, "UIPanelButtonTemplate")
+    hiddenCharsTriggerBtn:SetPoint("TOPLEFT", hiddenCharsTitle, "BOTTOMLEFT", 0, -4)
+    hiddenCharsTriggerBtn:SetSize(108, 22)
+    if Addon._styleActionButton then Addon._styleActionButton(hiddenCharsTriggerBtn) end
+    hiddenCharsTriggerBtn:SetScript("OnClick", function()
+        if Addon.ToggleHiddenCharsDropdown then Addon:ToggleHiddenCharsDropdown() end
+    end)
+    frame._lariasOptHiddenCharsTrigger = hiddenCharsTriggerBtn
     -- -------------------------------------------------------------------------
 
+    -- Reset button: bottom of the column, below hidden chars trigger.
+    resetBtn:SetPoint("TOPLEFT", hiddenCharsTriggerBtn, "BOTTOMLEFT", 0, -14)
+
     local localizationHint = optionsPanel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-    localizationHint:SetPoint("TOPLEFT", showCharPickerCheck, "BOTTOMLEFT", 6, -10)
+    localizationHint:SetPoint("TOPLEFT", resetBtn, "BOTTOMLEFT", 0, -8)
     localizationHint:SetWidth(200)
     localizationHint:SetJustifyH("LEFT")
     localizationHint:SetJustifyV("TOP")
@@ -260,108 +262,238 @@ function Addon:InitOptionsTab(frame, optionsPanel)
     end
 end
 
+function Addon:ToggleHiddenCharsDropdown()
+    local picker = self._hiddenCharsPicker
+    if picker and picker.IsShown and picker:IsShown() then
+        picker:Hide()
+        return
+    end
+    -- Create picker frame lazily.
+    if not picker then
+        if BackdropTemplateMixin then
+            picker = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+        else
+            picker = CreateFrame("Frame", nil, UIParent)
+        end
+        if not picker.SetBackdrop and BackdropTemplateMixin and Mixin then
+            Mixin(picker, BackdropTemplateMixin)
+        end
+        picker:SetFrameStrata("HIGH")
+        picker:SetClampedToScreen(true)
+        picker:SetSize(160, 40)
+        picker:Hide()
+        if picker.SetToplevel then picker:SetToplevel(true) end
+        if picker.SetFrameLevel then picker:SetFrameLevel(200) end
+        if picker.SetBackdrop then
+            picker:SetBackdrop({
+                bgFile   = "Interface\\Buttons\\WHITE8x8",
+                edgeFile = "Interface\\Buttons\\WHITE8x8",
+                tile = false, edgeSize = 1,
+                insets = { left=1, right=1, top=1, bottom=1 },
+            })
+        end
+        if Addon.THEME then
+            if picker.SetBackdropColor then
+                picker:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, 1.0)
+            end
+            if picker.SetBackdropBorderColor then
+                picker:SetBackdropBorderColor(Addon.THEME.border.r, Addon.THEME.border.g, Addon.THEME.border.b, Addon.THEME.border.a)
+            end
+        end
+        picker._buttons = {}
+        picker._pool    = {}
+        -- Fullscreen catcher closes picker on outside click.
+        local catcher = CreateFrame("Button", nil, UIParent)
+        catcher:SetAllPoints(UIParent)
+        catcher:SetFrameStrata("HIGH")
+        catcher:SetFrameLevel(picker:GetFrameLevel() - 1)
+        catcher:Hide()
+        catcher:SetScript("OnClick", function()
+            picker:Hide()
+            catcher:Hide()
+        end)
+        picker._catcher = catcher
+        picker:SetScript("OnHide", function() catcher:Hide() end)
+        picker:SetScript("OnShow", function() catcher:Show() end)
+        self._hiddenCharsPicker = picker
+    end
+    -- Position below the trigger button.
+    local frame = GetMainFrame()
+    local trigBtn = frame and frame._lariasOptHiddenCharsTrigger
+    picker:ClearAllPoints()
+    if trigBtn then
+        picker:SetPoint("TOPLEFT", trigBtn, "BOTTOMLEFT", 0, -4)
+    else
+        picker:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    end
+    self:RefreshHiddenCharsList()
+    picker:Show()
+end
+
 function Addon:RefreshHiddenCharsList()
     local frame = GetMainFrame()
     if not frame then return end
-    local panel = frame._lariasOptHiddenCharsPanel
-    if not panel then return end
 
-    local L = self.L or {}
-    local gdb = self.db and self.db.global
-    local hiddenChars = gdb and gdb.hiddenChars or {}
-    local ROW_H = 22
-    local BTN_W = 20
-    local PAD   = 4
+    local L          = self.L or {}
+    local gdb        = self.db and self.db.global
+    local hiddenMap  = gdb and gdb.hiddenChars or {}
+    local ROW_H      = 20
+    local PAD        = 6
+    local BTN_W      = 20
+    local NAME_W_MIN = 120
 
     -- Collect and sort hidden keys.
     local hidden = {}
-    for key, v in pairs(hiddenChars) do
+    for key, v in pairs(hiddenMap) do
         if v then tinsert(hidden, key) end
     end
     table.sort(hidden)
 
-    panel._rows = panel._rows or {}
+    -- Update trigger button label.
+    local trigBtn = frame._lariasOptHiddenCharsTrigger
+    if trigBtn and trigBtn.SetText then
+        local label = string.format("%s (%d)", L.OPTIONS_HIDDEN_CHARS_TITLE or "Hidden", #hidden)
+        trigBtn:SetText(label)
+    end
+
+    -- If the dropdown isn't open, nothing else to do.
+    local picker = self._hiddenCharsPicker
+    if not (picker and picker.IsShown and picker:IsShown()) then return end
+
+    -- Release existing rows back to pool.
+    for _, b in ipairs(picker._buttons) do
+        b:Hide()
+        b:ClearAllPoints()
+        b:SetScript("OnClick", nil)
+        tinsert(picker._pool, b)
+    end
+    wipe(picker._buttons)
+
+    local function AcquireRow()
+        local f = tremove(picker._pool)
+        if not f then
+            f = CreateFrame("Frame", nil, picker)
+            -- name button
+            local nb = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+            nb:SetHeight(ROW_H)
+            nb:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
+            if Addon._styleActionButton then Addon._styleActionButton(nb) end
+            if nb.SetTextInsets then nb:SetTextInsets(4, 4, 0, 0) end
+            local ntr = nb.Text or (nb.GetFontString and nb:GetFontString())
+            if ntr then
+                if ntr.SetJustifyH then ntr:SetJustifyH("LEFT") end
+                if ntr.SetJustifyV then ntr:SetJustifyV("MIDDLE") end
+            end
+            f._nameBtn = nb
+            -- unhide button
+            local ub = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+            ub:SetSize(BTN_W, ROW_H)
+            ub:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 0)
+            if Addon._styleActionButton then Addon._styleActionButton(ub) end
+            if ub.SetTextInsets then ub:SetTextInsets(0, 0, 0, 0) end
+            local utr = ub.Text or (ub.GetFontString and ub:GetFontString())
+            if utr and utr.SetJustifyH then utr:SetJustifyH("CENTER") end
+            ub:SetText("|TInterface\\RaidFrame\\ReadyCheck-Ready:12:12|t")
+            f._unhideBtn = ub
+        end
+        f:Show()
+        return f
+    end
 
     if #hidden == 0 then
-        for _, row in ipairs(panel._rows) do row:Hide() end
-        if not panel._noneLabel then
-            local lbl = panel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-            lbl:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, 0)
-            panel._noneLabel = lbl
-        end
-        panel._noneLabel:SetText(L.OPTIONS_HIDDEN_CHARS_NONE or "None")
-        panel._noneLabel:Show()
-        panel:SetHeight(ROW_H)
+        -- Single disabled row saying "None".
+        local f = AcquireRow()
+        f._nameBtn:SetText(L.OPTIONS_HIDDEN_CHARS_NONE or "None")
+        f._nameBtn:SetEnabled(false)
+        f._unhideBtn:Hide()
+        f._nameBtn:SetWidth(NAME_W_MIN)
+        f:SetSize(NAME_W_MIN + PAD * 2, ROW_H)
+        f:SetPoint("TOPLEFT", picker, "TOPLEFT", PAD, -PAD)
+        tinsert(picker._buttons, f)
+        picker:SetSize(NAME_W_MIN + PAD * 2, ROW_H + PAD * 2)
         return
     end
 
-    if panel._noneLabel then panel._noneLabel:Hide() end
-
+    local posY   = -PAD
+    local bestW  = NAME_W_MIN
     for i, key in ipairs(hidden) do
-        local charName = (key:match("^(.-)%s*%-") or key):gsub("^%s+",""):gsub("%s+$","")
-        local realm    = (key:match("%-%s*(.+)$") or ""):gsub("^%s+",""):gsub("%s+$","")
-        local displayText
-        if realm ~= "" then
-            displayText = charName .. " - " .. realm
-        else
-            displayText = key
-        end
+        local charName    = (key:match("^(.-)%s*%-") or key):gsub("^%s+",""):gsub("%s+$","")
+        local realm       = (key:match("%-(.+)$") or ""):gsub("^%s+",""):gsub("%s+$","")
+        local displayText = (realm ~= "") and (charName .. " - " .. realm) or key
 
-        local row = panel._rows[i]
-        if not row then
-            row = CreateFrame("Frame", nil, panel)
-            panel._rows[i] = row
+        local f = AcquireRow()
+        f._nameBtn:SetEnabled(true)
+        f._unhideBtn:Show()
 
-            -- Checkmark button (unhide action)
-            local checkBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-            checkBtn:SetSize(BTN_W, BTN_W)
-            checkBtn:SetPoint("LEFT", row, "LEFT", 0, 0)
-            if Addon._styleActionButton then Addon._styleActionButton(checkBtn) end
-            local checkTR = checkBtn.Text or (checkBtn.GetFontString and checkBtn:GetFontString())
-            if checkTR then
-                if checkTR.SetJustifyH then checkTR:SetJustifyH("CENTER") end
-            end
-            checkBtn:SetText("|cFF00FF00\226\156\147|r")  -- green checkmark ✓
-            row._checkBtn = checkBtn
-
-            -- Name + realm fontstring  (aligns flush with panel left after button)
-            local nameFS = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-            nameFS:SetPoint("LEFT", checkBtn, "RIGHT", PAD, 0)
-            nameFS:SetWidth(panel:GetWidth() - BTN_W - PAD * 2)
-            if nameFS.SetJustifyH then nameFS:SetJustifyH("LEFT") end
-            if nameFS.SetWordWrap  then nameFS:SetWordWrap(false)  end
-            row._nameFS = nameFS
-        end
-
-        row:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, -(ROW_H * (i - 1)))
-        row:SetSize(panel:GetWidth(), ROW_H)
-        row:Show()
-
+        -- Class colour.
         local classToken = gdb and gdb.charClasses and gdb.charClasses[key]
         local r, g, b = 1, 1, 1
         if classToken then
             local cc = RAID_CLASS_COLORS and RAID_CLASS_COLORS[classToken]
             if cc then r, g, b = cc.r, cc.g, cc.b end
         end
-        row._nameFS:SetText(displayText)
-        row._nameFS:SetTextColor(r, g, b, 1)
+        local ntr = f._nameBtn.Text or (f._nameBtn.GetFontString and f._nameBtn:GetFontString())
+        if ntr then ntr:SetTextColor(r, g, b, 1) end
+        f._nameBtn:SetText(displayText)
 
         local _key = key
-        row._checkBtn:SetScript("OnClick", function()
+        local function doUnhide()
             local gdbU = Addon.db and Addon.db.global
-            if gdbU and gdbU.hiddenChars then
-                gdbU.hiddenChars[_key] = nil
-            end
+            if gdbU and gdbU.hiddenChars then gdbU.hiddenChars[_key] = nil end
             if Addon.RefreshHiddenCharsList then Addon:RefreshHiddenCharsList() end
+            if Addon.LayoutHeaderButtons    then Addon:LayoutHeaderButtons() end
+            -- If the char picker button just became visible, open its dropdown
+            -- so the player can immediately switch to the newly unhidden character.
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0, function()
+                    local cpBtn = Addon._cpEnsureBtn and Addon._cpEnsureBtn()
+                    if cpBtn and cpBtn.IsShown and cpBtn:IsShown() then
+                        if Addon._cpOnClick then Addon._cpOnClick() end
+                    end
+                end)
+            end
+        end
+        f._nameBtn:SetScript("OnClick",   doUnhide)
+        f._unhideBtn:SetScript("OnClick", doUnhide)
+
+        f:SetPoint("TOPLEFT", picker, "TOPLEFT", PAD, posY)
+        posY = posY - ROW_H
+        tinsert(picker._buttons, f)
+    end
+
+    local totalH = -posY + PAD
+    picker:SetHeight(math.max(40, totalH))
+
+    -- Deferred width sizing (same pattern as header picker).
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, function()
+            if not (picker and picker.IsShown and picker:IsShown()) then return end
+            local bw = NAME_W_MIN
+            for _, f in ipairs(picker._buttons) do
+                local nb = f._nameBtn
+                local tr = nb.Text or (nb.GetFontString and nb:GetFontString())
+                local w  = 0
+                if tr then
+                    if tr.GetUnboundedStringWidth then w = tonumber(tr:GetUnboundedStringWidth()) or 0 end
+                    if w <= 0 and tr.GetStringWidth then w = tonumber(tr:GetStringWidth()) or 0 end
+                end
+                if w > bw then bw = w end
+            end
+            local newW = math.max(160, math.min(400, math.ceil(bw) + BTN_W + PAD * 3 + 8))
+            picker:SetWidth(newW)
+            for _, f in ipairs(picker._buttons) do
+                f:SetWidth(newW - PAD * 2)
+                f._nameBtn:SetWidth(newW - PAD * 2 - BTN_W - 4)
+            end
         end)
     end
-
-    -- Hide any unused rows from a previous (longer) list.
-    for i = #hidden + 1, #panel._rows do
-        if panel._rows[i] then panel._rows[i]:Hide() end
+    -- Initial width.
+    local initW = NAME_W_MIN + BTN_W + PAD * 3 + 8
+    picker:SetWidth(initW)
+    for _, f in ipairs(picker._buttons) do
+        f:SetWidth(initW - PAD * 2)
+        f._nameBtn:SetWidth(initW - PAD * 2 - BTN_W - 4)
     end
-
-    panel:SetHeight(math.max(ROW_H, ROW_H * #hidden))
 end
 
 function Addon:SyncOptionsTabControls()

@@ -604,6 +604,18 @@ local function GetTrackedQuestID(key)
     return q
 end
 
+-- Quest completion state as a raw boolean, for snapshot persistence.
+-- Returns true (done), false (not done), or nil (quest disabled / API unavailable).
+local function GetQuestDoneRaw(questKey)
+    local questID = GetTrackedQuestID(questKey)
+    if not questID then return nil end
+    if C_QuestLog and C_QuestLog.IsQuestFlaggedCompleted then
+        local ok, done = pcall(C_QuestLog.IsQuestFlaggedCompleted, questID)
+        if ok then return done and true or false end
+    end
+    return nil
+end
+
 -- Quest row: returns (label,value) as colored text based on completion.
 local function GetQuestDoneParts(labelText, questKey, opts)
     local questID = GetTrackedQuestID(questKey)
@@ -858,6 +870,32 @@ local function GetCrestLines()
     return out, labelOut, valueOut, crestCount
 end
 
+-- Raw catalyst charge count for snapshot persistence (no cap, no color).
+-- Returns a number or nil when the row should be suppressed entirely.
+local function GetCatalystQtyRaw()
+    local cur
+    local tracking = Addon.TRACKING
+    local id = tracking and tracking.catalystCurrencyID
+    local hasConfiguredID = (id and tonumber(id) and tonumber(id) > 0) and true or false
+    if hasConfiguredID then
+        local qty, _ = FormatCurrencyProgressParts(tonumber(id))
+        cur = tonumber(qty)
+    end
+    if cur == nil and C_Catalyst then
+        if C_Catalyst.GetCharges then
+            local charges = C_Catalyst.GetCharges()
+            if type(charges) == "table" then
+                cur = tonumber(charges.currentCharges or charges.numCharges or charges.charges)
+            end
+        end
+        if cur == nil and C_Catalyst.GetNumCharges then
+            cur = tonumber(C_Catalyst.GetNumCharges())
+        end
+    end
+    if cur == nil and not hasConfiguredID then return nil end
+    return cur
+end
+
 local function GetCatalystParts()
     -- Catalyst charges row.
     -- Hides entirely when no configured ID and C_Catalyst is unavailable.
@@ -915,7 +953,7 @@ local function ComputeWantTrackingPanel(db)
         -- When viewing another character, only show the panel if we have a
         -- stored snapshot for them (they've opened the addon at least once).
         local snap = db.trackingSnapshot
-        local hasData = snap and (snap.leftLines ~= nil or snap.rightRows ~= nil)
+        local hasData = snap and (snap.leftLines ~= nil or (snap.rightRows ~= nil and #snap.rightRows > 0))
         return hasData and IsMainFrameOnListTab() and true or false
     end
     local wantPanel = (db.showGreatVault or db.showCurrency) and true or false
@@ -1206,10 +1244,10 @@ function Addon:ApplyTrackingPanelOptions()
     if Addon._viewingChar then
         -- For another character, derive visibility from their stored snapshot.
         local snap = db.trackingSnapshot
-        wantPanel = snap and (snap.leftLines ~= nil or snap.rightRows ~= nil) and IsMainFrameOnListTab() and true or false
+        wantPanel = snap and (snap.leftLines ~= nil or (snap.rightRows ~= nil and #snap.rightRows > 0)) and IsMainFrameOnListTab() and true or false
         if wantPanel and snap then
             showGreatVault = snap.leftLines ~= nil
-            showCurrency   = snap.rightRows ~= nil
+            showCurrency   = snap.rightRows ~= nil and #snap.rightRows > 0
         end
     else
         wantPanel = (showGreatVault or showCurrency) and IsMainFrameOnListTab()
@@ -1282,38 +1320,52 @@ ComputeSnapshotData = function(snap)
         snap.leftLines[i] = gvLines[i] or ""
     end
 
-    -- Right column: same ordering as ApplyRightColumnAsPairs but writing to
-    -- snap.rightRows instead of TrackingUI font strings.
-    snap.rightRows = snap.rightRows or {}
-    local _, labelLines, valueLines, crestCount = GetCrestLines()
-    crestCount = tonumber(crestCount) or 4
+    -- Right column: store minimal structured data (no rendered strings, no caps).
+    -- Caps are always resolved live from C_CurrencyInfo when the snapshot is rendered.
+    snap.rightRows = {}
+    local tracking = Addon.TRACKING
 
-    local idx = 1
-    local function AddPair(lbl, val)
-        lbl = lbl or ""; val = val or ""
-        if idx <= RIGHT_LINE_COUNT and (IsNonEmptyText(lbl) or IsNonEmptyText(val)) then
-            snap.rightRows[idx] = snap.rightRows[idx] or {}
-            snap.rightRows[idx].label = lbl
-            snap.rightRows[idx].value = val
-            idx = idx + 1
+    -- Crests: only persist entries where the player holds a non-zero quantity.
+    if tracking then
+        EnsureCrestIDsDetected(tracking)
+        local ids, crestCount = GetCrestIDsAndCount(tracking)
+        local cache = EnsureCrestCache(tracking, crestCount)
+        PopulateCrestCurCap(cache, ids, crestCount)
+        for i = 1, crestCount do
+            local id = ids[i]
+            if id then
+                local qty = cache.cur[i] or 0
+                if qty > 0 then
+                    snap.rightRows[#snap.rightRows + 1] = { type = "crest", id = id, qty = qty }
+                end
+            end
         end
     end
 
-    for i = 1, crestCount do
-        if idx > RIGHT_LINE_COUNT then break end
-        AddPair((labelLines and labelLines[i]) or "", (valueLines and valueLines[i]) or "")
+    -- Catalyst charges.
+    local catQty = GetCatalystQtyRaw()
+    if catQty ~= nil then
+        snap.rightRows[#snap.rightRows + 1] = { type = "catalyst", qty = catQty }
     end
 
-    local cLbl, cVal = GetCatalystParts();     AddPair(cLbl, cVal)
-    local sLbl, sVal = GetSparksParts();        AddPair(sLbl, sVal)
-    local bLbl, bVal = GetDelversBountyParts(); AddPair(bLbl, bVal)
-    local pLbl, pVal = GetWeeklyPreyParts();    AddPair(pLbl, pVal)
+    -- Sparks of the season.
+    local sparkID = tracking and tonumber(tracking.sparkCurrencyID)
+    if sparkID and sparkID > 0 then
+        local sQty, _ = FormatCurrencyProgressParts(sparkID)
+        sQty = tonumber(sQty)
+        if sQty ~= nil then
+            snap.rightRows[#snap.rightRows + 1] = { type = "sparks", id = sparkID, qty = sQty }
+        end
+    end
 
-    -- Clear any now-unneeded trailing rows.
-    for i = idx, RIGHT_LINE_COUNT do
-        snap.rightRows[i] = snap.rightRows[i] or {}
-        snap.rightRows[i].label = ""
-        snap.rightRows[i].value = ""
+    -- Weekly quests: always include so the viewer can see completion status.
+    local bDone = GetQuestDoneRaw("delversBounty")
+    if bDone ~= nil then
+        snap.rightRows[#snap.rightRows + 1] = { type = "quest", key = "delversBounty", done = bDone }
+    end
+    local pDone = GetQuestDoneRaw("weeklyPrey")
+    if pDone ~= nil then
+        snap.rightRows[#snap.rightRows + 1] = { type = "quest", key = "weeklyPrey", done = pDone }
     end
 end
 
@@ -1326,15 +1378,135 @@ local function SaveTrackingSnapshot(db)
     ComputeSnapshotData(snap)
 end
 
+local function RenderSnapshotRow(row)
+    -- Derive a display label+value pair from a structured snapshot row.
+    -- Caps are fetched live from the WoW API so they are always current.
+    local t = row.type
+    if t == "crest" then
+        local id  = row.id
+        local qty = tonumber(row.qty) or 0
+        local labelText = GetCrestLabelText(id)
+        if not labelText then
+            local fmt = L.TRACKING_CREST_ID_LABEL_FMT or "%s"
+            labelText = fmt:format(tostring(id or "?"))
+        end
+        local lbl = ColorWrap(COLORS.dim, tostring(labelText))
+        local _, cap = FormatCurrencyProgressParts(id)
+        cap = tonumber(cap) or 0
+        local xy, color
+        if cap > 0 then
+            xy    = FormatXY(qty, cap)
+            color = ColorForXY(qty, cap)
+        else
+            local inf = L.TRACKING_INF
+            if type(inf) ~= "string" or inf == "" then inf = "∞" end
+            xy    = ("%d/%s"):format(qty, inf)
+            color = (qty <= 0) and COLORS.red or COLORS.green
+        end
+        return lbl, ColorWrap(color, xy)
+
+    elseif t == "catalyst" then
+        local qty = tonumber(row.qty) or 0
+        local lbl = ColorWrap(COLORS.dim, L.TRACKING_CATALYST_LABEL or "")
+        -- Resolve live cap from C_Catalyst or the configured currency ID.
+        local cap = nil
+        if C_Catalyst then
+            if C_Catalyst.GetMaxCharges then cap = tonumber(C_Catalyst.GetMaxCharges()) end
+            if not cap and C_Catalyst.GetCharges then
+                local charges = C_Catalyst.GetCharges()
+                if type(charges) == "table" then
+                    cap = tonumber(charges.maxCharges or charges.maximumCharges)
+                end
+            end
+        end
+        local tracking = Addon.TRACKING
+        local catID = tracking and tracking.catalystCurrencyID
+        if (not cap or cap == 0) and catID and tonumber(catID) and tonumber(catID) > 0 then
+            local _, c = FormatCurrencyProgressParts(tonumber(catID))
+            cap = tonumber(c)
+        end
+        local val
+        if cap and cap > 0 then
+            val = ColorWrap(ColorForXY(qty, cap), FormatXY(qty, cap))
+        else
+            val = ColorWrap((qty <= 0) and COLORS.red or COLORS.yellow, ("%d"):format(qty))
+        end
+        return lbl, val
+
+    elseif t == "sparks" then
+        local qty = tonumber(row.qty) or 0
+        local id  = tonumber(row.id)
+        if not id then
+            local tracking = Addon.TRACKING
+            id = tracking and tonumber(tracking.sparkCurrencyID)
+        end
+        local lbl = ColorWrap(COLORS.dim, L.TRACKING_SPARKS_LABEL or "")
+        local cap = 0
+        if id and id > 0 then
+            local _, c = FormatCurrencyProgressParts(id)
+            cap = tonumber(c) or 0
+        end
+        local xy, color
+        if cap > 0 then
+            xy    = FormatXY(qty, cap)
+            color = ColorForXY(qty, cap)
+        else
+            local inf = L.TRACKING_INF
+            if type(inf) ~= "string" or inf == "" then inf = "∞" end
+            xy    = ("%d/%s"):format(qty, inf)
+            color = (qty <= 0) and COLORS.red or COLORS.yellow
+        end
+        return lbl, ColorWrap(color, xy)
+
+    elseif t == "quest" then
+        local key  = row.key
+        local done = row.done
+        local labelText = ""
+        if key == "delversBounty" then
+            labelText = L.TRACKING_QUEST_DELVERS_BOUNTY or ""
+        elseif key == "weeklyPrey" then
+            labelText = L.TRACKING_QUEST_WEEKLY_PREY or ""
+        end
+        if not IsNonEmptyText(labelText) then return "", "" end
+        local lbl = ColorWrap(COLORS.dim, labelText)
+        local val
+        if done == nil then
+            val = ColorWrap(COLORS.red, L.TRACKING_NA or "")
+        elseif done then
+            val = ColorWrap(COLORS.green, "1/1")
+        else
+            val = ColorWrap(COLORS.red, "0/1")
+        end
+        return lbl, val
+    end
+    return "", ""
+end
+
 local function RenderSnapshotIntoPanel(snap)
-    -- Apply stored strings from another character's snapshot into the panel UI.
+    -- Apply a stored snapshot into the tracking panel UI.
+    -- New schema rows carry a `type` field and are rendered live (caps fetched from API).
+    -- Legacy rows without `type` fall back to their stored label/value strings.
     if snap.leftLines then
         ApplyGreatVaultLines(snap.leftLines)
     end
     if snap.rightRows then
-        for i = 1, RIGHT_LINE_COUNT do
-            local row = snap.rightRows[i]
-            SetRightRowPair(i, row and row.label or "", row and row.value or "")
+        local idx = 1
+        for _, row in ipairs(snap.rightRows) do
+            if idx > RIGHT_LINE_COUNT then break end
+            local lbl, val
+            if row.type then
+                lbl, val = RenderSnapshotRow(row)
+            else
+                lbl = row.label or ""
+                val = row.value or ""
+            end
+            if IsNonEmptyText(lbl) or IsNonEmptyText(val) then
+                SetRightRowPair(idx, lbl, val)
+                idx = idx + 1
+            end
+        end
+        for i = idx, RIGHT_LINE_COUNT do
+            SetRightRowPair(i, "", "")
         end
     end
 end
@@ -1392,9 +1564,15 @@ function Addon:ResizeTrackingCols()
 
     if leftCol  and leftCol.SetWidth  then leftCol:SetWidth(newColW)  end
     if rightCol and rightCol.SetWidth then rightCol:SetWidth(newColW) end
+    -- Only re-anchor rightCol relative to leftCol when both are visible.
+    -- When only one column is shown, ApplyTrackingPanelOptions owns the anchor.
     if rightCol and leftCol then
-        rightCol:ClearAllPoints()
-        rightCol:SetPoint("TOPLEFT", leftCol, "TOPRIGHT", colGap, 0)
+        local leftShown  = leftCol.IsShown  and leftCol:IsShown()  or false
+        local rightShown = rightCol.IsShown and rightCol:IsShown() or false
+        if leftShown and rightShown then
+            rightCol:ClearAllPoints()
+            rightCol:SetPoint("TOPLEFT", leftCol, "TOPRIGHT", colGap, 0)
+        end
     end
 
     -- Keep left-column font strings constrained to the new column width.

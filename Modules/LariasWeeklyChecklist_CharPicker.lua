@@ -47,6 +47,15 @@ function Addon:SetViewingChar(profileKey)
         self._viewingChar = profileKey
     end
     if self._cpUpdateLabel then self._cpUpdateLabel() end
+    -- Switch to list tab in case the user was on the Options tab.
+    if self.SelectMainTab and not self._inLayoutHeaderButtons then
+        self:SelectMainTab(1)
+    end
+    -- Guard against re-entry: LayoutHeaderButtons_ may reset _viewingChar directly
+    -- to avoid this exact call, but protect here too in case other callers exist.
+    if not self._inLayoutHeaderButtons then
+        if self.LayoutHeaderButtons then self:LayoutHeaderButtons() end
+    end
     if self.RequestRefresh then self:RequestRefresh() else self:Refresh() end
 end
 
@@ -180,7 +189,7 @@ function Addon:InitCharPickerUI(frame, styleFunc)
             btn = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
             btn:SetFrameStrata("HIGH")
             if styleFunc then styleFunc(btn) end
-            if btn.SetTextInsets then btn:SetTextInsets(10, 10, 0, 0) end
+            if btn.SetTextInsets then btn:SetTextInsets(4, 4, 0, 0) end
             local tr = btn.Text or (btn.GetFontString and btn:GetFontString())
             if tr then
                 if tr.SetJustifyH then tr:SetJustifyH("LEFT") end
@@ -203,12 +212,14 @@ function Addon:InitCharPickerUI(frame, styleFunc)
             end
         end
         btn:SetSize(20, CPICK_ROW_H)
-        btn:SetText("x")
+        if btn.SetTextInsets then btn:SetTextInsets(0, 0, 0, 0) end
+        btn:SetText("|TInterface\\RaidFrame\\ReadyCheck-NotReady:12:12|t")
         btn:Show()
         return btn
     end
 
     local function Populate()
+        local CHECK = "|TInterface\\RaidFrame\\ReadyCheck-Ready:12:12|t"
         local p       = EnsurePanel()
         ReleaseBtns(p)
         local ownKey  = Addon:GetCurrentProfileKey()
@@ -256,7 +267,7 @@ function Addon:InitCharPickerUI(frame, styleFunc)
         end
 
         for _, profileKey in ipairs(allKeys) do
-            -- Skip own character and the one currently being viewed.
+            -- Skip own character.
             local isOwn     = (profileKey == ownKey)
             -- Also compare case-insensitively for safety (realm capitalisation).
             if not isOwn then
@@ -264,12 +275,12 @@ function Addon:InitCharPickerUI(frame, styleFunc)
             end
             local isViewing = (profileKey == Addon._viewingChar)
             local isHidden  = (gdb and gdb.hiddenChars and gdb.hiddenChars[profileKey]) and true or false
-            if not isOwn and not isViewing and not isHidden then
+            if not isOwn and not isHidden then
                 local charName = (profileKey:match("^(.-)%s*%-") or profileKey):gsub("^%s+",""):gsub("%s+$","")
                 if charName == "" then charName = profileKey end
 
                 local classToken = classFor(profileKey)
-                local r, g, b    = Addon.THEME.text.r, Addon.THEME.text.g, Addon.THEME.text.b
+                local r, g, b    = 1, 1, 1
                 if classToken then
                     local cc = RAID_CLASS_COLORS and RAID_CLASS_COLORS[classToken]
                     if cc then r, g, b = cc.r, cc.g, cc.b end
@@ -279,47 +290,64 @@ function Addon:InitCharPickerUI(frame, styleFunc)
                 btn:ClearAllPoints()
                 btn:SetPoint("TOPLEFT", p, "TOPLEFT", CPICK_PAD, posY)
                 btn:SetHeight(CPICK_ROW_H)
-                btn:SetText(charName)
 
-                local tr = btn.Text or (btn.GetFontString and btn:GetFontString())
-                if tr then tr:SetTextColor(r, g, b, 1) end
+                if isViewing then
+                    -- Currently viewed: show ✔ prefix, disable clicking.
+                    btn:SetText(CHECK .. " " .. charName)
+                    btn:SetEnabled(false)
+                    local tr = btn.Text or (btn.GetFontString and btn:GetFontString())
+                    if tr then tr:SetTextColor(0, 1, 0, 0.9) end
+                    btn:SetScript("OnClick", nil)
+                    btn:SetScript("OnEnter", nil)
+                    btn:SetScript("OnLeave", nil)
+                else
+                    btn:SetText(charName)
+                    btn:SetEnabled(true)
+                    local tr = btn.Text or (btn.GetFontString and btn:GetFontString())
+                    if tr then tr:SetTextColor(r, g, b, 1) end
 
-                local _r, _g, _b, _pk = r, g, b, profileKey
-                btn:SetScript("OnEnter", function(self_)
-                    local fs = self_.Text or (self_.GetFontString and self_:GetFontString())
-                    if fs then fs:SetTextColor(1, 1, 0, 1) end
-                end)
-                btn:SetScript("OnLeave", function(self_)
-                    local fs = self_.Text or (self_.GetFontString and self_:GetFontString())
-                    if fs then fs:SetTextColor(_r, _g, _b, 1) end
-                end)
-                btn:SetScript("OnClick", function()
-                    p:Hide()
-                    Addon:SetViewingChar(_pk)
-                end)
+                    local _r, _g, _b, _pk = r, g, b, profileKey
+                    btn:SetScript("OnEnter", function(self_)
+                        local fs = self_.Text or (self_.GetFontString and self_:GetFontString())
+                        if fs then fs:SetTextColor(1, 1, 0, 1) end
+                    end)
+                    btn:SetScript("OnLeave", function(self_)
+                        local fs = self_.Text or (self_.GetFontString and self_:GetFontString())
+                        if fs then fs:SetTextColor(_r, _g, _b, 1) end
+                    end)
+                    btn:SetScript("OnClick", function()
+                        p:Hide()
+                        Addon:SetViewingChar(_pk)
+                    end)
+                end
                 tinsert(p._buttons, btn)
 
-                -- X button: hides this character from the dropdown.
-                local xBtn = AcquireXBtn(p)
-                xBtn:ClearAllPoints()
-                xBtn:SetPoint("TOPRIGHT", p, "TOPRIGHT", -CPICK_PAD, posY)
-                local _pkHide = profileKey
-                xBtn:SetScript("OnClick", function()
-                    p:Hide()
-                    local gdbH = Addon.db and Addon.db.global
-                    if gdbH then
-                        gdbH.hiddenChars = gdbH.hiddenChars or {}
-                        gdbH.hiddenChars[_pkHide] = true
-                    end
-                    -- If currently viewing the hidden char, return to own.
-                    if Addon._viewingChar == _pkHide then
-                        Addon:SetViewingChar(nil)
-                    end
-                    if Addon.RefreshHiddenCharsList then
-                        Addon:RefreshHiddenCharsList()
-                    end
-                end)
-                tinsert(p._xButtons, xBtn)
+                -- X button: only on non-viewed characters (can't hide while viewing).
+                if not isViewing then
+                    local xBtn = AcquireXBtn(p)
+                    xBtn:ClearAllPoints()
+                    xBtn:SetPoint("TOPRIGHT", p, "TOPRIGHT", -CPICK_PAD, posY)
+                    local _pkHide = profileKey
+                    xBtn:SetScript("OnClick", function()
+                        p:Hide()
+                        local gdbH = Addon.db and Addon.db.global
+                        if gdbH then
+                            gdbH.hiddenChars = gdbH.hiddenChars or {}
+                            gdbH.hiddenChars[_pkHide] = true
+                        end
+                        -- If currently viewing the hidden char, return to own.
+                        if Addon._viewingChar == _pkHide then
+                            Addon:SetViewingChar(nil)  -- also calls LayoutHeaderButtons
+                        elseif Addon.LayoutHeaderButtons then
+                            -- Re-evaluate button visibility (may now be empty).
+                            Addon:LayoutHeaderButtons()
+                        end
+                        if Addon.RefreshHiddenCharsList then
+                            Addon:RefreshHiddenCharsList()
+                        end
+                    end)
+                    tinsert(p._xButtons, xBtn)
+                end
                 posY = posY - CPICK_ROW_H
             end
         end

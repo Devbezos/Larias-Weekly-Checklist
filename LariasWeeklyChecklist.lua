@@ -101,14 +101,14 @@ do
         self.THEME = self.THEME or self.CONSTANTS.theme
 
         self.CONSTANTS.ui = self.CONSTANTS.ui or self.UI or {
-            frameW = 600,
+            frameW = 520,
             frameH = 650,
             padOuterX = 14,
             padOuterTop = 10,
             closeInset = 4,
             topRowH = 26,
             topRowRightInset = 34,
-            scrollTop = 38,
+            scrollTop = 54,
             scrollBottom = 16,
             scrollRight = 30,
             sectionGap = 10,
@@ -118,7 +118,7 @@ do
             headerTextExtraW = 28,
             itemMinH = 24,
             itemTextPad = 8,
-            itemTextWidth = 490,
+            itemTextWidth = 358,
             sectionInsetX = 14,
             trackH = 210,
             trackTopPad = 10,
@@ -288,6 +288,7 @@ local function SetupAddonDB()
             ilvlRefPos    = false,
             ilvlRefSize   = false,
             uiScalePct    = 100,
+            minimap       = {},  -- LibDBIcon position/hide state (account-wide)
             charClasses   = {},  -- [profileKey] = classToken (e.g. "WARRIOR")
             hiddenChars   = {},  -- [profileKey] = true (hidden from char picker dropdown)
             -- Per-character data, each keyed by "CharName - Realm".
@@ -408,7 +409,13 @@ local function SetupMinimapIcon()
         end,
     })
     
-    local minimapCfg = {}
+    -- Store minimap config in the global DB so LibDBIcon persists the icon
+    -- position and hide-state across sessions, and so Reset List never touches it.
+    local gdb = Addon.db and Addon.db.global
+    if gdb then
+        gdb.minimap = gdb.minimap or {}
+    end
+    local minimapCfg = (gdb and gdb.minimap) or {}
     icon:Register(addonName, dataObject, minimapCfg)
 end
 
@@ -931,6 +938,40 @@ function Addon:ApplyScrollLayout()
 
     scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -Addon.UI.scrollRight, Addon.UI.scrollBottom + extra)
     frame:SetScale(self:GetUIScale())
+
+    -- Recompute itemTextWidth from the live frame width so text never over-runs
+    -- or wastes space after a resize.
+    -- Formula: frameW - padOuterX - scrollRight - 2*sectionInsetX - checkboxOffset
+    -- checkboxOffset (32 box + 6 gap) = 38
+    local currentFrameW = frame:GetWidth() or Addon.UI.frameW
+    local newTextW = math.max(120, math.floor(
+        currentFrameW
+        - Addon.UI.padOuterX
+        - Addon.UI.scrollRight
+        - 2 * Addon.UI.sectionInsetX
+        - 38
+    ))
+    if newTextW ~= Addon.UI.itemTextWidth then
+        Addon.UI.itemTextWidth = newTextW
+        -- Apply directly to all live text labels immediately — SyncCheckboxesForSection
+        -- only runs when data changes, so we can't rely on a queued Refresh for this.
+        local headerTextW = newTextW + (Addon.UI.headerTextExtraW or 0)
+        for _, sectionFrame in ipairs(Addon._activeSections or {}) do
+            -- Update section header text width.
+            if sectionFrame._title and sectionFrame._title.SetWidth then
+                sectionFrame._title:SetWidth(headerTextW)
+            end
+            -- Update each checkbox's text label.
+            local checkboxes = sectionFrame._checkboxes or {}
+            for j = 1, #checkboxes do
+                local cb = checkboxes[j]
+                local textLabel = cb.text or cb.Text
+                if textLabel and textLabel.SetWidth then
+                    textLabel:SetWidth(newTextW)
+                end
+            end
+        end
+    end
 
     if self._trackingFrame and self.ResizeTrackingCols then
         self:ResizeTrackingCols()
@@ -1583,11 +1624,18 @@ function Addon:Refresh()
         self:ApplyScrollLayout()
     end
 
+    -- Update header buttons regardless of which tab is active (e.g. while on Options).
+    if self.LayoutHeaderButtons then self:LayoutHeaderButtons() end
+
     if tonumber(frame._lariasSelectedTab) ~= 1 then
         return
     end
 
     SyncAllDataAndFrames()
+
+    -- Re-run after SyncAllDataAndFrames so _sectionsById is fully populated and
+    -- the change-week button shows the real current week from the very first load.
+    if self.LayoutHeaderButtons then self:LayoutHeaderButtons() end
 
     local posY = -Addon.UI.sectionTopPad
     local paddingX = Addon.UI.sectionInsetX
@@ -1657,6 +1705,10 @@ function Addon:CreateFrame()
     end)
     frame:SetScript("OnSizeChanged", function()
         Addon:ApplyScrollLayout()
+        -- Queue a full refresh to recompute header heights (which may change if
+        -- a section title wraps differently at the new width). Debounced to once
+        -- per tick, so rapid resize drag doesn't spam rebuilds.
+        if Addon.RequestRefresh then Addon:RequestRefresh() end
     end)
     -- Hide the week picker whenever the main frame is hidden (close button,
     -- Toggle(), ESC, or any other dismiss path). The picker is parented to
@@ -1685,21 +1737,18 @@ function Addon:CreateFrame()
 
     frame:Hide()
 
-    if UISpecialFrames and frame.GetName then
-        local frameNameForSpecialFrames = frame:GetName()
-        if frameNameForSpecialFrames and frameNameForSpecialFrames ~= "" then
-            local exists = false
-            for i = 1, #UISpecialFrames do
-                if UISpecialFrames[i] == frameNameForSpecialFrames then
-                    exists = true
-                    break
-                end
-            end
-            if not exists then
-                tinsert(UISpecialFrames, frameNameForSpecialFrames)
-            end
+    -- Handle ESC via keyboard input. When the ilvl ref window is open it consumes
+    -- ESC itself (SetPropagateKeyboardInput(false)), so only this frame sees ESC
+    -- when ilvl ref is already closed.
+    frame:EnableKeyboard(true)
+    frame:SetScript("OnKeyDown", function(self, key)
+        if key == "ESCAPE" then
+            self:SetPropagateKeyboardInput(false)
+            self:Hide()
+        else
+            self:SetPropagateKeyboardInput(true)
         end
-    end
+    end)
 
     self:ApplyTheme(frame)
 
@@ -1779,6 +1828,7 @@ function Addon:CreateFrame()
                 textRegion:ClearAllPoints()
                 textRegion:SetPoint("CENTER", tabButton, "CENTER", 0, 0)
             end
+            if textRegion.SetTextColor then textRegion:SetTextColor(1, 1, 1, 1) end
         end
 
         if tabButton.CreateTexture and not tabButton._lariasCustomHighlight then
@@ -1859,7 +1909,6 @@ function Addon:CreateFrame()
         local btn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
         btn:SetSize(108, 22)
         StyleMainTabButton(btn)
-        btn:SetText(L.CHANGE_WEEK_BUTTON or "Change Week")
         changeWeekBtn              = btn
         frame._lariasChangeWeekBtn = btn
         return btn
@@ -2043,6 +2092,8 @@ function Addon:CreateFrame()
         if sf and sf.SetVerticalScroll then
             sf:SetVerticalScroll(0)
         end
+        -- Switch to list tab in case the user was on the Options tab.
+        if Addon.SelectMainTab then Addon:SelectMainTab(1) end
         if Addon.RequestRefresh then
             Addon:RequestRefresh()
         elseif Addon.Refresh then
@@ -2077,7 +2128,7 @@ function Addon:CreateFrame()
                     btn:SetPoint("TOPLEFT", picker, "TOPLEFT", PICKER_PAD, posY)
                     btn:SetHeight(PICKER_ROW_HEIGHT)
                     btn:SetText(label)
-
+                    btn:SetEnabled(true)
                     local capturedId = id
                     btn:SetScript("OnClick", function() HandlePick(capturedId, scrollFrame) end)
 
@@ -2135,13 +2186,99 @@ function Addon:CreateFrame()
     -- is disabled at load time) and positions them relative to closeBtn.
     -- Exposed as Addon:LayoutHeaderButtons() for the Options tab callbacks.
     local function LayoutHeaderButtons_()
+        if Addon._inLayoutHeaderButtons then return end
+        Addon._inLayoutHeaderButtons = true
         local dbLocal = Addon:EnsureDB()
         local showCW  = dbLocal.showChangeWeekBtn  ~= false
         local showIR  = dbLocal.showIlvlRefBtn     ~= false
         local showCP  = dbLocal.showCharPickerBtn  ~= false
 
+        -- Also hide the char picker when there is nothing to pick from: no other
+        -- characters in the dropdown and we are not currently viewing one.
+        if showCP then
+            local hasPickable = false
+            if Addon._viewingChar then
+                hasPickable = true   -- "back to me" row is available
+            elseif Addon.GetCharProfileKeys and Addon.GetCurrentProfileKey then
+                local ownKey  = Addon:GetCurrentProfileKey()
+                local gdb     = Addon.db and Addon.db.global
+                for _, charKey in ipairs(Addon:GetCharProfileKeys()) do
+                    local isOwn    = (charKey == ownKey) or (charKey:lower() == ownKey:lower())
+                    local isHidden = gdb and gdb.hiddenChars and gdb.hiddenChars[charKey]
+                    if not isOwn and not isHidden then
+                        hasPickable = true
+                        break
+                    end
+                end
+            end
+            if not hasPickable then showCP = false end
+        end
+
+        -- charPickerBtn sits in the TOP row (above changeWeekBtn).  Position it first
+        -- so changeWeekBtn and ilvlRefBtn can anchor to it.
+        local cpBtn = EnsureCharPickerBtn_()
+        if cpBtn then
+            if showCP then
+                cpBtn:SetScript("OnClick", function()
+                    if Addon._cpOnClick then Addon._cpOnClick() end
+                end)
+                cpBtn:ClearAllPoints()
+                cpBtn:SetPoint("TOPRIGHT", closeBtn, "TOPLEFT", -6, -2)
+                if Addon._cpUpdateLabel then Addon._cpUpdateLabel() end
+                cpBtn:Show()
+            else
+                -- Return to own character before hiding the picker.
+                -- Inline reset instead of SetViewingChar() to avoid re-entering
+                -- LayoutHeaderButtons (SetViewingChar now calls LayoutHeaderButtons).
+                if Addon._viewingChar then
+                    Addon._viewingChar = nil
+                    if Addon._cpUpdateLabel then Addon._cpUpdateLabel() end
+                    if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
+                end
+                cpBtn:Hide()
+            end
+        end
+
+        -- changeWeekBtn sits below cpBtn when both are visible, otherwise in the top row.
         if showCW then
             local btn = EnsureChangeWeekBtn_()
+            -- Label = current week's date range, or fallback to locale string.
+            local cwLabel = L.CHANGE_WEEK_BUTTON or "Change Week"
+            do
+                local db0       = Addon:EnsureDB()
+                local curId     = tostring(db0.startAtSectionId or "")
+                if curId == "" and Addon._order and Addon._order[1] then
+                    curId = tostring(Addon._order[1])
+                end
+                local secDef = curId ~= "" and Addon._sectionsById and Addon._sectionsById[curId]
+                if secDef then
+                    local extracted = ExtractMonthRangeLabel(secDef.title or curId)
+                    if extracted ~= "" then cwLabel = extracted end
+                end
+            end
+            btn:SetText(cwLabel)
+            -- Auto-size button width to fit the label text.
+            -- Deferred one frame so WoW has performed its layout pass
+            -- and GetStringWidth returns real pixel widths.
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0, function()
+                    if not (btn and btn.IsShown and btn:IsShown()) then return end
+                    local fs = btn.GetFontString and btn:GetFontString()
+                    local w  = 0
+                    if fs then
+                        if fs.GetUnboundedStringWidth then
+                            w = tonumber(fs:GetUnboundedStringWidth()) or 0
+                        end
+                        if w <= 0 and fs.GetStringWidth then
+                            w = tonumber(fs:GetStringWidth()) or 0
+                        end
+                    end
+                    if w <= 0 and btn.GetTextWidth then
+                        w = tonumber(btn:GetTextWidth()) or 0
+                    end
+                    btn:SetWidth(max(108, math.ceil(w) + 24))
+                end)
+            end
             btn:SetScript("OnClick", function()
                 local p = EnsureHeaderPicker()
                 if p and p.IsShown and p:IsShown() then
@@ -2158,42 +2295,26 @@ function Addon:CreateFrame()
                 end
             end)
             btn:ClearAllPoints()
-            btn:SetPoint("TOPRIGHT", closeBtn, "TOPLEFT", -6, -2)
+            if showCP and cpBtn then
+                -- Stack directly below the char picker button, right-aligned so it grows left.
+                btn:SetPoint("TOPRIGHT", cpBtn, "BOTTOMRIGHT", 0, -2)
+            else
+                btn:SetPoint("TOPRIGHT", closeBtn, "TOPLEFT", -6, -2)
+            end
             btn:Show()
         elseif changeWeekBtn then
             changeWeekBtn:Hide()
         end
 
-        -- charPickerBtn: visibility controlled by showCharPickerBtn option.
-        local cpBtn = EnsureCharPickerBtn_()
-        if cpBtn then
-            if showCP then
-                cpBtn:SetScript("OnClick", function()
-                    if Addon._cpOnClick then Addon._cpOnClick() end
-                end)
-                cpBtn:ClearAllPoints()
-                if showCW and changeWeekBtn then
-                    cpBtn:SetPoint("RIGHT", changeWeekBtn, "LEFT", -6, 0)
-                else
-                    cpBtn:SetPoint("TOPRIGHT", closeBtn, "TOPLEFT", -6, -2)
-                end
-                if Addon._cpUpdateLabel then Addon._cpUpdateLabel() end
-                cpBtn:Show()
-            else
-                -- Return to own character before hiding the picker.
-                if Addon.SetViewingChar then Addon:SetViewingChar(nil) end
-                cpBtn:Hide()
-            end
-        end
-
+        -- ilvlRefBtn anchors to the LEFT of the stacked column (cpBtn if shown,
+        -- else changeWeekBtn if shown), always on the top row.
         if showIR then
             local btn = EnsureIlvlRefBtn_()
             btn:ClearAllPoints()
-            local cpBtn = EnsureCharPickerBtn_()
-            if cpBtn and cpBtn:IsShown() then
-                btn:SetPoint("RIGHT", cpBtn, "LEFT", -6, 0)
+            if showCP and cpBtn then
+                btn:SetPoint("TOPRIGHT", cpBtn, "TOPLEFT", -6, 0)
             elseif showCW and changeWeekBtn then
-                btn:SetPoint("RIGHT", changeWeekBtn, "LEFT", -6, 0)
+                btn:SetPoint("TOPRIGHT", changeWeekBtn, "TOPLEFT", -6, -2)
             else
                 btn:SetPoint("TOPRIGHT", closeBtn, "TOPLEFT", -6, -2)
             end
@@ -2205,13 +2326,13 @@ function Addon:CreateFrame()
             end
         end
 
-        -- Minimum width: tabs on the left + gap + all visible right-side buttons.
+        -- Minimum width: charPickerBtn and changeWeekBtn now share one 108-wide column
+        -- (stacked vertically), so count that column only once.
         -- tabInsetX (padOuterX+sectionInsetX=28) + tab1 (80) + gap (6) + tab2 (80) = 194
         local _tabAreaW = (Addon.UI.padOuterX + Addon.UI.sectionInsetX) + 80 + 6 + 80
-        -- right side: closeInset(4) + close(32) + optional charPickerBtn(6+108) + optional buttons
+        -- right side: closeInset(4) + close(32) + stacked column (if either visible) + ilvlRef
         local _rightW = Addon.UI.closeInset + 32
-        if showCP then _rightW = _rightW + 6 + 108 end
-        if showCW then _rightW = _rightW + 6 + 108 end
+        if showCP or showCW then _rightW = _rightW + 6 + 108 end  -- shared stacked column
         if showIR then _rightW = _rightW + 6 + 108 end
         local _minW = _tabAreaW + 10 + _rightW  -- 10px breathing room between tabs and buttons
         if frame.SetResizeBounds then
@@ -2220,13 +2341,15 @@ function Addon:CreateFrame()
             frame:SetMinResize(_minW, 200)
         end
         -- Snap existing width up if it's already narrower than the new minimum.
-        if frame:GetWidth() < _minW then
+        local currentW = frame:GetWidth()
+        if currentW < _minW then
             frame:SetWidth(_minW)
             local _gdb = Addon.db and Addon.db.global
             if _gdb and _gdb.mainFrameSize then
                 _gdb.mainFrameSize.w = _minW
             end
         end
+        Addon._inLayoutHeaderButtons = nil
     end  -- LayoutHeaderButtons_
 
     Addon.LayoutHeaderButtons = function(self) LayoutHeaderButtons_() end
