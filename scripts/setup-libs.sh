@@ -16,7 +16,6 @@ declare -A LIBRARIES=(
     [CallbackHandler-1.0]="https://github.com/zerosnake0/CallbackHandler-1.0.git"
     [LibDataBroker-1.1]="https://github.com/tekkub/libdatabroker-1-1.git"
     [LibDBIcon-1.0]="https://github.com/zerosnake0/LibDBIcon-1.0.git"
-    [LibWindow-1.1]="https://github.com/wowace-clone/LibWindow-1.1.git"
     [Ace3]="https://github.com/WoWUIDev/Ace3.git"
 )
 

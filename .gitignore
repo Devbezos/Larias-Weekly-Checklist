@@ -2,4 +2,5 @@
 scripts/deploy_to_wow.ps1
 
 # Local dev dependencies (cloned by scripts/setup-libs.ps1)
-Libs/
+# LibWindow-1.1 is excluded from this rule because it is bundled directly in the
+# repo (patched to fix the SVN $Revision$ keyword not expanding in Git clones).
