@@ -32,7 +32,6 @@ local DATASET = {
             { id = "with_dmf_buff_hunt_down_each_region_s_treasures_for_free_renown_see_doc_for_guide", text = "With DMF buff, hunt down each region's treasures for free Renown. See doc for guide" },
             { id = "complete_4x_prey_on_normal_difficulty_for_veteran_gear", text = "Complete 4x Prey on normal difficulty for veteran gear." },
             { id = "once_dmf_opens_complete_side_quest_chains_for_renown_can_be_done_on_alts_to_level_at_same_time", text = "Once DMF opens, complete side quest chains for renown. (can be done on alts to level at same time)" },
-            { id = "very_unlikely_see_doc_for_info_complete_a_world_tour_of_m0_s_after_full_release_but_before_your_region_s_reset", text = "(VERY unlikely, see doc for info) Complete a world tour of M0's after full release but before your region's reset" },
         },
     },
     {
