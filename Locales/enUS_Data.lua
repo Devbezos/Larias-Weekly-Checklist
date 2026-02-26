@@ -22,7 +22,7 @@ local DATASET = {
         id = "early_access_feb_26_through_mar_2_pay_to_win",
         title = "Early Access - Feb 26 through Mar 2 - Pay to Win",
         items = {
-            { id = "do_not_spend_any_crests_until_told_to_do_so", text = "Do not spend any Crests until told to do so" },
+            { id = "log_on_to_each_character_you_plan_on_leveling_so_they_start_accumulating_rested_xp", text = "Log on to each character you plan on leveling so they start accumulating rested XP." },
             { id = "level_characters_warmode_on_to_90_dmf_opens_sunday_for_10_more_exp", text = "Level characters warmode on to 90 - DMF opens Sunday for 10% more exp" },
             { id = "if_available_complete_the_weekly_saltheril_s_soiree_in_eversong_woods_with_the_dmf_buff", text = "If available, complete the weekly Saltheril's Soiree in Eversong Woods with the DMF buff." },
             { id = "if_available_complete_the_weekly_abundance_event_in_zul_aman_with_the_dmf_buff", text = "If available, complete the weekly Abundance Event in Zul'aman with the DMF buff." },
