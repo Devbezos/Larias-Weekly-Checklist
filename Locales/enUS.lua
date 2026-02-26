@@ -25,9 +25,16 @@ local STRINGS = {
 	OPTIONS_HIDE_GREAT_VAULT = "Hide Great Vault",
 	OPTIONS_HIDE_CURRENCY = "Hide Currency",
 	HIDE_COMPLETED_WEEKS = "Hide completed weeks",
-	OPTIONS_HIDE_CHANGE_WEEK_BTN = 'Hide Change Week button',
-	OPTIONS_HIDE_ILVL_REF_BTN = 'Hide Ilvl Refs button',
+	OPTIONS_HIDE_CHANGE_WEEK_BTN = 'Hide week selector',
+	OPTIONS_HIDE_ILVL_REF_BTN = 'Hide ilvl references',
+	OPTIONS_HIDE_CHAR_SELECT = "Hide character selector",
+	OPTIONS_HIDDEN_CHARS_TITLE = "Hidden characters:",
+	OPTIONS_HIDDEN_CHARS_NONE = "None",
 	RESET_BUTTON = "Reset List",
+	UI_SCALE_LABEL = "Scale",
+	UI_SCALE_MIN_LABEL = "50%",
+	UI_SCALE_MAX_LABEL = "150%",
+	OPTIONS_HIDE_SCALE_SLIDER = "Hide scale slider",
 
 	-- List tab
 	DONE_PREFIX = "[Done] ",
@@ -35,8 +42,9 @@ local STRINGS = {
 	-- Tracking panel
 	TRACKING_GREAT_VAULT_TITLE = "Great Vault",
 	TRACKING_CURRENCY_TITLE = "Currency",
-	TRACKING_GV_RAID = "Raid",
+	TRACKING_GV_RAID     = "Raid",
 	TRACKING_GV_DUNGEONS = "Dungeons",
+	TRACKING_GV_WORLD    = "World",
 	TRACKING_NA = "N/A",
 
 	TRACKING_SPARKS_LABEL = "Sparks:",
@@ -67,12 +75,12 @@ local STRINGS = {
 	-- Minimap tooltip
 	MINIMAP_TOOLTIP_LEFT_CLICK_TOGGLE = "Left-click: Toggle checklist",
 	MINIMAP_TOOLTIP_RIGHT_CLICK_OPTIONS = "Right-click: Options",
+	MINIMAP_TOOLTIP_MIDDLE_CLICK_ILVL = "Middle-click: Ilvl Refs",
 
 	-- Main window
-	TAB_LIST = "List",
 	TAB_OPTIONS = "Options",
 	CHANGE_WEEK_BUTTON = "Change Week",
-	ILVLREF_BUTTON = "Ilvl Refs",
+	ILVLREF_BUTTON = "View Item Levels",
 
 	-- Item level reference popup
 	ILVLREF_WINDOW_TITLE  = "Midnight Season 1 Item Level Reference",
@@ -116,6 +124,9 @@ local STRINGS = {
 	ILVLREF_RAID_MYTHIC        = "Mythic",
 
 	ILVLREF_DELVE_TIER_FMT     = "T%d",
+
+	ILVLREF_TOGGLE_EXPAND = "Expand",
+	ILVLREF_TOGGLE_SHRINK = "Shrink",
 
 	-- Slash commands
 	SLASH_USAGE_TOGGLE = "Usage: /larias or /lcl to toggle the checklist",

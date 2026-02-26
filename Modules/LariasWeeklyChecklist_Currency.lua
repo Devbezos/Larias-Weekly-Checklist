@@ -24,6 +24,27 @@ local TrackingUI = { left = {}, right = {} }
 local tonumber, tostring, type = tonumber, tostring, type
 local floor, max, abs = math.floor, math.max, math.abs
 local tinsert, tremove, tconcat, tsort = table.insert, table.remove, table.concat, table.sort
+-- Forward declaration: defined later (after all data-gathering helpers).
+local ComputeSnapshotData
+
+-- Module-level constant: avoids a new table allocation on every ResizeTrackingCols call.
+local LEFT_LINE_KEYS = { "line1", "line2", "line3", "line4", "line5", "line6", "line7", "line8", "line9" }
+
+-- Great Vault 3-column grid layout constants (one grid per section).
+-- Single-row layout: section label left, then 3 ilvl cells; no threshold row.
+local GV_LABEL_W     = 60   -- px reserved for the section label to the left of each grid
+local GV_LABEL_GAP   =  5   -- gap between label right edge and grid left border (px)
+local GV_GRID_X      = GV_LABEL_W + GV_LABEL_GAP  -- x offset of grid left border = 65
+local GV_ROW_H       = 24   -- height of the single ilvl row (px)
+local GV_GRID_H      = 1 + GV_ROW_H + 1  -- top border + row + bot border = 26px
+local GV_BLOCK_STEP  = GV_GRID_H + 6                      -- 32px between sections
+local GV_BLOCK_Y     = { 0, -GV_BLOCK_STEP, -GV_BLOCK_STEP * 2 } -- {0, -32, -64}
+local GV_CELL_W      = 40   -- wider single cell (no threshold row sharing width)
+local GV_GRID_W      = GV_CELL_W * 3                                -- total grid width = 120px
+local GV_CELL_ASPECT = GV_CELL_W / GV_ROW_H  -- preserved when cells scale (≈1.667)
+local GV_THRESHOLDS  = { {2,4,6}, {1,4,8}, {2,4,8} }            -- raid, dungeons, world
+local GV_SECTION_KEYS   = { "TRACKING_GV_RAID", "TRACKING_GV_DUNGEONS", "TRACKING_GV_WORLD" }
+local GV_SECTION_LABELS = { "Raid", "Dungeons", "World" }
 
 local function IsFrameShown(frameObj)
     -- Safe IsShown wrapper; treats missing frames as hidden.
@@ -43,6 +64,17 @@ local function Wipe(tableToWipe)
 end
 
 Addon.TRACKING = Addon.TRACKING or {}
+
+-- Returns true when the logged-in character has previously saved tracking data.
+-- Intentionally bypasses _viewingChar so it always reflects the OWN character;
+-- used to decide whether background event-driven snapshot updates should run.
+function Addon:HasTrackingSnapshot()
+    if not (self.db and self.db.global) then return false end
+    local ownKey = self:GetCurrentProfileKey()
+    local cdb    = self.db.global.chars and self.db.global.chars[ownKey]
+    local snap   = cdb and cdb.trackingSnapshot
+    return snap ~= nil and (snap.leftLines ~= nil or snap.rightRows ~= nil)
+end
 
 local function SafeRegisterEvent(frame, eventName)
     -- Some events aren’t present on all client versions; register defensively.
@@ -72,25 +104,59 @@ function Addon:ConfigureTrackingEvents(parentFrame, showGreatVault, showCurrency
         trackingEventFrame:RegisterEvent("CURRENCY_DISPLAY_UPDATE")
         trackingEventFrame:RegisterEvent("BAG_UPDATE_DELAYED")
         trackingEventFrame:RegisterEvent("QUEST_TURNED_IN")
-        SafeRegisterEvent(trackingEventFrame, "QUEST_LOG_UPDATE")
         SafeRegisterEvent(trackingEventFrame, "CATALYST_CHARGES_UPDATED")
         SafeRegisterEvent(trackingEventFrame, "CATALYST_UPDATE")
         SafeRegisterEvent(trackingEventFrame, "ITEM_INTERACTION_ITEM_SELECTION_UPDATED")
         trackingEventFrame:RegisterEvent("ITEM_DATA_LOAD_RESULT")
     end
 
-    if not trackingEventFrame._lariasOnEventSet then
-        trackingEventFrame._lariasOnEventSet = true
-        trackingEventFrame:SetScript("OnEvent", function()
-            local isMainFrameVisible = IsFrameShown(parentFrame)
-            local isTrackingPanelVisible = IsFrameShown(Addon._trackingFrame)
-            if isMainFrameVisible and isTrackingPanelVisible then
-                -- Never run per-frame: we update on relevant events only,
-                -- and then funnel through a throttle (see RequestTrackingUpdate).
-                Addon:RequestTrackingUpdate()
+    -- Always overwrite the handler so the parentFrame upvalue stays current;
+    -- OnEnable may call this with nil before the frame is created.
+    trackingEventFrame:SetScript("OnEvent", function()
+        local isMainFrameVisible = IsFrameShown(parentFrame)
+        local isTrackingPanelVisible = IsFrameShown(Addon._trackingFrame)
+        if isMainFrameVisible and isTrackingPanelVisible then
+            -- Normal path: panel is open, do a full UI update.
+            Addon:RequestTrackingUpdate()
+        elseif Addon:HasTrackingSnapshot() then
+            -- Background path: this character has prior snapshot data; keep it
+            -- fresh via background updates even while the panel is not open.
+            Addon:RequestBackgroundSnapshotUpdate()
+        end
+    end)
+end
+
+function Addon:RequestBackgroundSnapshotUpdate()
+    -- Throttled background snapshot save (fires when the panel is hidden but
+    -- the character already has snapshot data from a previous session).
+    if self._bgSnapshotPending then return end
+    self._bgSnapshotPending = true
+
+    if not self._bgSnapshotRunner then
+        local addon = self
+        self._bgSnapshotRunner = function()
+            addon._bgSnapshotPending = nil
+            if addon.UpdateSnapshotBackground then
+                addon:UpdateSnapshotBackground()
             end
-        end)
+        end
     end
+
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0.2, self._bgSnapshotRunner)
+    else
+        self._bgSnapshotRunner()
+    end
+end
+
+function Addon:UpdateSnapshotBackground()
+    -- Compute current data from WoW APIs and save to the profile snapshot
+    -- without rendering anything to the UI (frame may be hidden/uncreated).
+    if not self:HasTrackingSnapshot() then return end
+    local db = self:EnsureDB()
+    local snap = db.trackingSnapshot
+    if type(snap) ~= "table" then return end
+    ComputeSnapshotData(snap)
 end
 
 function Addon:RequestTrackingUpdate()
@@ -143,7 +209,8 @@ local COLORS = {
     red    = "ffff4040",
     yellow = "ffffd34d",
     green  = "ff40ff40",
-    dim    = "ffbfbfbf",
+    white  = "ffffffff",
+    dim    = "ff808080",
 }
 
 local function ColorWrap(hex, txt)
@@ -185,13 +252,11 @@ local function IsMainFrameOnListTab()
 end
 
 local function FormatXY(currentAmount, maxAmount)
-    -- Standard progress format with infinity fallback when there is no max.
+    -- Standard progress format: always expects a positive max.
     currentAmount = tonumber(currentAmount) or 0
     maxAmount = tonumber(maxAmount) or 0
     if maxAmount > 0 then return ("%d/%d"):format(currentAmount, maxAmount) end
-    local infiniteString = L.TRACKING_INF
-    if type(infiniteString) ~= "string" or infiniteString == "" then infiniteString = "∞" end
-    return ("%d/%s"):format(currentAmount, infiniteString)
+    return tostring(currentAmount)
 end
 
 local function ColorForXY(currentAmount, maxAmount)
@@ -236,18 +301,68 @@ local function GetCrestAchievementID(i)
 end
 
 local function FormatCurrencyProgressParts(currencyID)
-    -- Returns (qty, cap) where cap is weekly max or total max.
+    -- Returns (qty, cap) where:
+    --   weekly cap exists  → qty = currently held,
+    --                        cap = currently held + weekly remaining
+    --                              (i.e. the most you could have by end of week)
+    --   no weekly cap, has total max → qty = currently held, cap = total max
+    --   no cap at all               → qty = currently held, cap = 0 (no cap shown)
     if not currencyID or not C_CurrencyInfo or not C_CurrencyInfo.GetCurrencyInfo then return nil end
     local info = C_CurrencyInfo.GetCurrencyInfo(currencyID)
     if not info then return nil end
 
-    local qty = info.quantity or 0
     local weeklyMax = info.maxWeeklyQuantity
-    local maxQty = info.maxQuantity
+    if weeklyMax and weeklyMax > 0 then
+        local held         = info.quantity or 0
+        local weeklyEarned = info.weeklyQuantity or 0
+        local weeklyLeft   = math.max(0, weeklyMax - weeklyEarned)
+        return held, held + weeklyLeft
+    end
 
-    if weeklyMax and weeklyMax > 0 then return qty, weeklyMax end
+    local qty    = info.quantity or 0
+    local maxQty = info.maxQuantity
     if maxQty and maxQty > 0 then return qty, maxQty end
     return qty, 0
+end
+
+local function GetCurrencyIconID(currencyID)
+    -- Returns the iconFileID for a currency, or nil when unavailable.
+    local id = tonumber(currencyID)
+    if not (id and id > 0) then return nil end
+    if not (C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo) then return nil end
+    local info = C_CurrencyInfo.GetCurrencyInfo(id)
+    return info and info.iconFileID or nil
+end
+
+local function GetCurrencyName(currencyID)
+    -- Returns the in-game display name for a currency from the WoW API.
+    local id = tonumber(currencyID)
+    if not (id and id > 0) then return nil end
+    if not (C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo) then return nil end
+    local info = C_CurrencyInfo.GetCurrencyInfo(id)
+    return info and info.name or nil
+end
+
+-- Standard WoW item-quality hex colors (AARRGGBB, matching ITEM_QUALITY_COLORS).
+local QUALITY_HEX = {
+    [0] = "ff9d9d9d",  -- Poor (gray)
+    [1] = "ffffffff",  -- Common (white)
+    [2] = "ff1eff00",  -- Uncommon (green)
+    [3] = "ff0070dd",  -- Rare (blue)
+    [4] = "ffa335ee",  -- Epic (purple)
+    [5] = "ffff8000",  -- Legendary (orange)
+    [6] = "ffe6cc80",  -- Artifact / Token
+    [7] = "ff00ccff",  -- Heirloom
+}
+local function GetCurrencyQualityColor(currencyID)
+    -- Returns an 8-char AARRGGBB hex matching the currency's in-game rarity.
+    local id = tonumber(currencyID)
+    if not (id and id > 0) then return COLORS.dim end
+    if not (C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo) then return COLORS.dim end
+    local info = C_CurrencyInfo.GetCurrencyInfo(id)
+    if not info then return COLORS.dim end
+    local q = tonumber(info.quality)
+    return (q and QUALITY_HEX[q]) or COLORS.dim
 end
 
 local function GetCrestLabelText(currencyID)
@@ -423,30 +538,34 @@ local function MakeGVIlvlsRow(ilvls, maxPossible, parts)
     return tconcat(parts, " ")
 end
 
-local GV_TYPE_MPLUS = (Enum and Enum.WeeklyRewardChestActivityType and Enum.WeeklyRewardChestActivityType.MythicPlus) or 1
-local GV_TYPE_RAID  = (Enum and Enum.WeeklyRewardChestActivityType and Enum.WeeklyRewardChestActivityType.Raid) or 3
+local GV_TYPE_MPLUS  = (Enum and Enum.WeeklyRewardChestActivityType and Enum.WeeklyRewardChestActivityType.MythicPlus) or 1
+local GV_TYPE_WORLD  = (Enum and Enum.WeeklyRewardChestActivityType and Enum.WeeklyRewardChestActivityType.World) or 2
+local GV_TYPE_RAID   = (Enum and Enum.WeeklyRewardChestActivityType and Enum.WeeklyRewardChestActivityType.Raid) or 3
 local function GetGreatVaultBlockLines()
-    -- Returns 6 lines representing GV raid/dungeons blocks.
+    -- Returns 9 lines representing GV raid/dungeons/world blocks.
     -- Uses a reusable cache table to minimize allocations during throttled updates.
     local cache = Addon.TRACKING._gvCache
     if not cache then
         cache = {
-            out = { "", "", "", "", "", "" },
+            out = { "", "", "", "", "", "", "", "", "" },
             rIlvls = {},
             mIlvls = {},
+            wIlvls = {},
             parts = {},
         }
         Addon.TRACKING._gvCache = cache
     end
 
     local out = cache.out
-    out[1], out[2], out[3], out[4], out[5], out[6] = "", "", "", "", "", ""
+    out[1], out[2], out[3], out[4], out[5], out[6], out[7], out[8], out[9] = "", "", "", "", "", "", "", "", ""
 
     if not C_WeeklyRewards or not C_WeeklyRewards.GetActivities then
         out[1] = MakeGVHeader(L.TRACKING_GV_RAID or "Raid")
         out[2] = ColorWrap(COLORS.red, L.TRACKING_NA or "")
         out[4] = MakeGVHeader(L.TRACKING_GV_DUNGEONS or "Dungeons")
         out[5] = ColorWrap(COLORS.red, L.TRACKING_NA or "")
+        out[7] = MakeGVHeader(L.TRACKING_GV_WORLD or "World")
+        out[8] = ColorWrap(COLORS.red, L.TRACKING_NA or "")
         return out
     end
 
@@ -456,18 +575,23 @@ local function GetGreatVaultBlockLines()
         out[2] = ColorWrap(COLORS.red, L.TRACKING_NA or "")
         out[4] = MakeGVHeader(L.TRACKING_GV_DUNGEONS or "Dungeons")
         out[5] = ColorWrap(COLORS.red, L.TRACKING_NA or "")
+        out[7] = MakeGVHeader(L.TRACKING_GV_WORLD or "World")
+        out[8] = ColorWrap(COLORS.red, L.TRACKING_NA or "")
         return out
     end
 
     local TYPE_MPLUS = GV_TYPE_MPLUS
+    local TYPE_WORLD = GV_TYPE_WORLD
     local TYPE_RAID  = GV_TYPE_RAID
 
     Wipe(cache.rIlvls)
     Wipe(cache.mIlvls)
-    
+    Wipe(cache.wIlvls)
+
     local raidTotal, raidComplete, raidMaxIlvl = 0, 0, 0
     local mythicTotal, mythicComplete, mythicMaxIlvl = 0, 0, 0
-    local raidExampleMax, dungeonExampleMax = 0, 0
+    local worldTotal, worldComplete, worldMaxIlvl = 0, 0, 0
+    local raidExampleMax, dungeonExampleMax, worldExampleMax = 0, 0, 0
 
     for idx = 1, #activities do
         local activity = activities[idx]
@@ -504,11 +628,28 @@ local function GetGreatVaultBlockLines()
             
             local exLevel = GetExampleRewardIlvlForActivity(activity)
             if exLevel > dungeonExampleMax then dungeonExampleMax = exLevel end
+
+        elseif activityType == TYPE_WORLD then
+            worldTotal = worldTotal + 1
+            local level = 0
+            if IsActivityComplete(activity) then
+                worldComplete = worldComplete + 1
+                level = GetActivityRewardIlvl(activity)
+                if level <= 0 then
+                    level = GetExampleRewardIlvlForActivity(activity)
+                end
+                if level > worldMaxIlvl then worldMaxIlvl = level end
+            end
+            cache.wIlvls[#cache.wIlvls + 1] = level
+
+            local exLevel = GetExampleRewardIlvlForActivity(activity)
+            if exLevel > worldExampleMax then worldExampleMax = exLevel end
         end
     end
 
-    local raidMax = (raidExampleMax > 0) and raidExampleMax or raidMaxIlvl
+    local raidMax    = (raidExampleMax > 0)    and raidExampleMax    or raidMaxIlvl
     local dungeonMax = (dungeonExampleMax > 0) and dungeonExampleMax or mythicMaxIlvl
+    local worldMax   = (worldExampleMax > 0)   and worldExampleMax   or worldMaxIlvl
 
     out[1] = MakeGVHeader(L.TRACKING_GV_RAID or "Raid")
     out[2] = (raidTotal > 0) and MakeGVThresholdsString(raidComplete, raidTotal, { 2, 4, 6 }, cache.parts) or ColorWrap(COLORS.red, L.TRACKING_NA or "")
@@ -518,7 +659,40 @@ local function GetGreatVaultBlockLines()
     out[5] = (mythicTotal > 0) and MakeGVThresholdsString(mythicComplete, mythicTotal, { 1, 4, 8 }, cache.parts) or ColorWrap(COLORS.red, L.TRACKING_NA or "")
     out[6] = (mythicTotal > 0) and MakeGVIlvlsRow(cache.mIlvls, dungeonMax, cache.parts) or ""
 
+    out[7] = MakeGVHeader(L.TRACKING_GV_WORLD or "World")
+    out[8] = (worldTotal > 0) and MakeGVThresholdsString(worldComplete, worldTotal, { 2, 4, 8 }, cache.parts) or ColorWrap(COLORS.red, L.TRACKING_NA or "")
+    out[9] = (worldTotal > 0) and MakeGVIlvlsRow(cache.wIlvls, worldMax, cache.parts) or ""
+
+    -- Populate structured grid data for ApplyGreatVaultGrid.
+    cache.gridBlocks = cache.gridBlocks or {}
+    local gb = cache.gridBlocks
+    gb[1] = {
+        available = raidTotal   > 0, complete = raidComplete,   maxIlvl = raidMax,
+        slots = { { thresh=2, ilvl=cache.rIlvls[1] or 0 },
+                  { thresh=4, ilvl=cache.rIlvls[2] or 0 },
+                  { thresh=6, ilvl=cache.rIlvls[3] or 0 } },
+    }
+    gb[2] = {
+        available = mythicTotal > 0, complete = mythicComplete, maxIlvl = dungeonMax,
+        slots = { { thresh=1, ilvl=cache.mIlvls[1] or 0 },
+                  { thresh=4, ilvl=cache.mIlvls[2] or 0 },
+                  { thresh=8, ilvl=cache.mIlvls[3] or 0 } },
+    }
+    gb[3] = {
+        available = worldTotal  > 0, complete = worldComplete,  maxIlvl = worldMax,
+        slots = { { thresh=2, ilvl=cache.wIlvls[1] or 0 },
+                  { thresh=4, ilvl=cache.wIlvls[2] or 0 },
+                  { thresh=8, ilvl=cache.wIlvls[3] or 0 } },
+    }
+
     return out
+end
+
+local function GetGreatVaultGridData()
+    -- Refresh the GV cache and return the structured per-slot data for grid rendering.
+    GetGreatVaultBlockLines()
+    local c = Addon.TRACKING and Addon.TRACKING._gvCache
+    return c and c.gridBlocks
 end
 
 -- Sparks row: currency progress with weekly/total cap semantics.
@@ -529,21 +703,19 @@ local function GetSparksParts()
         return "", ""
     end
 
-    local label = ColorWrap(COLORS.dim, L.TRACKING_SPARKS_LABEL or "")
+    local name = GetCurrencyName(id) or L.TRACKING_SPARKS_LABEL or ""
+    local label = ColorWrap(GetCurrencyQualityColor(id), name)
     local cur, c = FormatCurrencyProgressParts(id)
-    cur = cur or 0
+    cur = tonumber(cur) or 0
     c = tonumber(c) or 0
 
-    local xy
-    local color
+    local xy, color
     if c > 0 then
         xy = FormatXY(cur, c)
         color = ColorForXY(cur, c)
     else
-        local inf = L.TRACKING_INF
-        if type(inf) ~= "string" or inf == "" then inf = "∞" end
-        xy = ("%d/%s"):format(tonumber(cur) or 0, inf)
-        color = ((tonumber(cur) or 0) <= 0) and COLORS.red or COLORS.yellow
+        xy = tostring(cur)
+        color = COLORS.green
     end
     return label, ColorWrap(color, xy)
 end
@@ -554,6 +726,18 @@ local function GetTrackedQuestID(key)
     q = tonumber(q) or 0
     if q <= 0 then return nil end
     return q
+end
+
+-- Quest completion state as a raw boolean, for snapshot persistence.
+-- Returns true (done), false (not done), or nil (quest disabled / API unavailable).
+local function GetQuestDoneRaw(questKey)
+    local questID = GetTrackedQuestID(questKey)
+    if not questID then return nil end
+    if C_QuestLog and C_QuestLog.IsQuestFlaggedCompleted then
+        local ok, done = pcall(C_QuestLog.IsQuestFlaggedCompleted, questID)
+        if ok then return done and true or false end
+    end
+    return nil
 end
 
 -- Quest row: returns (label,value) as colored text based on completion.
@@ -753,23 +937,25 @@ local function GetCrestLines()
     for i = 1, crestCount do
         local id = ids[i]
         if id then
-            local labelText = GetCrestLabelText(id)
-            if labelText then
+            local name = GetCurrencyName(id) or GetCrestLabelText(id) or tostring(id)
+            if name then
                 local cur = crest.cur[i]
                 local cap = crest.cap[i]
-
-                local forceGreen = crest.unlocked[i] or false
 
                 local xy
                 local color
                 if cap > 0 then
                     xy = FormatXY(cur, cap)
-                    color = forceGreen and COLORS.green or ColorForXY(cur, cap)
+                    if cur >= cap then
+                        color = COLORS.green   -- weekly cap reached
+                    elseif crest.unlocked[i] then
+                        color = COLORS.yellow  -- not capped, but achievement earned
+                    else
+                        color = COLORS.red     -- not capped, achievement not yet earned
+                    end
                 else
-                    local inf = L.TRACKING_INF
-                    if type(inf) ~= "string" or inf == "" then inf = "∞" end
-                    xy = ("%d/%s"):format(cur, inf)
-                    color = forceGreen and COLORS.green or ((cur <= 0) and COLORS.red or COLORS.green)
+                    xy = tostring(cur)
+                    color = COLORS.green       -- no cap
                 end
 
                 local tradeUp = ""
@@ -782,15 +968,8 @@ local function GetCrestLines()
                     end
                 end
 
-                local lbl = ColorWrap(COLORS.dim, tostring(labelText)) .. tradeUp
+                local lbl = ColorWrap(GetCurrencyQualityColor(id), tostring(name)) .. tradeUp
                 local val = ColorWrap(color, xy)
-                labelOut[i] = lbl
-                valueOut[i] = val
-                out[i] = lbl .. " " .. val
-            else
-                local fmt = L.TRACKING_CREST_ID_LABEL_FMT or "%s"
-                local lbl = ColorWrap(COLORS.dim, (fmt):format(tostring(id)))
-                local val = ColorWrap(COLORS.red, L.TRACKING_NA or "")
                 labelOut[i] = lbl
                 valueOut[i] = val
                 out[i] = lbl .. " " .. val
@@ -810,6 +989,32 @@ local function GetCrestLines()
     return out, labelOut, valueOut, crestCount
 end
 
+-- Raw catalyst charge count for snapshot persistence (no cap, no color).
+-- Returns a number or nil when the row should be suppressed entirely.
+local function GetCatalystQtyRaw()
+    local cur
+    local tracking = Addon.TRACKING
+    local id = tracking and tracking.catalystCurrencyID
+    local hasConfiguredID = (id and tonumber(id) and tonumber(id) > 0) and true or false
+    if hasConfiguredID then
+        local qty, _ = FormatCurrencyProgressParts(tonumber(id))
+        cur = tonumber(qty)
+    end
+    if cur == nil and C_Catalyst then
+        if C_Catalyst.GetCharges then
+            local charges = C_Catalyst.GetCharges()
+            if type(charges) == "table" then
+                cur = tonumber(charges.currentCharges or charges.numCharges or charges.charges)
+            end
+        end
+        if cur == nil and C_Catalyst.GetNumCharges then
+            cur = tonumber(C_Catalyst.GetNumCharges())
+        end
+    end
+    if cur == nil and not hasConfiguredID then return nil end
+    return cur
+end
+
 local function GetCatalystParts()
     -- Catalyst charges row.
     -- Hides entirely when no configured ID and C_Catalyst is unavailable.
@@ -817,6 +1022,8 @@ local function GetCatalystParts()
 
     local id = Addon.TRACKING and Addon.TRACKING.catalystCurrencyID
     local hasConfiguredID = (id and tonumber(id) and tonumber(id) > 0) and true or false
+    local catName = (hasConfiguredID and GetCurrencyName(tonumber(id))) or L.TRACKING_CATALYST_LABEL or ""
+    local catLabelColor = (hasConfiguredID and GetCurrencyQualityColor(tonumber(id))) or COLORS.dim
     if hasConfiguredID then
         local qty, c = FormatCurrencyProgressParts(id)
         cur = tonumber(qty)
@@ -848,21 +1055,49 @@ local function GetCatalystParts()
             return "", ""
         end
 
-        return ColorWrap(COLORS.dim, L.TRACKING_CATALYST_LABEL or ""), ColorWrap(COLORS.red, L.TRACKING_NA or "")
+        return ColorWrap(catLabelColor, catName), ColorWrap(COLORS.red, L.TRACKING_NA or "")
     end
 
     if cap and cap > 0 then
         local xy = FormatXY(cur, cap)
         local color = ColorForXY(cur, cap)
-        return ColorWrap(COLORS.dim, L.TRACKING_CATALYST_LABEL or ""), ColorWrap(color, xy)
+        return ColorWrap(catLabelColor, catName), ColorWrap(color, xy)
     end
 
-    local color = (cur <= 0) and COLORS.red or COLORS.yellow
-    return ColorWrap(COLORS.dim, L.TRACKING_CATALYST_LABEL or ""), ColorWrap(color, ("%d"):format(cur))
+    local color = (cur <= 0) and COLORS.red or COLORS.green
+    return ColorWrap(catLabelColor, catName), ColorWrap(color, ("%d"):format(cur))
+end
+
+local function GetCofferKeysParts()
+    -- Restored Coffer Keys row using the configured currency ID.
+    local id = Addon.TRACKING and Addon.TRACKING.cofferKeysCurrencyID
+    if not (id and tonumber(id) and tonumber(id) > 0) then return "", "" end
+    id = tonumber(id)
+    local name = GetCurrencyName(id) or "Restored Coffer Keys"
+    local label = ColorWrap(GetCurrencyQualityColor(id), name)
+    local cur, cap = FormatCurrencyProgressParts(id)
+    cur = tonumber(cur) or 0
+    cap = tonumber(cap) or 0
+    local xy, color
+    if cap > 0 then
+        xy = FormatXY(cur, cap)
+        color = ColorForXY(cur, cap)
+    else
+        xy = tostring(cur)
+        color = (cur <= 0) and COLORS.red or COLORS.green
+    end
+    return label, ColorWrap(color, xy)
 end
 
 local function ComputeWantTrackingPanel(db)
     -- Decide whether the tracking panel should be shown at all.
+    if Addon._viewingChar then
+        -- When viewing another character, only show the panel if we have a
+        -- stored snapshot for them (they've opened the addon at least once).
+        local snap = db.trackingSnapshot
+        local hasData = snap and (snap.leftLines ~= nil or (snap.rightRows ~= nil and #snap.rightRows > 0))
+        return hasData and IsMainFrameOnListTab() and true or false
+    end
     local wantPanel = (db.showGreatVault or db.showCurrency) and true or false
     if wantPanel and not IsMainFrameOnListTab() then
         wantPanel = false
@@ -880,26 +1115,38 @@ local function EnsureTrackingPanelCreatedIfNeeded(wantPanel)
     end
 end
 
-local function ApplyGreatVaultLines(lines)
-    -- Write left column (Great Vault) lines and collapse empties.
-    SetTextIfChanged(TrackingUI.left.line1, lines[1])
-    SetTextIfChanged(TrackingUI.left.line2, lines[2])
-    SetTextIfChanged(TrackingUI.left.line3, lines[3])
-    SetTextIfChanged(TrackingUI.left.line4, lines[4])
-    SetTextIfChanged(TrackingUI.left.line5, lines[5])
-    SetTextIfChanged(TrackingUI.left.line6, lines[6])
-
-    SetShownIfChanged(TrackingUI.left.line1, IsNonEmptyText(lines[1]))
-    SetShownIfChanged(TrackingUI.left.line2, IsNonEmptyText(lines[2]))
-    SetShownIfChanged(TrackingUI.left.line3, IsNonEmptyText(lines[3]))
-    SetShownIfChanged(TrackingUI.left.line4, IsNonEmptyText(lines[4]))
-    SetShownIfChanged(TrackingUI.left.line5, IsNonEmptyText(lines[5]))
-    SetShownIfChanged(TrackingUI.left.line6, IsNonEmptyText(lines[6]))
-    SetShownIfChanged(TrackingUI.left.raidUnderline, TrackingUI.left.line1 and TrackingUI.left.line1:IsShown())
-    SetShownIfChanged(TrackingUI.left.dungeonsUnderline, TrackingUI.left.line4 and TrackingUI.left.line4:IsShown())
+local function ApplyGreatVaultGrid(gridBlocks)
+    -- Fill the 3 GV section grids from structured per-slot block data.
+    -- Single-row layout: each cell shows the ilvl reward only.
+    local grids = TrackingUI.left.gvGrids
+    if not grids then return end
+    for bi = 1, 3 do
+        local grid  = grids[bi]
+        local block = gridBlocks and gridBlocks[bi]
+        if not (grid and grid.cells) then break end
+        if block and block.available then
+            local done    = block.complete or 0
+            local maxIlvl = block.maxIlvl  or 0
+            for col = 1, 3 do
+                local slot    = block.slots and block.slots[col]
+                local ilvl    = slot and slot.ilvl   or 0
+                -- done = number of completed vault slots; slot col is unlocked when done >= col
+                local unlocked = done >= col
+                -- Single cell: green for best reward, white for other unlocked, dim "-" locked.
+                grid.cells[col].bot:SetText(
+                    (unlocked and ilvl > 0)
+                    and ColorWrap((maxIlvl > 0 and ilvl == maxIlvl) and COLORS.green or COLORS.white, tostring(ilvl))
+                    or  ColorWrap(COLORS.dim, "-"))
+            end
+        else
+            for col = 1, 3 do
+                grid.cells[col].bot:SetText(ColorWrap(COLORS.dim, "-"))
+            end
+        end
+    end
 end
 
-local function SetRightRowPair(i, rowLabel, rowValue)
+local function SetRightRowPair(i, rowLabel, rowValue, iconFileID)
     -- Write a {label,value} row and hide it if empty.
     local row = TrackingUI.right[RIGHT_ROW_KEYS[i]]
     if not (row and row.label and row.value) then return end
@@ -909,6 +1156,15 @@ local function SetRightRowPair(i, rowLabel, rowValue)
     SetTextIfChanged(row.value, rowValue)
     local showRow = IsNonEmptyText(rowLabel) or IsNonEmptyText(rowValue)
     SetShownIfChanged(row.frame or row.label, showRow)
+    -- Icon: show when the row is visible and we have a valid file ID.
+    if row.icon then
+        if showRow and iconFileID and iconFileID ~= 0 then
+            row.icon:SetTexture(iconFileID)
+            SetShownIfChanged(row.icon, true)
+        else
+            SetShownIfChanged(row.icon, false)
+        end
+    end
 end
 
 local function ApplyRightColumnAsPairs()
@@ -917,6 +1173,10 @@ local function ApplyRightColumnAsPairs()
     local _, labelLines, valueLines, crestCount = GetCrestLines()
     crestCount = tonumber(crestCount) or 4
 
+    -- Gather crest IDs for per-row icon lookup.
+    local tracking = Addon.TRACKING
+    local crestIDs = GetCrestIDsAndCount(tracking or {})
+
     local idx = 1
 
     for i = 1, crestCount do
@@ -924,7 +1184,7 @@ local function ApplyRightColumnAsPairs()
         local rowLabel = (labelLines and labelLines[i]) or ""
         local rowValue = (valueLines and valueLines[i]) or ""
         if IsNonEmptyText(rowLabel) or IsNonEmptyText(rowValue) then
-            SetRightRowPair(idx, rowLabel, rowValue)
+            SetRightRowPair(idx, rowLabel, rowValue, GetCurrencyIconID(crestIDs[i]))
             idx = idx + 1
         end
     end
@@ -932,13 +1192,22 @@ local function ApplyRightColumnAsPairs()
     local cLbl, cVal = GetCatalystParts()
     cLbl = cLbl or ""; cVal = cVal or ""
     if idx <= RIGHT_LINE_COUNT and (IsNonEmptyText(cLbl) or IsNonEmptyText(cVal)) then
-        SetRightRowPair(idx, cLbl, cVal); idx = idx + 1
+        SetRightRowPair(idx, cLbl, cVal, GetCurrencyIconID(tracking and tracking.catalystCurrencyID))
+        idx = idx + 1
     end
 
     local sLbl, sVal = GetSparksParts()
     sLbl = sLbl or ""; sVal = sVal or ""
     if idx <= RIGHT_LINE_COUNT and (IsNonEmptyText(sLbl) or IsNonEmptyText(sVal)) then
-        SetRightRowPair(idx, sLbl, sVal); idx = idx + 1
+        SetRightRowPair(idx, sLbl, sVal, GetCurrencyIconID(tracking and tracking.sparkCurrencyID))
+        idx = idx + 1
+    end
+
+    local kLbl, kVal = GetCofferKeysParts()
+    kLbl = kLbl or ""; kVal = kVal or ""
+    if idx <= RIGHT_LINE_COUNT and (IsNonEmptyText(kLbl) or IsNonEmptyText(kVal)) then
+        SetRightRowPair(idx, kLbl, kVal, GetCurrencyIconID(tracking and tracking.cofferKeysCurrencyID))
+        idx = idx + 1
     end
 
     local bLbl, bVal = GetDelversBountyParts()
@@ -963,14 +1232,7 @@ local function ResizeTrackingPanelToContent(addon)
     local trackingFrame = addon._trackingFrame
     if not (trackingFrame and trackingFrame.GetHeight and trackingFrame.SetHeight) then return end
 
-    local bottomLeft = 0
-    bottomLeft = max(bottomLeft, BottomFor(TrackingUI.left.line1))
-    bottomLeft = max(bottomLeft, BottomFor(TrackingUI.left.line2))
-    bottomLeft = max(bottomLeft, BottomFor(TrackingUI.left.line3))
-    bottomLeft = max(bottomLeft, BottomFor(TrackingUI.left.line4))
-    bottomLeft = max(bottomLeft, BottomFor(TrackingUI.left.line5))
-    bottomLeft = max(bottomLeft, BottomFor(TrackingUI.left.line6))
-
+    -- Measure right column first so the GV grid can expand to match it.
     local bottomRight = 0
     for i = 1, RIGHT_LINE_COUNT do
         local row = TrackingUI.right[RIGHT_ROW_KEYS[i]]
@@ -980,6 +1242,15 @@ local function ResizeTrackingPanelToContent(addon)
             bottomRight = max(bottomRight, BottomFor(row))
         end
     end
+
+    -- Reflow the GV grid so it fills the same vertical space as the right column.
+    if bottomRight > 0 and Addon._reflowGVGrid then
+        Addon._reflowGVGrid(bottomRight)
+    end
+
+    local bottomLeft = 0
+    -- Use the bottom border of the last GV grid block as the left-column height sentinel.
+    bottomLeft = max(bottomLeft, BottomFor(TrackingUI.left._gvSentinel))
 
     local contentH = max(bottomLeft, bottomRight)
     local topOffset = 32
@@ -1011,8 +1282,10 @@ function Addon:CreateTrackingPanel(parentFrame)
     if not trackingFrame.SetBackdrop and BackdropTemplateMixin and Mixin then
         Mixin(trackingFrame, BackdropTemplateMixin)
     end
-    trackingFrame:SetPoint("BOTTOMLEFT", parentFrame, "BOTTOMLEFT", Addon.UI.sectionInsetX, UI.scrollBottom)
-    trackingFrame:SetPoint("BOTTOMRIGHT", parentFrame, "BOTTOMRIGHT", -Addon.UI.sectionInsetX, UI.scrollBottom)
+    -- Lift tracking panel above the in-frame scale slider that sits below it.
+    local trackingBottomY = (Addon.UI.sliderBottomPad or 4) + (Addon.UI.sliderH or 20)
+    trackingFrame:SetPoint("BOTTOMLEFT", parentFrame, "BOTTOMLEFT", Addon.UI.sectionInsetX, trackingBottomY)
+    trackingFrame:SetPoint("BOTTOMRIGHT", parentFrame, "BOTTOMRIGHT", -Addon.UI.sectionInsetX, trackingBottomY)
     trackingFrame:SetHeight(UI.trackH)
     self:ApplyTheme(trackingFrame)
 
@@ -1037,6 +1310,39 @@ function Addon:CreateTrackingPanel(parentFrame)
     rightCol:SetPoint("TOPLEFT", leftCol, "TOPRIGHT", colGap, 0)
     rightCol:SetSize(colW, UI.trackH - 40)
     trackingFrame._lariasRightCol = rightCol
+
+    -- ── Decorative box border around each column (title + content) ────────
+    local BOX_PAD = 6
+    local function MakeColBox(col)
+        local box = CreateFrame("Frame", nil, trackingFrame)
+        if BackdropTemplateMixin and Mixin then Mixin(box, BackdropTemplateMixin) end
+        -- Keep box behind column content: match trackingFrame's level so
+        -- OVERLAY-layer FontStrings in the columns always render on top.
+        local tfLevel = trackingFrame.GetFrameLevel and trackingFrame:GetFrameLevel() or 1
+        if box.SetFrameLevel then box:SetFrameLevel(tfLevel) end
+        box:EnableMouse(false)
+        -- Extend above the column to cover the title (title is 24px above col.TOPLEFT).
+        box:SetPoint("TOPLEFT",     col, "TOPLEFT",     -BOX_PAD,  24 + BOX_PAD)
+        box:SetPoint("BOTTOMRIGHT", col, "BOTTOMRIGHT",  BOX_PAD, -BOX_PAD)
+        if box.SetBackdrop then
+            box:SetBackdrop({
+                bgFile   = "Interface\\Buttons\\WHITE8x8",
+                edgeFile = "Interface\\Buttons\\WHITE8x8",
+                tile = false, edgeSize = 1,
+                insets = { left=1, right=1, top=1, bottom=1 },
+            })
+            local bg  = THEME and THEME.bg
+            local bdr = THEME and THEME.border
+            if bg  then box:SetBackdropColor(bg.r, bg.g, bg.b, 0.55) end
+            if bdr then box:SetBackdropBorderColor(bdr.r, bdr.g, bdr.b, 0.65) end
+        end
+        return box
+    end
+
+    local leftBox  = MakeColBox(leftCol)
+    local rightBox = MakeColBox(rightCol)
+    trackingFrame._lariasLeftBox  = leftBox
+    trackingFrame._lariasRightBox = rightBox
 
     local rightTitle = trackingFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     rightTitle:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", padL + colW + colGap, -8)
@@ -1066,25 +1372,170 @@ function Addon:CreateTrackingPanel(parentFrame)
         return fontString
     end
 
-    TrackingUI.left.line1 = MakeLine(leftCol,    0, "GameFontHighlightLarge", "CENTER")
-    TrackingUI.left.line2 = MakeLine(leftCol,  -22, "GameFontHighlightSmall", "CENTER")
-    TrackingUI.left.line3 = MakeLine(leftCol,  -38, "GameFontHighlightSmall", "CENTER")
-    TrackingUI.left.line4 = MakeLine(leftCol,  -62, "GameFontHighlightLarge", "CENTER")
-    TrackingUI.left.line5 = MakeLine(leftCol,  -84, "GameFontHighlightSmall", "CENTER")
-    TrackingUI.left.line6 = MakeLine(leftCol, -100, "GameFontHighlightSmall", "CENTER")
+    -- Build 3 Great Vault section grids (3 columns × 2 rows with borders).
+    local GRID_BOR_A = 0.55  -- outer border opacity
+    local GRID_MID_A = 0.30  -- inner row/col divider opacity
+    local CELL_INSET = 4     -- horizontal text inset inside each cell (px)
 
-    local function MakeUnderlineFor(fontString)
-        if not fontString then return nil end
-        local line = leftCol:CreateTexture(nil, "OVERLAY")
-        line:SetColorTexture(THEME.textDim.r, THEME.textDim.g, THEME.textDim.b, 0.55)
-        line:SetHeight(1)
-        line:SetPoint("TOPLEFT", fontString, "BOTTOMLEFT", 0, -1)
-        line:SetPoint("TOPRIGHT", fontString, "BOTTOMRIGHT", 0, -1)
-        return line
+    local function MakeHLine(yOff, alpha, xOff, w)
+        local t = leftCol:CreateTexture(nil, "OVERLAY")
+        t:SetColorTexture(THEME.border.r, THEME.border.g, THEME.border.b, alpha)
+        t:SetHeight(1)
+        t:SetPoint("TOPLEFT", leftCol, "TOPLEFT", xOff or 0, yOff)
+        if w then
+            t:SetWidth(w)
+        else
+            t:SetPoint("TOPRIGHT", leftCol, "TOPRIGHT", 0, yOff)
+        end
+        t._lariasBaseY = yOff
+        return t
     end
 
-    TrackingUI.left.raidUnderline = MakeUnderlineFor(TrackingUI.left.line1)
-    TrackingUI.left.dungeonsUnderline = MakeUnderlineFor(TrackingUI.left.line4)
+    local function MakeVLine(xOff, yOff, alpha)
+        local t = leftCol:CreateTexture(nil, "OVERLAY")
+        t:SetColorTexture(THEME.border.r, THEME.border.g, THEME.border.b, alpha)
+        t:SetSize(1, GV_GRID_H)
+        t:SetPoint("TOPLEFT", leftCol, "TOPLEFT", xOff, yOff)
+        return t
+    end
+
+    local function MakeCellFS(xOff, yOff, w)
+        local fs = leftCol:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        fs:SetPoint("TOPLEFT", leftCol, "TOPLEFT", xOff, yOff)
+        fs:SetSize(w, GV_ROW_H)
+        fs:SetJustifyH("CENTER")
+        fs:SetJustifyV("MIDDLE")
+        if fs.SetWordWrap then fs:SetWordWrap(false) end
+        fs:SetText("")
+        return fs
+    end
+
+    local gvGrids = {}
+    for bi = 1, 3 do
+        local blockY   = GV_BLOCK_Y[bi]               -- y of grid top border
+        local gridBotY = blockY - 1 - GV_ROW_H        -- y of bot border
+        local cellW    = GV_CELL_W
+
+        -- Horizontal borders (top + bottom only; no mid divider in single-row layout).
+        local topLine = MakeHLine(blockY,   GRID_BOR_A, GV_GRID_X, GV_GRID_W)
+        local botLine = MakeHLine(gridBotY, GRID_BOR_A, GV_GRID_X, GV_GRID_W)
+        botLine._lariasBaseY = gridBotY  -- sentinel for ResizeTrackingPanelToContent
+
+        -- Section label — left of grid, vertically centred.
+        local hdr = leftCol:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        hdr:SetPoint("TOPLEFT", leftCol, "TOPLEFT", 0, blockY)
+        hdr:SetSize(GV_LABEL_W, GV_GRID_H)
+        hdr:SetJustifyH("LEFT")
+        hdr:SetJustifyV("MIDDLE")
+        if hdr.SetWordWrap then hdr:SetWordWrap(false) end
+        hdr:SetTextColor(THEME.text.r, THEME.text.g, THEME.text.b, THEME.text.a)
+        hdr:SetText(L[GV_SECTION_KEYS[bi]] or GV_SECTION_LABELS[bi])
+
+        -- Vertical borders and column dividers.
+        local vLeft  = MakeVLine(GV_GRID_X,                   blockY, GRID_BOR_A)
+        local vRight = MakeVLine(GV_GRID_X + GV_GRID_W,       blockY, GRID_BOR_A)
+        local vMid1  = MakeVLine(GV_GRID_X + cellW,           blockY, GRID_MID_A)
+        local vMid2  = MakeVLine(GV_GRID_X + cellW * 2,       blockY, GRID_MID_A)
+
+        -- Cell FontStrings (3 cols × 1 row — ilvl only).
+        local cells = {}
+        for col = 1, 3 do
+            local cellX = GV_GRID_X + (col - 1) * cellW + CELL_INSET
+            local cw    = cellW - CELL_INSET * 2
+            cells[col] = {
+                bot = MakeCellFS(cellX, blockY - 1, cw),
+            }
+        end
+
+        gvGrids[bi] = {
+            header   = hdr,
+            topLine  = topLine, botLine = botLine,
+            vLeft    = vLeft,   vRight  = vRight,
+            vMid1    = vMid1,   vMid2   = vMid2,
+            cells    = cells,
+            gridTopY = blockY,
+        }
+    end
+    TrackingUI.left.gvGrids    = gvGrids
+    TrackingUI.left._gvSentinel = gvGrids[3] and gvGrids[3].botLine
+
+    -- ReflowGVGrid: repositions and resizes all GV grid elements so the 3 sections
+    -- collectively fill targetH pixels of vertical space in leftCol.
+    -- Called by ResizeTrackingPanelToContent after the right-column height is known.
+    local function ReflowGVGrid(targetH)
+        local grds = TrackingUI.left.gvGrids
+        if not grds then return end
+        local GAP    = 6
+        local BORDER = 1
+        local CINSET = 4
+        -- Single-row grid: divide target height evenly across 3 sections.
+        local gridH = math.max(14, math.floor((targetH - GAP * 2) / 3))
+        local rowH  = math.max(10, gridH - BORDER * 2)  -- row fills grid minus borders
+        gridH = BORDER + rowH + BORDER                  -- normalise to exact px
+        -- Cap cellW so the grid never overflows the left column.
+        -- Available px for grid = leftCol width minus the label+gap zone.
+        local availGridW = math.max(60, (leftCol:GetWidth() or 0) - GV_GRID_X)
+        local cellW = math.min(
+            math.floor(availGridW / 3),
+            math.max(30, math.ceil(rowH * GV_CELL_ASPECT)))
+        local gridW = cellW * 3
+
+        for bi = 1, 3 do
+            local blockY   = -(bi - 1) * (gridH + GAP)
+            local gridBotY = blockY - BORDER - rowH
+            local grid = grds[bi]
+            if not grid then break end
+
+            local function setHL(t, y)
+                if not t then return end
+                t:ClearAllPoints()
+                t:SetPoint("TOPLEFT", leftCol, "TOPLEFT", GV_GRID_X, y)
+                t:SetWidth(gridW)
+                t._lariasBaseY = y
+            end
+            setHL(grid.topLine, blockY)
+            setHL(grid.botLine, gridBotY)
+
+            local hdr = grid.header
+            if hdr then
+                hdr:ClearAllPoints()
+                hdr:SetPoint("TOPLEFT", leftCol, "TOPLEFT", 0, blockY)
+                hdr:SetSize(GV_LABEL_W, gridH)
+            end
+
+            if bi == 3 then
+                TrackingUI.left._gvSentinel = grid.botLine
+            end
+
+            local function setVL(t, x, y)
+                if not t then return end
+                t:ClearAllPoints()
+                t:SetPoint("TOPLEFT", leftCol, "TOPLEFT", x, y)
+                t:SetSize(1, gridH)
+            end
+            setVL(grid.vLeft,  GV_GRID_X,             blockY)
+            setVL(grid.vRight, GV_GRID_X + gridW,     blockY)
+            setVL(grid.vMid1,  GV_GRID_X + cellW,     blockY)
+            setVL(grid.vMid2,  GV_GRID_X + cellW * 2, blockY)
+
+            for col = 1, 3 do
+                local cellX = GV_GRID_X + (col - 1) * cellW + CINSET
+                local cw    = cellW - CINSET * 2
+                local cell  = grid.cells and grid.cells[col]
+                if cell and cell.bot then
+                    cell.bot:ClearAllPoints()
+                    cell.bot:SetPoint("TOPLEFT", leftCol, "TOPLEFT", cellX, blockY - BORDER)
+                    cell.bot:SetSize(cw, rowH)
+                end
+            end
+
+            grid.gridTopY = blockY
+        end
+    end
+    Addon._reflowGVGrid = ReflowGVGrid
+
+    local ROW_ICON_SZ  = 14  -- px; square currency icon
+    local ROW_ICON_GAP = 3   -- gap between icon and label text
 
     local function MakeLinePair(parent, y, template)
         local row = CreateFrame("Frame", nil, parent)
@@ -1093,8 +1544,13 @@ function Addon:CreateTrackingPanel(parentFrame)
         row:SetHeight(16)
         row._lariasBaseY = y
 
+        local icon = row:CreateTexture(nil, "OVERLAY")
+        icon:SetSize(ROW_ICON_SZ, ROW_ICON_SZ)
+        icon:SetPoint("LEFT", row, "LEFT", 0, 0)
+        icon:Hide()
+
         local label = row:CreateFontString(nil, "OVERLAY", template or "GameFontHighlightSmall")
-        label:SetPoint("LEFT", row, "LEFT", 0, 0)
+        label:SetPoint("LEFT", row, "LEFT", ROW_ICON_SZ + ROW_ICON_GAP, 0)
         label:SetJustifyH("LEFT")
         if label.SetWordWrap then label:SetWordWrap(false) end
         label:SetTextColor(THEME.text.r, THEME.text.g, THEME.text.b, THEME.text.a)
@@ -1109,7 +1565,7 @@ function Addon:CreateTrackingPanel(parentFrame)
 
         label:SetPoint("RIGHT", value, "LEFT", -6, 0)
 
-        return { frame = row, label = label, value = value }
+        return { frame = row, icon = icon, label = label, value = value }
     end
 
     for i = 1, RIGHT_LINE_COUNT do
@@ -1126,13 +1582,20 @@ function Addon:CreateTrackingPanel(parentFrame)
             Addon:RequestTrackingUpdate()
         end)
         trackingFrame:SetScript("OnHide", function()
-            if trackingEventFrame then
+            -- Keep events registered if this character has snapshot data so
+            -- background updates continue even while the panel is not visible.
+            if trackingEventFrame and not Addon:HasTrackingSnapshot() then
                 trackingEventFrame:UnregisterAllEvents()
             end
         end)
     end
 
     self:ConfigureTrackingEvents(parentFrame, db.showGreatVault and true or false, db.showCurrency and true or false)
+
+    -- Scale slider lives below this panel, inside the main frame.
+    if self.CreateInFrameScaleSlider then
+        self:CreateInFrameScaleSlider(parentFrame)
+    end
 
 end
 
@@ -1144,7 +1607,19 @@ function Addon:ApplyTrackingPanelOptions()
     local db = self:EnsureDB()
     local showGreatVault = db.showGreatVault and true or false
     local showCurrency = db.showCurrency and true or false
-    local wantPanel = (showGreatVault or showCurrency) and IsMainFrameOnListTab()
+
+    local wantPanel
+    if Addon._viewingChar then
+        -- For another character, derive visibility from their stored snapshot.
+        local snap = db.trackingSnapshot
+        wantPanel = snap and (snap.leftLines ~= nil or (snap.rightRows ~= nil and #snap.rightRows > 0)) and IsMainFrameOnListTab() and true or false
+        if wantPanel and snap then
+            showGreatVault = snap.leftLines ~= nil
+            showCurrency   = snap.rightRows ~= nil and #snap.rightRows > 0
+        end
+    else
+        wantPanel = (showGreatVault or showCurrency) and IsMainFrameOnListTab()
+    end
 
     trackingFrame:SetShown(wantPanel)
     if not wantPanel then
@@ -1155,7 +1630,10 @@ function Addon:ApplyTrackingPanelOptions()
         return
     end
 
-    self:ConfigureTrackingEvents(_G["LariasWeeklyChecklistFrame"], showGreatVault, showCurrency)
+    -- Only wire live events when showing the current player's data.
+    if not Addon._viewingChar then
+        self:ConfigureTrackingEvents(_G["LariasWeeklyChecklistFrame"], showGreatVault, showCurrency)
+    end
 
     local leftCol = trackingFrame._lariasLeftCol
     local rightCol = trackingFrame._lariasRightCol
@@ -1168,6 +1646,10 @@ function Addon:ApplyTrackingPanelOptions()
     SetShownIfChanged(rightCol, showCurrency)
     SetShownIfChanged(leftTitle, showGreatVault)
     SetShownIfChanged(rightTitle, showCurrency)
+    local leftBox  = trackingFrame._lariasLeftBox
+    local rightBox = trackingFrame._lariasRightBox
+    if leftBox  then SetShownIfChanged(leftBox,  showGreatVault) end
+    if rightBox then SetShownIfChanged(rightBox, showCurrency)   end
 
     if leftCol and leftCol.ClearAllPoints and leftCol.SetPoint then
         leftCol:ClearAllPoints()
@@ -1198,6 +1680,297 @@ function Addon:ApplyTrackingPanelOptions()
     if self.ApplyScrollLayout then self:ApplyScrollLayout() end
 end
 
+ComputeSnapshotData = function(snap)
+    -- Compute tracking data directly from WoW APIs and write into snap tables.
+    -- Used both after a live panel render and for background updates when the
+    -- panel is hidden. No UI frame required.
+
+    -- Left column: Great Vault (9 lines: Raid + Dungeons + World).
+    local gvLines = GetGreatVaultBlockLines()
+    snap.leftLines = snap.leftLines or {}
+    for i = 1, 9 do
+        snap.leftLines[i] = gvLines[i] or ""
+    end
+    -- Also persist structured grid data for the grid-based rendering path.
+    local gvc = Addon.TRACKING._gvCache
+    if gvc and gvc.gridBlocks then
+        snap.leftGrid = snap.leftGrid or {{},{},{}}
+        for bi = 1, 3 do
+            local src = gvc.gridBlocks[bi]
+            local dst = snap.leftGrid[bi]
+            if src and dst then
+                dst.available = src.available
+                dst.complete  = src.complete
+                dst.maxIlvl   = src.maxIlvl
+                dst.slots = dst.slots or {{},{},{}}
+                for si = 1, 3 do
+                    if src.slots and src.slots[si] and dst.slots[si] then
+                        dst.slots[si].thresh = src.slots[si].thresh
+                        dst.slots[si].ilvl   = src.slots[si].ilvl
+                    end
+                end
+            end
+        end
+    end
+
+    -- Right column: store minimal structured data (no rendered strings, no caps).
+    -- Reuse the existing table to avoid per-update allocation.
+    if snap.rightRows then
+        Wipe(snap.rightRows)
+    else
+        snap.rightRows = {}
+    end
+    local tracking = Addon.TRACKING
+
+    -- Crests: only persist entries where the player holds a non-zero quantity.
+    if tracking then
+        EnsureCrestIDsDetected(tracking)
+        local ids, crestCount = GetCrestIDsAndCount(tracking)
+        local cache = EnsureCrestCache(tracking, crestCount)
+        PopulateCrestCurCap(cache, ids, crestCount)
+        for i = 1, crestCount do
+            local id = ids[i]
+            if id then
+                local qty = cache.cur[i] or 0
+                snap.rightRows[#snap.rightRows + 1] = { type = "crest", id = id, qty = qty }
+            end
+        end
+    end
+
+    -- Catalyst charges.
+    local catQty = GetCatalystQtyRaw()
+    snap.rightRows[#snap.rightRows + 1] = { type = "catalyst", qty = catQty or 0 }
+
+    -- Sparks of the season.
+    local sparkID = tracking and tonumber(tracking.sparkCurrencyID)
+    if sparkID and sparkID > 0 then
+        local sQty, _ = FormatCurrencyProgressParts(sparkID)
+        snap.rightRows[#snap.rightRows + 1] = { type = "sparks", id = sparkID, qty = tonumber(sQty) or 0 }
+    end
+
+    -- Restored Coffer Keys.
+    local cofferID = tracking and tonumber(tracking.cofferKeysCurrencyID)
+    if cofferID and cofferID > 0 then
+        local kQty, _ = FormatCurrencyProgressParts(cofferID)
+        snap.rightRows[#snap.rightRows + 1] = { type = "cofferkeys", id = cofferID, qty = tonumber(kQty) or 0 }
+    end
+
+    -- Weekly quests: always include so the viewer can see completion status.
+    local bDone = GetQuestDoneRaw("delversBounty")
+    if bDone ~= nil then
+        snap.rightRows[#snap.rightRows + 1] = { type = "quest", key = "delversBounty", done = bDone }
+    end
+    local pDone = GetQuestDoneRaw("weeklyPrey")
+    if pDone ~= nil then
+        snap.rightRows[#snap.rightRows + 1] = { type = "quest", key = "weeklyPrey", done = pDone }
+    end
+end
+
+local function SaveTrackingSnapshot(db)
+    local snap = db.trackingSnapshot
+    if type(snap) ~= "table" then
+        snap = {}
+        db.trackingSnapshot = snap
+    end
+    ComputeSnapshotData(snap)
+end
+
+local function RenderSnapshotRow(row)
+    -- Derive a display label+value pair from a structured snapshot row.
+    -- Caps are fetched live from the WoW API so they are always current.
+    local t = row.type
+    if t == "crest" then
+        local id  = row.id
+        local qty = tonumber(row.qty) or 0
+        local name = GetCurrencyName(id) or GetCrestLabelText(id) or tostring(id or "?")
+        local lbl = ColorWrap(GetCurrencyQualityColor(id), tostring(name))
+        local _, cap = FormatCurrencyProgressParts(id)
+        cap = tonumber(cap) or 0
+        local xy, color
+        if cap > 0 then
+            xy    = FormatXY(qty, cap)
+            color = ColorForXY(qty, cap)
+        else
+            xy    = tostring(qty)
+            color = COLORS.green
+        end
+        return lbl, ColorWrap(color, xy)
+
+    elseif t == "catalyst" then
+        local qty = tonumber(row.qty) or 0
+        local tracking = Addon.TRACKING
+        local catID = tracking and tonumber(tracking.catalystCurrencyID)
+        local catLabel = (catID and catID > 0 and GetCurrencyName(catID)) or L.TRACKING_CATALYST_LABEL or ""
+        local lbl = ColorWrap(GetCurrencyQualityColor(catID), catLabel)
+        -- Resolve live cap from C_Catalyst or the configured currency ID.
+        local cap = nil
+        if C_Catalyst then
+            if C_Catalyst.GetMaxCharges then cap = tonumber(C_Catalyst.GetMaxCharges()) end
+            if not cap and C_Catalyst.GetCharges then
+                local charges = C_Catalyst.GetCharges()
+                if type(charges) == "table" then
+                    cap = tonumber(charges.maxCharges or charges.maximumCharges)
+                end
+            end
+        end
+        if (not cap or cap == 0) and catID and catID > 0 then
+            local _, c = FormatCurrencyProgressParts(catID)
+            cap = tonumber(c)
+        end
+        local val
+        if cap and cap > 0 then
+            val = ColorWrap(ColorForXY(qty, cap), FormatXY(qty, cap))
+        else
+            val = ColorWrap((qty <= 0) and COLORS.red or COLORS.green, ("%d"):format(qty))
+        end
+        return lbl, val
+
+    elseif t == "sparks" then
+        local qty = tonumber(row.qty) or 0
+        local id  = tonumber(row.id)
+        if not id then
+            local tracking = Addon.TRACKING
+            id = tracking and tonumber(tracking.sparkCurrencyID)
+        end
+        local sparkLabel = (id and id > 0 and GetCurrencyName(id)) or L.TRACKING_SPARKS_LABEL or ""
+        local lbl = ColorWrap(GetCurrencyQualityColor(id), sparkLabel)
+        local cap = 0
+        if id and id > 0 then
+            local _, c = FormatCurrencyProgressParts(id)
+            cap = tonumber(c) or 0
+        end
+        local xy, color
+        if cap > 0 then
+            xy    = FormatXY(qty, cap)
+            color = ColorForXY(qty, cap)
+        else
+            xy    = tostring(qty)
+            color = (qty <= 0) and COLORS.red or COLORS.green
+        end
+        return lbl, ColorWrap(color, xy)
+
+    elseif t == "cofferkeys" then
+        local qty = tonumber(row.qty) or 0
+        local id  = tonumber(row.id)
+        if not id then
+            local tracking = Addon.TRACKING
+            id = tracking and tonumber(tracking.cofferKeysCurrencyID)
+        end
+        local keyName = (id and id > 0 and GetCurrencyName(id)) or "Restored Coffer Keys"
+        local lbl = ColorWrap(GetCurrencyQualityColor(id), keyName)
+        local cap = 0
+        if id and id > 0 then
+            local _, c = FormatCurrencyProgressParts(id)
+            cap = tonumber(c) or 0
+        end
+        local xy, color
+        if cap > 0 then
+            xy    = FormatXY(qty, cap)
+            color = ColorForXY(qty, cap)
+        else
+            xy    = tostring(qty)
+            color = (qty <= 0) and COLORS.red or COLORS.green
+        end
+        return lbl, ColorWrap(color, xy)
+
+    elseif t == "quest" then
+        local key  = row.key
+        local done = row.done
+        local labelText = ""
+        if key == "delversBounty" then
+            labelText = L.TRACKING_QUEST_DELVERS_BOUNTY or ""
+        elseif key == "weeklyPrey" then
+            labelText = L.TRACKING_QUEST_WEEKLY_PREY or ""
+        end
+        if not IsNonEmptyText(labelText) then return "", "" end
+        local lbl = ColorWrap(COLORS.dim, labelText)
+        local val
+        if done == nil then
+            val = ColorWrap(COLORS.red, L.TRACKING_NA or "")
+        elseif done then
+            val = ColorWrap(COLORS.green, "1/1")
+        else
+            val = ColorWrap(COLORS.red, "0/1")
+        end
+        return lbl, val
+    end
+    return "", ""
+end
+
+local function RenderSnapshotIntoPanel(snap)
+    -- Apply a stored snapshot into the tracking panel UI.
+    -- New schema rows carry a `type` field and are rendered live (caps fetched from API).
+    -- Legacy rows without `type` fall back to their stored label/value strings.
+    if snap.leftGrid then
+        ApplyGreatVaultGrid(snap.leftGrid)
+    else
+        -- Old snapshot (no structured grid data): show N/A placeholders.
+        ApplyGreatVaultGrid(nil)
+    end
+    if snap.rightRows then
+        local idx = 1
+
+        -- Build a lookup of stored crest qty by currency ID so old snapshots that
+        -- only persisted non-zero crests still render a full crest list (with 0s).
+        local storedCrestQty = {}
+        local nonCrestRows   = {}
+        for _, row in ipairs(snap.rightRows) do
+            if row.type == "crest" and row.id then
+                storedCrestQty[row.id] = tonumber(row.qty) or 0
+            else
+                nonCrestRows[#nonCrestRows + 1] = row
+            end
+        end
+
+        -- Render ALL configured crest IDs in order, defaulting missing ones to 0.
+        local tracking = Addon.TRACKING
+        if tracking then
+            EnsureCrestIDsDetected(tracking)
+            local ids, crestCount = GetCrestIDsAndCount(tracking)
+            for i = 1, crestCount do
+                if idx > RIGHT_LINE_COUNT then break end
+                local id = ids[i]
+                if id then
+                    local qty = storedCrestQty[id] or 0
+                    local lbl, val = RenderSnapshotRow({ type = "crest", id = id, qty = qty })
+                    if IsNonEmptyText(lbl) or IsNonEmptyText(val) then
+                        SetRightRowPair(idx, lbl, val, GetCurrencyIconID(id))
+                        idx = idx + 1
+                    end
+                end
+            end
+        end
+
+        -- Render remaining non-crest rows (catalyst, sparks, cofferkeys, quests) from snapshot.
+        for _, row in ipairs(nonCrestRows) do
+            if idx > RIGHT_LINE_COUNT then break end
+            local lbl, val
+            if row.type then
+                lbl, val = RenderSnapshotRow(row)
+            else
+                lbl = row.label or ""
+                val = row.value or ""
+            end
+            if IsNonEmptyText(lbl) or IsNonEmptyText(val) then
+                -- Pass icon for known typed rows.
+                local iconID = nil
+                if row.type == "sparks" or row.type == "cofferkeys" then
+                    iconID = GetCurrencyIconID(row.id)
+                elseif row.type == "catalyst" then
+                    local tr = Addon.TRACKING
+                    iconID = GetCurrencyIconID(tr and tr.catalystCurrencyID)
+                end
+                SetRightRowPair(idx, lbl, val, iconID)
+                idx = idx + 1
+            end
+        end
+
+        for i = idx, RIGHT_LINE_COUNT do
+            SetRightRowPair(i, "", "")
+        end
+    end
+end
+
 function Addon:UpdateTracking()
     -- Main throttled entry point: reconcile desired visibility, then render content.
     local db = self:EnsureDB()
@@ -1214,11 +1987,75 @@ function Addon:UpdateTracking()
         return
     end
 
-    ApplyGreatVaultLines(GetGreatVaultBlockLines())
+    -- When viewing another character: render their stored snapshot instead of
+    -- calling live WoW APIs which only return the logged-in player's data.
+    if Addon._viewingChar then
+        local snap = db.trackingSnapshot
+        if snap then
+            RenderSnapshotIntoPanel(snap)
+            ResizeTrackingPanelToContent(self)
+        end
+        return
+    end
 
+    -- Normal path: read live WoW APIs for the current player.
+    ApplyGreatVaultGrid(GetGreatVaultGridData())
     ApplyRightColumnAsPairs()
-
     ResizeTrackingPanelToContent(self)
+
+    -- Persist the rendered output so the char picker can show it when another
+    -- character is viewing this one.
+    SaveTrackingSnapshot(db)
+end
+
+function Addon:ResizeTrackingCols()
+    -- Reflow column widths so they always fill the tracking frame's current width.
+    local tf = self._trackingFrame
+    if not tf then return end
+
+    local frameW  = tonumber(tf:GetWidth()) or Addon.UI.frameW
+    local padL    = tonumber(tf._lariasPadL)   or 10
+    local padR    = tonumber(tf._lariasPadR)   or 10
+    local colGap  = tonumber(tf._lariasColGap) or 12
+    local newColW = math.max(10, math.floor((frameW - padL - padR - colGap) / 2))
+
+    local leftCol  = tf._lariasLeftCol
+    local rightCol = tf._lariasRightCol
+
+    if leftCol  and leftCol.SetWidth  then leftCol:SetWidth(newColW)  end
+    if rightCol and rightCol.SetWidth then rightCol:SetWidth(newColW) end
+    -- Only re-anchor rightCol relative to leftCol when both are visible.
+    -- When only one column is shown, ApplyTrackingPanelOptions owns the anchor.
+    if rightCol and leftCol then
+        local leftShown  = leftCol.IsShown  and leftCol:IsShown()  or false
+        local rightShown = rightCol.IsShown and rightCol:IsShown() or false
+        if leftShown and rightShown then
+            rightCol:ClearAllPoints()
+            rightCol:SetPoint("TOPLEFT", leftCol, "TOPRIGHT", colGap, 0)
+        end
+    end
+
+    -- Keep left-column font strings constrained to the new column width.
+    for _, k in ipairs(LEFT_LINE_KEYS) do
+        local fs = TrackingUI.left[k]
+        if fs and fs.SetWidth then fs:SetWidth(newColW) end
+    end
+
+    -- Update title widths and anchors.
+    local leftTitle  = tf._lariasLeftTitle
+    local rightTitle = tf._lariasRightTitle
+    if leftTitle  and leftTitle.SetWidth  then leftTitle:SetWidth(newColW)  end
+    if rightTitle and rightTitle.SetWidth then
+        rightTitle:SetWidth(newColW)
+        if rightCol then
+            rightTitle:ClearAllPoints()
+            rightTitle:SetPoint("TOP", rightCol, "TOP", 0, 24)
+        end
+    end
+
+    -- GV grids are fixed-width (GV_GRID_W) so no repositioning needed on resize.
+
+    tf._lariasColW = newColW
 end
 
 

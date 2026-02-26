@@ -18,12 +18,12 @@ local HDR_H    = 22    -- section heading height
 local SUBHDR_H = 18    -- column sub-header height
 local SCROLLTOP = 32   -- pixels from win top to scroll frame
 
-local ADV   = "|cFF1EFF00"   -- Adventurer  (green)
-local VET   = "|cFF0070DD"   -- Veteran     (blue)
-local CHAMP = "|cFFA335EE"   -- Champion    (purple)
-local HERO  = "|cFFFF8000"   -- Hero        (orange)
-local MYTH  = "|cFFFFD100"   -- Myth/Gilded (gold)
-local R     = "|r"
+local ADV   = "|cFF" .. (Addon.TRACKING and Addon.TRACKING.crestColors and Addon.TRACKING.crestColors[1] or "1EFF00")  -- Adventurer  (green)
+local VET   = "|cFF" .. (Addon.TRACKING and Addon.TRACKING.crestColors and Addon.TRACKING.crestColors[2] or "0070DD")  -- Veteran     (blue)
+local CHAMP = "|cFF" .. (Addon.TRACKING and Addon.TRACKING.crestColors and Addon.TRACKING.crestColors[3] or "A335EE")  -- Champion    (purple)
+local HERO  = "|cFF" .. (Addon.TRACKING and Addon.TRACKING.crestColors and Addon.TRACKING.crestColors[4] or "FF8000")  -- Hero        (orange)
+local MYTH  = "|cFF" .. (Addon.TRACKING and Addon.TRACKING.crestColors and Addon.TRACKING.crestColors[5] or "FFD100")  -- Myth/Gilded (gold)
+local COLOR_RESET = "|r"
 
 
 -- Create a FontString anchored at (x, posY) from parent's TOPLEFT.
@@ -41,30 +41,30 @@ end
 
 -- Draw a 1 px horizontal rule and return the new posY.
 local function HRule(parent, posY)
-    local t = parent:CreateTexture(nil, "ARTWORK")
-    t:SetColorTexture(
+    local tex = parent:CreateTexture(nil, "ARTWORK")
+    tex:SetColorTexture(
         Addon.THEME.border.r, Addon.THEME.border.g,
         Addon.THEME.border.b, Addon.THEME.border.a * 0.6)
-    t:SetHeight(1)
-    t:SetPoint("TOPLEFT",  parent, "TOPLEFT",  0,  posY)
-    t:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0,  posY)
+    tex:SetHeight(1)
+    tex:SetPoint("TOPLEFT",  parent, "TOPLEFT",  0,  posY)
+    tex:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0,  posY)
     return posY - 4
 end
 
 -- Draw a gold section heading and return the new posY.
 local function SecHead(parent, posY, text)
-    local c = Addon.THEME.header
-    FS(parent, 0, posY, text, "GameFontNormal", c.r, c.g, c.b, c.a)
+    local headerColor = Addon.THEME.header
+    FS(parent, 0, posY, text, "GameFontNormal", headerColor.r, headerColor.g, headerColor.b, headerColor.a)
     return posY - HDR_H
 end
 
 -- Draw a dim column-header row and return the new posY.
 -- cols = array of { x, w, t, align }
 local function ColHead(parent, posY, cols)
-    local c = Addon.THEME.textDim
+    local dimColor = Addon.THEME.textDim
     for _, col in ipairs(cols) do
         FS(parent, col.x, posY, col.t, "GameFontHighlightSmall",
-           c.r, c.g, c.b, c.a, col.w, col.align)
+           dimColor.r, dimColor.g, dimColor.b, dimColor.a, col.w, col.align)
     end
     return posY - SUBHDR_H
 end
@@ -97,35 +97,23 @@ end
 local CELL_PAD = 10  -- 4 px left inset + right margin + buffer
 local function AutoFitCols(cols, rows)
     for ci, col in ipairs(cols) do
-        local w = MeasureStr(col.t or "", "GameFontHighlightSmall")
+        local maxW = MeasureStr(col.t or "", "GameFontHighlightSmall")
         for _, row in ipairs(rows) do
-            local cw = MeasureStr(row[ci] or "")
-            if cw > w then w = cw end
+            local cellW = MeasureStr(row[ci] or "")
+            if cellW > maxW then maxW = cellW end
         end
-        col.w = math.ceil(w) + CELL_PAD
+        col.w = math.ceil(maxW) + CELL_PAD
     end
-    local x = 0
-    for _, col in ipairs(cols) do col.x = x; x = x + col.w end
+    local colX = 0
+    for _, col in ipairs(cols) do col.x = colX; colX = colX + col.w end
     return cols
-end
-
--- Color-code an ilvl number string by its crest tier.
-local function IlvlColor(s)
-    local n = tonumber(s)
-    if not n then return s end
-    if     n >= 279 then return MYTH ..s..R
-    elseif n >= 266 then return HERO ..s..R
-    elseif n >= 253 then return CHAMP..s..R
-    elseif n >= 237 then return VET  ..s..R
-    else                  return ADV  ..s..R
-    end
 end
 
 -- Color the two halves of a "Tier A / Tier B" track name independently.
 local function DualTrack(str, c1, c2)
-    local a, b = str:match("^(.+) / (.+)$")
-    if a and b then return c1..a..R.." / "..c2..b..R end
-    return c1..str..R
+    local leftPart, rightPart = str:match("^(.+) / (.+)$")
+    if leftPart and rightPart then return c1..leftPart..COLOR_RESET.." / "..c2..rightPart..COLOR_RESET end
+    return c1..str..COLOR_RESET
 end
 
 -- Draw a bordered grid table (header + data rows with column separators).
@@ -135,37 +123,35 @@ end
 local GBOR = 0.55  -- outer border / header divider opacity multiplier
 local GLIN = 0.18  -- inner row / column line opacity multiplier
 local function GridTable(parent, posY, cols, rows)
-    local br = Addon.THEME.border
-    local tc = Addon.THEME.textDim
-    -- compute right edge of the table
-    local rightX = 0
-    for _, c in ipairs(cols) do
-        local e = (c.x or 0) + (c.w or 60)
-        if e > rightX then rightX = e end
-    end
-    local nRows  = #rows
-    local totalH = SUBHDR_H + ROW_H * nRows
-    local startY = posY
+        local borderColor = Addon.THEME.border
+        local dimColor    = Addon.THEME.textDim
+        -- compute right edge of the table
+        local rightX = 0
+        for _, col in ipairs(cols) do
+            local edge = (col.x or 0) + (col.w or 60)
+            if edge > rightX then rightX = edge end
+        end
+        local nRows  = #rows
+        local totalH = SUBHDR_H + ROW_H * nRows
+        local startY = posY
 
-    local function hline(y, mul)
-        local t = parent:CreateTexture(nil, "ARTWORK")
-        t:SetColorTexture(br.r, br.g, br.b, math.min(1, br.a * mul))
-        t:SetSize(rightX, 1)
-        t:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, y)
-    end
-    local function vline(x)
-        local t = parent:CreateTexture(nil, "ARTWORK")
-        t:SetColorTexture(br.r, br.g, br.b, math.min(1, br.a * GBOR))
-        t:SetSize(1, totalH)
-        t:SetPoint("TOPLEFT", parent, "TOPLEFT", x, startY)
-    end
-
-    -- top border
+        local function hline(y, mul)
+            local tex = parent:CreateTexture(nil, "ARTWORK")
+            tex:SetColorTexture(borderColor.r, borderColor.g, borderColor.b, math.min(1, borderColor.a * mul))
+            tex:SetSize(rightX, 1)
+            tex:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, y)
+        end
+        local function vline(vx)
+            local tex = parent:CreateTexture(nil, "ARTWORK")
+            tex:SetColorTexture(borderColor.r, borderColor.g, borderColor.b, math.min(1, borderColor.a * GBOR))
+            tex:SetSize(1, totalH)
+            tex:SetPoint("TOPLEFT", parent, "TOPLEFT", vx, startY)
+        end
     hline(startY, GBOR)
     -- header cells (4 px left inset)
     for _, col in ipairs(cols) do
         FS(parent, (col.x or 0) + 4, startY - 2, col.t or "",
-           "GameFontHighlightSmall", tc.r, tc.g, tc.b, tc.a, (col.w or 60) - 6, col.align)
+           "GameFontHighlightSmall", dimColor.r, dimColor.g, dimColor.b, dimColor.a, (col.w or 60) - 6, col.align)
     end
     posY = startY - SUBHDR_H
     hline(posY, GBOR)  -- strong line under header
@@ -182,58 +168,73 @@ local function GridTable(parent, posY, cols, rows)
 
     -- vertical borders: left edge of every column + right edge of last
     for _, col in ipairs(cols) do vline(col.x or 0) end
-    vline(rightX)
+    vline(rightX)  -- right edge
 
     return posY
 end
 
 local function BuildIlvlRefWindow()
-    local L = Addon.L
+    local Locale = Addon.L
 
     -- ilvl at rank r = ilvlBase + RANK_OFFSETS[r]
-    local RANK_OFFSETS = { 0, 4, 7, 10, 13, 17 }
+    -- Starting points and rank offsets are defined in LariasWeeklyChecklist_Constants.lua
+    -- and loaded into Addon.TRACKING. The literals below are fallbacks only.
+    local tracking = Addon.TRACKING or {}
+    local rawBases   = tracking.ilvlBases       or { 220, 233, 246, 259, 272 }
+    local RANK_OFFSETS = tracking.ilvlRankOffsets or { 0, 4, 7, 10, 13, 17 }
 
     local TIERS = {
-        { id="ADV",   color=ADV,   ilvlBase=220,
-          crest      = L.ILVLREF_CREST_ADV,
-          crestShort = L.ILVLREF_CREST_ADV },
-        { id="VET",   color=VET,   ilvlBase=233,
-          crest      = L.ILVLREF_CREST_VET,
-          crestShort = L.ILVLREF_CREST_VET },
-        { id="CHAMP", color=CHAMP, ilvlBase=246,
-          crest      = L.ILVLREF_CREST_CHAMP,
-          crestShort = L.ILVLREF_CREST_CHAMP },
-        { id="HERO",  color=HERO,  ilvlBase=259,
-          crest      = L.ILVLREF_CREST_HERO,
-          crestShort = L.ILVLREF_CREST_HERO },
-        { id="MYTH",  color=MYTH,  ilvlBase=272,
-          crest      = L.ILVLREF_CREST_MYTH,
-          crestShort = L.ILVLREF_CREST_MYTH },
+        { id="ADV",   color=ADV,   ilvlBase=rawBases[1] or 220,
+          crest      = Locale.ILVLREF_CREST_ADV,
+          crestShort = Locale.ILVLREF_CREST_ADV },
+        { id="VET",   color=VET,   ilvlBase=rawBases[2] or 233,
+          crest      = Locale.ILVLREF_CREST_VET,
+          crestShort = Locale.ILVLREF_CREST_VET },
+        { id="CHAMP", color=CHAMP, ilvlBase=rawBases[3] or 246,
+          crest      = Locale.ILVLREF_CREST_CHAMP,
+          crestShort = Locale.ILVLREF_CREST_CHAMP },
+        { id="HERO",  color=HERO,  ilvlBase=rawBases[4] or 259,
+          crest      = Locale.ILVLREF_CREST_HERO,
+          crestShort = Locale.ILVLREF_CREST_HERO },
+        { id="MYTH",  color=MYTH,  ilvlBase=rawBases[5] or 272,
+          crest      = Locale.ILVLREF_CREST_MYTH,
+          crestShort = Locale.ILVLREF_CREST_MYTH },
     }
+
+    -- GetIlvl(2, 3)  → integer ilvl  for tier index 2, rank 3  (ilvlBase + RANK_OFFSETS[rank])
+    -- IC(2, 3) → colored string ready for display
+    local function GetIlvl(tier, rank)
+        local tierData = TIERS[tier]
+        return tierData.ilvlBase + RANK_OFFSETS[rank]
+    end
+    local function IC(tier, rank)
+        local tierData = TIERS[tier]
+        return tierData.color .. (tierData.ilvlBase + RANK_OFFSETS[rank]) .. COLOR_RESET
+    end
 
     local function makeTrackRow(tier, rank, nextTier)
         local ilvl      = tier.ilvlBase + RANK_OFFSETS[rank]
         local isOverlap = (rank >= 5) and (nextTier ~= nil)
 
-        local ilvlCell = (isOverlap and nextTier.color or tier.color) .. ilvl .. R
+        local ilvlCell = (isOverlap and nextTier.color or tier.color) .. ilvl .. COLOR_RESET
 
         local nameCell
         if isOverlap then
             local nextRank = rank - 4
             local lKey     = "ILVLREF_TRACK_" .. tier.id .. rank .. "_" .. nextTier.id .. nextRank
             local fb       = tier.crest .. " " .. rank .. " / " .. nextTier.crest .. " " .. nextRank
-            nameCell = DualTrack(L[lKey] or fb, tier.color, nextTier.color)
+            nameCell = DualTrack(Locale[lKey] or fb, tier.color, nextTier.color)
         else
             local lKey = "ILVLREF_TRACK_" .. tier.id .. rank
-            nameCell   = tier.color .. (L[lKey] or tier.crest .. " " .. rank) .. R
+            nameCell   = tier.color .. (Locale[lKey] or tier.crest .. " " .. rank) .. COLOR_RESET
         end
 
         local crestCell
         if rank == 6 and nextTier then
-            crestCell = tier.color .. tier.crestShort .. R
-                     .. " - (|cFFFF2020" .. (L.ILVLREF_DO_NOT_USE_CRESTS_FMT or "DO NOT USE %s CRESTS"):format(nextTier.crest) .. "|r)"
+            crestCell = tier.color .. tier.crestShort .. COLOR_RESET
+                     .. " - (|cFFFF2020" .. (Locale.ILVLREF_DO_NOT_USE_CRESTS_FMT or "DO NOT USE %s CRESTS"):format(nextTier.crest) .. "|r)"
         else
-            crestCell = tier.color .. tier.crest .. R
+            crestCell = tier.color .. tier.crest .. COLOR_RESET
         end
 
         return { ilvlCell, nameCell, crestCell }
@@ -248,94 +249,96 @@ local function BuildIlvlRefWindow()
         end
     end
 
-    -- Crafted item levels
+    -- Crafted item levels  (quality n = tier base + RANK_OFFSETS[n])
+    local rawIcons = tracking.craftingQualityIcons or {}
+    local function QIcon(n)
+        local atlas = rawIcons[n] or ("Professions-Icon-Quality-Tier" .. n)
+        return "|A:" .. atlas .. ":14:14|a"
+    end
     local CRAFTED = {
-        { "|A:Professions-Icon-Quality-Tier1:14:14|a", ADV..("220")..R, VET..("233")..R, CHAMP..("246")..R, HERO..("259")..R, MYTH..("272")..R },
-        { "|A:Professions-Icon-Quality-Tier2:14:14|a", ADV..("224")..R, VET..("237")..R, CHAMP..("250")..R, HERO..("263")..R, MYTH..("276")..R },
-        { "|A:Professions-Icon-Quality-Tier3:14:14|a", ADV..("227")..R, VET..("240")..R, CHAMP..("253")..R, HERO..("266")..R, MYTH..("279")..R },
-        { "|A:Professions-Icon-Quality-Tier4:14:14|a", ADV..("230")..R, VET..("243")..R, CHAMP..("256")..R, HERO..("269")..R, MYTH..("282")..R },
-        { "|A:Professions-Icon-Quality-Tier5:14:14|a", ADV..("233")..R, VET..("246")..R, CHAMP..("259")..R, HERO..("272")..R, MYTH..("285")..R },
+        { QIcon(1), IC(1,1), IC(2,1), IC(3,1), IC(4,1), IC(5,1) },
+        { QIcon(2), IC(1,2), IC(2,2), IC(3,2), IC(4,2), IC(5,2) },
+        { QIcon(3), IC(1,3), IC(2,3), IC(3,3), IC(4,3), IC(5,3) },
+        { QIcon(4), IC(1,4), IC(2,4), IC(3,4), IC(4,4), IC(5,4) },
+        { QIcon(5), IC(1,5), IC(2,5), IC(3,5), IC(4,5), IC(5,5) },
     }
 
     -- Dungeon item levels
     local DUNGEONS = {
-        { L.ILVLREF_DUNGEON_PRE_HEROIC, ADV.."224"..R,  "?"            },
-        { L.ILVLREF_DUNGEON_HEROIC,     ADV.."230"..R,  VET.."243"..R  },
-        { L.ILVLREF_DUNGEON_PRE_MYTHIC, VET.."240"..R,  "?"            },
-        { L.ILVLREF_DUNGEON_MYTHIC,     CHAMP.."246"..R, CHAMP.."256"..R },
-        { "M2",  CHAMP.."250"..R, HERO.."259"..R  },
-        { "M3",  CHAMP.."250"..R, HERO.."259"..R  },
-        { "M4",  CHAMP.."253"..R, HERO.."263"..R  },
-        { "M5",  CHAMP.."256"..R, HERO.."263"..R  },
-        { "M6",  HERO.."259"..R,  HERO.."266"..R  },
-        { "M7",  HERO.."259"..R,  HERO.."269"..R  },
-        { "M8",  HERO.."263"..R,  HERO.."269"..R  },
-        { "M9",  HERO.."263"..R,  HERO.."269"..R  },
-        { "M10", HERO.."266"..R,  MYTH.."272"..R  },
-        { "M11", HERO.."266"..R,  MYTH.."272"..R  },
-        { "M12", HERO.."266"..R,  MYTH.."272"..R  },
+        { Locale.ILVLREF_DUNGEON_PRE_HEROIC, IC(1,2), "?"      },
+        { Locale.ILVLREF_DUNGEON_HEROIC,     IC(1,4), IC(2,4)  },
+        { Locale.ILVLREF_DUNGEON_PRE_MYTHIC, IC(2,3), "?"      },
+        { Locale.ILVLREF_DUNGEON_MYTHIC,     IC(3,1), IC(3,4)  },
+        { "M2",  IC(3,2), IC(4,1) },
+        { "M3",  IC(3,2), IC(4,1) },
+        { "M4",  IC(3,3), IC(4,2) },
+        { "M5",  IC(3,4), IC(4,2) },
+        { "M6",  IC(4,1), IC(4,3) },
+        { "M7",  IC(4,1), IC(4,4) },
+        { "M8",  IC(4,2), IC(4,4) },
+        { "M9",  IC(4,2), IC(4,4) },
+        { "M10", IC(4,3), IC(5,1) },
+        { "M11", IC(4,3), IC(5,1) },
+        { "M12", IC(4,3), IC(5,1) },
     }
 
-    -- Raid item levels
+    -- Raid item levels  (each difficulty = one tier across boss columns 1–4)
     local RAID = {
-        { L.ILVLREF_RAID_LFR,    VET.."233"..R,   VET.."237"..R,   VET.."240"..R,   CHAMP.."243"..R },
-        { L.ILVLREF_RAID_NORMAL,  CHAMP.."246"..R, CHAMP.."250"..R, CHAMP.."253"..R, HERO.."256"..R  },
-        { L.ILVLREF_RAID_HEROIC,  HERO.."259"..R,  HERO.."263"..R,  HERO.."266"..R,  MYTH.."269"..R  },
-        { L.ILVLREF_RAID_MYTHIC,  MYTH.."272"..R,  MYTH.."276"..R,  MYTH.."279"..R,  MYTH.."282"..R  },
+        { Locale.ILVLREF_RAID_LFR,    IC(2,1), IC(2,2), IC(2,3), IC(2,4) },
+        { Locale.ILVLREF_RAID_NORMAL,  IC(3,1), IC(3,2), IC(3,3), IC(3,4) },
+        { Locale.ILVLREF_RAID_HEROIC,  IC(4,1), IC(4,2), IC(4,3), IC(4,4) },
+        { Locale.ILVLREF_RAID_MYTHIC,  IC(5,1), IC(5,2), IC(5,3), IC(5,4) },
     }
 
     -- Bountiful Delve item levels
-    local tFmt = L.ILVLREF_DELVE_TIER_FMT
+    local tFmt = Locale.ILVLREF_DELVE_TIER_FMT
     local DELVES = {
-        { tFmt:format(1),  ADV.."220"..R,   "-",             VET.."233"..R   },
-        { tFmt:format(2),  ADV.."224"..R,   "-",             VET.."237"..R   },
-        { tFmt:format(3),  ADV.."227"..R,   "-",             VET.."240"..R   },
-        { tFmt:format(4),  ADV.."230"..R,   VET.."237"..R,   VET.."243"..R   },
-        { tFmt:format(5),  VET.."233"..R,   VET.."243"..R,   CHAMP.."246"..R },
-        { tFmt:format(6),  VET.."237"..R,   CHAMP.."250"..R, CHAMP.."253"..R },
-        { tFmt:format(7),  CHAMP.."250"..R, CHAMP.."256"..R, CHAMP.."256"..R },
-        { tFmt:format(8),  CHAMP.."250"..R, HERO.."259"..R,  HERO.."259"..R  },
-        { tFmt:format(9),  CHAMP.."250"..R, HERO.."259"..R,  HERO.."259"..R  },
-        { tFmt:format(10), CHAMP.."250"..R, HERO.."259"..R,  HERO.."259"..R  },
-        { tFmt:format(11), CHAMP.."250"..R, HERO.."259"..R,  HERO.."259"..R  },
+        { tFmt:format(1),  IC(1,1), "-",     IC(2,1) },
+        { tFmt:format(2),  IC(1,2), "-",     IC(2,2) },
+        { tFmt:format(3),  IC(1,3), "-",     IC(2,3) },
+        { tFmt:format(4),  IC(1,4), IC(2,2), IC(2,4) },
+        { tFmt:format(5),  IC(2,1), IC(2,4), IC(3,1) },
+        { tFmt:format(6),  IC(2,2), IC(3,2), IC(3,3) },
+        { tFmt:format(7),  IC(3,2), IC(3,4), IC(3,4) },
+        { tFmt:format(8),  IC(3,2), IC(4,1), IC(4,1) },
+        { tFmt:format(9),  IC(3,2), IC(4,1), IC(4,1) },
+        { tFmt:format(10), IC(3,2), IC(4,1), IC(4,1) },
+        { tFmt:format(11), IC(3,2), IC(4,1), IC(4,1) },
     }
 
     -- Pre-fit column widths and compute dynamic window width ----------------
     local trackCols = AutoFitCols({
-        { t = L.ILVLREF_COL_ILVL           },
-        { t = L.ILVLREF_COL_TRACK  },
-        { t = L.ILVLREF_COL_CREST_NEEDED          },
+        { t = Locale.ILVLREF_COL_ILVL           },
+        { t = Locale.ILVLREF_COL_TRACK  },
+        { t = Locale.ILVLREF_COL_CREST_NEEDED          },
     }, TRACKS)
     local craftCols = AutoFitCols({
-        { t = L.ILVLREF_COL_QUALITY               },
-        { t = ADV..L.ILVLREF_CREST_ADV..R    },
-        { t = VET..L.ILVLREF_CREST_VET..R    },
-        { t = CHAMP..L.ILVLREF_CREST_CHAMP..R },
-        { t = HERO..L.ILVLREF_CREST_HERO..R  },
-        { t = MYTH..L.ILVLREF_CREST_MYTH..R  },
+        { t = Locale.ILVLREF_COL_QUALITY                          },
+        { t = ADV..Locale.ILVLREF_CREST_ADV..COLOR_RESET    },
+        { t = VET..Locale.ILVLREF_CREST_VET..COLOR_RESET    },
+        { t = CHAMP..Locale.ILVLREF_CREST_CHAMP..COLOR_RESET },
+        { t = HERO..Locale.ILVLREF_CREST_HERO..COLOR_RESET  },
+        { t = MYTH..Locale.ILVLREF_CREST_MYTH..COLOR_RESET  },
     }, CRAFTED)
     local dungCols = AutoFitCols({
-        { t = L.ILVLREF_COL_SOURCE      },
-        { t = L.ILVLREF_COL_END_LOOT    },
-        { t = L.ILVLREF_COL_GREAT_VAULT },
+        { t = Locale.ILVLREF_COL_SOURCE      },
+        { t = Locale.ILVLREF_COL_END_LOOT    },
+        { t = Locale.ILVLREF_COL_GREAT_VAULT },
     }, DUNGEONS)
     local raidCols = AutoFitCols({
-        { t = L.ILVLREF_COL_DIFFICULTY },
-        { t = L.ILVLREF_COL_BOSS1      },
-        { t = L.ILVLREF_COL_BOSS2        },
-        { t = L.ILVLREF_COL_BOSS3       },
-        { t = L.ILVLREF_COL_BOSS4        },
+        { t = Locale.ILVLREF_COL_DIFFICULTY },
+        { t = Locale.ILVLREF_COL_BOSS1      },
+        { t = Locale.ILVLREF_COL_BOSS2      },
+        { t = Locale.ILVLREF_COL_BOSS3      },
+        { t = Locale.ILVLREF_COL_BOSS4      },
     }, RAID)
     local delveCols = AutoFitCols({
-        { t = L.ILVLREF_COL_TIER        },
-        { t = L.ILVLREF_COL_END_LOOT    },
-        { t = L.ILVLREF_COL_MAP_DROP    },
-        { t = L.ILVLREF_COL_GREAT_VAULT },
+        { t = Locale.ILVLREF_COL_TIER        },
+        { t = Locale.ILVLREF_COL_END_LOOT    },
+        { t = Locale.ILVLREF_COL_MAP_DROP    },
+        { t = Locale.ILVLREF_COL_GREAT_VAULT },
     }, DELVES)
-    local function tblW(c) return c[#c].x + c[#c].w end
-    local contentW = math.max(tblW(trackCols), tblW(craftCols), tblW(dungCols),
-                               tblW(raidCols), tblW(delveCols))
-    local WIN_W = contentW + PAD * 2 + 22  -- PAD each side + scrollbar
+    local function tblW(cols) return cols[#cols].x + cols[#cols].w end
 
     local win
     if BackdropTemplateMixin then
@@ -347,12 +350,20 @@ local function BuildIlvlRefWindow()
         end
     end
 
+    -- Default width = 2-col layout (Tracks | everything else).  Set after
+    -- BuildSection calls (wTracks/wRight2 not yet available here).
     win:SetSize(WIN_W, WIN_H)
     local _savedIlvlPos = Addon.db and Addon.db.global and Addon.db.global.ilvlRefPos
     if _savedIlvlPos and _savedIlvlPos.x and _savedIlvlPos.y then
         win:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", _savedIlvlPos.x, _savedIlvlPos.y)
     else
-        win:SetPoint("CENTER", UIParent, "CENTER", 260, 0)  -- offset right so it doesn't cover the checklist
+        -- Default: snap to the right edge of the main checklist frame, same Y.
+        local mf = Addon._mainFrame
+        if mf then
+            win:SetPoint("TOPLEFT", mf, "TOPRIGHT", 4, 0)
+        else
+            win:SetPoint("CENTER", UIParent, "CENTER", 260, 0)
+        end
     end
     win:SetClampedToScreen(true)
     win:SetMovable(true)
@@ -378,70 +389,175 @@ local function BuildIlvlRefWindow()
     -- Title
     local titleFS = win:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     titleFS:SetPoint("TOPLEFT", win, "TOPLEFT", PAD, -10)
-    local th = Addon.THEME.header
-    titleFS:SetTextColor(th.r, th.g, th.b, th.a)
-    titleFS:SetText(L.ILVLREF_WINDOW_TITLE)
+    local titleHeaderColor = Addon.THEME.header
+    titleFS:SetTextColor(titleHeaderColor.r, titleHeaderColor.g, titleHeaderColor.b, titleHeaderColor.a)
+    titleFS:SetText(Locale.ILVLREF_WINDOW_TITLE)
 
     -- Close button
     local closeBtn = CreateFrame("Button", nil, win, "UIPanelCloseButton")
     closeBtn:SetPoint("TOPRIGHT", win, "TOPRIGHT", -4, -4)
     closeBtn:SetScript("OnClick", function() win:Hide() end)
 
-    -- Register with UISpecialFrames so ESC closes it
-    if UISpecialFrames and win.GetName then
-        local n = win:GetName()
-        if n and n ~= "" then
-            local exists = false
-            for i = 1, #UISpecialFrames do
-                if UISpecialFrames[i] == n then exists = true; break end
-            end
-            if not exists then
-                table.insert(UISpecialFrames, n)
-            end
+    -- Handle ESC via keyboard input so only this window closes (not the main frame).
+    win:EnableKeyboard(true)
+    win:SetScript("OnKeyDown", function(self, key)
+        if key == "ESCAPE" then
+            self:SetPropagateKeyboardInput(false)
+            self:Hide()
+        else
+            self:SetPropagateKeyboardInput(true)
         end
-    end
+    end)
 
-    -- Scroll frame
+    -- Scroll frame (auto-adapts to win size; content reflows instead of scaling)
     local sf = CreateFrame("ScrollFrame", nil, win, "UIPanelScrollFrameTemplate")
     sf:SetPoint("TOPLEFT",     win, "TOPLEFT",  PAD,     -SCROLLTOP)
     sf:SetPoint("BOTTOMRIGHT", win, "BOTTOMRIGHT", -(PAD + 22), PAD)
 
     local sc = CreateFrame("Frame", nil, sf)
-    -- Content width = window width - 2xPAD - scrollbar width (22)
-    sc:SetWidth(WIN_W - PAD * 2 - 22)
-    sc:SetHeight(1)
+    sc:SetSize(1, 1)
     sf:SetScrollChild(sc)
 
+    -- Build each section into its own sub-frame so ReflowIlvlSections can
+    -- reposition them without redrawing any content.
+    local COL_GAP = 20  -- horizontal gap between two columns when side-by-side
 
-    local posY = -4
+    local function BuildSection(headText, cols, rows)
+        local secFrame = CreateFrame("Frame", nil, sc)
+        local sectionY = 0
+        sectionY = SecHead(secFrame, sectionY, headText)
+        sectionY = GridTable(secFrame, sectionY, cols, rows)
+        local secHeight = -sectionY
+        local secWidth  = tblW(cols)
+        secFrame:SetSize(secWidth, secHeight)
+        return secFrame, secWidth, secHeight
+    end
 
-    -- 1. Upgrade Tracks
-    posY = SecHead(sc, posY, L.ILVLREF_SEC_TRACKS)
-    posY = GridTable(sc, posY, trackCols, TRACKS)
-    posY = posY - SEC_GAP
+    local secTracks,  wTracks,  hTracks  = BuildSection(Locale.ILVLREF_SEC_TRACKS,   trackCols, TRACKS)
+    local secCrafted, wCrafted, hCrafted = BuildSection(Locale.ILVLREF_SEC_CRAFTED,   craftCols, CRAFTED)
+    local secDungs,   wDungs,   hDungs   = BuildSection(Locale.ILVLREF_SEC_DUNGEONS,  dungCols,  DUNGEONS)
+    local secRaid,    wRaid,    hRaid    = BuildSection(Locale.ILVLREF_SEC_RAID,       raidCols,  RAID)
+    local secDelves,  wDelves,  hDelves  = BuildSection(Locale.ILVLREF_SEC_DELVES,    delveCols, DELVES)
 
-    -- 2. Crafted Item Levels
-    posY = SecHead(sc, posY, L.ILVLREF_SEC_CRAFTED)
-    posY = GridTable(sc, posY, craftCols, CRAFTED)
-    posY = posY - SEC_GAP
+    -- Natural column widths for multi-column layouts
+    local wMid    = math.max(wCrafted, wDungs)        -- 3-col: middle column
+    local wRight3 = math.max(wRaid,    wDelves)        -- 3-col: right column
+    local wSingle = math.max(wTracks, wCrafted, wDungs, wRaid, wDelves)  -- 1-col: widest table
 
-    -- 3. Dungeon Item Levels
-    posY = SecHead(sc, posY, L.ILVLREF_SEC_DUNGEONS)
-    posY = GridTable(sc, posY, dungCols, DUNGEONS)
-    posY = posY - SEC_GAP
+    -- Maximized = 3-col, auto-height, no scroll.
+    -- Minimized = 1-col stacked, fixed WIN_H, scrollable.
+    local _isMaximized = (Addon.db and Addon.db.global and Addon.db.global.ilvlRefMaximized) and true or false
+    local _reflowing   = false
 
-    -- 4. Raid Item Levels
-    posY = SecHead(sc, posY, L.ILVLREF_SEC_RAID)
-    posY = GridTable(sc, posY, raidCols, RAID)
-    posY = posY - SEC_GAP
+    local function ReflowIlvlSections()
+        if _reflowing then return end
+        _reflowing = true
 
-    -- 5. Bountiful Delve Item Levels
-    posY = SecHead(sc, posY, L.ILVLREF_SEC_DELVES)
-    posY = GridTable(sc, posY, delveCols, DELVES)
+        local sb = sf.ScrollBar
 
-    -- Set final scroll child height
-    local totalH = math.abs(posY) + PAD
-    sc:SetHeight(max(1, totalH))
+        if _isMaximized then
+            -- ── Three-column layout (maximized) ───────────────────────────────
+            local col3W = wTracks + wMid + wRight3 + COL_GAP * 2
+            sc:SetWidth(max(1, col3W))
+
+            secTracks:ClearAllPoints()
+            secTracks:SetPoint("TOPLEFT", sc, "TOPLEFT", 0, 0)
+
+            local midX   = wTracks + COL_GAP
+            local rightX = midX + wMid + COL_GAP
+
+            local my = 0
+            for i, s in ipairs({ secCrafted, secDungs }) do
+                s:ClearAllPoints()
+                s:SetPoint("TOPLEFT", sc, "TOPLEFT", midX, my)
+                my = my - ({ hCrafted, hDungs })[i] - SEC_GAP
+            end
+
+            local ry = 0
+            for i, s in ipairs({ secRaid, secDelves }) do
+                s:ClearAllPoints()
+                s:SetPoint("TOPLEFT", sc, "TOPLEFT", rightX, ry)
+                ry = ry - ({ hRaid, hDelves })[i] - SEC_GAP
+            end
+
+            sc:SetHeight(max(1, math.max(hTracks, -my, -ry) + PAD))
+
+            -- Auto-fit height so no scrollbar is needed.
+            local idealH = SCROLLTOP + math.ceil(sc:GetHeight()) + PAD
+            win:SetHeight(idealH)
+            -- +1 extra pixel so the scroll viewport (win_w - 2*PAD - 22) is wide
+            -- enough to include the 1px right-border vline drawn at x=col3W.
+            win:SetWidth(col3W + PAD * 2 + 22 + 1)
+            if sb then sb:Hide() end
+
+        else
+            -- ── Single-column layout (minimized / default) ────────────────────
+            sc:SetWidth(max(1, wSingle))
+
+            local allSecs = { secTracks, secCrafted, secDungs, secRaid,  secDelves }
+            local allHs   = { hTracks,  hCrafted,   hDungs,   hRaid,    hDelves   }
+            local y = 0
+            for i, s in ipairs(allSecs) do
+                s:ClearAllPoints()
+                s:SetPoint("TOPLEFT", sc, "TOPLEFT", 0, y)
+                y = y - allHs[i] - SEC_GAP
+            end
+            sc:SetHeight(max(1, -y + PAD))
+
+            -- Fixed window height; scroll frame handles overflow.
+            win:SetHeight(WIN_H)
+            if sb then sb:Show() end
+        end
+
+        -- The outer window (win) is scaled uniformly via win:SetScale() in
+        -- ApplyUIScale, so no separate content scale is needed here.
+
+        _reflowing = false
+    end
+
+    win._ilvlReflow = ReflowIlvlSections
+
+    -- Toggle button: text button showing "Expand" / "Shrink".
+    local toggleBtn = CreateFrame("Button", nil, win, "UIPanelButtonTemplate")
+    toggleBtn:SetPoint("TOPRIGHT", closeBtn, "TOPLEFT", 4, 0)
+    toggleBtn:SetSize(60, 20)
+    if Addon._styleActionButton then Addon._styleActionButton(toggleBtn) end
+
+    local function UpdateToggleTexture()
+        toggleBtn:SetText(_isMaximized
+            and (Locale.ILVLREF_TOGGLE_SHRINK or "Shrink")
+            or  (Locale.ILVLREF_TOGGLE_EXPAND or "Expand"))
+    end
+    UpdateToggleTexture()
+
+    toggleBtn:SetScript("OnClick", function()
+        _isMaximized = not _isMaximized
+        local _gdb = Addon.db and Addon.db.global
+        if _gdb then _gdb.ilvlRefMaximized = _isMaximized end
+        UpdateToggleTexture()
+        -- Freeze the horizontal center so the window grows/shrinks
+        -- symmetrically left and right from its current position.
+        local pinCX  = win:GetLeft() + win:GetWidth() / 2
+        local pinTop = win:GetTop()
+        if _isMaximized then
+            -- Widen to fit 3-col before reflow so layout branch is chosen correctly.
+            -- +1 for the right-border pixel on the last table (see ReflowIlvlSections).
+            win:SetWidth(wTracks + wMid + wRight3 + COL_GAP * 2 + PAD * 2 + 22 + 1)
+        else
+            win:SetWidth(wSingle + PAD * 2 + 22)
+        end
+        win:ClearAllPoints()
+        win:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", pinCX - win:GetWidth() / 2, pinTop)
+        ReflowIlvlSections()
+    end)
+
+    -- Initial state: apply saved maximized state (defaults to minimized/1-col scrollable).
+    if _isMaximized then
+        win:SetWidth(wTracks + wMid + wRight3 + COL_GAP * 2 + PAD * 2 + 22 + 1)
+    else
+        win:SetWidth(wSingle + PAD * 2 + 22)
+    end
+    ReflowIlvlSections()
 
     return win
 end

@@ -1,11 +1,11 @@
 ## Interface: 120001, 120000, 110207
-## Title: Larias's Weekly Checklist
+## Title: Larias's Weekly Checklist (ALPHA)
 ## Notes: Weekly checklist with collapsible weeks
 ## Author: Larias
-## Version: 1.0.24
-## SavedVariablesPerCharacter: LariasWeeklyChecklistDBPC
+## Version: 2.0.0.5-alpha
 ## SavedVariables: LariasWeeklyChecklistDB
 ## OptionalDeps: LariasWeeklyChecklist_Localization
+## IconTexture: Interface\AddOns\LariasWeeklyChecklist\Media\icon
 ## X-Wago-ID: mKOD5RGx
 ## X-Curse-Project-ID: 1448023
 
@@ -23,11 +23,14 @@ Libs\\Ace3\\AceComm-3.0\\AceComm-3.0.lua
 Libs\\Ace3\\AceBucket-3.0\\AceBucket-3.0.lua
 Libs\\LibDataBroker-1.1\\LibDataBroker-1.1.lua
 Libs\\LibDBIcon-1.0\\LibDBIcon-1.0.lua
+Libs\\LibWindow-1.1\\LibWindow-1.1\\LibWindow-1.1.lua
 Locales\\enUS.lua
 Locales\\enUS_Data.lua
 Modules\\LariasWeeklyChecklist_Constants.lua
 LariasWeeklyChecklist.lua
+Modules\\LariasWeeklyChecklist_CharPicker.lua
 Modules\\LariasWeeklyChecklist_Options.lua
+Modules\\LariasWeeklyChecklist_GearPopup.lua
 Modules\\LariasWeeklyChecklist_Comms.lua
 Modules\\LariasWeeklyChecklist_Currency.lua
 Modules\\LariasWeeklyChecklist_IlvlRef.lua
