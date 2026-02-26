@@ -189,7 +189,8 @@ function Addon:EnsureUpdatePopup()
             Addon:DismissUpdateNotice()
         end,
         OnCancel = function()
-            -- Keep pending; we'll remind next time they open the list.
+            -- Dismiss on cancel too — user has seen the notice.
+            Addon:DismissUpdateNotice()
         end,
         timeout = 0,
         whileDead = true,
@@ -347,6 +348,21 @@ end
 function Addon:CommsOnEnable()
     -- Called from Addon:OnEnable.
     self._myVersion = GetAddonVersion(addonName)
+
+    -- Auto-clear a stale _newestSeenRemoteVersion if our version has caught up
+    -- (e.g. the user installed an update since the last session, or a dev build
+    -- wrote a higher version string that is now obsolete).  This prevents the
+    -- update notice from firing forever on a version that is already installed.
+    local database = self:EnsureDB()
+    local myVer    = self._myVersion
+    if myVer ~= "" and IsLiveVersion(myVer) then
+        local stored = tostring(database._newestSeenRemoteVersion or "")
+        if stored ~= "" and not IsVersionNewer(stored, myVer) then
+            database._newestSeenRemoteVersion = ""
+            database._newestSeenRemoteSender  = ""
+            database._dismissedRemoteVersion  = ""
+        end
+    end
 
     -- Embed AceComm-3.0 now if it is available.  We defer this from NewAddon
     -- so a missing or overridden library does not crash the main chunk and
