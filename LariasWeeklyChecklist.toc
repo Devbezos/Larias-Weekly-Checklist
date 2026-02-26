@@ -2,8 +2,7 @@
 ## Title: Larias's Weekly Checklist (ALPHA)
 ## Notes: Weekly checklist with collapsible weeks
 ## Author: Larias
-## Version: 1.0.24
-## SavedVariablesPerCharacter: LariasWeeklyChecklistDBPC
+## Version: 2.0.0
 ## SavedVariables: LariasWeeklyChecklistDB
 ## OptionalDeps: LariasWeeklyChecklist_Localization
 ## IconTexture: Interface\AddOns\LariasWeeklyChecklist\Media\icon
