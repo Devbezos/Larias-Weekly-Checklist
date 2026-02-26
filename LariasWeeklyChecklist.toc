@@ -1,8 +1,8 @@
 ## Interface: 120001, 120000, 110207
-## Title: Larias's Weekly Checklist
+## Title: Larias's Weekly Checklist (ALPHA)
 ## Notes: Weekly checklist with collapsible weeks
 ## Author: Larias
-## Version: 1.0.22
+## Version: 1.0.22.12-alpha
 ## SavedVariables: LariasWeeklyChecklistDB
 ## OptionalDeps: LariasWeeklyChecklist_Localization
 ## IconTexture: Interface\AddOns\LariasWeeklyChecklist\Media\icon
