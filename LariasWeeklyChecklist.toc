@@ -29,6 +29,7 @@ Modules\\LariasWeeklyChecklist_Constants.lua
 LariasWeeklyChecklist.lua
 Modules\\LariasWeeklyChecklist_CharPicker.lua
 Modules\\LariasWeeklyChecklist_Options.lua
+Modules\\LariasWeeklyChecklist_GearPopup.lua
 Modules\\LariasWeeklyChecklist_Comms.lua
 Modules\\LariasWeeklyChecklist_Currency.lua
 Modules\\LariasWeeklyChecklist_IlvlRef.lua
