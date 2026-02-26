@@ -2,32 +2,6 @@ local addonName = ...
 local Addon = _G[addonName]
 if not Addon then return end
 
-local function SetCheckText(checkButton, text)
-    if not checkButton then return end
-    local textRegion = checkButton.text or checkButton.Text
-    if textRegion and textRegion.SetText then
-        textRegion:SetText(text)
-        if textRegion.SetTextColor and Addon.THEME and Addon.THEME.text then
-            textRegion:SetTextColor(Addon.THEME.text.r, Addon.THEME.text.g, Addon.THEME.text.b, Addon.THEME.text.a)
-        end
-    end
-end
-
--- Tints the standard UICheckButtonTemplate textures to match the dark theme.
--- Normal (unchecked box) → grey;  Checked mark → gold accent;  Hover → subtle white.
-local function StyleCheckButton(cb)
-    if not cb then return end
-    local norm = cb.GetNormalTexture and cb:GetNormalTexture()
-    if norm then norm:SetVertexColor(0.55, 0.55, 0.55, 1) end
-    local chk = cb.GetCheckedTexture and cb:GetCheckedTexture()
-    if chk then
-        local th = Addon.THEME and Addon.THEME.header
-        if th then chk:SetVertexColor(th.r, th.g, th.b, 1) end
-    end
-    local hi = cb.GetHighlightTexture and cb:GetHighlightTexture()
-    if hi then hi:SetVertexColor(1, 1, 1, 0.12) end
-end
-
 function Addon:ToggleHiddenCharsDropdown()
     -- Don't open when nothing is hidden.
     local gdbT   = self.db and self.db.global
@@ -128,11 +102,15 @@ function Addon:RefreshHiddenCharsList()
     if trigBtn and trigBtn.SetText then
         if #hidden == 0 then
             -- No hidden chars: plain label, no dropdown arrow, button disabled.
-            trigBtn:SetText(string.format("%s (0)", L.OPTIONS_HIDDEN_CHARS_TITLE or "Hidden"))
+            local noneLabel = string.format("%s %s",
+                L.OPTIONS_HIDDEN_CHARS_TITLE or "Hidden characters:",
+                L.OPTIONS_HIDDEN_CHARS_NONE  or "None")
+            trigBtn:SetText(noneLabel)
             trigBtn:SetEnabled(false)
         else
             trigBtn:SetEnabled(true)
-            local label = string.format("%s (%d) |TInterface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up:10:10|t", L.OPTIONS_HIDDEN_CHARS_TITLE or "Hidden", #hidden)
+            local label = string.format("%s (%d) |TInterface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up:10:10|t",
+                L.OPTIONS_HIDDEN_CHARS_TITLE or "Hidden characters:", #hidden)
             trigBtn:SetText(label)
         end
     end
@@ -285,7 +263,7 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
 
     local MIN_V  = 80
     local MAX_V  = 120
-    local STEP_V = 5
+    local STEP_V = 1
 
     -- Dimensions
     local TRACK_H  = 10      -- track bar height
@@ -301,6 +279,7 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
     local sf = CreateFrame("Frame", nil, parentFrame)
     sf:SetSize(SLIDER_W, SLIDER_H)
     sf:SetPoint("BOTTOMLEFT", parentFrame, "BOTTOMLEFT", Addon.UI.sectionInsetX or 14, Addon.UI.sliderBottomPad or 4)
+    sf:EnableMouse(true)  -- consume all clicks so right-clicks don't propagate to parent
     self._inFrameScaleSlider = sf
 
     -- "Scale" label
@@ -309,7 +288,8 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
     scaleLbl:SetWidth(LBL_W)
     scaleLbl:SetJustifyH("RIGHT")
     scaleLbl:SetTextColor(txt.r, txt.g, txt.b, txt.a)
-    scaleLbl:SetText("Scale")
+    local L = self.L or {}
+    scaleLbl:SetText(L.UI_SCALE_LABEL or "Scale")
 
     -- Track container (mouse receiver + clipping context)
     local trackCont = CreateFrame("Frame", nil, sf)

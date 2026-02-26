@@ -145,9 +145,14 @@ do
             -- Constants are authoritative: replace the whole tracking table.
             -- This makes "remove a key" (e.g. commenting out an ID) take effect immediately.
             self.TRACKING = DeepCopyTable(trackingConstants)
+            -- Feature flags live inside the constants file so there is one edit spot.
+            self.FEATURE_FLAGS = type(trackingConstants.featureFlags) == "table"
+                and DeepCopyTable(trackingConstants.featureFlags)
+                or {}
         else
             -- If the constants file is missing or failed to load, we don't silently invent IDs.
             -- Leave defaults as-is and print a single warning.
+            self.FEATURE_FLAGS = self.FEATURE_FLAGS or {}
             if not self._warnedMissingConstants then
                 self._warnedMissingConstants = true
                 if self.Print then
@@ -1254,6 +1259,35 @@ local function OnCheckboxClick(selfBtn)
         SetSectionCollapsed(sectionId, true, database)
     end
 
+    -- Auto-advance: when the user manually completes the current active week,
+    -- advance startAtSectionId to the next week so explicit navigation stays in sync.
+    -- Also repopulate the picker unconditionally so the ">" marker refreshes.
+    if secCompleteNow then
+        local order    = Addon._order or {}
+        local curStart = tostring(database.startAtSectionId or "")
+        -- Only update startAtSectionId when it's explicitly set (i.e. the user
+        -- navigated via the picker). When it's "" the picker computes current
+        -- dynamically from completion state, so no write is needed.
+        if curStart ~= "" then
+            local curId = curStart
+            if tostring(sectionId) == curId then
+                for i = 1, #order do
+                    if tostring(order[i]) == curId then
+                        local nextId = order[i + 1]
+                        if nextId then
+                            database.startAtSectionId = tostring(nextId)
+                        end
+                        break
+                    end
+                end
+            end
+        end
+        -- Refresh picker ">" regardless of how currentId is derived.
+        if Addon._PopulateHeaderPicker then
+            Addon._PopulateHeaderPicker()
+        end
+    end
+
     local sectionFrame = Addon._activeSections[Addon._sectionsIndexById[sectionId]]
     if not sectionFrame then return end
 
@@ -1943,6 +1977,10 @@ function Addon:CreateFrame()
             if order[i] == newStart then newIdx = i end
         end
 
+        -- An empty startAtSectionId means the user is implicitly on week 1.
+        -- Clamp oldIdx to 1 so navigation is consistent with what the ">" marker shows.
+        if oldIdx == 0 and #order > 0 then oldIdx = 1 end
+
         -- Going forward → check + collapse everything before the new start.
         -- Going backward → uncheck + expand everything from new start through
         -- the old start (inclusive, so a completed current week is also cleared).
@@ -1950,7 +1988,7 @@ function Addon:CreateFrame()
             -- Ensure both tables exist once before the loop, not on every iteration.
             if type(db.checked)          ~= "table" then db.checked          = {} end
             if type(db.collapsedSections) ~= "table" then db.collapsedSections = {} end
-            for i = (oldIdx == 0 and 1 or oldIdx), newIdx - 1 do
+            for i = oldIdx, newIdx - 1 do
                 local secId  = order[i]
                 local secDef = Addon._sectionsById and Addon._sectionsById[secId]
                 local items  = secDef and secDef.items or {}
@@ -1959,7 +1997,7 @@ function Addon:CreateFrame()
                 end
                 db.collapsedSections[secId] = true
             end
-        elseif newIdx < oldIdx then
+        elseif newIdx <= oldIdx then
             -- Hoist existence checks: if either table is absent there is nothing to clear.
             local checked   = type(db.checked)          == "table" and db.checked          or nil
             local collapsed = type(db.collapsedSections) == "table" and db.collapsedSections or nil
@@ -1999,20 +2037,38 @@ function Addon:CreateFrame()
         local data = Addon.GetListData and Addon:GetListData() or {}
         local posY = -PICKER_PAD
 
-        -- Determine the current week's id so we can skip it in the list.
-        local db0       = Addon:EnsureDB()
-        local currentId = tostring(db0.startAtSectionId or "")
-        if currentId == "" and Addon._order and Addon._order[1] then
-            currentId = tostring(Addon._order[1])
+        -- Determine the current week: use the stored start if explicitly set,
+        -- otherwise scan for the first incomplete section so that manually
+        -- checked sections are reflected without needing an explicit navigation.
+        local db0         = Addon:EnsureDB()
+        local storedStart = tostring(db0.startAtSectionId or "")
+        local currentId
+        if storedStart ~= "" then
+            currentId = storedStart
+        else
+            -- Find first section that isn't fully checked yet.
+            local order = Addon._order or {}
+            for i = 1, #order do
+                if not IsSectionCompleteById(order[i], db0) then
+                    currentId = tostring(order[i])
+                    break
+                end
+            end
+            -- Fallback: everything is done (or no data), point to first section.
+            if not currentId and Addon._order and Addon._order[1] then
+                currentId = tostring(Addon._order[1])
+            end
         end
 
         if type(data) == "table" then
             for i = 1, #data do
                 local section = data[i]
-                if type(section) == "table" and tostring(section.id or "") ~= currentId then
+                if type(section) == "table" then
                     local id    = section.id
+                    local isCurrent = (tostring(id or "") == currentId)
                     local label = ExtractMonthRangeLabel(section.title or id or "")
                     if label == "" then label = tostring(id or i) end
+                    if isCurrent then label = "> " .. label end
 
                     local btn = AcquirePickerButton(picker)
                     btn:ClearAllPoints()
@@ -2022,6 +2078,13 @@ function Addon:CreateFrame()
                     btn:SetEnabled(true)
                     local capturedId = id
                     btn:SetScript("OnClick", function() HandlePick(capturedId, scrollFrame) end)
+
+                    -- Dim the current-week button slightly so it reads as an indicator.
+                    if isCurrent then
+                        SetPickerButtonTextColor(btn, Addon.THEME.textDim or Addon.THEME.text)
+                        btn:SetScript("OnEnter", function() SetPickerButtonTextColor(btn, Addon.THEME.header) end)
+                        btn:SetScript("OnLeave", function() SetPickerButtonTextColor(btn, Addon.THEME.textDim or Addon.THEME.text) end)
+                    end
 
                     tinsert(picker._buttons, btn)
                     posY = posY - PICKER_ROW_HEIGHT
@@ -2083,41 +2146,14 @@ function Addon:CreateFrame()
         local showCW  = dbLocal.showChangeWeekBtn  ~= false
         local showIR  = dbLocal.showIlvlRefBtn     ~= false
         local showCP  = dbLocal.showCharPickerBtn  ~= false
+                    and (Addon.FEATURE_FLAGS and Addon.FEATURE_FLAGS.ENABLE_CHAR_SELECTOR) ~= false
 
         -- Also hide the char picker when there is nothing to pick from: no other
         -- characters in the dropdown and we are not currently viewing one.
         if showCP then
-            local hasPickable = false
-            if Addon._viewingChar then
-                hasPickable = true   -- "back to me" row is available
-            elseif Addon.GetCharProfileKeys and Addon.GetCurrentProfileKey then
-                local ownKey  = Addon:GetCurrentProfileKey()
-                local gdb     = Addon.db and Addon.db.global
-                for _, charKey in ipairs(Addon:GetCharProfileKeys()) do
-                    local isOwn    = (charKey == ownKey) or (charKey:lower() == ownKey:lower())
-                    local isHidden = gdb and gdb.hiddenChars and gdb.hiddenChars[charKey]
-                    if not isOwn and not isHidden then
-                        -- Must also pass the same class + snapshot guards used by Populate().
-                        local classToken = gdb and gdb.charClasses and gdb.charClasses[charKey]
-                        local snap = gdb and gdb.chars and gdb.chars[charKey] and gdb.chars[charKey].trackingSnapshot
-                        local usable = snap and (
-                            snap.leftLines ~= nil or
-                            (function()
-                                if type(snap.rightRows) ~= "table" then return false end
-                                for _, row in ipairs(snap.rightRows) do
-                                    if row.qty and row.qty > 0 then return true end
-                                end
-                                return false
-                            end)()
-                        )
-                        if classToken and usable then
-                            hasPickable = true
-                            break
-                        end
-                    end
-                end
+            if Addon.HasPickableChars then
+                showCP = Addon:HasPickableChars()
             end
-            if not hasPickable then showCP = false end
         end
 
         -- charPickerBtn sits in the TOP row (above changeWeekBtn).  Position it first

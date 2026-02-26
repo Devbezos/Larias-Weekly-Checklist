@@ -59,6 +59,35 @@ function Addon:SetViewingChar(profileKey)
     if self.RequestRefresh then self:RequestRefresh() else self:Refresh() end
 end
 
+-- Returns true when there is at least one character the picker can switch to.
+-- Used by LayoutHeaderButtons_ and SyncGearPopup to decide visibility.
+function Addon:HasPickableChars()
+    if self._viewingChar then return true end  -- "back to me" row is available
+    if not (self.GetCharProfileKeys and self.GetCurrentProfileKey) then return false end
+    local ownKey = self:GetCurrentProfileKey()
+    local gdb    = self.db and self.db.global
+    for _, charKey in ipairs(self:GetCharProfileKeys()) do
+        local isOwn    = (charKey == ownKey) or (charKey:lower() == ownKey:lower())
+        local isHidden = gdb and gdb.hiddenChars and gdb.hiddenChars[charKey]
+        if not isOwn and not isHidden then
+            local classToken = gdb and gdb.charClasses and gdb.charClasses[charKey]
+            local snap = gdb and gdb.chars and gdb.chars[charKey] and gdb.chars[charKey].trackingSnapshot
+            local usable = snap and (
+                snap.leftLines ~= nil or
+                (function()
+                    if type(snap.rightRows) ~= "table" then return false end
+                    for _, row in ipairs(snap.rightRows) do
+                        if row.qty and row.qty > 0 then return true end
+                    end
+                    return false
+                end)()
+            )
+            if classToken and usable then return true end
+        end
+    end
+    return false
+end
+
 -- ── UI construction ───────────────────────────────────────────────────────────
 -- Called once from CreateFrame (main file) after StyleMainTabButton is available.
 -- Installs behaviour hooks on Addon so LayoutHeaderButtons_ can call them without

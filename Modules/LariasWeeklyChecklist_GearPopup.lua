@@ -56,26 +56,26 @@ function Addon:SyncGearPopup()
     Sync(p._cbHideCharPicker,   db.showCharPickerBtn == false,
          L.OPTIONS_HIDE_CHAR_SELECT  or "Hide character selector")
 
-    -- Sync hidden chars trigger label.
-    local trigBtn = p._gearHiddenCharsTrigger
-    if trigBtn then
-        local gdb     = self.db and self.db.global
-        local hidMap  = gdb and gdb.hiddenChars or {}
-        local count   = 0
-        for _, v in pairs(hidMap) do if v then count = count + 1 end end
-        if count == 0 then
-            trigBtn:SetText(string.format("%s (0)", L.OPTIONS_HIDDEN_CHARS_TITLE or "Hidden"))
-            trigBtn:SetEnabled(false)
-        else
-            trigBtn:SetEnabled(true)
-            trigBtn:SetText(string.format("%s (%d) |TInterface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up:10:10|t",
-                L.OPTIONS_HIDDEN_CHARS_TITLE or "Hidden", count))
+    -- Hide the char picker checkbox row when the feature is disabled or when
+    -- there is only one character (nothing to switch to).
+    do
+        local featureOn = (Addon.FEATURE_FLAGS and Addon.FEATURE_FLAGS.ENABLE_CHAR_SELECTOR) ~= false
+        local hasChars  = featureOn and (Addon.HasPickableChars and Addon:HasPickableChars())
+        local cb = p._cbHideCharPicker
+        if cb then
+            cb:SetShown(hasChars and true or false)
+            if cb._label then cb._label:SetShown(hasChars and true or false) end
+            if cb._hit   then cb._hit:SetShown(hasChars and true or false) end
         end
     end
+
     -- Reset button label.
     if p._gearResetBtn then
         p._gearResetBtn:SetText(L.RESET_BUTTON or "Reset List")
     end
+    -- Hidden chars trigger label — delegate to RefreshHiddenCharsList which
+    -- owns the button-text logic (including the OPTIONS_HIDDEN_CHARS_NONE key).
+    if self.RefreshHiddenCharsList then self:RefreshHiddenCharsList() end
 end
 
 function Addon:ToggleGearPopup(anchor)
@@ -181,10 +181,9 @@ function Addon:ToggleGearPopup(anchor)
                 iw:SetSize(iw._baseW or Addon.UI.frameW, iw._baseH or 540)
                 if iw._ilvlReflow then iw._ilvlReflow() end
             end
-            if Addon.LayoutHeaderButtons    then Addon:LayoutHeaderButtons() end
-            if Addon.SyncOptionsTabControls then Addon:SyncOptionsTabControls() end
-            if Addon.SyncGearPopup          then Addon:SyncGearPopup() end
-            if Addon.ApplyUIScale           then Addon:ApplyUIScale() end
+            if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
+            if Addon.SyncGearPopup        then Addon:SyncGearPopup()        end
+            if Addon.ApplyUIScale         then Addon:ApplyUIScale()         end
             if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
         end)
         p._gearResetBtn = resetBtn
@@ -286,6 +285,7 @@ function Addon:ToggleGearPopup(anchor)
                 cb:SetChecked(newVal)
                 FireToggle(newVal)
             end)
+            cb._hit = hit  -- stored so SyncGearPopup can show/hide the row
         end
 
         -- ── Divider before Hidden Characters ──────────────────────────────
