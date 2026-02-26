@@ -1631,10 +1631,13 @@ function Addon:CreateFrame()
     end
     frame:SetMovable(true)
     frame:SetResizable(true)
+    local _maxW = Addon.UI.frameW * 2   -- 1040
+    local _maxH = Addon.UI.frameH * 2   -- 1300
     if frame.SetResizeBounds then
-        frame:SetResizeBounds(320, 380)
-    elseif frame.SetMinResize then
-        frame:SetMinResize(320, 380)
+        frame:SetResizeBounds(320, 380, _maxW, _maxH)
+    else
+        if frame.SetMinResize then frame:SetMinResize(320, 380) end
+        if frame.SetMaxResize then frame:SetMaxResize(_maxW, _maxH) end
     end
     frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
@@ -1734,12 +1737,25 @@ function Addon:CreateFrame()
     mainResizeBtn:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
     mainResizeBtn:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
     mainResizeBtn:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
-    mainResizeBtn:SetScript("OnMouseDown", function() frame:StartSizing("BOTTOMRIGHT") end)
+    mainResizeBtn:SetScript("OnMouseDown", function()
+        -- Re-anchor to TOPLEFT before sizing so StartSizing("BOTTOMRIGHT") has a
+        -- stable fixed corner.  Without this, any frame saved/restored via a
+        -- BOTTOMLEFT anchor causes the size to snap to the mouse position on the
+        -- very first mouse-down because WoW computes height as (top - mouseY) but
+        -- "top" is undefined when the authoritative anchor is at the bottom.
+        local left = frame:GetLeft()
+        local top  = frame:GetTop()
+        frame:ClearAllPoints()
+        frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
+        frame:StartSizing("BOTTOMRIGHT")
+    end)
     mainResizeBtn:SetScript("OnMouseUp", function()
         frame:StopMovingOrSizing()
         local _gdb = Addon.db and Addon.db.global
         if _gdb then
             _gdb.mainFrameSize = { w = frame:GetWidth(), h = frame:GetHeight() }
+            -- Re-save position too since ClearAllPoints changed the anchor.
+            _gdb.mainFramePos  = { x = frame:GetLeft(), y = frame:GetBottom() }
         end
         Addon:ApplyScrollLayout()
         if Addon.RequestRefresh then Addon:RequestRefresh() end
@@ -2256,10 +2272,13 @@ function Addon:CreateFrame()
         if showCP then _rightW = _rightW + 6 + 108 end
         if showIR then _rightW = _rightW + 6 + 108 end
         local _minW = _leftW + 20 + _rightW  -- 20px breathing room between sides
+        local _maxW2 = Addon.UI.frameW * 2
+        local _maxH2 = Addon.UI.frameH * 2
         if frame.SetResizeBounds then
-            frame:SetResizeBounds(_minW, 200)
-        elseif frame.SetMinResize then
-            frame:SetMinResize(_minW, 200)
+            frame:SetResizeBounds(_minW, 200, _maxW2, _maxH2)
+        else
+            if frame.SetMinResize then frame:SetMinResize(_minW, 200) end
+            if frame.SetMaxResize then frame:SetMaxResize(_maxW2, _maxH2) end
         end
         -- Snap existing width up if it's already narrower than the new minimum.
         local currentW = frame:GetWidth()
