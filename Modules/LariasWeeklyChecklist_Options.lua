@@ -21,6 +21,38 @@ local function SetCheckText(checkButton, text)
     end
 end
 
+-- Tints the standard UICheckButtonTemplate textures to match the dark theme.
+-- Normal (unchecked box) → grey;  Checked mark → gold accent;  Hover → subtle white.
+local function StyleCheckButton(cb)
+    if not cb then return end
+    local norm = cb.GetNormalTexture and cb:GetNormalTexture()
+    if norm then norm:SetVertexColor(0.55, 0.55, 0.55, 1) end
+    local chk = cb.GetCheckedTexture and cb:GetCheckedTexture()
+    if chk then
+        local th = Addon.THEME and Addon.THEME.header
+        if th then chk:SetVertexColor(th.r, th.g, th.b, 1) end
+    end
+    local hi = cb.GetHighlightTexture and cb:GetHighlightTexture()
+    if hi then hi:SetVertexColor(1, 1, 1, 0.12) end
+end
+
+-- Creates a 1-pixel horizontal rule anchored below anchorFrame.
+local function MakeDivider(parent, anchorFrame, padX, offsetY)
+    padX    = padX    or 0
+    offsetY = offsetY or -8
+    local d = parent:CreateTexture(nil, "ARTWORK")
+    d:SetHeight(1)
+    local th = Addon.THEME and Addon.THEME.border
+    if th then
+        d:SetColorTexture(th.r, th.g, th.b, 0.5)
+    else
+        d:SetColorTexture(0.3, 0.3, 0.3, 0.5)
+    end
+    d:SetPoint("TOPLEFT",  anchorFrame, "BOTTOMLEFT",  -padX, offsetY)
+    d:SetPoint("TOPRIGHT", anchorFrame, "BOTTOMRIGHT",  padX, offsetY)
+    return d
+end
+
 function Addon:InitOptionsTab(frame, optionsPanel)
     if not (frame and optionsPanel) then return end
 
@@ -40,6 +72,7 @@ function Addon:InitOptionsTab(frame, optionsPanel)
         end
     end)
     frame._lariasOptHideCompleted = hideCompletedCheck
+    StyleCheckButton(hideCompletedCheck)
 
     local showGreatVaultCheck = CreateFrame("CheckButton", nil, optionsPanel, "UICheckButtonTemplate")
     showGreatVaultCheck:SetPoint("TOPLEFT", hideCompletedCheck, "BOTTOMLEFT", 0, -8)
@@ -54,6 +87,7 @@ function Addon:InitOptionsTab(frame, optionsPanel)
         end
     end)
     frame._lariasOptShowGreatVault = showGreatVaultCheck
+    StyleCheckButton(showGreatVaultCheck)
 
     local showCurrencyCheck = CreateFrame("CheckButton", nil, optionsPanel, "UICheckButtonTemplate")
     showCurrencyCheck:SetPoint("TOPLEFT", showGreatVaultCheck, "BOTTOMLEFT", 0, -8)
@@ -68,6 +102,7 @@ function Addon:InitOptionsTab(frame, optionsPanel)
         end
     end)
     frame._lariasOptShowCurrency = showCurrencyCheck
+    StyleCheckButton(showCurrencyCheck)
 
     local showChangeWeekCheck = CreateFrame("CheckButton", nil, optionsPanel, "UICheckButtonTemplate")
     showChangeWeekCheck:SetPoint("TOPLEFT", showCurrencyCheck, "BOTTOMLEFT", 0, -8)
@@ -80,6 +115,7 @@ function Addon:InitOptionsTab(frame, optionsPanel)
         end
     end)
     frame._lariasOptShowChangeWeekBtn = showChangeWeekCheck
+    StyleCheckButton(showChangeWeekCheck)
 
     local showIlvlRefCheck = CreateFrame("CheckButton", nil, optionsPanel, "UICheckButtonTemplate")
     showIlvlRefCheck:SetPoint("TOPLEFT", showChangeWeekCheck, "BOTTOMLEFT", 0, -8)
@@ -92,6 +128,7 @@ function Addon:InitOptionsTab(frame, optionsPanel)
         end
     end)
     frame._lariasOptShowIlvlRefBtn = showIlvlRefCheck
+    StyleCheckButton(showIlvlRefCheck)
 
     local showCharPickerCheck = CreateFrame("CheckButton", nil, optionsPanel, "UICheckButtonTemplate")
     showCharPickerCheck:SetPoint("TOPLEFT", showIlvlRefCheck, "BOTTOMLEFT", 0, -8)
@@ -104,149 +141,10 @@ function Addon:InitOptionsTab(frame, optionsPanel)
         end
     end)
     frame._lariasOptShowCharPickerBtn = showCharPickerCheck
-
-    local resetBtn = CreateFrame("Button", nil, optionsPanel, "UIPanelButtonTemplate")
-    resetBtn:SetSize(108, 22)
-    if Addon._styleActionButton then
-        Addon._styleActionButton(resetBtn)
-    end
-    resetBtn:SetScript("OnClick", function()
-        local dbForReset = Addon:EnsureDB()
-        if wipe then
-            wipe(dbForReset.checked)
-            wipe(dbForReset.collapsedSections)
-        else
-            dbForReset.checked = {}
-            dbForReset.collapsedSections = {}
-        end
-        dbForReset.hideCompletedSections = true
-        dbForReset.startAtSectionId = ""
-        dbForReset.showGreatVault    = true
-        dbForReset.showCurrency      = true
-        dbForReset.showChangeWeekBtn = true
-        dbForReset.showIlvlRefBtn    = true
-
-        -- Reset window positions, sizes, and scale back to defaults
-        local gdb = Addon.db and Addon.db.global
-        if gdb then
-            gdb.mainFramePos  = nil
-            gdb.mainFrameSize = nil
-            gdb.ilvlRefPos    = nil
-            gdb.ilvlRefSize   = nil
-            gdb.uiScalePct    = nil  -- resets to 100%
-        end
-
-        -- Switch back to own character before resetting frames/controls
-        -- (so SyncOptionsTabControls and Refresh display own char's data).
-        if Addon.SetViewingChar then Addon:SetViewingChar(nil) end
-
-        local mf = Addon._mainFrame
-        if mf then
-            mf:SetScale(1.0)
-            mf:ClearAllPoints()
-            mf:SetPoint("CENTER")
-            mf:SetSize(Addon.UI.frameW, Addon.UI.frameH)
-            if Addon.ApplyScrollLayout then Addon:ApplyScrollLayout() end
-        end
-
-        local iw = Addon._ilvlRefWindow
-        if iw then
-            iw:ClearAllPoints()
-            if mf then
-                iw:SetPoint("TOPLEFT", mf, "TOPRIGHT", 4, 0)
-            else
-                iw:SetPoint("CENTER", UIParent, "CENTER", 260, 0)
-            end
-            local bw = iw._baseW or Addon.UI.frameW
-            local bh = iw._baseH or 540
-            iw:SetSize(bw, bh)
-            if iw._ilvlReflow then iw._ilvlReflow() end
-        end
-
-        if Addon.LayoutHeaderButtons then
-            Addon:LayoutHeaderButtons()
-        end
-
-        if Addon.SyncOptionsTabControls then
-            Addon:SyncOptionsTabControls()
-        end
-
-        if Addon.RequestRefresh then
-            Addon:RequestRefresh()
-        else
-            Addon:Refresh()
-        end
-    end)
-
-    frame._lariasOptResetBtn = resetBtn
-
-    -- UI Scale slider -------------------------------------------------------
-    local scaleTitle = optionsPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    scaleTitle:SetPoint("TOPLEFT", showCharPickerCheck, "BOTTOMLEFT", 0, -16)
-    frame._lariasOptScaleTitleFS = scaleTitle
-
-    local scaleSlider = CreateFrame("Slider", "LariasWeeklyChecklistScaleSlider", optionsPanel, "OptionsSliderTemplate")
-    scaleSlider:SetPoint("TOPLEFT", scaleTitle, "BOTTOMLEFT", 6, -6)
-    scaleSlider:SetWidth(220)
-    scaleSlider:SetMinMaxValues(80, 120)
-    scaleSlider:SetValueStep(1)
-    local _initPct = (Addon.db and Addon.db.global and tonumber(Addon.db.global.uiScalePct)) or 100
-    scaleSlider:SetValue(math.max(80, math.min(120, _initPct)))
-    do
-        local lo  = _G["LariasWeeklyChecklistScaleSliderLow"]
-        local hi  = _G["LariasWeeklyChecklistScaleSliderHigh"]
-        local txt = _G["LariasWeeklyChecklistScaleSliderText"]
-        if lo  then lo:SetText("80%")  end
-        if hi  then hi:SetText("120%") end
-        if txt then txt:SetText("")    end  -- title managed separately
-    end
-    local function ApplyScaleVal(val)
-        val = math.floor(val + 0.5)
-        local gdb = Addon.db and Addon.db.global
-        if gdb then gdb.uiScalePct = val end
-        local tf = GetMainFrame() and GetMainFrame()._lariasOptScaleTitleFS
-        if tf then
-            local L2 = Addon.L or {}
-            tf:SetText((L2.UI_SCALE_LABEL or "UI Scale") .. ": " .. val .. "%")
-        end
-        if Addon.ApplyUIScale then Addon:ApplyUIScale() end
-    end
-    -- Update label while dragging; only apply scale on release to avoid
-    -- the window resizing jankily on every tick.
-    scaleSlider:SetScript("OnValueChanged", function(self_, val)
-        val = math.floor(val + 0.5)
-        local tf = GetMainFrame() and GetMainFrame()._lariasOptScaleTitleFS
-        if tf then
-            local L2 = Addon.L or {}
-            tf:SetText((L2.UI_SCALE_LABEL or "UI Scale") .. ": " .. val .. "%")
-        end
-    end)
-    scaleSlider:SetScript("OnMouseUp", function(self_)
-        ApplyScaleVal(self_:GetValue())
-    end)
-    frame._lariasScaleSlider = scaleSlider
-    -- -------------------------------------------------------------------------
-
-    -- Hidden characters section ----------------------------------------------
-    local hiddenCharsTitle = optionsPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    hiddenCharsTitle:SetPoint("TOPLEFT", scaleSlider, "BOTTOMLEFT", -6, -14)
-    frame._lariasOptHiddenCharsTitle = hiddenCharsTitle
-
-    local hiddenCharsTriggerBtn = CreateFrame("Button", nil, optionsPanel, "UIPanelButtonTemplate")
-    hiddenCharsTriggerBtn:SetPoint("TOPLEFT", hiddenCharsTitle, "BOTTOMLEFT", 0, -4)
-    hiddenCharsTriggerBtn:SetSize(108, 22)
-    if Addon._styleActionButton then Addon._styleActionButton(hiddenCharsTriggerBtn) end
-    hiddenCharsTriggerBtn:SetScript("OnClick", function()
-        if Addon.ToggleHiddenCharsDropdown then Addon:ToggleHiddenCharsDropdown() end
-    end)
-    frame._lariasOptHiddenCharsTrigger = hiddenCharsTriggerBtn
-    -- -------------------------------------------------------------------------
-
-    -- Reset button: bottom of the column, below hidden chars trigger.
-    resetBtn:SetPoint("TOPLEFT", hiddenCharsTriggerBtn, "BOTTOMLEFT", 0, -14)
+    StyleCheckButton(showCharPickerCheck)
 
     local localizationHint = optionsPanel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-    localizationHint:SetPoint("TOPLEFT", resetBtn, "BOTTOMLEFT", 0, -8)
+    localizationHint:SetPoint("TOPLEFT", showCharPickerCheck, "BOTTOMLEFT", 0, -12)
     localizationHint:SetWidth(200)
     localizationHint:SetJustifyH("LEFT")
     localizationHint:SetJustifyV("TOP")
@@ -278,12 +176,12 @@ function Addon:ToggleHiddenCharsDropdown()
         if not picker.SetBackdrop and BackdropTemplateMixin and Mixin then
             Mixin(picker, BackdropTemplateMixin)
         end
-        picker:SetFrameStrata("HIGH")
+        picker:SetFrameStrata("FULLSCREEN_DIALOG")
         picker:SetClampedToScreen(true)
         picker:SetSize(160, 40)
         picker:Hide()
         if picker.SetToplevel then picker:SetToplevel(true) end
-        if picker.SetFrameLevel then picker:SetFrameLevel(200) end
+        if picker.SetFrameLevel then picker:SetFrameLevel(600) end
         if picker.SetBackdrop then
             picker:SetBackdrop({
                 bgFile   = "Interface\\Buttons\\WHITE8x8",
@@ -305,7 +203,7 @@ function Addon:ToggleHiddenCharsDropdown()
         -- Fullscreen catcher closes picker on outside click.
         local catcher = CreateFrame("Button", nil, UIParent)
         catcher:SetAllPoints(UIParent)
-        catcher:SetFrameStrata("HIGH")
+        catcher:SetFrameStrata("FULLSCREEN_DIALOG")
         catcher:SetFrameLevel(picker:GetFrameLevel() - 1)
         catcher:Hide()
         catcher:SetScript("OnClick", function()
@@ -314,12 +212,15 @@ function Addon:ToggleHiddenCharsDropdown()
         end)
         picker._catcher = catcher
         picker:SetScript("OnHide", function() catcher:Hide() end)
-        picker:SetScript("OnShow", function() catcher:Show() end)
+        picker:SetScript("OnShow", function()
+            catcher:Show()
+            if UIFrameFadeIn then UIFrameFadeIn(picker, 0.15, 0, 1)
+            else picker:SetAlpha(1) end
+        end)
         self._hiddenCharsPicker = picker
     end
-    -- Position below the trigger button.
-    local frame = GetMainFrame()
-    local trigBtn = frame and frame._lariasOptHiddenCharsTrigger
+    -- Position below the trigger button (lives on the Blizzard options panel).
+    local trigBtn = Addon._blizzOptHiddenCharsTrigger
     picker:ClearAllPoints()
     if trigBtn then
         picker:SetPoint("TOPLEFT", trigBtn, "BOTTOMLEFT", 0, -4)
@@ -331,9 +232,6 @@ function Addon:ToggleHiddenCharsDropdown()
 end
 
 function Addon:RefreshHiddenCharsList()
-    local frame = GetMainFrame()
-    if not frame then return end
-
     local L          = self.L or {}
     local gdb        = self.db and self.db.global
     local hiddenMap  = gdb and gdb.hiddenChars or {}
@@ -349,10 +247,10 @@ function Addon:RefreshHiddenCharsList()
     end
     table.sort(hidden)
 
-    -- Update trigger button label.
-    local trigBtn = frame._lariasOptHiddenCharsTrigger
+    -- Update trigger button label (lives on the Blizzard options panel).
+    local trigBtn = self._blizzOptHiddenCharsTrigger
     if trigBtn and trigBtn.SetText then
-        local label = string.format("%s (%d)", L.OPTIONS_HIDDEN_CHARS_TITLE or "Hidden", #hidden)
+        local label = string.format("%s (%d) |TInterface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up:10:10|t", L.OPTIONS_HIDDEN_CHARS_TITLE or "Hidden", #hidden)
         trigBtn:SetText(label)
     end
 
@@ -482,7 +380,7 @@ function Addon:RefreshHiddenCharsList()
             local newW = math.max(160, math.min(400, math.ceil(bw) + BTN_W + PAD * 3 + 8))
             picker:SetWidth(newW)
             for _, f in ipairs(picker._buttons) do
-                f:SetWidth(newW - PAD * 2)
+                f:SetSize(newW - PAD * 2, ROW_H)
                 f._nameBtn:SetWidth(newW - PAD * 2 - BTN_W - 4)
             end
         end)
@@ -491,7 +389,7 @@ function Addon:RefreshHiddenCharsList()
     local initW = NAME_W_MIN + BTN_W + PAD * 3 + 8
     picker:SetWidth(initW)
     for _, f in ipairs(picker._buttons) do
-        f:SetWidth(initW - PAD * 2)
+        f:SetSize(initW - PAD * 2, ROW_H)
         f._nameBtn:SetWidth(initW - PAD * 2 - BTN_W - 4)
     end
 end
@@ -536,12 +434,6 @@ function Addon:SyncOptionsTabControls()
         self:RefreshHiddenCharsList()
     end
 
-    local scaleSlider = frame._lariasScaleSlider
-    if scaleSlider and scaleSlider.SetValue then
-        local gdb = Addon.db and Addon.db.global
-        scaleSlider:SetValue((gdb and tonumber(gdb.uiScalePct)) or 100)
-    end
-
     if self.UpdateOptionsLocalizedUI then
         self:UpdateOptionsLocalizedUI()
     end
@@ -556,30 +448,16 @@ function Addon:UpdateOptionsLocalizedUI()
     SetCheckText(frame._lariasOptHideCompleted, L.HIDE_COMPLETED_WEEKS or "Hide completed weeks")
     SetCheckText(frame._lariasOptShowGreatVault, L.OPTIONS_HIDE_GREAT_VAULT or "Hide Great Vault")
     SetCheckText(frame._lariasOptShowCurrency, L.OPTIONS_HIDE_CURRENCY or "Hide Currency")
-    SetCheckText(frame._lariasOptShowChangeWeekBtn, L.OPTIONS_HIDE_CHANGE_WEEK_BTN or "Hide Change Week button")
-    SetCheckText(frame._lariasOptShowIlvlRefBtn, L.OPTIONS_HIDE_ILVL_REF_BTN or "Hide Ilvl Refs button")
-    SetCheckText(frame._lariasOptShowCharPickerBtn, L.OPTIONS_HIDE_CHAR_SELECT or "Hide character select")
-
-    local hiddenCharsTitle = frame._lariasOptHiddenCharsTitle
-    if hiddenCharsTitle and hiddenCharsTitle.SetText then
-        hiddenCharsTitle:SetText(L.OPTIONS_HIDDEN_CHARS_TITLE or "Hidden characters:")
-    end
+    SetCheckText(frame._lariasOptShowChangeWeekBtn, L.OPTIONS_HIDE_CHANGE_WEEK_BTN or "Hide week selector")
+    SetCheckText(frame._lariasOptShowIlvlRefBtn, L.OPTIONS_HIDE_ILVL_REF_BTN or "Hide ilvl references")
+    SetCheckText(frame._lariasOptShowCharPickerBtn, L.OPTIONS_HIDE_CHAR_SELECT or "Hide character selector")
 
     if self.RefreshHiddenCharsList then
         self:RefreshHiddenCharsList()
     end
 
-    local resetBtn = frame._lariasOptResetBtn
-    if resetBtn and resetBtn.SetText then
-        resetBtn:SetText(L.RESET_BUTTON or "Reset List")
-    end
-
-    local scaleTitleFS = frame._lariasOptScaleTitleFS
-    if scaleTitleFS then
-        local gdb = Addon.db and Addon.db.global
-        local pct = (gdb and tonumber(gdb.uiScalePct)) or 100
-        scaleTitleFS:SetText((L.UI_SCALE_LABEL or "UI Scale") .. ": " .. pct .. "%")
-    end
+    -- Sync labels on the Blizzard options panel when locale changes.
+    if self.SyncBlizzOptionsPanel then self:SyncBlizzOptionsPanel() end
 
     local hint = frame._lariasOptLocalizationHint
     if hint and hint.SetText then
@@ -591,4 +469,408 @@ function Addon:UpdateOptionsLocalizedUI()
             hint:Hide()
         end
     end
+end
+-- ---------------------------------------------------------------------------
+-- Blizzard Interface Options panel (Interface → AddOns → addonName)
+-- Hosts: UI Scale slider, Hidden Characters, Reset List button.
+-- ---------------------------------------------------------------------------
+
+-- Builds the control content of the Blizzard options panel.
+-- Called once lazily on first OnShow so L and THEME are fully loaded.
+function Addon:InitBlizzOptionsPanel(panel)
+    local L   = self.L or {}
+    local PAD = 16
+
+    -- Apply addon backdrop so the panel matches the addon's dark theme.
+    if not panel.SetBackdrop then
+        if BackdropTemplateMixin and Mixin then Mixin(panel, BackdropTemplateMixin) end
+    end
+    if panel.SetBackdrop and Addon.THEME then
+        panel:SetBackdrop({
+            bgFile   = "Interface\\Buttons\\WHITE8x8",
+            edgeFile = "Interface\\Buttons\\WHITE8x8",
+            tile = false, edgeSize = 1,
+            insets = { left=0, right=0, top=0, bottom=0 },
+        })
+        local bg  = Addon.THEME.bg
+        local brd = Addon.THEME.border
+        panel:SetBackdropColor(bg.r, bg.g, bg.b, bg.a or 1)
+        panel:SetBackdropBorderColor(brd.r, brd.g, brd.b, brd.a or 1)
+    end
+
+    local function MakeLabel(text)
+        local fs = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        if Addon.THEME then
+            local h = Addon.THEME.header
+            fs:SetTextColor(h.r, h.g, h.b, h.a or 1)
+        end
+        fs:SetText(text)
+        return fs
+    end
+
+    local function StyleBtn(btn)
+        if Addon._styleActionButton then Addon._styleActionButton(btn) end
+    end
+
+    -- ── UI Scale ────────────────────────────────────────────────────────────
+    local scaleTitle = MakeLabel("")
+    scaleTitle:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, -PAD)
+    self._blizzOptScaleTitleFS = scaleTitle
+
+    local scaleSlider = CreateFrame("Slider", "LariasWeeklyChecklistScaleSlider", panel, "OptionsSliderTemplate")
+    scaleSlider:SetPoint("TOPLEFT", scaleTitle, "BOTTOMLEFT", 6, -6)
+    scaleSlider:SetWidth(220)
+    scaleSlider:SetMinMaxValues(80, 120)
+    scaleSlider:SetValueStep(1)
+    do
+        local lo  = _G["LariasWeeklyChecklistScaleSliderLow"]
+        local hi  = _G["LariasWeeklyChecklistScaleSliderHigh"]
+        local txt = _G["LariasWeeklyChecklistScaleSliderText"]
+        if lo  then lo:SetText("80%")  end
+        if hi  then hi:SetText("120%") end
+        if txt then txt:SetText("")    end
+    end
+    local function ApplyScale(val)
+        val = math.floor(val + 0.5)
+        local gdb = Addon.db and Addon.db.global
+        if gdb then gdb.uiScalePct = val end
+        if Addon._blizzOptScaleTitleFS then
+            local L2 = Addon.L or {}
+            Addon._blizzOptScaleTitleFS:SetText((L2.UI_SCALE_LABEL or "UI Scale") .. ": " .. val .. "%")
+        end
+        if Addon.ApplyUIScale then Addon:ApplyUIScale() end
+    end
+    scaleSlider:SetScript("OnValueChanged", function(self_, val)
+        val = math.floor(val + 0.5)
+        if Addon._blizzOptScaleTitleFS then
+            local L2 = Addon.L or {}
+            Addon._blizzOptScaleTitleFS:SetText((L2.UI_SCALE_LABEL or "UI Scale") .. ": " .. val .. "%")
+        end
+    end)
+    scaleSlider:SetScript("OnMouseUp", function(self_) ApplyScale(self_:GetValue()) end)
+    self._blizzOptScaleSlider = scaleSlider
+
+    -- ── Hidden Characters ────────────────────────────────────────────────────
+    local hiddenTitle = MakeLabel("")
+    hiddenTitle:SetPoint("TOPLEFT", scaleSlider, "BOTTOMLEFT", -6, -20)
+    self._blizzOptHiddenCharsTitle = hiddenTitle
+
+    local hiddenTrigger = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    hiddenTrigger:SetPoint("TOPLEFT", hiddenTitle, "BOTTOMLEFT", 0, -4)
+    hiddenTrigger:SetSize(160, 22)
+    StyleBtn(hiddenTrigger)
+    hiddenTrigger:SetScript("OnClick", function()
+        if Addon.ToggleHiddenCharsDropdown then Addon:ToggleHiddenCharsDropdown() end
+    end)
+    self._blizzOptHiddenCharsTrigger = hiddenTrigger
+
+    -- ── Reset List button ────────────────────────────────────────────────────
+    local resetBtn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    resetBtn:SetPoint("TOPLEFT", hiddenTrigger, "BOTTOMLEFT", 0, -20)
+    resetBtn:SetSize(120, 22)
+    StyleBtn(resetBtn)
+    resetBtn:SetScript("OnClick", function()
+        local dbR = Addon:EnsureDB()
+        if wipe then
+            wipe(dbR.checked)
+            wipe(dbR.collapsedSections)
+        else
+            dbR.checked = {}
+            dbR.collapsedSections = {}
+        end
+        dbR.hideCompletedSections = true
+        dbR.startAtSectionId      = ""
+        dbR.showGreatVault        = true
+        dbR.showCurrency          = true
+        dbR.showChangeWeekBtn     = true
+        dbR.showIlvlRefBtn        = true
+
+        local gdb = Addon.db and Addon.db.global
+        if gdb then
+            gdb.mainFramePos  = nil
+            gdb.mainFrameSize = nil
+            gdb.ilvlRefPos    = nil
+            gdb.ilvlRefSize   = nil
+            gdb.uiScalePct    = nil
+        end
+
+        if Addon.SetViewingChar then Addon:SetViewingChar(nil) end
+
+        local mf = Addon._mainFrame
+        if mf then
+            mf:SetScale(1.0)
+            mf:ClearAllPoints()
+            mf:SetPoint("CENTER")
+            mf:SetSize(Addon.UI.frameW, Addon.UI.frameH)
+            if Addon.ApplyScrollLayout then Addon:ApplyScrollLayout() end
+        end
+
+        local iw = Addon._ilvlRefWindow
+        if iw then
+            iw:ClearAllPoints()
+            if mf then iw:SetPoint("TOPLEFT", mf, "TOPRIGHT", 4, 0)
+            else       iw:SetPoint("CENTER", UIParent, "CENTER", 260, 0) end
+            iw:SetSize(iw._baseW or Addon.UI.frameW, iw._baseH or 540)
+            if iw._ilvlReflow then iw._ilvlReflow() end
+        end
+
+        if Addon.LayoutHeaderButtons    then Addon:LayoutHeaderButtons() end
+        if Addon.SyncOptionsTabControls then Addon:SyncOptionsTabControls() end
+        if Addon.SyncBlizzOptionsPanel  then Addon:SyncBlizzOptionsPanel() end
+        if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
+    end)
+    self._blizzOptResetBtn = resetBtn
+
+    -- Initial label sync.
+    self:SyncBlizzOptionsPanel()
+end
+
+-- Syncs all values/labels on the Blizzard options panel to current DB state.
+function Addon:SyncBlizzOptionsPanel()
+    if not self._blizzOptScaleSlider then return end  -- not yet initialized
+    local L   = self.L or {}
+    local gdb = self.db and self.db.global
+    local pct = (gdb and tonumber(gdb.uiScalePct)) or 100
+
+    self._blizzOptScaleSlider:SetValue(math.max(80, math.min(120, pct)))
+    if self._blizzOptScaleTitleFS then
+        self._blizzOptScaleTitleFS:SetText((L.UI_SCALE_LABEL or "UI Scale") .. ": " .. pct .. "%")
+    end
+    if self._blizzOptHiddenCharsTitle then
+        self._blizzOptHiddenCharsTitle:SetText(L.OPTIONS_HIDDEN_CHARS_TITLE or "Hidden characters:")
+    end
+    if self._blizzOptResetBtn then
+        self._blizzOptResetBtn:SetText(L.RESET_BUTTON or "Reset List")
+    end
+    if self.RefreshHiddenCharsList then self:RefreshHiddenCharsList() end
+end
+
+-- Creates and registers the Blizzard Interface Options panel (once).
+-- Must be called early (e.g. OnInitialize) so the panel appears in the AddOns list.
+function Addon:CreateBlizzOptionsPanel()
+    if self._blizzOptPanel then return self._blizzOptPanel end
+
+    local panelName = (self.L and self.L.DISPLAY_NAME) or addonName
+
+    local panel = CreateFrame("Frame")
+    panel.name  = panelName
+
+    local initialized = false
+    panel:SetScript("OnShow", function()
+        if not initialized then
+            initialized = true
+            Addon:InitBlizzOptionsPanel(panel)
+        end
+        Addon:SyncBlizzOptionsPanel()
+    end)
+
+    -- Modern API (10.x / 11.x / 12.x): RegisterCanvasLayoutCategory returns a
+    -- category object that must then be passed to RegisterAddOnCategory.
+    if Settings and Settings.RegisterCanvasLayoutCategory then
+        local category = Settings.RegisterCanvasLayoutCategory(panel, panelName)
+        Settings.RegisterAddOnCategory(category)
+        self._blizzOptCategory = category
+    elseif InterfaceOptions_AddCategory then
+        -- Legacy fallback (pre-10.x).
+        InterfaceOptions_AddCategory(panel)
+    end
+
+    self._blizzOptPanel = panel
+    return panel
+end
+
+-- ---------------------------------------------------------------------------
+-- Gear popup: small floating panel with the 6 display toggles.
+-- Anchors below the gear button, styled like the other dropdowns.
+-- ---------------------------------------------------------------------------
+
+function Addon:SyncGearPopup()
+    local p = self._gearPopup
+    if not p then return end
+    local db = self:EnsureDB()
+    local L  = self.L or {}
+    local function Sync(cb, checked, label)
+        if cb then
+            cb:SetChecked(checked)
+            SetCheckText(cb, label)
+        end
+    end
+    Sync(p._cbHideCompleted,    db.hideCompletedSections and true or false,
+         L.HIDE_COMPLETED_WEEKS      or "Hide completed weeks")
+    Sync(p._cbHideGreatVault,   not db.showGreatVault,
+         L.OPTIONS_HIDE_GREAT_VAULT  or "Hide Great Vault")
+    Sync(p._cbHideCurrency,     not db.showCurrency,
+         L.OPTIONS_HIDE_CURRENCY     or "Hide Currency")
+    Sync(p._cbHideChangeWeek,   db.showChangeWeekBtn == false,
+         L.OPTIONS_HIDE_CHANGE_WEEK_BTN or "Hide week selector")
+    Sync(p._cbHideIlvlRef,      db.showIlvlRefBtn == false,
+         L.OPTIONS_HIDE_ILVL_REF_BTN or "Hide ilvl references")
+    Sync(p._cbHideCharPicker,   db.showCharPickerBtn == false,
+         L.OPTIONS_HIDE_CHAR_SELECT  or "Hide character selector")
+end
+
+function Addon:ToggleGearPopup(anchor)
+    local p = self._gearPopup
+    if p and p.IsShown and p:IsShown() then
+        p:Hide()
+        return
+    end
+
+    -- Create lazily.
+    if not p then
+        if BackdropTemplateMixin then
+            p = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+        else
+            p = CreateFrame("Frame", nil, UIParent)
+            if BackdropTemplateMixin and Mixin then Mixin(p, BackdropTemplateMixin) end
+        end
+        p:SetFrameStrata("DIALOG")
+        p:SetClampedToScreen(true)
+        p:SetSize(230, 10)   -- height set after rows are placed
+        p:Hide()
+        if p.SetToplevel   then p:SetToplevel(true)   end
+        if p.SetFrameLevel then p:SetFrameLevel(200)  end
+
+        -- Backdrop
+        if p.SetBackdrop then
+            p:SetBackdrop({
+                bgFile   = "Interface\\Buttons\\WHITE8x8",
+                edgeFile = "Interface\\Buttons\\WHITE8x8",
+                tile = false, edgeSize = 1,
+                insets = { left=1, right=1, top=1, bottom=1 },
+            })
+            if Addon.THEME then
+                p:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, 1)
+                p:SetBackdropBorderColor(Addon.THEME.border.r, Addon.THEME.border.g, Addon.THEME.border.b, 1)
+            end
+        end
+
+        -- Outside-click catcher.
+        local catcher = CreateFrame("Button", nil, UIParent)
+        catcher:SetAllPoints(UIParent)
+        catcher:SetFrameStrata("DIALOG")
+        catcher:SetFrameLevel(p:GetFrameLevel() - 1)
+        catcher:EnableMouse(true)
+        catcher:Hide()
+        catcher:SetScript("OnClick", function() p:Hide() end)
+        p:SetScript("OnHide", function() catcher:Hide() end)
+        p:SetScript("OnShow", function()
+            catcher:Show()
+            if UIFrameFadeIn then UIFrameFadeIn(p, 0.12, 0, 1)
+            else p:SetAlpha(1) end
+        end)
+
+        -- Build the 6 checkboxes.
+        local PAD    = 10
+        local ROW_H  = 26   -- UICheckButtonTemplate default height
+        local checks = {
+            { key = "_cbHideCompleted",  },
+            { key = "_cbHideGreatVault", },
+            { key = "_cbHideCurrency",   },
+            { key = "_cbHideChangeWeek", },
+            { key = "_cbHideIlvlRef",    },
+            { key = "_cbHideCharPicker", },
+        }
+        local callbacks = {
+            _cbHideCompleted  = function(checked)
+                local db = Addon:EnsureDB()
+                db.hideCompletedSections = checked
+                if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
+            end,
+            _cbHideGreatVault = function(checked)
+                local db = Addon:EnsureDB()
+                db.showGreatVault = not checked
+                if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
+            end,
+            _cbHideCurrency   = function(checked)
+                local db = Addon:EnsureDB()
+                db.showCurrency = not checked
+                if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
+            end,
+            _cbHideChangeWeek = function(checked)
+                local db = Addon:EnsureDB()
+                db.showChangeWeekBtn = not checked
+                if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
+            end,
+            _cbHideIlvlRef    = function(checked)
+                local db = Addon:EnsureDB()
+                db.showIlvlRefBtn = not checked
+                if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
+            end,
+            _cbHideCharPicker = function(checked)
+                local db = Addon:EnsureDB()
+                db.showCharPickerBtn = not checked
+                if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
+            end,
+        }
+
+        local prevCb = nil
+        for i, info in ipairs(checks) do
+            local cb = CreateFrame("CheckButton", nil, p, "UICheckButtonTemplate")
+            if i == 1 then
+                cb:SetPoint("TOPLEFT", p, "TOPLEFT", PAD, -PAD)
+            else
+                cb:SetPoint("TOPLEFT", prevCb, "BOTTOMLEFT", 0, -4)
+            end
+            StyleCheckButton(cb)
+            local _key = info.key
+            local function FireToggle(newState)
+                callbacks[_key](newState)
+                if Addon.SyncOptionsTabControls then Addon:SyncOptionsTabControls() end
+            end
+            cb:SetScript("OnClick", function(self_)
+                FireToggle(self_:GetChecked() and true or false)
+            end)
+            p[info.key] = cb
+
+            -- Full-width hit area anchored directly to cb so it's pixel-perfect.
+            local row = CreateFrame("Button", nil, p)
+            row:SetPoint("TOPLEFT",  cb, "TOPLEFT", -PAD, 0)
+            row:SetPoint("TOPRIGHT", p,  "TOPRIGHT", 0,   0)
+            row:SetHeight(ROW_H)
+            row:SetFrameLevel(p:GetFrameLevel())   -- below CheckButton (p+1)
+            local rowHL = row:CreateTexture(nil, "HIGHLIGHT")
+            rowHL:SetAllPoints(row)
+            rowHL:SetColorTexture(1, 1, 1, 0.06)
+            row:SetScript("OnClick", function()
+                local newVal = not (cb:GetChecked() and true or false)
+                cb:SetChecked(newVal)
+                FireToggle(newVal)
+            end)
+
+            prevCb = cb
+        end
+
+        -- Size the panel to fit all rows: use the actual bottom edge of the
+        -- last checkbox rather than a fixed formula, then add bottom padding.
+        local totalH
+        if prevCb and prevCb.GetBottom and p.GetTop then
+            -- Heights are only valid after the first layout pass, so defer one frame.
+            C_Timer.After(0, function()
+                local pTop  = p:GetTop()
+                local cbBot = prevCb:GetBottom()
+                if pTop and cbBot then
+                    p:SetHeight(math.ceil(pTop - cbBot) + PAD + 4)
+                end
+            end)
+            totalH = PAD + (#checks) * (ROW_H + 4) + PAD * 2  -- safe initial estimate
+        else
+            totalH = PAD + (#checks) * (ROW_H + 4) + PAD * 2
+        end
+        p:SetHeight(totalH)
+
+        self._gearPopup = p
+    end
+
+    -- Sync current values and labels.
+    self:SyncGearPopup()
+
+    -- Position below the anchor (gear button) or center if no anchor.
+    p:ClearAllPoints()
+    if anchor then
+        p:SetPoint("TOPRIGHT", anchor, "BOTTOMRIGHT", 0, -4)
+    else
+        p:SetPoint("CENTER", UIParent, "CENTER")
+    end
+    p:Show()
 end

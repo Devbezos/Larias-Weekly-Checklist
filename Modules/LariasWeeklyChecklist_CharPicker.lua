@@ -98,7 +98,7 @@ function Addon:InitCharPickerUI(frame, styleFunc)
             charName = (displayKey:match("^(.-)%s*%-") or displayKey):gsub("^%s+",""):gsub("%s+$","")
         end
         if charName == "" then charName = "Me" end
-        btn:SetText(charName)
+        btn:SetText(charName .. " |TInterface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up:10:10|t")
         local gdb        = Addon.db and Addon.db.global
         local classToken = gdb and gdb.charClasses and gdb.charClasses[displayKey]
         local tr         = btn.Text or (btn.GetFontString and btn:GetFontString())
@@ -146,7 +146,11 @@ function Addon:InitCharPickerUI(frame, styleFunc)
         catcher:EnableMouse(true)
         catcher:Hide()
         catcher:SetScript("OnClick", function() p:Hide() end)
-        p:SetScript("OnShow", function() catcher:Show() end)
+        p:SetScript("OnShow", function()
+            catcher:Show()
+            if UIFrameFadeIn then UIFrameFadeIn(p, 0.15, 0, 1)
+            else p:SetAlpha(1) end
+        end)
         p:SetScript("OnHide", function() catcher:Hide() end)
         charPickerPanel = p
         return p
@@ -326,7 +330,7 @@ function Addon:InitCharPickerUI(frame, styleFunc)
                 if not isViewing then
                     local xBtn = AcquireXBtn(p)
                     xBtn:ClearAllPoints()
-                    xBtn:SetPoint("TOPRIGHT", p, "TOPRIGHT", -CPICK_PAD, posY)
+                    xBtn:SetPoint("LEFT", btn, "RIGHT", 4, 0)
                     local _pkHide = profileKey
                     xBtn:SetScript("OnClick", function()
                         p:Hide()
@@ -368,11 +372,11 @@ function Addon:InitCharPickerUI(frame, styleFunc)
                     if not w and b.GetTextWidth then w = tonumber(b:GetTextWidth()) end
                     if w and w > bestW then bestW = w end
                 end
-                local newW = math.max(140, math.min(280, math.ceil(bestW + CPICK_PAD * 4 + 24)))
-                p:SetWidth(newW)
+                local btnW  = math.max(140, math.min(260, math.ceil(bestW + CPICK_PAD * 2 + 12)))
+                local totalW = btnW + 4 + 20 + CPICK_PAD  -- name btn + gap + X btn + right pad
+                p:SetWidth(totalW)
                 for _, b in ipairs(p._buttons) do
-                    -- Leave 20px + pad for the [x] button on the right.
-                    if b.SetWidth then b:SetWidth(newW - CPICK_PAD * 3 - 20) end
+                    if b.SetWidth then b:SetWidth(btnW) end
                 end
                 for _, xb in ipairs(p._xButtons or {}) do
                     if xb.SetWidth then xb:SetWidth(20) end
@@ -390,7 +394,7 @@ function Addon:InitCharPickerUI(frame, styleFunc)
         end
         local btn = EnsureBtn()
         p:ClearAllPoints()
-        p:SetPoint("TOPRIGHT", btn, "BOTTOMRIGHT", 0, -6)
+        p:SetPoint("TOPLEFT", btn, "BOTTOMLEFT", 0, -6)
         p:Show()
         if C_Timer and C_Timer.After then
             C_Timer.After(0, Populate)

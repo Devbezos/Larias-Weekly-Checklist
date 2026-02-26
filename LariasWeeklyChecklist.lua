@@ -108,7 +108,7 @@ do
             closeInset = 4,
             topRowH = 26,
             topRowRightInset = 34,
-            scrollTop = 54,
+            scrollTop = 38,
             scrollBottom = 16,
             scrollRight = 30,
             sectionGap = 10,
@@ -378,22 +378,16 @@ local function SetupMinimapIcon()
         icon = "Interface\\AddOns\\LariasWeeklyChecklist\\Media\\icon",
         OnClick = function(_, button)
             if button == "LeftButton" then
-                -- If the addon is already open on the Options tab, left-click should
-                -- take you back to the List tab (and keep the window open).
                 if Addon.CreateFrame then
                     Addon:CreateFrame()
                 end
-                local mainFrame = _G["LariasWeeklyChecklistFrame"]
-                if IsFrameShown(mainFrame) and tonumber(mainFrame._lariasSelectedTab) == 2 then
-                    if Addon.SelectMainTab then
-                        Addon:SelectMainTab(1)
-                    end
-                    return
-                end
-
                 Addon:Toggle()
             elseif button == "RightButton" then
                 Addon:OpenOptions()
+            elseif button == "MiddleButton" then
+                if Addon.ToggleIlvlRefWindow then
+                    Addon:ToggleIlvlRefWindow()
+                end
             end
         end,
         OnTooltipShow = function(tooltip)
@@ -401,6 +395,7 @@ local function SetupMinimapIcon()
             tooltip:AddLine(L.DISPLAY_NAME or addonName, 1, 0.82, 0)
             tooltip:AddLine(L.MINIMAP_TOOLTIP_LEFT_CLICK_TOGGLE or "", 1, 1, 1)
             tooltip:AddLine(L.MINIMAP_TOOLTIP_RIGHT_CLICK_OPTIONS or "", 1, 1, 1)
+            tooltip:AddLine(L.MINIMAP_TOOLTIP_MIDDLE_CLICK_ILVL or "Middle-click: toggle ilvl refs", 1, 1, 1)
 
             if Addon.ShouldShowLocalizationCompanionHint and Addon:ShouldShowLocalizationCompanionHint() then
                 tooltip:AddLine(" ")
@@ -426,6 +421,11 @@ function Addon:OnInitialize()
         self:ApplyLocaleOverride()
     end
     SetupMinimapIcon()
+    -- Register the Blizzard Interface Options panel early so it appears
+    -- in the Interface → AddOns list even before the window is opened.
+    if self.CreateBlizzOptionsPanel then
+        self:CreateBlizzOptionsPanel()
+    end
 end
 
 -- Handle player login event
@@ -706,129 +706,38 @@ function Addon:SetLocaleOverride(value)
     end
 end
 
--- Show the main window and switch to Options tab.
+-- Opens the Blizzard Interface Options panel to the addon's category.
+-- Right-click on the minimap icon calls this.
 function Addon:OpenOptions()
-    self:CreateFrame()
-
-    if IsFrameShown(frame) and tonumber(frame._lariasSelectedTab) == 2 then
-        frame:Hide()
-        return
+    if self.CreateBlizzOptionsPanel then
+        self:CreateBlizzOptionsPanel()
     end
-
-    if frame and not IsFrameShown(frame) then
-        self._updatePopupShownThisOpen = nil
-        self:BroadcastVersion(false)
-        self:RequestVersions(false)
-        self:ShowUpdatePopupIfNeeded()
-        frame:Show()
-    end
-
-    if self.SelectMainTab then
-        self:SelectMainTab(2)
+    if self._blizzOptCategory and Settings and Settings.OpenToCategory then
+        local catId = self._blizzOptCategory.GetID and self._blizzOptCategory:GetID() or self._blizzOptCategory
+        Settings.OpenToCategory(catId)
+    elseif InterfaceOptionsFrame_OpenToCategory and self._blizzOptPanel then
+        InterfaceOptionsFrame_OpenToCategory(self._blizzOptPanel)
+    elseif InterfaceOptionsFrame then
+        InterfaceOptionsFrame:Show()
     end
 end
 
--- Tab switching for the main window.
--- tabId: 1 = list, 2 = options.
+-- Options tab removed; SelectMainTab is kept as a no-op stub for call-site safety.
 function Addon:SelectMainTab(tabId)
     self:CreateFrame()
     if not frame then return end
-
-    tabId = tonumber(tabId) or 1
-    if tabId ~= 2 then tabId = 1 end
-    frame._lariasSelectedTab = tabId
-
-    local listTab = frame._lariasTabList
-    local optionsTab = frame._lariasTabOptions
-
-    local function SetTabSelected(tabButton, selected)
-        if not tabButton then return end
-        if tabButton.SetEnabled then
-            tabButton:SetEnabled(not selected)
-        elseif selected and tabButton.Disable then
-            tabButton:Disable()
-        elseif tabButton.Enable then
-            tabButton:Enable()
-        end
-
-        if tabButton._lariasTabStyled and tabButton.SetBackdropColor then
-            local bg = Addon.THEME.bg
-            local baseAlpha = tonumber(bg.a) or 1
-            local alpha
-            if selected then
-                alpha = min(1, baseAlpha + 0.18)
-            else
-                alpha = max(0, baseAlpha - 0.28)
-            end
-            tabButton:SetBackdropColor(bg.r, bg.g, bg.b, alpha)
-
-            if tabButton._lariasNavTab then
-                -- Nav tabs: show/hide the underline indicator; keep border invisible.
-                if tabButton._lariasTabIndicator then
-                    if selected then
-                        tabButton._lariasTabIndicator:Show()
-                    else
-                        tabButton._lariasTabIndicator:Hide()
-                    end
-                end
-                if tabButton.SetBackdropBorderColor then
-                    tabButton:SetBackdropBorderColor(0, 0, 0, 0)
-                end
-            elseif tabButton.SetBackdropBorderColor then
-                local borderColor = selected and Addon.THEME.header or Addon.THEME.border
-                tabButton:SetBackdropBorderColor(borderColor.r, borderColor.g, borderColor.b, borderColor.a)
-            end
-        end
-
-        local textRegion = tabButton.Text or (tabButton.GetFontString and tabButton:GetFontString())
-        if textRegion and textRegion.SetTextColor then
-            if selected then
-                textRegion:SetTextColor(Addon.THEME.header.r, Addon.THEME.header.g, Addon.THEME.header.b, Addon.THEME.header.a)
-            else
-                textRegion:SetTextColor(Addon.THEME.textDim.r, Addon.THEME.textDim.g, Addon.THEME.textDim.b, Addon.THEME.textDim.a)
-            end
-        end
-    end
-
-    SetTabSelected(listTab, tabId == 1)
-    SetTabSelected(optionsTab, tabId == 2)
-
-    local showList = (tabId == 1)
     if scrollFrame and scrollFrame.SetShown then
-        scrollFrame:SetShown(showList)
+        scrollFrame:SetShown(true)
     end
-
-    local picker = frame._lariasHeaderPicker
-    if (not showList) and picker and picker.Hide then
-        picker:Hide()
-    end
-
-    local optionsPanel = frame._lariasOptionsPanel
-    if optionsPanel and optionsPanel.SetShown then
-        optionsPanel:SetShown(not showList)
-    end
-
-    if not showList and self.SyncOptionsTabControls then
-        self:SyncOptionsTabControls()
-    end
-
-    -- Force tracking panel to respect the selected tab (List only).
     if self.ApplyTrackingPanelOptions then
         self:ApplyTrackingPanelOptions()
     elseif self.UpdateTracking then
         self:UpdateTracking()
     end
-
-    if showList then
-        if self.RequestRefresh then
-            self:RequestRefresh()
-        elseif self.Refresh then
-            self:Refresh()
-        end
-    else
-        if self.ApplyScrollLayout then
-            self:ApplyScrollLayout()
-        end
+    if self.RequestRefresh then
+        self:RequestRefresh()
+    elseif self.Refresh then
+        self:Refresh()
     end
 end
 
@@ -873,16 +782,6 @@ function Addon:UpdateLocalizedUI()
 
     if self.RebuildIlvlRefWindow then
         self:RebuildIlvlRefWindow()
-    end
-
-    local optionsTab = frame._lariasTabOptions
-    if optionsTab and optionsTab.SetText then
-        optionsTab:SetText(L.TAB_OPTIONS or "Options")
-    end
-
-    local listTab = frame._lariasTabList
-    if listTab and listTab.SetText then
-        listTab:SetText(L.TAB_LIST or "List")
     end
 
     local changeWeekBtn = frame._lariasChangeWeekBtn
@@ -1059,16 +958,19 @@ local function AcquireSectionFrame()
     sectionFrame._header = header
 
     local title = header:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    title:SetPoint("LEFT", header, "LEFT", 0, 0)
+    title:SetPoint("LEFT", header, "LEFT", 6, 0)  -- 6px left indent: 3px accent bar + 3px gap
     title:SetTextColor(Addon.THEME.header.r, Addon.THEME.header.g, Addon.THEME.header.b, Addon.THEME.header.a)
     title:SetJustifyH("LEFT")
     if title.SetWordWrap then title:SetWordWrap(true) end
     sectionFrame._title = title
 
-    local status = header:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    status:SetPoint("RIGHT", header, "RIGHT", 0, 0)
-    status:SetTextColor(Addon.THEME.textDim.r, Addon.THEME.textDim.g, Addon.THEME.textDim.b, Addon.THEME.textDim.a)
-    sectionFrame._status = status
+    -- Colored left-edge accent bar that spans the full header height.
+    local accentBar = header:CreateTexture(nil, "BORDER")
+    accentBar:SetWidth(3)
+    accentBar:SetPoint("TOPLEFT",    header, "TOPLEFT",    0, 0)
+    accentBar:SetPoint("BOTTOMLEFT", header, "BOTTOMLEFT", 0, 0)
+    accentBar:SetColorTexture(Addon.THEME.header.r, Addon.THEME.header.g, Addon.THEME.header.b, 0.80)
+    sectionFrame._accentBar = accentBar
 
     return sectionFrame
 end
@@ -1325,7 +1227,6 @@ local function SetHeaderText(sectionFrame, sectionId, complete)
     local titleText = tostring((section and section.title) or sectionId)
     if complete then titleText = (L.DONE_PREFIX or "") .. titleText end
     sectionFrame._title:SetText(titleText)
-    sectionFrame._status:SetText("")
 end
 
 local function OnCheckboxClick(selfBtn)
@@ -1624,12 +1525,7 @@ function Addon:Refresh()
         self:ApplyScrollLayout()
     end
 
-    -- Update header buttons regardless of which tab is active (e.g. while on Options).
     if self.LayoutHeaderButtons then self:LayoutHeaderButtons() end
-
-    if tonumber(frame._lariasSelectedTab) ~= 1 then
-        return
-    end
 
     SyncAllDataAndFrames()
 
@@ -1756,6 +1652,25 @@ function Addon:CreateFrame()
     closeBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -Addon.UI.closeInset, -Addon.UI.closeInset)
     closeBtn:SetScript("OnClick", function() frame:Hide() end)
 
+    -- Gear / settings button: sits left of the close button, opens a toggle popup.
+    local gearBtn = CreateFrame("Button", nil, frame)
+    gearBtn:SetSize(20, 20)
+    gearBtn:SetPoint("RIGHT", closeBtn, "LEFT", -2, 0)
+    gearBtn:SetNormalTexture("Interface\\Buttons\\UI-OptionsButton")
+    local gearHL = gearBtn:CreateTexture(nil, "HIGHLIGHT")
+    gearHL:SetAllPoints(gearBtn)
+    gearHL:SetColorTexture(1, 1, 1, 0.18)
+    gearBtn:SetScript("OnClick", function()
+        if Addon.ToggleGearPopup then Addon:ToggleGearPopup(gearBtn) end
+    end)
+    gearBtn:SetScript("OnEnter", function(self_)
+        GameTooltip:SetOwner(self_, "ANCHOR_BOTTOMLEFT")
+        GameTooltip:SetText(L.TAB_OPTIONS or "Options", 1, 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    gearBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    frame._lariasGearBtn = gearBtn
+
     local mainResizeBtn = CreateFrame("Button", nil, frame)
     mainResizeBtn:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -4, 4)
     mainResizeBtn:SetSize(16, 16)
@@ -1774,8 +1689,6 @@ function Addon:CreateFrame()
     end)
 
     local frameName = frame.GetName and frame:GetName() or nil
-    local tab1Name = frameName and (frameName .. "Tab1") or nil
-    local tab2Name = frameName and (frameName .. "Tab2") or nil
 
     local function StyleMainTabButton(tabButton)
         -- Strip Blizzard textures and apply our theme colors.
@@ -1841,55 +1754,6 @@ function Addon:CreateFrame()
         tabButton._lariasTabStyled = true
     end
     Addon._styleActionButton = StyleMainTabButton
-
-    -- Nav tabs (List/Options): flat, no visible border, coloured underline when active.
-    local function StyleNavTabButton(tabButton)
-        StyleMainTabButton(tabButton)
-        -- Hide the border so tabs look flat.
-        if tabButton.SetBackdropBorderColor then
-            tabButton:SetBackdropBorderColor(0, 0, 0, 0)
-        end
-        -- 2 px underline indicator at the bottom edge.
-        if tabButton.CreateTexture and not tabButton._lariasTabIndicator then
-            local bar = tabButton:CreateTexture(nil, "OVERLAY")
-            bar:SetHeight(2)
-            bar:SetPoint("BOTTOMLEFT",  tabButton, "BOTTOMLEFT",  2, 0)
-            bar:SetPoint("BOTTOMRIGHT", tabButton, "BOTTOMRIGHT", -2, 0)
-            bar:SetColorTexture(
-                Addon.THEME.header.r, Addon.THEME.header.g,
-                Addon.THEME.header.b, Addon.THEME.header.a)
-            bar:Hide()
-            tabButton._lariasTabIndicator = bar
-        end
-        tabButton._lariasNavTab = true
-    end
-
-    local listTab = CreateFrame("Button", tab1Name, frame, "UIPanelButtonTemplate")
-    listTab:SetID(1)
-    listTab:SetText(L.TAB_LIST or "")
-    listTab:SetSize(80, 22)
-    listTab:ClearAllPoints()
-    -- Tabs should sit *inside* the window.
-    local tabInsetX = (Addon.UI.padOuterX or 0) + (Addon.UI.sectionInsetX or 0)
-    listTab:SetPoint("TOPLEFT", frame, "TOPLEFT", tabInsetX, -Addon.UI.padOuterTop)
-    StyleNavTabButton(listTab)
-    listTab:SetScript("OnClick", function(selfBtn)
-        Addon:SelectMainTab(selfBtn:GetID())
-    end)
-
-    local optionsTab = CreateFrame("Button", tab2Name, frame, "UIPanelButtonTemplate")
-    optionsTab:SetID(2)
-    optionsTab:SetText(L.TAB_OPTIONS or "")
-    optionsTab:SetSize(80, 22)
-    optionsTab:ClearAllPoints()
-    optionsTab:SetPoint("LEFT", listTab, "RIGHT", 6, 0)
-    StyleNavTabButton(optionsTab)
-    optionsTab:SetScript("OnClick", function(selfBtn)
-        Addon:SelectMainTab(selfBtn:GetID())
-    end)
-
-    frame._lariasTabList = listTab
-    frame._lariasTabOptions = optionsTab
 
     -- Header buttons are created lazily so they use no memory when disabled.
     local changeWeekBtn
@@ -1981,7 +1845,11 @@ function Addon:CreateFrame()
         catcher:SetScript("OnClick", function() picker:Hide() end)
 
         -- Tie catcher lifetime to the picker so nothing else needs to manage it.
-        picker:SetScript("OnShow", function() catcher:Show() end)
+        picker:SetScript("OnShow", function()
+            catcher:Show()
+            if UIFrameFadeIn then UIFrameFadeIn(picker, 0.15, 0, 1)
+            else picker:SetAlpha(1) end
+        end)
         picker:SetScript("OnHide", function() catcher:Hide() end)
 
         frame._lariasHeaderPicker = picker
@@ -2223,7 +2091,7 @@ function Addon:CreateFrame()
                     if Addon._cpOnClick then Addon._cpOnClick() end
                 end)
                 cpBtn:ClearAllPoints()
-                cpBtn:SetPoint("TOPRIGHT", closeBtn, "TOPLEFT", -6, -2)
+                cpBtn:SetPoint("TOPRIGHT", gearBtn, "TOPLEFT", -6, -2)
                 if Addon._cpUpdateLabel then Addon._cpUpdateLabel() end
                 cpBtn:Show()
             else
@@ -2256,7 +2124,7 @@ function Addon:CreateFrame()
                     if extracted ~= "" then cwLabel = extracted end
                 end
             end
-            btn:SetText(cwLabel)
+            btn:SetText(cwLabel .. " |TInterface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up:10:10|t")
             -- Auto-size button width to fit the label text.
             -- Deferred one frame so WoW has performed its layout pass
             -- and GetStringWidth returns real pixel widths.
@@ -2286,7 +2154,7 @@ function Addon:CreateFrame()
                     return
                 end
                 p:ClearAllPoints()
-                p:SetPoint("TOPRIGHT", changeWeekBtn, "BOTTOMRIGHT", 0, -6)
+                p:SetPoint("TOPLEFT", changeWeekBtn, "BOTTOMLEFT", 0, -6)
                 p:Show()
                 if C_Timer and C_Timer.After then
                     C_Timer.After(0, PopulateHeaderPicker)
@@ -2295,28 +2163,22 @@ function Addon:CreateFrame()
                 end
             end)
             btn:ClearAllPoints()
-            if showCP and cpBtn then
-                -- Stack directly below the char picker button, right-aligned so it grows left.
-                btn:SetPoint("TOPRIGHT", cpBtn, "BOTTOMRIGHT", 0, -2)
-            else
-                btn:SetPoint("TOPRIGHT", closeBtn, "TOPLEFT", -6, -2)
-            end
+            -- Pin to top-left of the frame, where the tab row used to live.
+            local cwInsetX = (Addon.UI.padOuterX or 14) + (Addon.UI.sectionInsetX or 14)
+            btn:SetPoint("TOPLEFT", frame, "TOPLEFT", cwInsetX, -(Addon.UI.padOuterTop or 10) - 2)
             btn:Show()
         elseif changeWeekBtn then
             changeWeekBtn:Hide()
         end
 
-        -- ilvlRefBtn anchors to the LEFT of the stacked column (cpBtn if shown,
-        -- else changeWeekBtn if shown), always on the top row.
+        -- ilvlRefBtn anchors to the LEFT of cpBtn (if shown), otherwise just left of closeBtn.
         if showIR then
             local btn = EnsureIlvlRefBtn_()
             btn:ClearAllPoints()
             if showCP and cpBtn then
                 btn:SetPoint("TOPRIGHT", cpBtn, "TOPLEFT", -6, 0)
-            elseif showCW and changeWeekBtn then
-                btn:SetPoint("TOPRIGHT", changeWeekBtn, "TOPLEFT", -6, -2)
             else
-                btn:SetPoint("TOPRIGHT", closeBtn, "TOPLEFT", -6, -2)
+                btn:SetPoint("TOPRIGHT", gearBtn, "TOPLEFT", -6, -2)
             end
             btn:Show()
         elseif ilvlRefBtn then
@@ -2326,15 +2188,13 @@ function Addon:CreateFrame()
             end
         end
 
-        -- Minimum width: charPickerBtn and changeWeekBtn now share one 108-wide column
-        -- (stacked vertically), so count that column only once.
-        -- tabInsetX (padOuterX+sectionInsetX=28) + tab1 (80) + gap (6) + tab2 (80) = 194
-        local _tabAreaW = (Addon.UI.padOuterX + Addon.UI.sectionInsetX) + 80 + 6 + 80
-        -- right side: closeInset(4) + close(32) + stacked column (if either visible) + ilvlRef
-        local _rightW = Addon.UI.closeInset + 32
-        if showCP or showCW then _rightW = _rightW + 6 + 108 end  -- shared stacked column
+        -- Minimum width: left side has inset + changeWeekBtn; right side has close + gear + cpBtn + ilvlRef.
+        local _insetX = (Addon.UI.padOuterX or 14) + (Addon.UI.sectionInsetX or 14)
+        local _leftW  = _insetX + (showCW and (108 + 6) or 0)
+        local _rightW = (Addon.UI.closeInset or 4) + 32 + 2 + 20  -- close + gear
+        if showCP then _rightW = _rightW + 6 + 108 end
         if showIR then _rightW = _rightW + 6 + 108 end
-        local _minW = _tabAreaW + 10 + _rightW  -- 10px breathing room between tabs and buttons
+        local _minW = _leftW + 20 + _rightW  -- 20px breathing room between sides
         if frame.SetResizeBounds then
             frame:SetResizeBounds(_minW, 200)
         elseif frame.SetMinResize then
@@ -2374,16 +2234,6 @@ function Addon:CreateFrame()
     scrollChild:SetSize(1, 1)
     scrollFrame:SetScrollChild(scrollChild)
 
-    local optionsPanel = CreateFrame("Frame", nil, frame)
-    optionsPanel:SetPoint("TOPLEFT", frame, "TOPLEFT", Addon.UI.padOuterX, -Addon.UI.scrollTop)
-    optionsPanel:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -Addon.UI.padOuterX, Addon.UI.scrollBottom)
-    optionsPanel:Hide()
-    frame._lariasOptionsPanel = optionsPanel
-
-    if self.InitOptionsTab then
-        self:InitOptionsTab(frame, optionsPanel)
-    end
-
     local db = self:EnsureDB()
     if (db.showGreatVault or db.showCurrency) and self.CreateTrackingPanel and not self._trackingFrame then
         self:CreateTrackingPanel(frame)
@@ -2393,7 +2243,7 @@ function Addon:CreateFrame()
         self:UpdateLocalizedUI()
     end
 
-    self:SelectMainTab(1)
+    if scrollFrame then scrollFrame:Show() end
 end
 
 function Addon:Toggle()
