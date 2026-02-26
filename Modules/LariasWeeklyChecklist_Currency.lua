@@ -233,13 +233,11 @@ local function IsMainFrameOnListTab()
 end
 
 local function FormatXY(currentAmount, maxAmount)
-    -- Standard progress format with infinity fallback when there is no max.
+    -- Standard progress format: always expects a positive max.
     currentAmount = tonumber(currentAmount) or 0
     maxAmount = tonumber(maxAmount) or 0
     if maxAmount > 0 then return ("%d/%d"):format(currentAmount, maxAmount) end
-    local infiniteString = L.TRACKING_INF
-    if type(infiniteString) ~= "string" or infiniteString == "" then infiniteString = "∞" end
-    return ("%d/%s"):format(currentAmount, infiniteString)
+    return tostring(currentAmount)
 end
 
 local function ColorForXY(currentAmount, maxAmount)
@@ -305,6 +303,37 @@ local function GetCurrencyIconID(currencyID)
     if not (C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo) then return nil end
     local info = C_CurrencyInfo.GetCurrencyInfo(id)
     return info and info.iconFileID or nil
+end
+
+local function GetCurrencyName(currencyID)
+    -- Returns the in-game display name for a currency from the WoW API.
+    local id = tonumber(currencyID)
+    if not (id and id > 0) then return nil end
+    if not (C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo) then return nil end
+    local info = C_CurrencyInfo.GetCurrencyInfo(id)
+    return info and info.name or nil
+end
+
+-- Standard WoW item-quality hex colors (AARRGGBB, matching ITEM_QUALITY_COLORS).
+local QUALITY_HEX = {
+    [0] = "ff9d9d9d",  -- Poor (gray)
+    [1] = "ffffffff",  -- Common (white)
+    [2] = "ff1eff00",  -- Uncommon (green)
+    [3] = "ff0070dd",  -- Rare (blue)
+    [4] = "ffa335ee",  -- Epic (purple)
+    [5] = "ffff8000",  -- Legendary (orange)
+    [6] = "ffe6cc80",  -- Artifact / Token
+    [7] = "ff00ccff",  -- Heirloom
+}
+local function GetCurrencyQualityColor(currencyID)
+    -- Returns an 8-char AARRGGBB hex matching the currency's in-game rarity.
+    local id = tonumber(currencyID)
+    if not (id and id > 0) then return COLORS.dim end
+    if not (C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo) then return COLORS.dim end
+    local info = C_CurrencyInfo.GetCurrencyInfo(id)
+    if not info then return COLORS.dim end
+    local q = tonumber(info.quality)
+    return (q and QUALITY_HEX[q]) or COLORS.dim
 end
 
 local function GetCrestLabelText(currencyID)
@@ -480,30 +509,34 @@ local function MakeGVIlvlsRow(ilvls, maxPossible, parts)
     return tconcat(parts, " ")
 end
 
-local GV_TYPE_MPLUS = (Enum and Enum.WeeklyRewardChestActivityType and Enum.WeeklyRewardChestActivityType.MythicPlus) or 1
-local GV_TYPE_RAID  = (Enum and Enum.WeeklyRewardChestActivityType and Enum.WeeklyRewardChestActivityType.Raid) or 3
+local GV_TYPE_MPLUS  = (Enum and Enum.WeeklyRewardChestActivityType and Enum.WeeklyRewardChestActivityType.MythicPlus) or 1
+local GV_TYPE_WORLD  = (Enum and Enum.WeeklyRewardChestActivityType and Enum.WeeklyRewardChestActivityType.World) or 2
+local GV_TYPE_RAID   = (Enum and Enum.WeeklyRewardChestActivityType and Enum.WeeklyRewardChestActivityType.Raid) or 3
 local function GetGreatVaultBlockLines()
-    -- Returns 6 lines representing GV raid/dungeons blocks.
+    -- Returns 9 lines representing GV raid/dungeons/world blocks.
     -- Uses a reusable cache table to minimize allocations during throttled updates.
     local cache = Addon.TRACKING._gvCache
     if not cache then
         cache = {
-            out = { "", "", "", "", "", "" },
+            out = { "", "", "", "", "", "", "", "", "" },
             rIlvls = {},
             mIlvls = {},
+            wIlvls = {},
             parts = {},
         }
         Addon.TRACKING._gvCache = cache
     end
 
     local out = cache.out
-    out[1], out[2], out[3], out[4], out[5], out[6] = "", "", "", "", "", ""
+    out[1], out[2], out[3], out[4], out[5], out[6], out[7], out[8], out[9] = "", "", "", "", "", "", "", "", ""
 
     if not C_WeeklyRewards or not C_WeeklyRewards.GetActivities then
         out[1] = MakeGVHeader(L.TRACKING_GV_RAID or "Raid")
         out[2] = ColorWrap(COLORS.red, L.TRACKING_NA or "")
         out[4] = MakeGVHeader(L.TRACKING_GV_DUNGEONS or "Dungeons")
         out[5] = ColorWrap(COLORS.red, L.TRACKING_NA or "")
+        out[7] = MakeGVHeader(L.TRACKING_GV_WORLD or "World")
+        out[8] = ColorWrap(COLORS.red, L.TRACKING_NA or "")
         return out
     end
 
@@ -513,18 +546,23 @@ local function GetGreatVaultBlockLines()
         out[2] = ColorWrap(COLORS.red, L.TRACKING_NA or "")
         out[4] = MakeGVHeader(L.TRACKING_GV_DUNGEONS or "Dungeons")
         out[5] = ColorWrap(COLORS.red, L.TRACKING_NA or "")
+        out[7] = MakeGVHeader(L.TRACKING_GV_WORLD or "World")
+        out[8] = ColorWrap(COLORS.red, L.TRACKING_NA or "")
         return out
     end
 
     local TYPE_MPLUS = GV_TYPE_MPLUS
+    local TYPE_WORLD = GV_TYPE_WORLD
     local TYPE_RAID  = GV_TYPE_RAID
 
     Wipe(cache.rIlvls)
     Wipe(cache.mIlvls)
-    
+    Wipe(cache.wIlvls)
+
     local raidTotal, raidComplete, raidMaxIlvl = 0, 0, 0
     local mythicTotal, mythicComplete, mythicMaxIlvl = 0, 0, 0
-    local raidExampleMax, dungeonExampleMax = 0, 0
+    local worldTotal, worldComplete, worldMaxIlvl = 0, 0, 0
+    local raidExampleMax, dungeonExampleMax, worldExampleMax = 0, 0, 0
 
     for idx = 1, #activities do
         local activity = activities[idx]
@@ -561,11 +599,28 @@ local function GetGreatVaultBlockLines()
             
             local exLevel = GetExampleRewardIlvlForActivity(activity)
             if exLevel > dungeonExampleMax then dungeonExampleMax = exLevel end
+
+        elseif activityType == TYPE_WORLD then
+            worldTotal = worldTotal + 1
+            local level = 0
+            if IsActivityComplete(activity) then
+                worldComplete = worldComplete + 1
+                level = GetActivityRewardIlvl(activity)
+                if level <= 0 then
+                    level = GetExampleRewardIlvlForActivity(activity)
+                end
+                if level > worldMaxIlvl then worldMaxIlvl = level end
+            end
+            cache.wIlvls[#cache.wIlvls + 1] = level
+
+            local exLevel = GetExampleRewardIlvlForActivity(activity)
+            if exLevel > worldExampleMax then worldExampleMax = exLevel end
         end
     end
 
-    local raidMax = (raidExampleMax > 0) and raidExampleMax or raidMaxIlvl
+    local raidMax    = (raidExampleMax > 0)    and raidExampleMax    or raidMaxIlvl
     local dungeonMax = (dungeonExampleMax > 0) and dungeonExampleMax or mythicMaxIlvl
+    local worldMax   = (worldExampleMax > 0)   and worldExampleMax   or worldMaxIlvl
 
     out[1] = MakeGVHeader(L.TRACKING_GV_RAID or "Raid")
     out[2] = (raidTotal > 0) and MakeGVThresholdsString(raidComplete, raidTotal, { 2, 4, 6 }, cache.parts) or ColorWrap(COLORS.red, L.TRACKING_NA or "")
@@ -574,6 +629,10 @@ local function GetGreatVaultBlockLines()
     out[4] = MakeGVHeader(L.TRACKING_GV_DUNGEONS or "Dungeons")
     out[5] = (mythicTotal > 0) and MakeGVThresholdsString(mythicComplete, mythicTotal, { 1, 4, 8 }, cache.parts) or ColorWrap(COLORS.red, L.TRACKING_NA or "")
     out[6] = (mythicTotal > 0) and MakeGVIlvlsRow(cache.mIlvls, dungeonMax, cache.parts) or ""
+
+    out[7] = MakeGVHeader(L.TRACKING_GV_WORLD or "World")
+    out[8] = (worldTotal > 0) and MakeGVThresholdsString(worldComplete, worldTotal, { 1, 5, 10 }, cache.parts) or ColorWrap(COLORS.red, L.TRACKING_NA or "")
+    out[9] = (worldTotal > 0) and MakeGVIlvlsRow(cache.wIlvls, worldMax, cache.parts) or ""
 
     return out
 end
@@ -586,21 +645,19 @@ local function GetSparksParts()
         return "", ""
     end
 
-    local label = ColorWrap(COLORS.dim, L.TRACKING_SPARKS_LABEL or "")
+    local name = GetCurrencyName(id) or L.TRACKING_SPARKS_LABEL or ""
+    local label = ColorWrap(GetCurrencyQualityColor(id), name)
     local cur, c = FormatCurrencyProgressParts(id)
-    cur = cur or 0
+    cur = tonumber(cur) or 0
     c = tonumber(c) or 0
 
-    local xy
-    local color
+    local xy, color
     if c > 0 then
         xy = FormatXY(cur, c)
         color = ColorForXY(cur, c)
     else
-        local inf = L.TRACKING_INF
-        if type(inf) ~= "string" or inf == "" then inf = "∞" end
-        xy = ("%d/%s"):format(tonumber(cur) or 0, inf)
-        color = ((tonumber(cur) or 0) <= 0) and COLORS.red or COLORS.yellow
+        xy = tostring(cur)
+        color = COLORS.green
     end
     return label, ColorWrap(color, xy)
 end
@@ -822,23 +879,19 @@ local function GetCrestLines()
     for i = 1, crestCount do
         local id = ids[i]
         if id then
-            local labelText = GetCrestLabelText(id)
-            if labelText then
+            local name = GetCurrencyName(id) or GetCrestLabelText(id) or tostring(id)
+            if name then
                 local cur = crest.cur[i]
                 local cap = crest.cap[i]
-
-                local forceGreen = crest.unlocked[i] or false
 
                 local xy
                 local color
                 if cap > 0 then
                     xy = FormatXY(cur, cap)
-                    color = forceGreen and COLORS.green or ColorForXY(cur, cap)
+                    color = ColorForXY(cur, cap)
                 else
-                    local inf = L.TRACKING_INF
-                    if type(inf) ~= "string" or inf == "" then inf = "∞" end
-                    xy = ("%d/%s"):format(cur, inf)
-                    color = forceGreen and COLORS.green or ((cur <= 0) and COLORS.red or COLORS.green)
+                    xy = tostring(cur)
+                    color = COLORS.green
                 end
 
                 local tradeUp = ""
@@ -851,15 +904,8 @@ local function GetCrestLines()
                     end
                 end
 
-                local lbl = ColorWrap(COLORS.dim, tostring(labelText)) .. tradeUp
+                local lbl = ColorWrap(GetCurrencyQualityColor(id), tostring(name)) .. tradeUp
                 local val = ColorWrap(color, xy)
-                labelOut[i] = lbl
-                valueOut[i] = val
-                out[i] = lbl .. " " .. val
-            else
-                local fmt = L.TRACKING_CREST_ID_LABEL_FMT or "%s"
-                local lbl = ColorWrap(COLORS.dim, (fmt):format(tostring(id)))
-                local val = ColorWrap(COLORS.red, L.TRACKING_NA or "")
                 labelOut[i] = lbl
                 valueOut[i] = val
                 out[i] = lbl .. " " .. val
@@ -912,6 +958,8 @@ local function GetCatalystParts()
 
     local id = Addon.TRACKING and Addon.TRACKING.catalystCurrencyID
     local hasConfiguredID = (id and tonumber(id) and tonumber(id) > 0) and true or false
+    local catName = (hasConfiguredID and GetCurrencyName(tonumber(id))) or L.TRACKING_CATALYST_LABEL or ""
+    local catLabelColor = (hasConfiguredID and GetCurrencyQualityColor(tonumber(id))) or COLORS.dim
     if hasConfiguredID then
         local qty, c = FormatCurrencyProgressParts(id)
         cur = tonumber(qty)
@@ -943,17 +991,38 @@ local function GetCatalystParts()
             return "", ""
         end
 
-        return ColorWrap(COLORS.dim, L.TRACKING_CATALYST_LABEL or ""), ColorWrap(COLORS.red, L.TRACKING_NA or "")
+        return ColorWrap(catLabelColor, catName), ColorWrap(COLORS.red, L.TRACKING_NA or "")
     end
 
     if cap and cap > 0 then
         local xy = FormatXY(cur, cap)
         local color = ColorForXY(cur, cap)
-        return ColorWrap(COLORS.dim, L.TRACKING_CATALYST_LABEL or ""), ColorWrap(color, xy)
+        return ColorWrap(catLabelColor, catName), ColorWrap(color, xy)
     end
 
-    local color = (cur <= 0) and COLORS.red or COLORS.yellow
-    return ColorWrap(COLORS.dim, L.TRACKING_CATALYST_LABEL or ""), ColorWrap(color, ("%d"):format(cur))
+    local color = (cur <= 0) and COLORS.red or COLORS.green
+    return ColorWrap(catLabelColor, catName), ColorWrap(color, ("%d"):format(cur))
+end
+
+local function GetCofferKeysParts()
+    -- Restored Coffer Keys row using the configured currency ID.
+    local id = Addon.TRACKING and Addon.TRACKING.cofferKeysCurrencyID
+    if not (id and tonumber(id) and tonumber(id) > 0) then return "", "" end
+    id = tonumber(id)
+    local name = GetCurrencyName(id) or "Restored Coffer Keys"
+    local label = ColorWrap(GetCurrencyQualityColor(id), name)
+    local cur, cap = FormatCurrencyProgressParts(id)
+    cur = tonumber(cur) or 0
+    cap = tonumber(cap) or 0
+    local xy, color
+    if cap > 0 then
+        xy = FormatXY(cur, cap)
+        color = ColorForXY(cur, cap)
+    else
+        xy = tostring(cur)
+        color = (cur <= 0) and COLORS.red or COLORS.green
+    end
+    return label, ColorWrap(color, xy)
 end
 
 local function ComputeWantTrackingPanel(db)
@@ -990,6 +1059,9 @@ local function ApplyGreatVaultLines(lines)
     SetTextIfChanged(TrackingUI.left.line4, lines[4])
     SetTextIfChanged(TrackingUI.left.line5, lines[5])
     SetTextIfChanged(TrackingUI.left.line6, lines[6])
+    SetTextIfChanged(TrackingUI.left.line7, lines[7])
+    SetTextIfChanged(TrackingUI.left.line8, lines[8])
+    SetTextIfChanged(TrackingUI.left.line9, lines[9])
 
     SetShownIfChanged(TrackingUI.left.line1, IsNonEmptyText(lines[1]))
     SetShownIfChanged(TrackingUI.left.line2, IsNonEmptyText(lines[2]))
@@ -997,8 +1069,12 @@ local function ApplyGreatVaultLines(lines)
     SetShownIfChanged(TrackingUI.left.line4, IsNonEmptyText(lines[4]))
     SetShownIfChanged(TrackingUI.left.line5, IsNonEmptyText(lines[5]))
     SetShownIfChanged(TrackingUI.left.line6, IsNonEmptyText(lines[6]))
-    SetShownIfChanged(TrackingUI.left.raidUnderline, TrackingUI.left.line1 and TrackingUI.left.line1:IsShown())
+    SetShownIfChanged(TrackingUI.left.line7, IsNonEmptyText(lines[7]))
+    SetShownIfChanged(TrackingUI.left.line8, IsNonEmptyText(lines[8]))
+    SetShownIfChanged(TrackingUI.left.line9, IsNonEmptyText(lines[9]))
+    SetShownIfChanged(TrackingUI.left.raidUnderline,     TrackingUI.left.line1 and TrackingUI.left.line1:IsShown())
     SetShownIfChanged(TrackingUI.left.dungeonsUnderline, TrackingUI.left.line4 and TrackingUI.left.line4:IsShown())
+    SetShownIfChanged(TrackingUI.left.worldUnderline,    TrackingUI.left.line7 and TrackingUI.left.line7:IsShown())
 end
 
 local function SetRightRowPair(i, rowLabel, rowValue, iconFileID)
@@ -1058,6 +1134,13 @@ local function ApplyRightColumnAsPairs()
         idx = idx + 1
     end
 
+    local kLbl, kVal = GetCofferKeysParts()
+    kLbl = kLbl or ""; kVal = kVal or ""
+    if idx <= RIGHT_LINE_COUNT and (IsNonEmptyText(kLbl) or IsNonEmptyText(kVal)) then
+        SetRightRowPair(idx, kLbl, kVal, GetCurrencyIconID(tracking and tracking.cofferKeysCurrencyID))
+        idx = idx + 1
+    end
+
     local bLbl, bVal = GetDelversBountyParts()
     bLbl = bLbl or ""; bVal = bVal or ""
     if idx <= RIGHT_LINE_COUNT and (IsNonEmptyText(bLbl) or IsNonEmptyText(bVal)) then
@@ -1087,6 +1170,9 @@ local function ResizeTrackingPanelToContent(addon)
     bottomLeft = max(bottomLeft, BottomFor(TrackingUI.left.line4))
     bottomLeft = max(bottomLeft, BottomFor(TrackingUI.left.line5))
     bottomLeft = max(bottomLeft, BottomFor(TrackingUI.left.line6))
+    bottomLeft = max(bottomLeft, BottomFor(TrackingUI.left.line7))
+    bottomLeft = max(bottomLeft, BottomFor(TrackingUI.left.line8))
+    bottomLeft = max(bottomLeft, BottomFor(TrackingUI.left.line9))
 
     local bottomRight = 0
     for i = 1, RIGHT_LINE_COUNT do
@@ -1191,6 +1277,9 @@ function Addon:CreateTrackingPanel(parentFrame)
     TrackingUI.left.line4 = MakeLine(leftCol,  -62, "GameFontHighlightLarge", "CENTER")
     TrackingUI.left.line5 = MakeLine(leftCol,  -84, "GameFontHighlightSmall", "CENTER")
     TrackingUI.left.line6 = MakeLine(leftCol, -100, "GameFontHighlightSmall", "CENTER")
+    TrackingUI.left.line7 = MakeLine(leftCol, -124, "GameFontHighlightLarge", "CENTER")
+    TrackingUI.left.line8 = MakeLine(leftCol, -146, "GameFontHighlightSmall", "CENTER")
+    TrackingUI.left.line9 = MakeLine(leftCol, -162, "GameFontHighlightSmall", "CENTER")
 
     local function MakeUnderlineFor(fontString)
         if not fontString then return nil end
@@ -1202,8 +1291,9 @@ function Addon:CreateTrackingPanel(parentFrame)
         return line
     end
 
-    TrackingUI.left.raidUnderline = MakeUnderlineFor(TrackingUI.left.line1)
+    TrackingUI.left.raidUnderline     = MakeUnderlineFor(TrackingUI.left.line1)
     TrackingUI.left.dungeonsUnderline = MakeUnderlineFor(TrackingUI.left.line4)
+    TrackingUI.left.worldUnderline    = MakeUnderlineFor(TrackingUI.left.line7)
 
     local ROW_ICON_SZ  = 14  -- px; square currency icon
     local ROW_ICON_GAP = 3   -- gap between icon and label text
@@ -1352,10 +1442,10 @@ ComputeSnapshotData = function(snap)
     -- Used both after a live panel render and for background updates when the
     -- panel is hidden. No UI frame required.
 
-    -- Left column: Great Vault (6 lines).
+    -- Left column: Great Vault (9 lines: Raid + Dungeons + World).
     local gvLines = GetGreatVaultBlockLines()
     snap.leftLines = snap.leftLines or {}
-    for i = 1, 6 do
+    for i = 1, 9 do
         snap.leftLines[i] = gvLines[i] or ""
     end
 
@@ -1390,6 +1480,13 @@ ComputeSnapshotData = function(snap)
         snap.rightRows[#snap.rightRows + 1] = { type = "sparks", id = sparkID, qty = tonumber(sQty) or 0 }
     end
 
+    -- Restored Coffer Keys.
+    local cofferID = tracking and tonumber(tracking.cofferKeysCurrencyID)
+    if cofferID and cofferID > 0 then
+        local kQty, _ = FormatCurrencyProgressParts(cofferID)
+        snap.rightRows[#snap.rightRows + 1] = { type = "cofferkeys", id = cofferID, qty = tonumber(kQty) or 0 }
+    end
+
     -- Weekly quests: always include so the viewer can see completion status.
     local bDone = GetQuestDoneRaw("delversBounty")
     if bDone ~= nil then
@@ -1417,12 +1514,8 @@ local function RenderSnapshotRow(row)
     if t == "crest" then
         local id  = row.id
         local qty = tonumber(row.qty) or 0
-        local labelText = GetCrestLabelText(id)
-        if not labelText then
-            local fmt = L.TRACKING_CREST_ID_LABEL_FMT or "%s"
-            labelText = fmt:format(tostring(id or "?"))
-        end
-        local lbl = ColorWrap(COLORS.dim, tostring(labelText))
+        local name = GetCurrencyName(id) or GetCrestLabelText(id) or tostring(id or "?")
+        local lbl = ColorWrap(GetCurrencyQualityColor(id), tostring(name))
         local _, cap = FormatCurrencyProgressParts(id)
         cap = tonumber(cap) or 0
         local xy, color
@@ -1430,16 +1523,17 @@ local function RenderSnapshotRow(row)
             xy    = FormatXY(qty, cap)
             color = ColorForXY(qty, cap)
         else
-            local inf = L.TRACKING_INF
-            if type(inf) ~= "string" or inf == "" then inf = "∞" end
-            xy    = ("%d/%s"):format(qty, inf)
-            color = (qty <= 0) and COLORS.red or COLORS.green
+            xy    = tostring(qty)
+            color = COLORS.green
         end
         return lbl, ColorWrap(color, xy)
 
     elseif t == "catalyst" then
         local qty = tonumber(row.qty) or 0
-        local lbl = ColorWrap(COLORS.dim, L.TRACKING_CATALYST_LABEL or "")
+        local tracking = Addon.TRACKING
+        local catID = tracking and tonumber(tracking.catalystCurrencyID)
+        local catLabel = (catID and catID > 0 and GetCurrencyName(catID)) or L.TRACKING_CATALYST_LABEL or ""
+        local lbl = ColorWrap(GetCurrencyQualityColor(catID), catLabel)
         -- Resolve live cap from C_Catalyst or the configured currency ID.
         local cap = nil
         if C_Catalyst then
@@ -1451,17 +1545,15 @@ local function RenderSnapshotRow(row)
                 end
             end
         end
-        local tracking = Addon.TRACKING
-        local catID = tracking and tracking.catalystCurrencyID
-        if (not cap or cap == 0) and catID and tonumber(catID) and tonumber(catID) > 0 then
-            local _, c = FormatCurrencyProgressParts(tonumber(catID))
+        if (not cap or cap == 0) and catID and catID > 0 then
+            local _, c = FormatCurrencyProgressParts(catID)
             cap = tonumber(c)
         end
         local val
         if cap and cap > 0 then
             val = ColorWrap(ColorForXY(qty, cap), FormatXY(qty, cap))
         else
-            val = ColorWrap((qty <= 0) and COLORS.red or COLORS.yellow, ("%d"):format(qty))
+            val = ColorWrap((qty <= 0) and COLORS.red or COLORS.green, ("%d"):format(qty))
         end
         return lbl, val
 
@@ -1472,7 +1564,8 @@ local function RenderSnapshotRow(row)
             local tracking = Addon.TRACKING
             id = tracking and tonumber(tracking.sparkCurrencyID)
         end
-        local lbl = ColorWrap(COLORS.dim, L.TRACKING_SPARKS_LABEL or "")
+        local sparkLabel = (id and id > 0 and GetCurrencyName(id)) or L.TRACKING_SPARKS_LABEL or ""
+        local lbl = ColorWrap(GetCurrencyQualityColor(id), sparkLabel)
         local cap = 0
         if id and id > 0 then
             local _, c = FormatCurrencyProgressParts(id)
@@ -1483,10 +1576,32 @@ local function RenderSnapshotRow(row)
             xy    = FormatXY(qty, cap)
             color = ColorForXY(qty, cap)
         else
-            local inf = L.TRACKING_INF
-            if type(inf) ~= "string" or inf == "" then inf = "∞" end
-            xy    = ("%d/%s"):format(qty, inf)
-            color = (qty <= 0) and COLORS.red or COLORS.yellow
+            xy    = tostring(qty)
+            color = (qty <= 0) and COLORS.red or COLORS.green
+        end
+        return lbl, ColorWrap(color, xy)
+
+    elseif t == "cofferkeys" then
+        local qty = tonumber(row.qty) or 0
+        local id  = tonumber(row.id)
+        if not id then
+            local tracking = Addon.TRACKING
+            id = tracking and tonumber(tracking.cofferKeysCurrencyID)
+        end
+        local keyName = (id and id > 0 and GetCurrencyName(id)) or "Restored Coffer Keys"
+        local lbl = ColorWrap(GetCurrencyQualityColor(id), keyName)
+        local cap = 0
+        if id and id > 0 then
+            local _, c = FormatCurrencyProgressParts(id)
+            cap = tonumber(c) or 0
+        end
+        local xy, color
+        if cap > 0 then
+            xy    = FormatXY(qty, cap)
+            color = ColorForXY(qty, cap)
+        else
+            xy    = tostring(qty)
+            color = (qty <= 0) and COLORS.red or COLORS.green
         end
         return lbl, ColorWrap(color, xy)
 
@@ -1548,14 +1663,14 @@ local function RenderSnapshotIntoPanel(snap)
                     local qty = storedCrestQty[id] or 0
                     local lbl, val = RenderSnapshotRow({ type = "crest", id = id, qty = qty })
                     if IsNonEmptyText(lbl) or IsNonEmptyText(val) then
-                        SetRightRowPair(idx, lbl, val)
+                        SetRightRowPair(idx, lbl, val, GetCurrencyIconID(id))
                         idx = idx + 1
                     end
                 end
             end
         end
 
-        -- Render remaining non-crest rows (catalyst, sparks, quests) from snapshot.
+        -- Render remaining non-crest rows (catalyst, sparks, cofferkeys, quests) from snapshot.
         for _, row in ipairs(nonCrestRows) do
             if idx > RIGHT_LINE_COUNT then break end
             local lbl, val
@@ -1566,7 +1681,15 @@ local function RenderSnapshotIntoPanel(snap)
                 val = row.value or ""
             end
             if IsNonEmptyText(lbl) or IsNonEmptyText(val) then
-                SetRightRowPair(idx, lbl, val)
+                -- Pass icon for known typed rows.
+                local iconID = nil
+                if row.type == "sparks" or row.type == "cofferkeys" then
+                    iconID = GetCurrencyIconID(row.id)
+                elseif row.type == "catalyst" then
+                    local tr = Addon.TRACKING
+                    iconID = GetCurrencyIconID(tr and tr.catalystCurrencyID)
+                end
+                SetRightRowPair(idx, lbl, val, iconID)
                 idx = idx + 1
             end
         end

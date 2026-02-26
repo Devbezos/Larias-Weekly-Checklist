@@ -39,8 +39,9 @@ local STRINGS = {
 	-- Tracking panel
 	TRACKING_GREAT_VAULT_TITLE = "Great Vault",
 	TRACKING_CURRENCY_TITLE = "Currency",
-	TRACKING_GV_RAID = "Raid",
+	TRACKING_GV_RAID     = "Raid",
 	TRACKING_GV_DUNGEONS = "Dungeons",
+	TRACKING_GV_WORLD    = "World",
 	TRACKING_NA = "N/A",
 
 	TRACKING_SPARKS_LABEL = "Sparks:",
@@ -120,6 +121,9 @@ local STRINGS = {
 	ILVLREF_RAID_MYTHIC        = "Mythic",
 
 	ILVLREF_DELVE_TIER_FMT     = "T%d",
+
+	ILVLREF_TOGGLE_EXPAND = "Expand",
+	ILVLREF_TOGGLE_SHRINK = "Shrink",
 
 	-- Slash commands
 	SLASH_USAGE_TOGGLE = "Usage: /larias or /lcl to toggle the checklist",

@@ -339,9 +339,6 @@ local function BuildIlvlRefWindow()
         { t = Locale.ILVLREF_COL_GREAT_VAULT },
     }, DELVES)
     local function tblW(cols) return cols[#cols].x + cols[#cols].w end
-    local contentW = math.max(tblW(trackCols), tblW(craftCols), tblW(dungCols),
-                               tblW(raidCols), tblW(delveCols))
-    local WIN_W = contentW + PAD * 2 + 22  -- PAD each side + scrollbar
 
     local win
     if BackdropTemplateMixin then
@@ -353,12 +350,9 @@ local function BuildIlvlRefWindow()
         end
     end
 
-    local _savedIlvlSize = Addon.db and Addon.db.global and Addon.db.global.ilvlRefSize
-    local initWinW = (_savedIlvlSize and tonumber(_savedIlvlSize.w) or 0)
-    local initWinH = (_savedIlvlSize and tonumber(_savedIlvlSize.h) or 0)
-    if initWinW < WIN_W then initWinW = WIN_W end
-    if initWinH < 150   then initWinH = WIN_H end  -- use default height on first open
-    win:SetSize(initWinW, initWinH)
+    -- Default width = 2-col layout (Tracks | everything else).  Set after
+    -- BuildSection calls (wTracks/wRight2 not yet available here).
+    win:SetSize(WIN_W, WIN_H)
     local _savedIlvlPos = Addon.db and Addon.db.global and Addon.db.global.ilvlRefPos
     if _savedIlvlPos and _savedIlvlPos.x and _savedIlvlPos.y then
         win:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", _savedIlvlPos.x, _savedIlvlPos.y)
@@ -373,12 +367,6 @@ local function BuildIlvlRefWindow()
     end
     win:SetClampedToScreen(true)
     win:SetMovable(true)
-    win:SetResizable(true)
-    if win.SetResizeBounds then
-        win:SetResizeBounds(WIN_W, 150)
-    elseif win.SetMinResize then
-        win:SetMinResize(WIN_W, 150)
-    end
     win:EnableMouse(true)
     win:RegisterForDrag("LeftButton")
     win:SetScript("OnDragStart", win.StartMoving)
@@ -452,24 +440,26 @@ local function BuildIlvlRefWindow()
     local secDelves,  wDelves,  hDelves  = BuildSection(Locale.ILVLREF_SEC_DELVES,    delveCols, DELVES)
 
     -- Natural column widths for multi-column layouts
-    local wRight2 = math.max(wCrafted, wDungs, wRaid, wDelves)  -- 2-col: all right sections
-    local wMid    = math.max(wCrafted, wDungs)                   -- 3-col: middle column
-    local wRight3 = math.max(wRaid,    wDelves)                  -- 3-col: right column
+    local wMid    = math.max(wCrafted, wDungs)        -- 3-col: middle column
+    local wRight3 = math.max(wRaid,    wDelves)        -- 3-col: right column
+    local wSingle = math.max(wTracks, wCrafted, wDungs, wRaid, wDelves)  -- 1-col: widest table
 
-    -- Reposition all section sub-frames based on current window width.
-    -- 3-col: Tracks | Crafted+Dungeons | Raid+Delves
-    -- 2-col: Tracks | Crafted+Dungeons+Raid+Delves
-    -- 1-col: all stacked, scrollbar handles overflow
-    local _reflowing = false
+    -- Maximized = 3-col, auto-height, no scroll.
+    -- Minimized = 1-col stacked, fixed WIN_H, scrollable.
+    local _isMaximized = (Addon.db and Addon.db.global and Addon.db.global.ilvlRefMaximized) and true or false
+    local _reflowing   = false
+
     local function ReflowIlvlSections()
         if _reflowing then return end
         _reflowing = true
 
-        local availW = win:GetWidth() - PAD * 2 - 22  -- subtract PAD each side + scrollbar
-        sc:SetWidth(math.max(1, availW))
+        local sb = sf.ScrollBar
 
-        if availW >= wTracks + wMid + wRight3 + COL_GAP * 2 then
-            -- ── Three-column layout ────────────────────────────────────────────
+        if _isMaximized then
+            -- ── Three-column layout (maximized) ───────────────────────────────
+            local col3W = wTracks + wMid + wRight3 + COL_GAP * 2
+            sc:SetWidth(max(1, col3W))
+
             secTracks:ClearAllPoints()
             secTracks:SetPoint("TOPLEFT", sc, "TOPLEFT", 0, 0)
 
@@ -492,26 +482,20 @@ local function BuildIlvlRefWindow()
 
             sc:SetHeight(max(1, math.max(hTracks, -my, -ry) + PAD))
 
-        elseif availW >= wTracks + wRight2 + COL_GAP then
-            -- ── Two-column layout ──────────────────────────────────────────────
-            secTracks:ClearAllPoints()
-            secTracks:SetPoint("TOPLEFT", sc, "TOPLEFT", 0, 0)
+            -- Auto-fit height so no scrollbar is needed.
+            local idealH = SCROLLTOP + math.ceil(sc:GetHeight()) + PAD
+            win:SetHeight(idealH)
+            -- +1 extra pixel so the scroll viewport (win_w - 2*PAD - 22) is wide
+            -- enough to include the 1px right-border vline drawn at x=col3W.
+            win:SetWidth(col3W + PAD * 2 + 22 + 1)
+            if sb then sb:Hide() end
 
-            local rightX = wTracks + COL_GAP
-            local ry = 0
-            local rightSecs = { secCrafted, secDungs,   secRaid, secDelves }
-            local rightHs   = { hCrafted,  hDungs,     hRaid,   hDelves   }
-            for i, s in ipairs(rightSecs) do
-                s:ClearAllPoints()
-                s:SetPoint("TOPLEFT", sc, "TOPLEFT", rightX, ry)
-                ry = ry - rightHs[i] - SEC_GAP
-            end
-
-            sc:SetHeight(max(1, math.max(hTracks, -ry) + PAD))
         else
-            -- ── Single-column layout ───────────────────────────────────────────
-            local allSecs = { secTracks,  secCrafted, secDungs, secRaid,  secDelves }
-            local allHs   = { hTracks,   hCrafted,   hDungs,   hRaid,    hDelves   }
+            -- ── Single-column layout (minimized / default) ────────────────────
+            sc:SetWidth(max(1, wSingle))
+
+            local allSecs = { secTracks, secCrafted, secDungs, secRaid,  secDelves }
+            local allHs   = { hTracks,  hCrafted,   hDungs,   hRaid,    hDelves   }
             local y = 0
             for i, s in ipairs(allSecs) do
                 s:ClearAllPoints()
@@ -519,68 +503,74 @@ local function BuildIlvlRefWindow()
                 y = y - allHs[i] - SEC_GAP
             end
             sc:SetHeight(max(1, -y + PAD))
+
+            -- Fixed window height; scroll frame handles overflow.
+            win:SetHeight(WIN_H)
+            if sb then sb:Show() end
         end
 
-        -- Apply UI scale (does not change logical dimensions, no OnSizeChanged).
-        local _scale = Addon.GetUIScale and Addon:GetUIScale() or 1.0
-        win:SetScale(_scale)
-
-        -- Enforce max size when content fits without scrolling.
-        -- sf is anchored: TOPLEFT=(PAD, -SCROLLTOP), BOTTOMRIGHT=(-(PAD+22), PAD)
-        -- so sf effective height = win:GetHeight() - SCROLLTOP - PAD.
-        -- Compute this directly from win height to avoid reading sf:GetHeight() before
-        -- the layout engine has processed the frame (returns 0 on first call).
-        local _scH    = math.ceil(sc:GetHeight())
-        local _sfH    = math.floor(win:GetHeight() - SCROLLTOP - PAD)
-        local _idealH = SCROLLTOP + _scH + PAD
-        local _curW   = win:GetWidth()
-        local _sb = sf.ScrollBar
-        if _scH <= _sfH then
-            -- Content fits: snap height to content, lock both max width and max height.
-            win:SetHeight(_idealH)
-            if win.SetResizeBounds then
-                win:SetResizeBounds(WIN_W, 150, _curW, _idealH)
-            elseif win.SetMaxResize then
-                win:SetMaxResize(_curW, _idealH)
-            end
-            if _sb and _sb.Hide then _sb:Hide() end
-        else
-            -- Content overflows: free both dimensions, show scrollbar.
-            if win.SetResizeBounds then
-                win:SetResizeBounds(WIN_W, 150, 0, 0)
-            elseif win.SetMaxResize then
-                win:SetMaxResize(0, 0)
-            end
-            if _sb and _sb.Show then _sb:Show() end
-        end
+        -- Apply UI scale to the scroll content only; the outer window stays at
+        -- whatever size the user has set so drag/resize coordinates stay correct.
+        sc:SetScale(Addon.GetUIScale and Addon:GetUIScale() or 1.0)
 
         _reflowing = false
     end
 
     win._ilvlReflow = ReflowIlvlSections
-    win._baseW = WIN_W  -- default window width (used by reset)
-    win._baseH = WIN_H  -- default window height (used by reset)
-    ReflowIlvlSections()  -- initial layout
 
-    win:SetScript("OnSizeChanged", function()
-        ReflowIlvlSections()
-    end)
+    -- Toggle button: NE arrow = maximize (3-col), SW arrow = minimize (1-col scrollable).
+    -- Uses WoW's built-in panel expand/collapse diagonal-arrow textures.
+    local EXPAND_NORM   = "Interface\\Buttons\\UI-Panel-ExpandButton-Up"
+    local EXPAND_PUSH   = "Interface\\Buttons\\UI-Panel-ExpandButton-Down"
+    local COLLAPSE_NORM = "Interface\\Buttons\\UI-Panel-CollapseButton-Up"
+    local COLLAPSE_PUSH = "Interface\\Buttons\\UI-Panel-CollapseButton-Down"
 
-    local ilvlResizeBtn = CreateFrame("Button", nil, win)
-    ilvlResizeBtn:SetPoint("BOTTOMRIGHT", win, "BOTTOMRIGHT", -4, 4)
-    ilvlResizeBtn:SetSize(16, 16)
-    ilvlResizeBtn:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
-    ilvlResizeBtn:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
-    ilvlResizeBtn:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
-    ilvlResizeBtn:SetScript("OnMouseDown", function() win:StartSizing("BOTTOMRIGHT") end)
-    ilvlResizeBtn:SetScript("OnMouseUp", function()
-        win:StopMovingOrSizing()
-        ReflowIlvlSections()
-        local _gdb = Addon.db and Addon.db.global
-        if _gdb then
-            _gdb.ilvlRefSize = { w = win:GetWidth(), h = win:GetHeight() }
+    local toggleBtn = CreateFrame("Button", nil, win)
+    toggleBtn:SetPoint("TOPRIGHT", closeBtn, "TOPLEFT", 4, 0)
+    toggleBtn:SetSize(18, 18)
+    local toggleHL = toggleBtn:CreateTexture(nil, "HIGHLIGHT")
+    toggleHL:SetAllPoints()
+    toggleHL:SetColorTexture(1, 1, 1, 0.15)
+
+    local function UpdateToggleTexture()
+        if _isMaximized then
+            toggleBtn:SetNormalTexture(EXPAND_NORM)
+            toggleBtn:SetPushedTexture(EXPAND_PUSH)
+        else
+            toggleBtn:SetNormalTexture(COLLAPSE_NORM)
+            toggleBtn:SetPushedTexture(COLLAPSE_PUSH)
         end
+    end
+    UpdateToggleTexture()
+
+    toggleBtn:SetScript("OnEnter", function()
+        GameTooltip:SetOwner(toggleBtn, "ANCHOR_BOTTOM")
+        GameTooltip:SetText(_isMaximized and (Locale.ILVLREF_TOGGLE_SHRINK or "Shrink") or (Locale.ILVLREF_TOGGLE_EXPAND or "Expand"))
+        GameTooltip:Show()
     end)
+    toggleBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    toggleBtn:SetScript("OnClick", function()
+        _isMaximized = not _isMaximized
+        local _gdb = Addon.db and Addon.db.global
+        if _gdb then _gdb.ilvlRefMaximized = _isMaximized end
+        UpdateToggleTexture()
+        if _isMaximized then
+            -- Widen to fit 3-col before reflow so layout branch is chosen correctly.
+            -- +1 for the right-border pixel on the last table (see ReflowIlvlSections).
+            win:SetWidth(wTracks + wMid + wRight3 + COL_GAP * 2 + PAD * 2 + 22 + 1)
+        else
+            win:SetWidth(wSingle + PAD * 2 + 22)
+        end
+        ReflowIlvlSections()
+    end)
+
+    -- Initial state: apply saved maximized state (defaults to minimized/1-col scrollable).
+    if _isMaximized then
+        win:SetWidth(wTracks + wMid + wRight3 + COL_GAP * 2 + PAD * 2 + 22 + 1)
+    else
+        win:SetWidth(wSingle + PAD * 2 + 22)
+    end
+    ReflowIlvlSections()
 
     return win
 end

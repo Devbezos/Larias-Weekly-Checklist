@@ -261,8 +261,8 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
     local txt    = THEME.text    or { r=1.00, g=1.00, b=1.00, a=1.00 }
     local txtD   = THEME.textDim or txt
 
-    local MIN_V  = 80
-    local MAX_V  = 120
+    local MIN_V  = 50
+    local MAX_V  = 150
     local STEP_V = 1
 
     -- Dimensions
@@ -349,7 +349,8 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
 
     sf.Sync = function() UpdateVisuals(GetCurrentPct()) end
 
-    -- The main frame always has SetScale(1); scaling is done via SetSize().
+    -- The main frame always has SetScale(1); content scaling is applied to
+    -- scrollChild and the tracking frame instead of the outer window.
     -- GetEffectiveScale() here is just UIParent's scale, which is the correct
     -- divisor for mapping raw cursor pixels to frame-local coordinates.
     local function PctFromCursor()

@@ -29,6 +29,7 @@ local tracking = {
     },
     sparkCurrencyID = 3212,
     catalystCurrencyID = 3378,
+    cofferKeysCurrencyID = 3310,
     crestTradeBatch = { 45, 15 },
     questIDs = {
         delversBounty = 0,

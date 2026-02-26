@@ -120,7 +120,7 @@ do
             itemTextPad = 8,
             itemTextWidth = 358,
             sectionInsetX = 14,
-            trackH = 210,
+            trackH = 250,
             trackTopPad = 10,
             sliderH = 20,
             sliderBottomPad = 4,
@@ -842,6 +842,10 @@ function Addon:ApplyScrollLayout()
     if (db.showGreatVault or db.showCurrency) and IsFrameShown(self._trackingFrame) then
         local trackingHeight = (self._trackingFrame.GetHeight and self._trackingFrame:GetHeight()) or Addon.UI.trackH
         trackingHeight = tonumber(trackingHeight) or Addon.UI.trackH
+        -- Multiply by the tracking frame's own scale so the reserved space matches
+        -- the actual visual height after the scale slider adjusts content size.
+        local tfScale = (self._trackingFrame.GetScale and self._trackingFrame:GetScale()) or 1
+        trackingHeight = trackingHeight * tfScale
         local sliderH        = Addon.UI.sliderH         or 0
         local sliderBotPad   = Addon.UI.sliderBottomPad or 0
         -- Tracking panel is anchored sliderH+sliderBotPad above the frame bottom;
@@ -851,9 +855,9 @@ function Addon:ApplyScrollLayout()
     end
 
     scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -Addon.UI.scrollRight, Addon.UI.scrollBottom + extra)
-    -- Always keep frame scale at 1.0 — scaling is done by resizing (SetSize),
-    -- not SetScale().  SetScale() causes StartSizing() to snap because WoW maps
-    -- cursor pixels through GetEffectiveScale() which diverges from visual position.
+    -- Always keep the outer frame at scale 1.0 — scaling is applied only to
+    -- content children (scrollChild, trackingFrame) so resize/drag cursor
+    -- coordinates stay in sync with the frame's coordinate space.
     frame:SetScale(1)
 
     -- Recompute itemTextWidth from the live frame width so text never over-runs
@@ -897,42 +901,20 @@ end
 
 function Addon:GetUIScale()
     local pct = (self.db and self.db.global and tonumber(self.db.global.uiScalePct)) or 100
-    return math.max(0.8, math.min(1.2, pct / 100))
+    return math.max(0.5, math.min(1.5, pct / 100))
 end
 
 function Addon:ApplyUIScale()
-    -- Resize the frame to base * scale instead of using SetScale().
-    -- This keeps the frame's effective scale at 1.0 so resize/drag coordinates
-    -- are always in the same space as cursor coordinates.
+    -- Scale only content frames so text and checklist items grow/shrink while
+    -- the outer window stays at whatever size the user dragged it to.
+    -- The outer frame is always kept at scale 1.0 so resize/drag coordinates
+    -- remain in sync with cursor coordinates.
     local scale = self:GetUIScale()
-    local mf = self._mainFrame
-    if mf then
-        local newW = math.floor(Addon.UI.frameW * scale)
-        local newH = math.floor(Addon.UI.frameH * scale)
-        -- Clamp to the same 80-120% bounds used by the resize grip.
-        local minW = math.floor(Addon.UI.frameW * 0.8)
-        local minH = math.floor(Addon.UI.frameH * 0.8)
-        local maxW = math.floor(Addon.UI.frameW * 1.2)
-        local maxH = math.floor(Addon.UI.frameH * 1.2)
-        newW = math.max(minW, math.min(maxW, newW))
-        newH = math.max(minH, math.min(maxH, newH))
-        -- Pin the bottom edge so the scale slider (at the bottom of the frame)
-        -- stays under the mouse cursor as the frame grows/shrinks upward.
-        local left   = mf:GetLeft()  or 0
-        local bottom = mf:GetBottom() or 0
-        mf:ClearAllPoints()
-        -- TOPLEFT anchor: top = bottom + newH
-        mf:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, bottom + newH)
-        mf:SetSize(newW, newH)
-        -- Persist so the size and position survive reloads.
-        local gdb = self.db and self.db.global
-        if gdb then
-            gdb.mainFrameSize = { w = newW, h = newH }
-            gdb.mainFramePos  = { x = left, y = bottom + newH }
-        end
-        if self.ApplyScrollLayout then self:ApplyScrollLayout() end
-        if self.RequestRefresh then self:RequestRefresh() end
-    end
+    if scrollChild then scrollChild:SetScale(scale) end
+    local tf = self._trackingFrame
+    if tf and tf.SetScale then tf:SetScale(scale) end
+    -- Re-anchor scroll frame so it accounts for the tracking panel's new visual height.
+    if self.ApplyScrollLayout then self:ApplyScrollLayout() end
     local iw = self._ilvlRefWindow
     if iw and iw._ilvlReflow then iw._ilvlReflow() end
     -- Keep in-frame slider in sync with whatever changed the value.
@@ -1650,8 +1632,8 @@ function Addon:CreateFrame()
     if _savedMainSize then
         local _clampMinW = math.floor(Addon.UI.frameW * 0.8)
         local _clampMinH = math.floor(Addon.UI.frameH * 0.8)
-        local _clampMaxW = math.floor(Addon.UI.frameW * 1.2)
-        local _clampMaxH = math.floor(Addon.UI.frameH * 1.2)
+        local _clampMaxW = math.floor(Addon.UI.frameW * 1.0)
+        local _clampMaxH = math.floor(Addon.UI.frameH * 1.0)
         if _savedMainSize.w then frame:SetWidth( math.max(_clampMinW, math.min(_clampMaxW, _savedMainSize.w))) end
         if _savedMainSize.h then frame:SetHeight(math.max(_clampMinH, math.min(_clampMaxH, _savedMainSize.h))) end
     end
@@ -1666,10 +1648,10 @@ function Addon:CreateFrame()
     end
     frame:SetMovable(true)
     frame:SetResizable(true)
-    local _maxW = math.floor(Addon.UI.frameW * 1.2)   -- 624
-    local _maxH = math.floor(Addon.UI.frameH * 1.2)   -- 780
-    local _minW0 = math.floor(Addon.UI.frameW * 0.8)  -- 416
-    local _minH0 = math.floor(Addon.UI.frameH * 0.8)  -- 520
+    local _maxW = math.floor(Addon.UI.frameW * 1.0)
+    local _maxH = math.floor(Addon.UI.frameH * 1.0)
+    local _minW0 = math.floor(Addon.UI.frameW * 0.8)
+    local _minH0 = math.floor(Addon.UI.frameH * 0.8)
     if frame.SetResizeBounds then
         frame:SetResizeBounds(_minW0, _minH0, _maxW, _maxH)
     else
@@ -1775,6 +1757,7 @@ function Addon:CreateFrame()
     gearBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
     frame._lariasGearBtn = gearBtn
 
+    -- Draggable resize grip (bottom-right corner).
     local mainResizeBtn = CreateFrame("Button", nil, frame)
     mainResizeBtn:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -4, 4)
     mainResizeBtn:SetSize(16, 16)
@@ -1782,16 +1765,10 @@ function Addon:CreateFrame()
     mainResizeBtn:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
     mainResizeBtn:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
 
-    -- Manual resize: never use StartSizing().  StartSizing() evaluates the frame
-    -- size from the cursor position the instant it is called, so even a bare click
-    -- (no drag) snaps the frame to (cursor - topleft).  Instead we track the delta
-    -- from the mouse-down position ourselves.
     local _rsData = nil  -- {startCX, startCY, startW, startH, left, top}
 
     mainResizeBtn:SetScript("OnMouseDown", function(self_, btn)
         if btn ~= "LeftButton" then return end
-        -- Normalise anchor to TOPLEFT so the top-left corner stays fixed while
-        -- we grow/shrink the bottom-right corner.
         local left = frame:GetLeft()
         local top  = frame:GetTop()
         local w    = frame:GetWidth()
@@ -1813,15 +1790,14 @@ function Addon:CreateFrame()
 
     mainResizeBtn:SetScript("OnUpdate", function()
         if not _rsData then return end
-        local uiScale    = UIParent:GetEffectiveScale()
-        local cx, cy     = GetCursorPosition()
+        local uiScale = UIParent:GetEffectiveScale()
+        local cx, cy  = GetCursorPosition()
         cx = cx / uiScale
         cy = cy / uiScale
         local minW = math.floor(Addon.UI.frameW * 0.8)
         local minH = math.floor(Addon.UI.frameH * 0.8)
-        local maxW = math.floor(Addon.UI.frameW * 1.2)
-        local maxH = math.floor(Addon.UI.frameH * 1.2)
-        -- Right edge moves with cx; bottom edge moves opposite to cy (y increases upward).
+        local maxW = math.floor(Addon.UI.frameW * 1.0)
+        local maxH = math.floor(Addon.UI.frameH * 1.0)
         local newW = math.max(minW, math.min(maxW, math.floor(_rsData.startW + (cx - _rsData.startCX))))
         local newH = math.max(minH, math.min(maxH, math.floor(_rsData.startH - (cy - _rsData.startCY))))
         frame:SetSize(newW, newH)
@@ -2352,8 +2328,8 @@ function Addon:CreateFrame()
         -- Never go below the 80/120% design bounds, regardless of button layout.
         local _absMinW = math.floor(Addon.UI.frameW * 0.8)
         local _absMinH = math.floor(Addon.UI.frameH * 0.8)
-        local _maxW2   = math.floor(Addon.UI.frameW * 1.2)
-        local _maxH2   = math.floor(Addon.UI.frameH * 1.2)
+        local _maxW2   = math.floor(Addon.UI.frameW * 1.0)
+        local _maxH2   = math.floor(Addon.UI.frameH * 1.0)
         _minW = math.max(_minW, _absMinW)
         if frame.SetResizeBounds then
             frame:SetResizeBounds(_minW, _absMinH, _maxW2, _maxH2)
