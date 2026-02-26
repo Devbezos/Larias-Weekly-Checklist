@@ -404,22 +404,22 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
         self_._dragStartPct     = clickPct
         self_._dragTrackPxW     = TRACK_W * mfScale
         UpdateVisuals(clickPct)
+        -- Only run OnUpdate for the duration of the drag; not every frame forever.
+        trackCont:SetScript("OnUpdate", function()
+            local pct = PctFromCursor()
+            if pct then UpdateVisuals(pct) end
+            -- Scale commits on mouse release via OnMouseUp → SetPct.
+        end)
     end)
     trackCont:SetScript("OnMouseUp", function(self_, btn)
         if btn ~= "LeftButton" then return end
+        trackCont:SetScript("OnUpdate", nil)  -- stop per-frame work immediately
         local pct = PctFromCursor()  -- delta path still active here
         self_._dragging         = false
         self_._dragStartCursorX = nil
         self_._dragStartPct     = nil
         self_._dragTrackPxW     = nil
         if pct then SetPct(pct) end  -- full commit: saves, applies scale + layout
-    end)
-    trackCont:SetScript("OnUpdate", function(self_)
-        if not self_._dragging then return end
-        local pct = PctFromCursor()
-        if not pct then return end
-        UpdateVisuals(pct)
-        -- Scale is applied only on mouse release (OnMouseUp → SetPct).
     end)
 
     sf:SetScript("OnShow", function() UpdateVisuals(GetCurrentPct()) end)
