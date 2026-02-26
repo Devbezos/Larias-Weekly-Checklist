@@ -14,9 +14,10 @@ def main() -> int:
 
     nl = "\r\n" if "\r\n" in text else "\n"
 
-    # Accept MAJOR.MINOR.PATCH and optionally ignore an existing 4th component.
+    # Accept MAJOR.MINOR.PATCH and optionally ignore a 4th component or
+    # a pre-release suffix (e.g. 2.0.0.5-alpha, 1.0.24-beta, 2.0.0.5).
     m = re.search(
-        r"^##\s*Version:\s*([0-9]+)\.([0-9]+)\.([0-9]+)(?:\.[0-9]+)?\s*$",
+        r"^##\s*Version:\s*([0-9]+)\.([0-9]+)\.([0-9]+)(?:[.\-][^\s]*)?\s*$",
         text,
         flags=re.MULTILINE,
     )

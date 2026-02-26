@@ -45,119 +45,115 @@ jobs:
       - name: Update .toc Interface versions (latest 3)
         run: |
           set -euo pipefail
+          python scripts/update_toc_interface.py --toc LariasWeeklyChecklist.toc --count 3
 
-          TOC="LariasWeeklyChecklist.toc"
-
-          python scripts/update_toc_interface.py --toc "$TOC" --count 3
-
-      - name: Commit (and release only on spreadsheet change or WoW major/minor bump)
-        id: commitstep
+      - name: Check for release-worthy changes
+        id: check
         env:
           FORCE_DEPLOY: ${{ github.event.inputs.force || 'false' }}
         run: |
           set -euo pipefail
-
           TOC="LariasWeeklyChecklist.toc"
           DATA_FILE="Locales/enUS_Data.lua"
 
-          # Ensure stable releases never keep an ALPHA display name.
+          # Read the current version from the toc, stripping any pre-release suffix
+          # so we always tag at a clean MAJOR.MINOR.PATCH.
+          RAW=$(grep "^## Version:" "$TOC" | sed 's/## Version:[[:space:]]*//')
+          if [[ "$RAW" =~ ^([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+            VERSION="${BASH_REMATCH[1]}"
+          else
+            echo "ERROR: could not parse version from toc: $RAW"; exit 1
+          fi
+
+          # Normalize toc: strip any alpha suffix, ensure stable title.
+          sed -i "s/^## Version:.*/## Version: $VERSION/" "$TOC"
           sed -i "s/^## Title:.*/## Title: Larias's Weekly Checklist/" "$TOC"
 
-          # Determine what changed.
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
           DATA_CHANGED=false
           TOC_CHANGED=false
+          if ! git diff --quiet -- "$DATA_FILE"; then DATA_CHANGED=true; fi
+          if ! git diff --quiet -- "$TOC";       then TOC_CHANGED=true;  fi
 
-          FORCE_DEPLOY="${FORCE_DEPLOY:-false}"
-
-          if ! git diff --quiet -- "$DATA_FILE"; then
-            DATA_CHANGED=true
-          fi
-          if ! git diff --quiet -- "$TOC"; then
-            TOC_CHANGED=true
-          fi
-
-          # Nothing changed.
-          if [ "$DATA_CHANGED" = "false" ] && [ "$TOC_CHANGED" = "false" ] && [ "$FORCE_DEPLOY" != "true" ]; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "released=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          # Compare WoW version (from Wago Interface) at MAJOR.MINOR granularity.
-          # If only PATCH changed, commit but do not tag/deploy.
-          WOW_MAJOR_MINOR_CHANGED=false
-          if [ "$TOC_CHANGED" = "true" ]; then
+          SHOULD_RELEASE=false
+          if [ "${FORCE_DEPLOY:-false}" = "true" ]; then
+            SHOULD_RELEASE=true
+          elif [ "$DATA_CHANGED" = "true" ]; then
+            SHOULD_RELEASE=true
+          elif [ "$TOC_CHANGED" = "true" ]; then
+            # Release only on a WoW game-version major/minor bump, not a patch.
             OLD_IFACE=$(git show HEAD:"$TOC" | sed -n 's/^## Interface:[[:space:]]*//p' | head -n 1 | cut -d',' -f1 | tr -d '[:space:]' || true)
-            NEW_IFACE=$(sed -n 's/^## Interface:[[:space:]]*//p' "$TOC" | head -n 1 | cut -d',' -f1 | tr -d '[:space:]' || true)
-
+            NEW_IFACE=$(sed  -n 's/^## Interface:[[:space:]]*//p' "$TOC"           | head -n 1 | cut -d',' -f1 | tr -d '[:space:]' || true)
             if [[ "$OLD_IFACE" =~ ^[0-9]+$ ]] && [[ "$NEW_IFACE" =~ ^[0-9]+$ ]]; then
-              OLD_MAJOR=$((OLD_IFACE / 10000))
-              OLD_MINOR=$(((OLD_IFACE / 100) % 100))
-              NEW_MAJOR=$((NEW_IFACE / 10000))
-              NEW_MINOR=$(((NEW_IFACE / 100) % 100))
-
+              OLD_MAJOR=$((OLD_IFACE / 10000)); OLD_MINOR=$(((OLD_IFACE / 100) % 100))
+              NEW_MAJOR=$((NEW_IFACE / 10000)); NEW_MINOR=$(((NEW_IFACE / 100) % 100))
               if [ "$OLD_MAJOR" -ne "$NEW_MAJOR" ] || [ "$OLD_MINOR" -ne "$NEW_MINOR" ]; then
-                WOW_MAJOR_MINOR_CHANGED=true
+                SHOULD_RELEASE=true
               fi
             fi
           fi
 
-          SHOULD_RELEASE=false
-          if [ "$FORCE_DEPLOY" = "true" ]; then
-            SHOULD_RELEASE=true
-          elif [ "$DATA_CHANGED" = "true" ] || [ "$WOW_MAJOR_MINOR_CHANGED" = "true" ]; then
-            SHOULD_RELEASE=true
-          fi
+          echo "should_release=$SHOULD_RELEASE" >> "$GITHUB_OUTPUT"
 
-          git config user.name "github-actions[bot]"
+      - name: Commit data/toc update (no release)
+        if: steps.check.outputs.should_release == 'false'
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Locales/enUS_Data.lua LariasWeeklyChecklist.toc
+          git diff --cached --quiet || { git commit -m "Auto-update data/toc (no release)"; git push; }
+          echo "No release conditions met; done."
+
+      - name: Tag at current version, then bump post-release
+        if: steps.check.outputs.should_release == 'true'
+        id: release
+        env:
+          VERSION: ${{ steps.check.outputs.version }}
+        run: |
+          set -euo pipefail
+          TOC="LariasWeeklyChecklist.toc"
+          TAG="v$VERSION"
+
+          git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          if [ "$SHOULD_RELEASE" = "true" ]; then
-            # Version: bump the 3rd number in ## Version: (MAJOR.MINOR.PATCH)
-            NEW_VERSION=$(python scripts/bump_toc_version.py --toc "$TOC")
-            TAG="v$NEW_VERSION"
+          # Commit data + toc at the stable version and tag it.
+          git add Locales/enUS_Data.lua "$TOC"
+          git diff --cached --quiet || git commit -m "Release $TAG"
+          git tag -a "$TAG" -m "Release $TAG"
+          git push
 
-            git add "$DATA_FILE" "$TOC"
-            git commit -m "Auto-update addon ($TAG)"
-            git push
+          # Post-release bump so the branch always starts at the next version.
+          NEW_VERSION=$(python scripts/bump_toc_version.py --toc "$TOC")
+          git add "$TOC"
+          git commit -m "Post-release: bump version to $NEW_VERSION"
+          git push
 
-            git tag -a "$TAG" -m "Release $TAG"
-            git push origin "$TAG"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-            echo "released=true" >> "$GITHUB_OUTPUT"
-            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          else
-            # Patch-only WoW Interface update (or other TOC-only change): commit but do not release.
-            git add "$DATA_FILE" "$TOC"
-            git commit -m "Auto-update data/toc (no release)"
-            git push
-
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-            echo "released=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Fetch tags (packager)
-        if: steps.commitstep.outputs.released == 'true'
+      - name: Fetch tags and reset to release tag for packager
+        if: steps.check.outputs.should_release == 'true'
         shell: bash
         run: |
           set -euo pipefail
           git fetch --tags --force
-          git reset --hard ${{ steps.commitstep.outputs.tag }}
+          git reset --hard ${{ steps.release.outputs.tag }}
 
       - name: Package + Upload (CurseForge & Wago)
-        if: steps.commitstep.outputs.released == 'true'
+        if: steps.check.outputs.should_release == 'true'
         uses: BigWigsMods/packager@v2.4.3
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
           WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
 
       - name: Notify Discord (release posted)
-        if: steps.commitstep.outputs.released == 'true'
+        if: steps.check.outputs.should_release == 'true'
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
-          TAG: ${{ steps.commitstep.outputs.tag }}
+          TAG: ${{ steps.release.outputs.tag }}
           REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
@@ -182,7 +178,7 @@ jobs:
 
           payload=$(cat <<EOF
           {
-            "content": "🚀 **Larias's Weekly Checklist ${TAG}** is live!\n\n📦 GitHub: ${RELEASE_URL}${CURSE_URL:+\n🔥 CurseForge: ${CURSE_URL}}\n🛠 Workflow: ${RUN_URL}"
+            "content": " **Larias's Weekly Checklist ${TAG}** is live!\n\n GitHub: ${RELEASE_URL}${CURSE_URL:+\n CurseForge: ${CURSE_URL}}\n Workflow: ${RUN_URL}"
           }
           EOF
           )

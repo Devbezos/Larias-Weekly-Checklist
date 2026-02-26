@@ -44,6 +44,92 @@ jobs:
           echo "==> Updating .toc Interface versions (latest 3 from Wago)"
           python -u scripts/update_toc_interface.py --toc "$TOC" --count 3
 
+          echo "==> Reading current version from toc"
+          RAW=$(grep "^## Version:" "$TOC" | sed 's/## Version:[[:space:]]*//')
+          if [[ "$RAW" =~ ^([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+            VERSION="${BASH_REMATCH[1]}"
+            echo "Current stable version: $VERSION"
+          else
+            echo "ERROR: could not parse version: $RAW"; exit 1
+          fi
+
+          echo "==> Normalising toc (stable title, clean version)"
+          sed -i "s/^## Version:.*/## Version: $VERSION/" "$TOC"
+          sed -i "s/^## Title:.*/## Title: Larias's Weekly Checklist/" "$TOC"
+
+          echo "==> Checking for changes (data or toc)"
+          DATA_CHANGED=false
+          TOC_CHANGED=false
+          if ! git diff --quiet -- "$DATA_FILE"; then DATA_CHANGED=true; fi
+          if ! git diff --quiet -- "$TOC";       then TOC_CHANGED=true;  fi
+
+          SHOULD_RELEASE=false
+          if [ "$DATA_CHANGED" = "true" ]; then
+            SHOULD_RELEASE=true
+          elif [ "$TOC_CHANGED" = "true" ]; then
+            OLD_IFACE=$(git show HEAD:"$TOC" | sed -n 's/^## Interface:[[:space:]]*//p' | head -n 1 | cut -d',' -f1 | tr -d '[:space:]' || true)
+            NEW_IFACE=$(sed  -n 's/^## Interface:[[:space:]]*//p' "$TOC"           | head -n 1 | cut -d',' -f1 | tr -d '[:space:]' || true)
+            if [[ "$OLD_IFACE" =~ ^[0-9]+$ ]] && [[ "$NEW_IFACE" =~ ^[0-9]+$ ]]; then
+              OLD_MAJOR=$((OLD_IFACE / 10000)); OLD_MINOR=$(((OLD_IFACE / 100) % 100))
+              NEW_MAJOR=$((NEW_IFACE / 10000)); NEW_MINOR=$(((NEW_IFACE / 100) % 100))
+              if [ "$OLD_MAJOR" -ne "$NEW_MAJOR" ] || [ "$OLD_MINOR" -ne "$NEW_MINOR" ]; then
+                SHOULD_RELEASE=true
+              fi
+            fi
+          fi
+
+          if [ "$SHOULD_RELEASE" = "true" ]; then
+            echo "==> Would tag: v$VERSION"
+            NEXT_VERSION=$(python -u scripts/bump_toc_version.py --toc "$TOC")
+            echo "==> Would post-release bump toc to: $NEXT_VERSION"
+            # Restore toc to the stable version for the artifact
+            sed -i "s/^## Version:.*/## Version: $VERSION/" "$TOC"
+          else
+            echo "==> Would commit data/toc only (no release)"
+          fi
+
+          echo "==> Git status"
+          git status --porcelain=v1
+
+          echo "==> Diff stat"
+          git diff --stat
+
+          echo "==> Diff (limited)"
+          git diff -- "$DATA_FILE" "$TOC" | sed -n '1,400p'
+
+      - name: Upload dry-run artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dry-run-output
+          if-no-files-found: ignore
+          path: |
+            data/spreadsheet.csv
+            Locales/enUS_Data.lua
+            LariasWeeklyChecklist.toc
+
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -x
+
+          TOC="LariasWeeklyChecklist.toc"
+          DATA_FILE="Locales/enUS_Data.lua"
+          SHEET_ID="1iK2SZUcz_ljnkdTG7KW6pqfzaUDuSgnlh1HupcLrkus"
+          GID="53744607"
+
+          echo "==> Downloading Google Sheet CSV"
+          mkdir -p data
+          curl -fL --show-error --retry 3 --retry-delay 2 \
+            "https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}" \
+            -o data/spreadsheet.csv
+
+          echo "==> Converting CSV to Lua"
+          python -u scripts/sheet_to_lua.py data/spreadsheet.csv Locales/enUS_Data.lua
+
+          echo "==> Updating .toc Interface versions (latest 3 from Wago)"
+          python -u scripts/update_toc_interface.py --toc "$TOC" --count 3
+
           echo "==> Checking for changes (data or toc)"
           DATA_CHANGED=false
           TOC_CHANGED=false

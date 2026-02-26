@@ -14,8 +14,6 @@ on:
       - hotfix/**
     tags-ignore:
       # Prevent the bot's own tag push from re-triggering this workflow.
-      # Without this, pushing v*-alpha would re-fire the workflow, causing a
-      # second run that races with the original and can loop indefinitely.
       - '**'
   workflow_dispatch:
     inputs:
@@ -42,134 +40,68 @@ jobs:
           fetch-depth: 0
           ref: ${{ inputs.target_branch || github.ref_name }}
 
-      - name: Get current version
-        id: version
-        run: |
-          # Extract version from .toc file
-          CURRENT_VERSION=$(grep "^## Version:" LariasWeeklyChecklist.toc | sed 's/## Version: //')
-          echo "current=$CURRENT_VERSION" >> $GITHUB_OUTPUT
-          
-          # Get branch name
-          BRANCH_NAME="${{ inputs.target_branch || github.ref_name }}"
-          echo "branch=$BRANCH_NAME" >> $GITHUB_OUTPUT
-
-      - name: Calculate new version
-        id: newversion
-        env:
-          CURRENT: ${{ steps.version.outputs.current }}
+      - name: Update .toc Interface versions (latest 3)
         run: |
           set -euo pipefail
+          python scripts/update_toc_interface.py --toc LariasWeeklyChecklist.toc --count 3
 
-          # Ensure tags are available for version calculation.
+      - name: Compute alpha version
+        id: ver
+        run: |
+          set -euo pipefail
           git fetch --tags --force
 
-          # Versioning rules for alpha:
-          # - Parse MAJOR.MINOR.PATCH from the current stable .toc version.
-          # - If alpha tags exist AND their base MAJOR.MINOR.PATCH matches the
-          #   .toc version, bump only the BUILD (4th) component.
-          # - If the .toc version is AHEAD of the latest alpha tag (e.g. a stable
-          #   release was cut and the .toc was bumped), reset BUILD to 1 using
-          #   the .toc version as the base.
-          # Examples:
-          #   toc=1.0.19, latest alpha=v1.0.19.5-alpha  -> 1.0.19.6-alpha
-          #   toc=1.0.20, latest alpha=v1.0.19.5-alpha  -> 1.0.20.1-alpha
-          #   toc=1.0.20, no alpha tags                 -> 1.0.20.1-alpha
+          TOC="LariasWeeklyChecklist.toc"
+          BRANCH_NAME="${{ inputs.target_branch || github.ref_name }}"
 
-          # Parse MAJOR.MINOR.PATCH from the .toc (strip any pre-existing build component).
-          if [[ "${CURRENT:-}" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
-            TOC_MAJOR="${BASH_REMATCH[1]}"
-            TOC_MINOR="${BASH_REMATCH[2]}"
-            TOC_PATCH="${BASH_REMATCH[3]}"
+          # Read MAJOR.MINOR.PATCH from the toc (strip any pre-release suffix).
+          RAW=$(grep "^## Version:" "$TOC" | sed 's/## Version:[[:space:]]*//')
+          if [[ "$RAW" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+            MAJOR="${BASH_REMATCH[1]}"
+            MINOR="${BASH_REMATCH[2]}"
+            PATCH="${BASH_REMATCH[3]}"
           else
-            TOC_MAJOR=0; TOC_MINOR=0; TOC_PATCH=0
+            echo "ERROR: could not parse version: $RAW"; exit 1
           fi
 
-          LATEST_ALPHA_TAG=$(git tag --list 'v*-alpha' --sort=-v:refname | head -n 1 || true)
-          if [ -n "${LATEST_ALPHA_TAG:-}" ]; then
-            BASE_VERSION="${LATEST_ALPHA_TAG#v}"
-            BASE_VERSION="${BASE_VERSION%-alpha}"
-            IFS='.' read -r TAG_MAJOR TAG_MINOR TAG_PATCH TAG_BUILD <<< "$BASE_VERSION"
-            if [ -z "${TAG_BUILD:-}" ]; then TAG_BUILD=0; fi
-
-            # Compare tag base to .toc; if .toc is strictly ahead, start fresh.
-            if [ "$TOC_MAJOR" -gt "$TAG_MAJOR" ] ||
-               { [ "$TOC_MAJOR" -eq "$TAG_MAJOR" ] && [ "$TOC_MINOR" -gt "$TAG_MINOR" ]; } ||
-               { [ "$TOC_MAJOR" -eq "$TAG_MAJOR" ] && [ "$TOC_MINOR" -eq "$TAG_MINOR" ] && [ "$TOC_PATCH" -gt "$TAG_PATCH" ]; }; then
-              MAJOR=$TOC_MAJOR; MINOR=$TOC_MINOR; PATCH=$TOC_PATCH; BUILD=1
-            else
-              MAJOR=$TAG_MAJOR; MINOR=$TAG_MINOR; PATCH=$TAG_PATCH
-              BUILD=$((TAG_BUILD + 1))
-            fi
+          # Find the latest alpha tag for this exact MAJOR.MINOR.PATCH and bump
+          # only the build (4th) component.  If no matching tag exists, start at 1.
+          LATEST=$(git tag --list "v${MAJOR}.${MINOR}.${PATCH}.*-alpha" --sort=-v:refname | head -n 1 || true)
+          if [ -n "${LATEST:-}" ]; then
+            BASE="${LATEST#v}"; BASE="${BASE%-alpha}"
+            IFS='.' read -r _ _ _ BUILD <<< "$BASE"
+            BUILD=${BUILD:-0}
+            BUILD=$((BUILD + 1))
           else
-            MAJOR=$TOC_MAJOR; MINOR=$TOC_MINOR; PATCH=$TOC_PATCH; BUILD=1
+            BUILD=1
           fi
 
-          NEW_VERSION="$MAJOR.$MINOR.$PATCH.$BUILD"
-          ALPHA_VERSION="$NEW_VERSION-alpha"
-          
-          echo "new=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "alpha=$ALPHA_VERSION" >> $GITHUB_OUTPUT
+          ALPHA_VERSION="${MAJOR}.${MINOR}.${PATCH}.${BUILD}-alpha"
+          echo "alpha=$ALPHA_VERSION"  >> "$GITHUB_OUTPUT"
+          echo "tag=v$ALPHA_VERSION"   >> "$GITHUB_OUTPUT"
+          echo "branch=$BRANCH_NAME"   >> "$GITHUB_OUTPUT"
 
-      - name: Update version in .toc file
+      - name: Tag alpha (no branch commit)
         env:
-          ALPHA_VERSION: ${{ steps.newversion.outputs.alpha }}
-        run: |
-          sed -i "s/^## Version:.*/## Version: $ALPHA_VERSION/" LariasWeeklyChecklist.toc
-          sed -i "s/^## Title:.*/## Title: Larias's Weekly Checklist (ALPHA)/" LariasWeeklyChecklist.toc
-
-      - name: Commit and tag
-        env:
-          ALPHA_VERSION: ${{ steps.newversion.outputs.alpha }}
+          ALPHA_VERSION: ${{ steps.ver.outputs.alpha }}
+          TAG:           ${{ steps.ver.outputs.tag }}
         run: |
           set -euo pipefail
+          TOC="LariasWeeklyChecklist.toc"
 
-          git config user.name "github-actions[bot]"
+          git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          git add LariasWeeklyChecklist.toc
-          git commit -m "Alpha release: $ALPHA_VERSION from ${{ steps.version.outputs.branch }}"
-          
-          TAG="v$ALPHA_VERSION"
+
+          # Update toc for this build.  Commit on a detached HEAD so the source
+          # branch is never touched -- only the tag carries the change.
+          sed -i "s/^## Version:.*/## Version: $ALPHA_VERSION/" "$TOC"
+          sed -i "s/^## Title:.*/## Title: Larias's Weekly Checklist (ALPHA)/" "$TOC"
+
+          git checkout --detach HEAD
+          git add "$TOC"
+          git commit -m "Alpha release: $ALPHA_VERSION"
           git tag -a "$TAG" -m "Alpha Release $ALPHA_VERSION"
-          git push
           git push origin "$TAG"
-          
-          echo "tag=$TAG" >> $GITHUB_ENV
-
-      - name: Check packager config
-        id: pkgmeta
-        shell: bash
-        env:
-          CF_API_KEY: ${{ secrets.CF_API_KEY }}
-          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
-        run: |
-          set -euo pipefail
-
-          if [ ! -f .pkgmeta ]; then
-            echo "cf_enabled=false" >> "$GITHUB_OUTPUT"
-            echo "wago_enabled=false" >> "$GITHUB_OUTPUT"
-            echo "cf_id=0" >> "$GITHUB_OUTPUT"
-            echo ".pkgmeta missing; uploads will be skipped."
-            exit 0
-          fi
-
-          CF_ID=$(sed -n 's/^curse-project-id:[[:space:]]*//p' .pkgmeta | head -n 1 | tr -d '[:space:]' || true)
-          WAGO_ID=$(sed -n 's/^wago-id:[[:space:]]*//p' .pkgmeta | head -n 1 | tr -d '"[:space:]' || true)
-
-          if [ -z "${CF_ID:-}" ]; then CF_ID=0; fi
-          CF_ENABLED=false
-          WAGO_ENABLED=false
-          if [ "${CF_ID}" != "0" ] && [ -n "${CF_API_KEY:-}" ]; then CF_ENABLED=true; fi
-          if [ -n "${WAGO_ID:-}" ] && [ -n "${WAGO_API_TOKEN:-}" ]; then WAGO_ENABLED=true; fi
-
-          echo "CurseForge project id: ${CF_ID}"
-          echo "Wago id: ${WAGO_ID:-<empty>}"
-          echo "CurseForge upload enabled: ${CF_ENABLED}"
-          echo "Wago upload enabled: ${WAGO_ENABLED}"
-
-          echo "cf_enabled=${CF_ENABLED}" >> "$GITHUB_OUTPUT"
-          echo "wago_enabled=${WAGO_ENABLED}" >> "$GITHUB_OUTPUT"
-          echo "cf_id=${CF_ID}" >> "$GITHUB_OUTPUT"
 
       - name: Fetch tags (packager)
         shell: bash
@@ -188,9 +120,9 @@ jobs:
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
-          TAG: v${{ steps.newversion.outputs.alpha }}
-          REPO: ${{ github.repository }}
-          BRANCH: ${{ steps.version.outputs.branch }}
+          TAG:     ${{ steps.ver.outputs.tag }}
+          BRANCH:  ${{ steps.ver.outputs.branch }}
+          REPO:    ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
@@ -214,7 +146,7 @@ jobs:
 
           payload=$(cat <<EOF
           {
-            "content": "🧪 **Larias's Weekly Checklist ${TAG}** (ALPHA from \`${BRANCH}\`) is ready!\n\n📦 GitHub: ${RELEASE_URL}${CURSE_URL:+\n🔥 CurseForge: ${CURSE_URL}}\n🛠 Workflow: ${RUN_URL}"
+            "content": " **Larias's Weekly Checklist ${TAG}** (ALPHA from \`${BRANCH}\`) is ready!\n\n GitHub: ${RELEASE_URL}${CURSE_URL:+\n CurseForge: ${CURSE_URL}}\n Workflow: ${RUN_URL}"
           }
           EOF
           )
