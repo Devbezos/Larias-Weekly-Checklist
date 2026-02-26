@@ -6,11 +6,13 @@ if not Addon then return end
 
 local function SetCheckText(checkButton, text)
     if not checkButton then return end
-    local textRegion = checkButton.text or checkButton.Text
-    if textRegion and textRegion.SetText then
-        textRegion:SetText(text)
-        if textRegion.SetTextColor and Addon.THEME and Addon.THEME.text then
-            textRegion:SetTextColor(Addon.THEME.text.r, Addon.THEME.text.g, Addon.THEME.text.b, Addon.THEME.text.a)
+    -- Use the explicit _label FontString created alongside each checkbox.
+    local lbl = checkButton._label
+    if lbl then
+        lbl:SetText(text or "")
+        if lbl.SetTextColor and Addon.THEME and Addon.THEME.text then
+            local t = Addon.THEME.text
+            lbl:SetTextColor(t.r, t.g, t.b, t.a or 1)
         end
     end
 end
@@ -127,121 +129,12 @@ function Addon:ToggleGearPopup(anchor)
             else p:SetAlpha(1) end
         end)
 
-        -- Build the 6 checkboxes.
+        -- Layout constants.
         local PAD    = 10
         local ROW_H  = 26   -- UICheckButtonTemplate actual height
-        local checks = {
-            { key = "_cbHideCompleted",  },
-            { key = "_cbHideGreatVault", },
-            { key = "_cbHideCurrency",   },
-            { key = "_cbHideChangeWeek", },
-            { key = "_cbHideIlvlRef",    },
-            { key = "_cbHideCharPicker", },
-        }
-        local callbacks = {
-            _cbHideCompleted  = function(checked)
-                local db = Addon:EnsureDB()
-                db.hideCompletedSections = checked
-                if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
-            end,
-            _cbHideGreatVault = function(checked)
-                local db = Addon:EnsureDB()
-                db.showGreatVault = not checked
-                if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
-            end,
-            _cbHideCurrency   = function(checked)
-                local db = Addon:EnsureDB()
-                db.showCurrency = not checked
-                if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
-            end,
-            _cbHideChangeWeek = function(checked)
-                local db = Addon:EnsureDB()
-                db.showChangeWeekBtn = not checked
-                if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
-            end,
-            _cbHideIlvlRef    = function(checked)
-                local db = Addon:EnsureDB()
-                db.showIlvlRefBtn = not checked
-                if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
-            end,
-            _cbHideCharPicker = function(checked)
-                local db = Addon:EnsureDB()
-                db.showCharPickerBtn = not checked
-                if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
-            end,
-        }
 
-        local N      = #checks
-        local TILE_H = ROW_H + 8          -- height of each equal slice
-        local totalH = N * TILE_H
-        p:SetHeight(totalH)
-
-        for i, info in ipairs(checks) do
-            -- Each tile occupies an equal vertical slice of the popup.
-            local tileTopY = -((i - 1) * TILE_H)
-            local cbOffY   = tileTopY - math.floor((TILE_H - ROW_H) / 2)
-
-            local cb = CreateFrame("CheckButton", nil, p, "UICheckButtonTemplate")
-            cb:SetPoint("TOPLEFT", p, "TOPLEFT", PAD, cbOffY)
-            StyleCheckButton(cb)
-            local _key = info.key
-            local function FireToggle(newState)
-                callbacks[_key](newState)
-                if Addon.SyncOptionsTabControls then Addon:SyncOptionsTabControls() end
-            end
-            cb:SetScript("OnClick", function(self_)
-                FireToggle(self_:GetChecked() and true or false)
-            end)
-            p[info.key] = cb
-
-            -- Hit region: full popup width × 1/N height, zero gaps.
-            local hit = CreateFrame("Button", nil, p)
-            hit:SetPoint("TOPLEFT",  p, "TOPLEFT",  0, tileTopY)
-            hit:SetPoint("TOPRIGHT", p, "TOPRIGHT", 0, tileTopY)
-            hit:SetHeight(TILE_H)
-            hit:SetFrameLevel(p:GetFrameLevel())   -- below CheckButton (p+1)
-            local hl = hit:CreateTexture(nil, "HIGHLIGHT")
-            hl:SetAllPoints(hit)
-            hl:SetColorTexture(1, 1, 1, 0.06)
-            hit:SetScript("OnClick", function()
-                local newVal = not (cb:GetChecked() and true or false)
-                cb:SetChecked(newVal)
-                FireToggle(newVal)
-            end)
-        end
-
-        -- No deferred resize needed; checkboxes height is fixed from the tile formula.
-        -- Below the checkboxes: divider, Hidden Characters trigger, Reset List button.
-
-        local divStartY  = totalH + 6            -- top of divider from popup top
-        local hidStartY  = divStartY + 1 + 8     -- hidden chars trigger top
-        local rstStartY  = hidStartY + 22 + 6    -- reset button top
-        local popupH     = rstStartY + 22 + 8    -- total popup height
-        p:SetHeight(popupH)
-
-        -- ── Divider ────────────────────────────────────────────────────────
-        local div = p:CreateTexture(nil, "OVERLAY")
-        div:SetHeight(1)
-        div:SetPoint("TOPLEFT",  p, "TOPLEFT",  PAD,  -divStartY)
-        div:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PAD, -divStartY)
-        if Addon.THEME then
-            local bdr = Addon.THEME.border
-            div:SetColorTexture(bdr.r, bdr.g, bdr.b, 0.5)
-        end
-
-        -- ── Hidden Characters trigger ──────────────────────────────────────
-        local hiddenTrigger = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
-        hiddenTrigger:SetPoint("TOPLEFT",  p, "TOPLEFT",  PAD,  -hidStartY)
-        hiddenTrigger:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PAD, -hidStartY)
-        hiddenTrigger:SetHeight(22)
-        if Addon._styleActionButton then Addon._styleActionButton(hiddenTrigger) end
-        hiddenTrigger:SetScript("OnClick", function()
-            if Addon.ToggleHiddenCharsDropdown then Addon:ToggleHiddenCharsDropdown() end
-        end)
-        p._gearHiddenCharsTrigger  = hiddenTrigger
-        Addon._gearHiddenCharsTrigger = hiddenTrigger
-
-        -- ── Reset List button ──────────────────────────────────────────────
+        -- ── Reset List button (top of popup) ───────────────────────────────
+        local rstStartY = PAD          -- px from popup top
         local resetBtn = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
         resetBtn:SetPoint("TOPLEFT",  p, "TOPLEFT",  PAD,  -rstStartY)
         resetBtn:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PAD, -rstStartY)
@@ -296,6 +189,131 @@ function Addon:ToggleGearPopup(anchor)
         end)
         p._gearResetBtn = resetBtn
 
+        -- ── Divider after Reset ────────────────────────────────────────────
+        local div1StartY = rstStartY + 22 + 6
+        local div1 = p:CreateTexture(nil, "OVERLAY")
+        div1:SetHeight(1)
+        div1:SetPoint("TOPLEFT",  p, "TOPLEFT",  PAD,  -div1StartY)
+        div1:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PAD, -div1StartY)
+        if Addon.THEME then
+            local bdr = Addon.THEME.border
+            div1:SetColorTexture(bdr.r, bdr.g, bdr.b, 0.5)
+        end
+
+        -- ── 6 Checkboxes ──────────────────────────────────────────────────
+        local checks = {
+            { key = "_cbHideCompleted",  },
+            { key = "_cbHideGreatVault", },
+            { key = "_cbHideCurrency",   },
+            { key = "_cbHideChangeWeek", },
+            { key = "_cbHideIlvlRef",    },
+            { key = "_cbHideCharPicker", },
+        }
+        local callbacks = {
+            _cbHideCompleted  = function(checked)
+                local db = Addon:EnsureDB()
+                db.hideCompletedSections = checked
+                if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
+            end,
+            _cbHideGreatVault = function(checked)
+                local db = Addon:EnsureDB()
+                db.showGreatVault = not checked
+                if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
+            end,
+            _cbHideCurrency   = function(checked)
+                local db = Addon:EnsureDB()
+                db.showCurrency = not checked
+                if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
+            end,
+            _cbHideChangeWeek = function(checked)
+                local db = Addon:EnsureDB()
+                db.showChangeWeekBtn = not checked
+                if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
+            end,
+            _cbHideIlvlRef    = function(checked)
+                local db = Addon:EnsureDB()
+                db.showIlvlRefBtn = not checked
+                if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
+            end,
+            _cbHideCharPicker = function(checked)
+                local db = Addon:EnsureDB()
+                db.showCharPickerBtn = not checked
+                if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
+            end,
+        }
+
+        local N          = #checks
+        local TILE_H     = ROW_H + 8
+        local cbsY       = div1StartY + 1 + 8   -- checkboxes section top (px from popup top)
+
+        for i, info in ipairs(checks) do
+            local tileTopY = -(cbsY + (i - 1) * TILE_H)
+            local cbOffY   = tileTopY - math.floor((TILE_H - ROW_H) / 2)
+
+            local cb = CreateFrame("CheckButton", nil, p, "UICheckButtonTemplate")
+            cb:SetPoint("TOPLEFT", p, "TOPLEFT", PAD, cbOffY)
+            StyleCheckButton(cb)
+            -- Explicit label (anonymous frames can't access $parenttext)
+            local lbl = p:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            lbl:SetPoint("LEFT", cb, "RIGHT", 2, 0)
+            lbl:SetPoint("RIGHT", p, "RIGHT", -PAD, 0)
+            lbl:SetJustifyH("LEFT")
+            if Addon.THEME and Addon.THEME.text then
+                local t = Addon.THEME.text
+                lbl:SetTextColor(t.r, t.g, t.b, t.a or 1)
+            end
+            cb._label = lbl
+            local _key = info.key
+            local function FireToggle(newState)
+                callbacks[_key](newState)
+                if Addon.SyncGearPopup then Addon:SyncGearPopup() end
+            end
+            cb:SetScript("OnClick", function(self_)
+                FireToggle(self_:GetChecked() and true or false)
+            end)
+            p[info.key] = cb
+
+            local hit = CreateFrame("Button", nil, p)
+            hit:SetPoint("TOPLEFT",  p, "TOPLEFT",  0, tileTopY)
+            hit:SetPoint("TOPRIGHT", p, "TOPRIGHT", 0, tileTopY)
+            hit:SetHeight(TILE_H)
+            hit:SetFrameLevel(p:GetFrameLevel())
+            local hl = hit:CreateTexture(nil, "HIGHLIGHT")
+            hl:SetAllPoints(hit)
+            hl:SetColorTexture(1, 1, 1, 0.06)
+            hit:SetScript("OnClick", function()
+                local newVal = not (cb:GetChecked() and true or false)
+                cb:SetChecked(newVal)
+                FireToggle(newVal)
+            end)
+        end
+
+        -- ── Divider before Hidden Characters ──────────────────────────────
+        local div2StartY = cbsY + N * TILE_H + 6
+        local div2 = p:CreateTexture(nil, "OVERLAY")
+        div2:SetHeight(1)
+        div2:SetPoint("TOPLEFT",  p, "TOPLEFT",  PAD,  -div2StartY)
+        div2:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PAD, -div2StartY)
+        if Addon.THEME then
+            local bdr = Addon.THEME.border
+            div2:SetColorTexture(bdr.r, bdr.g, bdr.b, 0.5)
+        end
+
+        -- ── Hidden Characters trigger ──────────────────────────────────────
+        local hidStartY = div2StartY + 1 + 8
+        local hiddenTrigger = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
+        hiddenTrigger:SetPoint("TOPLEFT",  p, "TOPLEFT",  PAD,  -hidStartY)
+        hiddenTrigger:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PAD, -hidStartY)
+        hiddenTrigger:SetHeight(22)
+        if Addon._styleActionButton then Addon._styleActionButton(hiddenTrigger) end
+        hiddenTrigger:SetScript("OnClick", function()
+            if Addon.ToggleHiddenCharsDropdown then Addon:ToggleHiddenCharsDropdown() end
+        end)
+        p._gearHiddenCharsTrigger  = hiddenTrigger
+        Addon._gearHiddenCharsTrigger = hiddenTrigger
+
+        -- Set final popup height.
+        p:SetHeight(hidStartY + 22 + 8)
         self._gearPopup = p
     end
 
