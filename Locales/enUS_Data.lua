@@ -97,7 +97,7 @@ local DATASET = {
             { id = "do_lfr_for_tier_pieces_check_guide_for_why", text = "Do LFR for tier pieces (check guide for why)" },
             { id = "optional_kill_world_boss_for_champ_2_6_250_ilvl_item", text = "(Optional) Kill World Boss for champ 2/6 250 ilvl item" },
             { id = "optional_complete_4x_nightmare_prey_for_champion_gear_and_renown", text = "(Optional) Complete 4x Nightmare Prey for Champion gear and renown." },
-            { id = "do_at_least_one_t11_to_get_cracked_keystone_quest", text = "Do at least one t11 to get Cracked Keystone Quest" },
+            { id = "do_at_least_one_t11_bountiful_delve_to_get_cracked_keystone_quest", text = "Do at least one t11 bountiful delve to get Cracked Keystone Quest" },
             { id = "continue_to_spend_all_adventurer_veteran_and_champion_crests_upgrading_anything", text = "Continue to spend all Adventurer, Veteran and Champion Crests upgrading anything" },
             { id = "farm_10s_for_266_gear_in_every_slot", text = "Farm +10s for 266 gear in every slot" },
             { id = "before_mythic_raid_upgrade_11x_3_6_hero_items_once_each", text = "Before Mythic raid, Upgrade 11x 3/6 hero items once each" },
