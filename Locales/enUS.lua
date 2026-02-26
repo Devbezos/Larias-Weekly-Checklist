@@ -71,9 +71,9 @@ local STRINGS = {
 	-- Minimap tooltip
 	MINIMAP_TOOLTIP_LEFT_CLICK_TOGGLE = "Left-click: Toggle checklist",
 	MINIMAP_TOOLTIP_RIGHT_CLICK_OPTIONS = "Right-click: Options",
+	MINIMAP_TOOLTIP_MIDDLE_CLICK_ILVL = "Middle-click: Ilvl Refs",
 
 	-- Main window
-	TAB_LIST = "List",
 	TAB_OPTIONS = "Options",
 	CHANGE_WEEK_BUTTON = "Change Week",
 	ILVLREF_BUTTON = "Ilvl Refs",
