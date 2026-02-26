@@ -31,7 +31,7 @@ local STRINGS = {
 	OPTIONS_HIDDEN_CHARS_TITLE = "Hidden characters:",
 	OPTIONS_HIDDEN_CHARS_NONE = "None",
 	RESET_BUTTON = "Reset List",
-	UI_SCALE_LABEL = "UI Scale",
+	UI_SCALE_LABEL = "Scale",
 
 	-- List tab
 	DONE_PREFIX = "[Done] ",

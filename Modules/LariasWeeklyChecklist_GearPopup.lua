@@ -109,6 +109,14 @@ function Addon:SyncGearPopup()
     -- Hidden chars trigger label — delegate to RefreshHiddenCharsList which
     -- owns the button-text logic (including the OPTIONS_HIDDEN_CHARS_NONE key).
     if self.RefreshHiddenCharsList then self:RefreshHiddenCharsList() end
+
+    -- Re-apply custom styling after all SetText / SetEnabled calls above, which
+    -- can trigger UIPanelButtonTemplate's OnDisable/OnEnable handlers and restore
+    -- Blizzard's default grey text and art regions.
+    if Addon._styleActionButton then
+        if p._gearResetBtn              then Addon._styleActionButton(p._gearResetBtn)              end
+        if p._gearHiddenCharsTrigger    then Addon._styleActionButton(p._gearHiddenCharsTrigger)    end
+    end
 end
 
 function Addon:ToggleGearPopup(anchor)

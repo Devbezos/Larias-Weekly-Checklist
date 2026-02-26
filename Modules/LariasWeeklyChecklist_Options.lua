@@ -287,14 +287,23 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
     scaleLbl:SetPoint("LEFT", sf, "LEFT", 0, 0)
     scaleLbl:SetWidth(LBL_W)
     scaleLbl:SetJustifyH("RIGHT")
+    scaleLbl:SetWordWrap(false)
     scaleLbl:SetTextColor(txt.r, txt.g, txt.b, txt.a)
     local L = self.L or {}
     scaleLbl:SetText(L.UI_SCALE_LABEL or "Scale")
 
-    -- Track container (mouse receiver + clipping context)
+    -- Percentage readout — sits right after the "Scale" label
+    local pctLbl = sf:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    pctLbl:SetPoint("LEFT", scaleLbl, "RIGHT", GAP, 0)
+    pctLbl:SetWidth(PCT_W)
+    pctLbl:SetJustifyH("LEFT")
+    pctLbl:SetWordWrap(false)
+    pctLbl:SetTextColor(txtD.r, txtD.g, txtD.b, txtD.a)
+
+    -- Track container (mouse receiver + clipping context) — right of the readout
     local trackCont = CreateFrame("Frame", nil, sf)
     trackCont:SetSize(TRACK_W, SLIDER_H)
-    trackCont:SetPoint("LEFT", scaleLbl, "RIGHT", GAP, 0)
+    trackCont:SetPoint("LEFT", pctLbl, "RIGHT", GAP, 0)
 
     -- Track bar (thin rectangle centred vertically)
     local trackBar = trackCont:CreateTexture(nil, "BACKGROUND")
@@ -310,13 +319,6 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
     local thumbTex = thumb:CreateTexture(nil, "ARTWORK")
     thumbTex:SetAllPoints(thumb)
     thumbTex:SetColorTexture(txt.r, txt.g, txt.b, 0.9)
-
-    -- Percentage readout
-    local pctLbl = sf:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    pctLbl:SetPoint("LEFT", trackCont, "RIGHT", GAP, 0)
-    pctLbl:SetWidth(PCT_W)
-    pctLbl:SetJustifyH("LEFT")
-    pctLbl:SetTextColor(txtD.r, txtD.g, txtD.b, txtD.a)
 
     -- ── Logic ─────────────────────────────────────────────────────────────
 
@@ -365,7 +367,7 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
         if btn ~= "LeftButton" then return end
         self_._dragging = true
         local pct = PctFromCursor()
-        if pct then UpdateVisuals(pct) end
+        if pct then SetPct(pct) end
     end)
     trackCont:SetScript("OnMouseUp", function(self_, btn)
         if btn ~= "LeftButton" then return end
@@ -376,7 +378,7 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
     trackCont:SetScript("OnUpdate", function(self_)
         if not self_._dragging then return end
         local pct = PctFromCursor()
-        if pct then UpdateVisuals(pct) end
+        if pct then SetPct(pct) end
     end)
 
     sf:SetScript("OnShow", function() UpdateVisuals(GetCurrentPct()) end)

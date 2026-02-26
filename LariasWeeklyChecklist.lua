@@ -1619,8 +1619,12 @@ function Addon:CreateFrame()
     frame:SetSize(Addon.UI.frameW, Addon.UI.frameH)
     local _savedMainSize = Addon.db and Addon.db.global and Addon.db.global.mainFrameSize
     if _savedMainSize then
-        if _savedMainSize.w then frame:SetWidth(_savedMainSize.w) end
-        if _savedMainSize.h then frame:SetHeight(_savedMainSize.h) end
+        local _clampMinW = math.floor(Addon.UI.frameW * 0.8)
+        local _clampMinH = math.floor(Addon.UI.frameH * 0.8)
+        local _clampMaxW = math.floor(Addon.UI.frameW * 1.2)
+        local _clampMaxH = math.floor(Addon.UI.frameH * 1.2)
+        if _savedMainSize.w then frame:SetWidth( math.max(_clampMinW, math.min(_clampMaxW, _savedMainSize.w))) end
+        if _savedMainSize.h then frame:SetHeight(math.max(_clampMinH, math.min(_clampMaxH, _savedMainSize.h))) end
     end
     frame:SetClampedToScreen(true)
     local _savedMainPos = Addon.db and Addon.db.global and Addon.db.global.mainFramePos
@@ -1631,12 +1635,14 @@ function Addon:CreateFrame()
     end
     frame:SetMovable(true)
     frame:SetResizable(true)
-    local _maxW = Addon.UI.frameW * 2   -- 1040
-    local _maxH = Addon.UI.frameH * 2   -- 1300
+    local _maxW = math.floor(Addon.UI.frameW * 1.2)   -- 624
+    local _maxH = math.floor(Addon.UI.frameH * 1.2)   -- 780
+    local _minW0 = math.floor(Addon.UI.frameW * 0.8)  -- 416
+    local _minH0 = math.floor(Addon.UI.frameH * 0.8)  -- 520
     if frame.SetResizeBounds then
-        frame:SetResizeBounds(320, 380, _maxW, _maxH)
+        frame:SetResizeBounds(_minW0, _minH0, _maxW, _maxH)
     else
-        if frame.SetMinResize then frame:SetMinResize(320, 380) end
+        if frame.SetMinResize then frame:SetMinResize(_minW0, _minH0) end
         if frame.SetMaxResize then frame:SetMaxResize(_maxW, _maxH) end
     end
     frame:EnableMouse(true)
@@ -2272,12 +2278,16 @@ function Addon:CreateFrame()
         if showCP then _rightW = _rightW + 6 + 108 end
         if showIR then _rightW = _rightW + 6 + 108 end
         local _minW = _leftW + 20 + _rightW  -- 20px breathing room between sides
-        local _maxW2 = Addon.UI.frameW * 2
-        local _maxH2 = Addon.UI.frameH * 2
+        -- Never go below the 80/120% design bounds, regardless of button layout.
+        local _absMinW = math.floor(Addon.UI.frameW * 0.8)
+        local _absMinH = math.floor(Addon.UI.frameH * 0.8)
+        local _maxW2   = math.floor(Addon.UI.frameW * 1.2)
+        local _maxH2   = math.floor(Addon.UI.frameH * 1.2)
+        _minW = math.max(_minW, _absMinW)
         if frame.SetResizeBounds then
-            frame:SetResizeBounds(_minW, 200, _maxW2, _maxH2)
+            frame:SetResizeBounds(_minW, _absMinH, _maxW2, _maxH2)
         else
-            if frame.SetMinResize then frame:SetMinResize(_minW, 200) end
+            if frame.SetMinResize then frame:SetMinResize(_minW, _absMinH) end
             if frame.SetMaxResize then frame:SetMaxResize(_maxW2, _maxH2) end
         end
         -- Snap existing width up if it's already narrower than the new minimum.
