@@ -1298,11 +1298,25 @@ local function SetHeaderText(sectionFrame, sectionId, complete)
     sectionFrame._title:SetText(titleText)
 end
 
+-- Sets the checklist item label colour based on checked state.
+-- Called after every SetChecked() so the text stays in sync with the box.
+local function RefreshItemTextColor(checkbox)
+    local lbl = checkbox.text or checkbox.Text
+    if not lbl then return end
+    if checkbox:GetChecked() then
+        lbl:SetTextColor(0.45, 0.45, 0.45, 0.85)
+    else
+        local t = (Addon.THEME and Addon.THEME.text) or { r = 1, g = 1, b = 1, a = 1 }
+        lbl:SetTextColor(t.r, t.g, t.b, t.a or 1)
+    end
+end
+
 local function OnCheckboxClick(selfBtn)
     -- Item click handler: update saved state, collapse/hide completed sections, relayout.
     local database = Addon:EnsureDB()
     local checked = selfBtn:GetChecked() and true or nil
     database.checked[selfBtn._dbKey or Key(selfBtn._sectionId, selfBtn._itemId)] = checked
+    RefreshItemTextColor(selfBtn)
 
     local sectionId = selfBtn._sectionId
     local secCompleteNow = IsSectionCompleteById(sectionId, database)
@@ -1428,6 +1442,7 @@ local function SyncCheckboxesForSection(sectionFrame, sectionId, db)
         end
 
         checkbox:SetChecked(IsItemChecked(sectionId, item.id, db))
+        RefreshItemTextColor(checkbox)
 
         checkbox:SetScript("OnClick", OnCheckboxClick)
     end
@@ -1470,6 +1485,7 @@ UpdateSectionVisuals = function(sectionFrame, sectionId)
         local checkbox = sectionFrame._checkboxes[i]
         if checkbox and checkbox._itemId ~= nil then
             checkbox:SetChecked(IsItemChecked(sectionId, checkbox._itemId, database))
+            RefreshItemTextColor(checkbox)
         end
     end
 
