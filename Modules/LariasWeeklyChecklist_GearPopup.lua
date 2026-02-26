@@ -56,23 +56,56 @@ function Addon:SyncGearPopup()
     Sync(p._cbHideCharPicker,   db.showCharPickerBtn == false,
          L.OPTIONS_HIDE_CHAR_SELECT  or "Hide character selector")
 
-    -- Hide the char picker checkbox row when the feature is disabled or when
-    -- there is only one character (nothing to switch to).
-    do
-        local featureOn = (Addon.FEATURE_FLAGS and Addon.FEATURE_FLAGS.ENABLE_CHAR_SELECTOR) ~= false
-        local hasChars  = featureOn and (Addon.HasPickableChars and Addon:HasPickableChars())
-        local cb = p._cbHideCharPicker
-        if cb then
-            cb:SetShown(hasChars and true or false)
-            if cb._label then cb._label:SetShown(hasChars and true or false) end
-            if cb._hit   then cb._hit:SetShown(hasChars and true or false) end
-        end
-    end
-
     -- Reset button label.
     if p._gearResetBtn then
         p._gearResetBtn:SetText(L.RESET_BUTTON or "Reset List")
     end
+
+    -- Determine visibility of char-selector-related rows.
+    -- Hidden when: feature flag off, or no pickable chars, or the user hid the char picker button.
+    local featureOn      = (Addon.FEATURE_FLAGS and Addon.FEATURE_FLAGS.ENABLE_CHAR_SELECTOR) ~= false
+    local hasChars       = featureOn and (Addon.HasPickableChars and Addon:HasPickableChars())
+    local charPickerOn   = featureOn and hasChars and (db.showCharPickerBtn ~= false)
+    local showCharRow    = hasChars   -- show the checkbox itself only when there are chars
+    local showHiddenSect = charPickerOn  -- hidden-chars section tracks whether the button is on
+
+    -- Char picker checkbox row.
+    local cb = p._cbHideCharPicker
+    if cb then
+        cb:SetShown(showCharRow and true or false)
+        if cb._label then cb._label:SetShown(showCharRow and true or false) end
+        if cb._hit   then cb._hit:SetShown(showCharRow and true or false) end
+    end
+
+    -- Hidden chars divider + trigger.
+    if p._gearHiddenCharsDiv     then p._gearHiddenCharsDiv:SetShown(showHiddenSect and true or false) end
+    if p._gearHiddenCharsTrigger then p._gearHiddenCharsTrigger:SetShown(showHiddenSect and true or false) end
+    if not showHiddenSect and self._hiddenCharsPicker then
+        local pk = self._hiddenCharsPicker
+        if pk.IsShown and pk:IsShown() then pk:Hide() end
+    end
+
+    -- Recalculate popup height based on visible content.
+    do
+        local PAD_   = 10
+        local ROW_H_ = 26
+        local TILE_H_= ROW_H_ + 8   -- 34
+        local N_TOTAL = 6
+        local rstStartY_  = PAD_
+        local div1StartY_ = rstStartY_ + 22 + 6
+        local cbsY_       = div1StartY_ + 1 + 8
+        local nVisible    = showCharRow and N_TOTAL or (N_TOTAL - 1)
+        local totalH
+        if showHiddenSect then
+            local div2StartY_ = cbsY_ + nVisible * TILE_H_ + 6
+            local hidStartY_  = div2StartY_ + 1 + 8
+            totalH = hidStartY_ + 22 + PAD_
+        else
+            totalH = cbsY_ + nVisible * TILE_H_ + PAD_
+        end
+        p:SetHeight(totalH)
+    end
+
     -- Hidden chars trigger label — delegate to RefreshHiddenCharsList which
     -- owns the button-text logic (including the OPTIONS_HIDDEN_CHARS_NONE key).
     if self.RefreshHiddenCharsList then self:RefreshHiddenCharsList() end
@@ -298,6 +331,7 @@ function Addon:ToggleGearPopup(anchor)
             local bdr = Addon.THEME.border
             div2:SetColorTexture(bdr.r, bdr.g, bdr.b, 0.5)
         end
+        p._gearHiddenCharsDiv = div2
 
         -- ── Hidden Characters trigger ──────────────────────────────────────
         local hidStartY = div2StartY + 1 + 8
@@ -312,8 +346,6 @@ function Addon:ToggleGearPopup(anchor)
         p._gearHiddenCharsTrigger  = hiddenTrigger
         Addon._gearHiddenCharsTrigger = hiddenTrigger
 
-        -- Set final popup height.
-        p:SetHeight(hidStartY + 22 + 8)
         self._gearPopup = p
     end
 
