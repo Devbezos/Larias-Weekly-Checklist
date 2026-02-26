@@ -851,7 +851,10 @@ function Addon:ApplyScrollLayout()
     end
 
     scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -Addon.UI.scrollRight, Addon.UI.scrollBottom + extra)
-    frame:SetScale(self:GetUIScale())
+    -- Always keep frame scale at 1.0 — scaling is done by resizing (SetSize),
+    -- not SetScale().  SetScale() causes StartSizing() to snap because WoW maps
+    -- cursor pixels through GetEffectiveScale() which diverges from visual position.
+    frame:SetScale(1)
 
     -- Recompute itemTextWidth from the live frame width so text never over-runs
     -- or wastes space after a resize.
@@ -898,10 +901,36 @@ function Addon:GetUIScale()
 end
 
 function Addon:ApplyUIScale()
-    -- Called when the slider changes; re-scales both windows and refreshes content.
+    -- Resize the frame to base * scale instead of using SetScale().
+    -- This keeps the frame's effective scale at 1.0 so resize/drag coordinates
+    -- are always in the same space as cursor coordinates.
+    local scale = self:GetUIScale()
     local mf = self._mainFrame
     if mf then
-        -- Scale is applied inside ApplyScrollLayout/Refresh; just trigger a refresh.
+        local newW = math.floor(Addon.UI.frameW * scale)
+        local newH = math.floor(Addon.UI.frameH * scale)
+        -- Clamp to the same 80-120% bounds used by the resize grip.
+        local minW = math.floor(Addon.UI.frameW * 0.8)
+        local minH = math.floor(Addon.UI.frameH * 0.8)
+        local maxW = math.floor(Addon.UI.frameW * 1.2)
+        local maxH = math.floor(Addon.UI.frameH * 1.2)
+        newW = math.max(minW, math.min(maxW, newW))
+        newH = math.max(minH, math.min(maxH, newH))
+        -- Pin the bottom edge so the scale slider (at the bottom of the frame)
+        -- stays under the mouse cursor as the frame grows/shrinks upward.
+        local left   = mf:GetLeft()  or 0
+        local bottom = mf:GetBottom() or 0
+        mf:ClearAllPoints()
+        -- TOPLEFT anchor: top = bottom + newH
+        mf:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, bottom + newH)
+        mf:SetSize(newW, newH)
+        -- Persist so the size and position survive reloads.
+        local gdb = self.db and self.db.global
+        if gdb then
+            gdb.mainFrameSize = { w = newW, h = newH }
+            gdb.mainFramePos  = { x = left, y = bottom + newH }
+        end
+        if self.ApplyScrollLayout then self:ApplyScrollLayout() end
         if self.RequestRefresh then self:RequestRefresh() end
     end
     local iw = self._ilvlRefWindow
@@ -1629,7 +1658,9 @@ function Addon:CreateFrame()
     frame:SetClampedToScreen(true)
     local _savedMainPos = Addon.db and Addon.db.global and Addon.db.global.mainFramePos
     if _savedMainPos and _savedMainPos.x and _savedMainPos.y then
-        frame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", _savedMainPos.x, _savedMainPos.y)
+        -- y stores the top edge (TOPLEFT anchor) so StartSizing("BOTTOMRIGHT") always
+        -- has a stable fixed corner without any re-anchoring on mouse-down.
+        frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", _savedMainPos.x, _savedMainPos.y)
     else
         frame:SetPoint("CENTER")
     end
@@ -1650,9 +1681,16 @@ function Addon:CreateFrame()
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", function()
         frame:StopMovingOrSizing()
+        -- StartMoving() changes the frame's internal anchors during movement.
+        -- Re-normalise to a single TOPLEFT anchor so that the next
+        -- StartSizing("BOTTOMRIGHT") call always has a stable fixed corner.
+        local left = frame:GetLeft()
+        local top  = frame:GetTop()
+        frame:ClearAllPoints()
+        frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
         local _gdb = Addon.db and Addon.db.global
         if _gdb then
-            _gdb.mainFramePos = { x = frame:GetLeft(), y = frame:GetBottom() }
+            _gdb.mainFramePos = { x = left, y = top }
         end
     end)
     frame:SetScript("OnSizeChanged", function()
@@ -1743,27 +1781,60 @@ function Addon:CreateFrame()
     mainResizeBtn:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
     mainResizeBtn:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
     mainResizeBtn:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
-    mainResizeBtn:SetScript("OnMouseDown", function()
-        -- Re-anchor to TOPLEFT before sizing so StartSizing("BOTTOMRIGHT") has a
-        -- stable fixed corner.  Without this, any frame saved/restored via a
-        -- BOTTOMLEFT anchor causes the size to snap to the mouse position on the
-        -- very first mouse-down because WoW computes height as (top - mouseY) but
-        -- "top" is undefined when the authoritative anchor is at the bottom.
+
+    -- Manual resize: never use StartSizing().  StartSizing() evaluates the frame
+    -- size from the cursor position the instant it is called, so even a bare click
+    -- (no drag) snaps the frame to (cursor - topleft).  Instead we track the delta
+    -- from the mouse-down position ourselves.
+    local _rsData = nil  -- {startCX, startCY, startW, startH, left, top}
+
+    mainResizeBtn:SetScript("OnMouseDown", function(self_, btn)
+        if btn ~= "LeftButton" then return end
+        -- Normalise anchor to TOPLEFT so the top-left corner stays fixed while
+        -- we grow/shrink the bottom-right corner.
         local left = frame:GetLeft()
         local top  = frame:GetTop()
+        local w    = frame:GetWidth()
+        local h    = frame:GetHeight()
         frame:ClearAllPoints()
         frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
-        frame:StartSizing("BOTTOMRIGHT")
+        frame:SetSize(w, h)
+        local uiScale = UIParent:GetEffectiveScale()
+        local cx, cy  = GetCursorPosition()
+        _rsData = {
+            startCX = cx / uiScale,
+            startCY = cy / uiScale,
+            startW  = w,
+            startH  = h,
+            left    = left,
+            top     = top,
+        }
     end)
-    mainResizeBtn:SetScript("OnMouseUp", function()
-        frame:StopMovingOrSizing()
+
+    mainResizeBtn:SetScript("OnUpdate", function()
+        if not _rsData then return end
+        local uiScale    = UIParent:GetEffectiveScale()
+        local cx, cy     = GetCursorPosition()
+        cx = cx / uiScale
+        cy = cy / uiScale
+        local minW = math.floor(Addon.UI.frameW * 0.8)
+        local minH = math.floor(Addon.UI.frameH * 0.8)
+        local maxW = math.floor(Addon.UI.frameW * 1.2)
+        local maxH = math.floor(Addon.UI.frameH * 1.2)
+        -- Right edge moves with cx; bottom edge moves opposite to cy (y increases upward).
+        local newW = math.max(minW, math.min(maxW, math.floor(_rsData.startW + (cx - _rsData.startCX))))
+        local newH = math.max(minH, math.min(maxH, math.floor(_rsData.startH - (cy - _rsData.startCY))))
+        frame:SetSize(newW, newH)
+        Addon:ApplyScrollLayout()
+    end)
+
+    mainResizeBtn:SetScript("OnMouseUp", function(self_, btn)
+        if btn ~= "LeftButton" then return end
+        _rsData = nil
         local _gdb = Addon.db and Addon.db.global
         if _gdb then
             _gdb.mainFrameSize = { w = frame:GetWidth(), h = frame:GetHeight() }
-            -- Re-save position too since ClearAllPoints changed the anchor.
-            _gdb.mainFramePos  = { x = frame:GetLeft(), y = frame:GetBottom() }
         end
-        Addon:ApplyScrollLayout()
         if Addon.RequestRefresh then Addon:RequestRefresh() end
     end)
 

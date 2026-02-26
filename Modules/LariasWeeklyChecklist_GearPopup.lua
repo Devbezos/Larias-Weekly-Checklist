@@ -183,48 +183,39 @@ function Addon:ToggleGearPopup(anchor)
         if Addon._styleActionButton then Addon._styleActionButton(resetBtn) end
         resetBtn:SetScript("OnClick", function()
             p:Hide()
-            local dbR = Addon:EnsureDB()
-            if wipe then
-                wipe(dbR.checked)
-                wipe(dbR.collapsedSections)
-            else
-                dbR.checked = {}
-                dbR.collapsedSections = {}
+            -- Reset only the current character's list data (checked items,
+            -- collapsed sections, week pointer). Display preferences (hide
+            -- great vault, currency, etc.) and UI scale are intentionally kept.
+            local currentKey = Addon._viewingChar or (Addon.GetCurrentProfileKey and Addon:GetCurrentProfileKey())
+            if currentKey then
+                local chars = Addon.db and Addon.db.global and Addon.db.global.chars
+                if chars and chars[currentKey] then
+                    local cdb = chars[currentKey]
+                    if wipe then
+                        wipe(cdb.checked or {})
+                        wipe(cdb.collapsedSections or {})
+                    else
+                        cdb.checked = {}
+                        cdb.collapsedSections = {}
+                    end
+                    cdb.startAtSectionId = ""
+                end
             end
-            dbR.hideCompletedSections = true
-            dbR.startAtSectionId      = ""
-            dbR.showGreatVault        = true
-            dbR.showCurrency          = true
-            dbR.showChangeWeekBtn     = true
-            dbR.showIlvlRefBtn        = true
+            -- Reset main frame position and size back to defaults.
             local gdb = Addon.db and Addon.db.global
             if gdb then
                 gdb.mainFramePos  = nil
                 gdb.mainFrameSize = nil
-                gdb.ilvlRefPos    = nil
-                gdb.ilvlRefSize   = nil
-                gdb.uiScalePct    = nil
             end
-            if Addon.SetViewingChar then Addon:SetViewingChar(nil) end
             local mf = Addon._mainFrame
             if mf then
-                mf:SetScale(1.0)
                 mf:ClearAllPoints()
                 mf:SetPoint("CENTER")
                 mf:SetSize(Addon.UI.frameW, Addon.UI.frameH)
                 if Addon.ApplyScrollLayout then Addon:ApplyScrollLayout() end
             end
-            local iw = Addon._ilvlRefWindow
-            if iw then
-                iw:ClearAllPoints()
-                if mf then iw:SetPoint("TOPLEFT", mf, "TOPRIGHT", 4, 0)
-                else       iw:SetPoint("CENTER", UIParent, "CENTER", 260, 0) end
-                iw:SetSize(iw._baseW or Addon.UI.frameW, iw._baseH or 540)
-                if iw._ilvlReflow then iw._ilvlReflow() end
-            end
             if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
             if Addon.SyncGearPopup        then Addon:SyncGearPopup()        end
-            if Addon.ApplyUIScale         then Addon:ApplyUIScale()         end
             if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
         end)
         p._gearResetBtn = resetBtn

@@ -349,9 +349,9 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
 
     sf.Sync = function() UpdateVisuals(GetCurrentPct()) end
 
-    -- Divide cursor by the frame's OWN effective scale to get coordinates in
-    -- the same space as GetLeft() / GetWidth().  Using UIParent:GetEffectiveScale()
-    -- alone is wrong whenever the main frame has SetScale() applied.
+    -- The main frame always has SetScale(1); scaling is done via SetSize().
+    -- GetEffectiveScale() here is just UIParent's scale, which is the correct
+    -- divisor for mapping raw cursor pixels to frame-local coordinates.
     local function PctFromCursor()
         local scale = trackCont:GetEffectiveScale()
         local cx    = GetCursorPosition() / scale
