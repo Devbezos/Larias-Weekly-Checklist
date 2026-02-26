@@ -53,6 +53,27 @@ function Addon:SyncGearPopup()
          L.OPTIONS_HIDE_ILVL_REF_BTN or "Hide ilvl references")
     Sync(p._cbHideCharPicker,   db.showCharPickerBtn == false,
          L.OPTIONS_HIDE_CHAR_SELECT  or "Hide character selector")
+
+    -- Sync hidden chars trigger label.
+    local trigBtn = p._gearHiddenCharsTrigger
+    if trigBtn then
+        local gdb     = self.db and self.db.global
+        local hidMap  = gdb and gdb.hiddenChars or {}
+        local count   = 0
+        for _, v in pairs(hidMap) do if v then count = count + 1 end end
+        if count == 0 then
+            trigBtn:SetText(string.format("%s (0)", L.OPTIONS_HIDDEN_CHARS_TITLE or "Hidden"))
+            trigBtn:SetEnabled(false)
+        else
+            trigBtn:SetEnabled(true)
+            trigBtn:SetText(string.format("%s (%d) |TInterface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up:10:10|t",
+                L.OPTIONS_HIDDEN_CHARS_TITLE or "Hidden", count))
+        end
+    end
+    -- Reset button label.
+    if p._gearResetBtn then
+        p._gearResetBtn:SetText(L.RESET_BUTTON or "Reset List")
+    end
 end
 
 function Addon:ToggleGearPopup(anchor)
@@ -189,12 +210,96 @@ function Addon:ToggleGearPopup(anchor)
             end)
         end
 
-        -- No deferred resize needed; height is fixed from the tile formula.
+        -- No deferred resize needed; checkboxes height is fixed from the tile formula.
+        -- Below the checkboxes: divider, Hidden Characters trigger, Reset List button.
+
+        local divStartY  = totalH + 6            -- top of divider from popup top
+        local hidStartY  = divStartY + 1 + 8     -- hidden chars trigger top
+        local rstStartY  = hidStartY + 22 + 6    -- reset button top
+        local popupH     = rstStartY + 22 + 8    -- total popup height
+        p:SetHeight(popupH)
+
+        -- ── Divider ────────────────────────────────────────────────────────
+        local div = p:CreateTexture(nil, "OVERLAY")
+        div:SetHeight(1)
+        div:SetPoint("TOPLEFT",  p, "TOPLEFT",  PAD,  -divStartY)
+        div:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PAD, -divStartY)
+        if Addon.THEME then
+            local bdr = Addon.THEME.border
+            div:SetColorTexture(bdr.r, bdr.g, bdr.b, 0.5)
+        end
+
+        -- ── Hidden Characters trigger ──────────────────────────────────────
+        local hiddenTrigger = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
+        hiddenTrigger:SetPoint("TOPLEFT",  p, "TOPLEFT",  PAD,  -hidStartY)
+        hiddenTrigger:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PAD, -hidStartY)
+        hiddenTrigger:SetHeight(22)
+        if Addon._styleActionButton then Addon._styleActionButton(hiddenTrigger) end
+        hiddenTrigger:SetScript("OnClick", function()
+            if Addon.ToggleHiddenCharsDropdown then Addon:ToggleHiddenCharsDropdown() end
+        end)
+        p._gearHiddenCharsTrigger  = hiddenTrigger
+        Addon._gearHiddenCharsTrigger = hiddenTrigger
+
+        -- ── Reset List button ──────────────────────────────────────────────
+        local resetBtn = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
+        resetBtn:SetPoint("TOPLEFT",  p, "TOPLEFT",  PAD,  -rstStartY)
+        resetBtn:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PAD, -rstStartY)
+        resetBtn:SetHeight(22)
+        if Addon._styleActionButton then Addon._styleActionButton(resetBtn) end
+        resetBtn:SetScript("OnClick", function()
+            p:Hide()
+            local dbR = Addon:EnsureDB()
+            if wipe then
+                wipe(dbR.checked)
+                wipe(dbR.collapsedSections)
+            else
+                dbR.checked = {}
+                dbR.collapsedSections = {}
+            end
+            dbR.hideCompletedSections = true
+            dbR.startAtSectionId      = ""
+            dbR.showGreatVault        = true
+            dbR.showCurrency          = true
+            dbR.showChangeWeekBtn     = true
+            dbR.showIlvlRefBtn        = true
+            local gdb = Addon.db and Addon.db.global
+            if gdb then
+                gdb.mainFramePos  = nil
+                gdb.mainFrameSize = nil
+                gdb.ilvlRefPos    = nil
+                gdb.ilvlRefSize   = nil
+                gdb.uiScalePct    = nil
+            end
+            if Addon.SetViewingChar then Addon:SetViewingChar(nil) end
+            local mf = Addon._mainFrame
+            if mf then
+                mf:SetScale(1.0)
+                mf:ClearAllPoints()
+                mf:SetPoint("CENTER")
+                mf:SetSize(Addon.UI.frameW, Addon.UI.frameH)
+                if Addon.ApplyScrollLayout then Addon:ApplyScrollLayout() end
+            end
+            local iw = Addon._ilvlRefWindow
+            if iw then
+                iw:ClearAllPoints()
+                if mf then iw:SetPoint("TOPLEFT", mf, "TOPRIGHT", 4, 0)
+                else       iw:SetPoint("CENTER", UIParent, "CENTER", 260, 0) end
+                iw:SetSize(iw._baseW or Addon.UI.frameW, iw._baseH or 540)
+                if iw._ilvlReflow then iw._ilvlReflow() end
+            end
+            if Addon.LayoutHeaderButtons    then Addon:LayoutHeaderButtons() end
+            if Addon.SyncOptionsTabControls then Addon:SyncOptionsTabControls() end
+            if Addon.SyncGearPopup          then Addon:SyncGearPopup() end
+            if Addon.ApplyUIScale           then Addon:ApplyUIScale() end
+            if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
+        end)
+        p._gearResetBtn = resetBtn
 
         self._gearPopup = p
     end
 
-    -- Sync current values and labels.
+    -- Sync current values and labels (includes hidden chars trigger label).
     self:SyncGearPopup()
 
     -- Position below the anchor (gear button) or center if no anchor.

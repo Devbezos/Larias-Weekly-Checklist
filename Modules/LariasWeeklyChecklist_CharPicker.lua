@@ -193,11 +193,31 @@ function Addon:InitCharPickerUI(frame, styleFunc)
             btn = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
             btn:SetFrameStrata("HIGH")
             if styleFunc then styleFunc(btn) end
-            if btn.SetTextInsets then btn:SetTextInsets(4, 4, 0, 0) end
+            -- StyleMainTabButton resets backdrop colors; re-apply theme after it runs.
+            if btn.SetBackdrop then
+                btn:SetBackdrop({
+                    bgFile   = "Interface\\Buttons\\WHITE8x8",
+                    edgeFile = "Interface\\Buttons\\WHITE8x8",
+                    tile = false, edgeSize = 1,
+                    insets = { left = 1, right = 1, top = 1, bottom = 1 },
+                })
+                if btn.SetBackdropColor then
+                    btn:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, Addon.THEME.bg.a)
+                end
+                if btn.SetBackdropBorderColor then
+                    btn:SetBackdropBorderColor(Addon.THEME.border.r, Addon.THEME.border.g, Addon.THEME.border.b, Addon.THEME.border.a)
+                end
+            end
             local tr = btn.Text or (btn.GetFontString and btn:GetFontString())
             if tr then
                 if tr.SetJustifyH then tr:SetJustifyH("LEFT") end
                 if tr.SetJustifyV then tr:SetJustifyV("MIDDLE") end
+                -- StyleMainTabButton pins text to CENTER; override to fill left-to-right.
+                if tr.ClearAllPoints and tr.SetPoint then
+                    tr:ClearAllPoints()
+                    tr:SetPoint("LEFT",  btn, "LEFT",  6, 0)
+                    tr:SetPoint("RIGHT", btn, "RIGHT", -4, 0)
+                end
             end
         end
         btn:Show()
@@ -232,15 +252,32 @@ function Addon:InitCharPickerUI(frame, styleFunc)
         local sv      = Addon.db and Addon.db.sv
         local posY    = -CPICK_PAD
 
-        -- Helper: look up class token for a charKey, falling back to the
-        -- AceDB profile name in case charClasses was written under the old key.
+        -- Helper: look up class token for a charKey.
+        -- Only direct charKey lookups are used; profile-name fallbacks are
+        -- intentionally omitted to avoid inheriting colours from shared AceDB
+        -- profiles (e.g. "Default") which may belong to a different class.
         local function classFor(charKey)
             if not (gdb and gdb.charClasses) then return nil end
-            local t = gdb.charClasses[charKey]
-            if t then return t end
-            -- Fallback: look via the profile name this char maps to.
-            local profName = sv and sv.profileKeys and sv.profileKeys[charKey]
-            return profName and gdb.charClasses[profName]
+            return gdb.charClasses[charKey] or nil
+        end
+
+        -- Helper: returns true only if the char has enough saved data to be
+        -- worth showing.  A char with only all-zero currency rows (e.g. first
+        -- login before doing any weeklies) is treated as having no usable data.
+        local function hasUsableData(charKey)
+            local cdb = gdb and gdb.chars and gdb.chars[charKey]
+            if not cdb then return false end
+            local snap = cdb.trackingSnapshot
+            if not snap then return false end
+            -- Weekly-task tracking lines present → definitely has data.
+            if snap.leftLines ~= nil then return true end
+            -- Currency rows present, but only count if at least one is non-zero.
+            if type(snap.rightRows) == "table" then
+                for _, row in ipairs(snap.rightRows) do
+                    if row.qty and row.qty > 0 then return true end
+                end
+            end
+            return false
         end
 
         -- When viewing another character, show a "back to me" entry first.
@@ -248,7 +285,8 @@ function Addon:InitCharPickerUI(frame, styleFunc)
             local myName = (UnitName and UnitName("player")) or "My character"
             local btn = AcquireBtn(p)
             btn:ClearAllPoints()
-            btn:SetPoint("TOPLEFT", p, "TOPLEFT", CPICK_PAD, posY)
+            btn:SetPoint("TOPLEFT",  p, "TOPLEFT",  0, posY)
+            btn:SetPoint("TOPRIGHT", p, "TOPRIGHT", 0, posY)
             btn:SetHeight(CPICK_ROW_H)
             btn:SetText("<< " .. myName)  -- back to own char
             local tr = btn.Text or (btn.GetFontString and btn:GetFontString())
@@ -280,23 +318,25 @@ function Addon:InitCharPickerUI(frame, styleFunc)
             local isViewing = (profileKey == Addon._viewingChar)
             local isHidden  = (gdb and gdb.hiddenChars and gdb.hiddenChars[profileKey]) and true or false
             if not isOwn and not isHidden then
+                local classToken = classFor(profileKey)
+                -- Skip chars with no class entry or no saved snapshot data.
+                if classToken and hasUsableData(profileKey) then
                 local charName = (profileKey:match("^(.-)%s*%-") or profileKey):gsub("^%s+",""):gsub("%s+$","")
                 if charName == "" then charName = profileKey end
 
-                local classToken = classFor(profileKey)
-                local r, g, b    = 1, 1, 1
-                if classToken then
-                    local cc = RAID_CLASS_COLORS and RAID_CLASS_COLORS[classToken]
-                    if cc then r, g, b = cc.r, cc.g, cc.b end
-                end
+                local r, g, b = 1, 1, 1
+                local cc = RAID_CLASS_COLORS and RAID_CLASS_COLORS[classToken]
+                if cc then r, g, b = cc.r, cc.g, cc.b end
 
                 local btn = AcquireBtn(p)
                 btn:ClearAllPoints()
-                btn:SetPoint("TOPLEFT", p, "TOPLEFT", CPICK_PAD, posY)
+                -- Name button spans the full panel width.
+                btn:SetPoint("TOPLEFT",  p, "TOPLEFT",  0, posY)
+                btn:SetPoint("TOPRIGHT", p, "TOPRIGHT", 0, posY)
                 btn:SetHeight(CPICK_ROW_H)
 
                 if isViewing then
-                    -- Currently viewed: show ✔ prefix, disable clicking.
+                    -- Currently viewed: show ✔ prefix, disable clicking; no X.
                     btn:SetText(CHECK .. " " .. charName)
                     btn:SetEnabled(false)
                     local tr = btn.Text or (btn.GetFontString and btn:GetFontString())
@@ -326,14 +366,14 @@ function Addon:InitCharPickerUI(frame, styleFunc)
                 end
                 tinsert(p._buttons, btn)
 
-                -- X button: only on non-viewed characters (can't hide while viewing).
+                -- X button: sits outside the panel, anchored to its right edge.
                 if not isViewing then
                     local xBtn = AcquireXBtn(p)
                     xBtn:ClearAllPoints()
-                    xBtn:SetPoint("LEFT", btn, "RIGHT", 4, 0)
+                    xBtn:SetPoint("TOPLEFT", p, "TOPRIGHT", 2, posY)
+                    xBtn:SetSize(20, CPICK_ROW_H)
                     local _pkHide = profileKey
                     xBtn:SetScript("OnClick", function()
-                        p:Hide()
                         local gdbH = Addon.db and Addon.db.global
                         if gdbH then
                             gdbH.hiddenChars = gdbH.hiddenChars or {}
@@ -349,11 +389,20 @@ function Addon:InitCharPickerUI(frame, styleFunc)
                         if Addon.RefreshHiddenCharsList then
                             Addon:RefreshHiddenCharsList()
                         end
+                        -- Refresh the dropdown in-place; don't close it.
+                        Populate()
                     end)
                     tinsert(p._xButtons, xBtn)
                 end
                 posY = posY - CPICK_ROW_H
+                end  -- classToken guard
             end
+        end
+
+        -- No entries built → nothing to show; close and bail out.
+        if #p._buttons == 0 then
+            p:Hide()
+            return
         end
 
         p:SetHeight(math.max(40, -posY + CPICK_PAD))
@@ -361,7 +410,7 @@ function Addon:InitCharPickerUI(frame, styleFunc)
         if C_Timer and C_Timer.After then
             C_Timer.After(0, function()
                 if not (p and p.IsShown and p:IsShown()) then return end
-                local bestW = 120
+                local bestW = 0
                 for _, b in ipairs(p._buttons) do
                     local tr = b.Text or (b.GetFontString and b:GetFontString())
                     local w
@@ -372,15 +421,10 @@ function Addon:InitCharPickerUI(frame, styleFunc)
                     if not w and b.GetTextWidth then w = tonumber(b:GetTextWidth()) end
                     if w and w > bestW then bestW = w end
                 end
-                local btnW  = math.max(140, math.min(260, math.ceil(bestW + CPICK_PAD * 2 + 12)))
-                local totalW = btnW + 4 + 20 + CPICK_PAD  -- name btn + gap + X btn + right pad
+                -- Buttons fill via TOPLEFT+TOPRIGHT anchors; only panel width needed.
+                -- +10 for text insets (LEFT+6, RIGHT-4). X sits outside panel.
+                local totalW = math.max(90, math.min(260, math.ceil(bestW) + 10))
                 p:SetWidth(totalW)
-                for _, b in ipairs(p._buttons) do
-                    if b.SetWidth then b:SetWidth(btnW) end
-                end
-                for _, xb in ipairs(p._xButtons or {}) do
-                    if xb.SetWidth then xb:SetWidth(20) end
-                end
             end)
         end
     end  -- end Populate

@@ -298,6 +298,15 @@ local function FormatCurrencyProgressParts(currencyID)
     return qty, 0
 end
 
+local function GetCurrencyIconID(currencyID)
+    -- Returns the iconFileID for a currency, or nil when unavailable.
+    local id = tonumber(currencyID)
+    if not (id and id > 0) then return nil end
+    if not (C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo) then return nil end
+    local info = C_CurrencyInfo.GetCurrencyInfo(id)
+    return info and info.iconFileID or nil
+end
+
 local function GetCrestLabelText(currencyID)
     -- Locale-driven crest name with stable fallbacks when untranslated/unknown.
     local idNum = tonumber(currencyID)
@@ -992,7 +1001,7 @@ local function ApplyGreatVaultLines(lines)
     SetShownIfChanged(TrackingUI.left.dungeonsUnderline, TrackingUI.left.line4 and TrackingUI.left.line4:IsShown())
 end
 
-local function SetRightRowPair(i, rowLabel, rowValue)
+local function SetRightRowPair(i, rowLabel, rowValue, iconFileID)
     -- Write a {label,value} row and hide it if empty.
     local row = TrackingUI.right[RIGHT_ROW_KEYS[i]]
     if not (row and row.label and row.value) then return end
@@ -1002,6 +1011,15 @@ local function SetRightRowPair(i, rowLabel, rowValue)
     SetTextIfChanged(row.value, rowValue)
     local showRow = IsNonEmptyText(rowLabel) or IsNonEmptyText(rowValue)
     SetShownIfChanged(row.frame or row.label, showRow)
+    -- Icon: show when the row is visible and we have a valid file ID.
+    if row.icon then
+        if showRow and iconFileID and iconFileID ~= 0 then
+            row.icon:SetTexture(iconFileID)
+            SetShownIfChanged(row.icon, true)
+        else
+            SetShownIfChanged(row.icon, false)
+        end
+    end
 end
 
 local function ApplyRightColumnAsPairs()
@@ -1010,6 +1028,10 @@ local function ApplyRightColumnAsPairs()
     local _, labelLines, valueLines, crestCount = GetCrestLines()
     crestCount = tonumber(crestCount) or 4
 
+    -- Gather crest IDs for per-row icon lookup.
+    local tracking = Addon.TRACKING
+    local crestIDs = GetCrestIDsAndCount(tracking or {})
+
     local idx = 1
 
     for i = 1, crestCount do
@@ -1017,7 +1039,7 @@ local function ApplyRightColumnAsPairs()
         local rowLabel = (labelLines and labelLines[i]) or ""
         local rowValue = (valueLines and valueLines[i]) or ""
         if IsNonEmptyText(rowLabel) or IsNonEmptyText(rowValue) then
-            SetRightRowPair(idx, rowLabel, rowValue)
+            SetRightRowPair(idx, rowLabel, rowValue, GetCurrencyIconID(crestIDs[i]))
             idx = idx + 1
         end
     end
@@ -1025,13 +1047,15 @@ local function ApplyRightColumnAsPairs()
     local cLbl, cVal = GetCatalystParts()
     cLbl = cLbl or ""; cVal = cVal or ""
     if idx <= RIGHT_LINE_COUNT and (IsNonEmptyText(cLbl) or IsNonEmptyText(cVal)) then
-        SetRightRowPair(idx, cLbl, cVal); idx = idx + 1
+        SetRightRowPair(idx, cLbl, cVal, GetCurrencyIconID(tracking and tracking.catalystCurrencyID))
+        idx = idx + 1
     end
 
     local sLbl, sVal = GetSparksParts()
     sLbl = sLbl or ""; sVal = sVal or ""
     if idx <= RIGHT_LINE_COUNT and (IsNonEmptyText(sLbl) or IsNonEmptyText(sVal)) then
-        SetRightRowPair(idx, sLbl, sVal); idx = idx + 1
+        SetRightRowPair(idx, sLbl, sVal, GetCurrencyIconID(tracking and tracking.sparkCurrencyID))
+        idx = idx + 1
     end
 
     local bLbl, bVal = GetDelversBountyParts()
@@ -1104,8 +1128,10 @@ function Addon:CreateTrackingPanel(parentFrame)
     if not trackingFrame.SetBackdrop and BackdropTemplateMixin and Mixin then
         Mixin(trackingFrame, BackdropTemplateMixin)
     end
-    trackingFrame:SetPoint("BOTTOMLEFT", parentFrame, "BOTTOMLEFT", Addon.UI.sectionInsetX, UI.scrollBottom)
-    trackingFrame:SetPoint("BOTTOMRIGHT", parentFrame, "BOTTOMRIGHT", -Addon.UI.sectionInsetX, UI.scrollBottom)
+    -- Lift tracking panel above the in-frame scale slider that sits below it.
+    local trackingBottomY = (Addon.UI.sliderBottomPad or 4) + (Addon.UI.sliderH or 20)
+    trackingFrame:SetPoint("BOTTOMLEFT", parentFrame, "BOTTOMLEFT", Addon.UI.sectionInsetX, trackingBottomY)
+    trackingFrame:SetPoint("BOTTOMRIGHT", parentFrame, "BOTTOMRIGHT", -Addon.UI.sectionInsetX, trackingBottomY)
     trackingFrame:SetHeight(UI.trackH)
     self:ApplyTheme(trackingFrame)
 
@@ -1179,6 +1205,9 @@ function Addon:CreateTrackingPanel(parentFrame)
     TrackingUI.left.raidUnderline = MakeUnderlineFor(TrackingUI.left.line1)
     TrackingUI.left.dungeonsUnderline = MakeUnderlineFor(TrackingUI.left.line4)
 
+    local ROW_ICON_SZ  = 14  -- px; square currency icon
+    local ROW_ICON_GAP = 3   -- gap between icon and label text
+
     local function MakeLinePair(parent, y, template)
         local row = CreateFrame("Frame", nil, parent)
         row:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, y)
@@ -1186,8 +1215,13 @@ function Addon:CreateTrackingPanel(parentFrame)
         row:SetHeight(16)
         row._lariasBaseY = y
 
+        local icon = row:CreateTexture(nil, "OVERLAY")
+        icon:SetSize(ROW_ICON_SZ, ROW_ICON_SZ)
+        icon:SetPoint("LEFT", row, "LEFT", 0, 0)
+        icon:Hide()
+
         local label = row:CreateFontString(nil, "OVERLAY", template or "GameFontHighlightSmall")
-        label:SetPoint("LEFT", row, "LEFT", 0, 0)
+        label:SetPoint("LEFT", row, "LEFT", ROW_ICON_SZ + ROW_ICON_GAP, 0)
         label:SetJustifyH("LEFT")
         if label.SetWordWrap then label:SetWordWrap(false) end
         label:SetTextColor(THEME.text.r, THEME.text.g, THEME.text.b, THEME.text.a)
@@ -1202,7 +1236,7 @@ function Addon:CreateTrackingPanel(parentFrame)
 
         label:SetPoint("RIGHT", value, "LEFT", -6, 0)
 
-        return { frame = row, label = label, value = value }
+        return { frame = row, icon = icon, label = label, value = value }
     end
 
     for i = 1, RIGHT_LINE_COUNT do
@@ -1228,6 +1262,11 @@ function Addon:CreateTrackingPanel(parentFrame)
     end
 
     self:ConfigureTrackingEvents(parentFrame, db.showGreatVault and true or false, db.showCurrency and true or false)
+
+    -- Scale slider lives below this panel, inside the main frame.
+    if self.CreateInFrameScaleSlider then
+        self:CreateInFrameScaleSlider(parentFrame)
+    end
 
 end
 
@@ -1335,27 +1374,20 @@ ComputeSnapshotData = function(snap)
             local id = ids[i]
             if id then
                 local qty = cache.cur[i] or 0
-                if qty > 0 then
-                    snap.rightRows[#snap.rightRows + 1] = { type = "crest", id = id, qty = qty }
-                end
+                snap.rightRows[#snap.rightRows + 1] = { type = "crest", id = id, qty = qty }
             end
         end
     end
 
     -- Catalyst charges.
     local catQty = GetCatalystQtyRaw()
-    if catQty ~= nil then
-        snap.rightRows[#snap.rightRows + 1] = { type = "catalyst", qty = catQty }
-    end
+    snap.rightRows[#snap.rightRows + 1] = { type = "catalyst", qty = catQty or 0 }
 
     -- Sparks of the season.
     local sparkID = tracking and tonumber(tracking.sparkCurrencyID)
     if sparkID and sparkID > 0 then
         local sQty, _ = FormatCurrencyProgressParts(sparkID)
-        sQty = tonumber(sQty)
-        if sQty ~= nil then
-            snap.rightRows[#snap.rightRows + 1] = { type = "sparks", id = sparkID, qty = sQty }
-        end
+        snap.rightRows[#snap.rightRows + 1] = { type = "sparks", id = sparkID, qty = tonumber(sQty) or 0 }
     end
 
     -- Weekly quests: always include so the viewer can see completion status.
@@ -1491,7 +1523,40 @@ local function RenderSnapshotIntoPanel(snap)
     end
     if snap.rightRows then
         local idx = 1
+
+        -- Build a lookup of stored crest qty by currency ID so old snapshots that
+        -- only persisted non-zero crests still render a full crest list (with 0s).
+        local storedCrestQty = {}
+        local nonCrestRows   = {}
         for _, row in ipairs(snap.rightRows) do
+            if row.type == "crest" and row.id then
+                storedCrestQty[row.id] = tonumber(row.qty) or 0
+            else
+                nonCrestRows[#nonCrestRows + 1] = row
+            end
+        end
+
+        -- Render ALL configured crest IDs in order, defaulting missing ones to 0.
+        local tracking = Addon.TRACKING
+        if tracking then
+            EnsureCrestIDsDetected(tracking)
+            local ids, crestCount = GetCrestIDsAndCount(tracking)
+            for i = 1, crestCount do
+                if idx > RIGHT_LINE_COUNT then break end
+                local id = ids[i]
+                if id then
+                    local qty = storedCrestQty[id] or 0
+                    local lbl, val = RenderSnapshotRow({ type = "crest", id = id, qty = qty })
+                    if IsNonEmptyText(lbl) or IsNonEmptyText(val) then
+                        SetRightRowPair(idx, lbl, val)
+                        idx = idx + 1
+                    end
+                end
+            end
+        end
+
+        -- Render remaining non-crest rows (catalyst, sparks, quests) from snapshot.
+        for _, row in ipairs(nonCrestRows) do
             if idx > RIGHT_LINE_COUNT then break end
             local lbl, val
             if row.type then
@@ -1505,6 +1570,7 @@ local function RenderSnapshotIntoPanel(snap)
                 idx = idx + 1
             end
         end
+
         for i = idx, RIGHT_LINE_COUNT do
             SetRightRowPair(i, "", "")
         end

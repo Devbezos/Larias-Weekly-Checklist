@@ -122,6 +122,8 @@ do
             sectionInsetX = 14,
             trackH = 210,
             trackTopPad = 10,
+            sliderH = 20,
+            sliderBottomPad = 4,
         }
         self.UI = self.UI or self.CONSTANTS.ui
 
@@ -376,14 +378,17 @@ local function SetupMinimapIcon()
         type = "data source",
         text = addonName,
         icon = "Interface\\AddOns\\LariasWeeklyChecklist\\Media\\icon",
-        OnClick = function(_, button)
+        OnClick = function(self_, button)
             if button == "LeftButton" then
                 if Addon.CreateFrame then
                     Addon:CreateFrame()
                 end
                 Addon:Toggle()
             elseif button == "RightButton" then
-                Addon:OpenOptions()
+                -- Open the gear popup anchored to the minimap button.
+                if Addon.ToggleGearPopup then
+                    Addon:ToggleGearPopup(self_)
+                end
             elseif button == "MiddleButton" then
                 if Addon.ToggleIlvlRefWindow then
                     Addon:ToggleIlvlRefWindow()
@@ -832,7 +837,12 @@ function Addon:ApplyScrollLayout()
     if (db.showGreatVault or db.showCurrency) and IsFrameShown(self._trackingFrame) then
         local trackingHeight = (self._trackingFrame.GetHeight and self._trackingFrame:GetHeight()) or Addon.UI.trackH
         trackingHeight = tonumber(trackingHeight) or Addon.UI.trackH
+        local sliderH        = Addon.UI.sliderH         or 0
+        local sliderBotPad   = Addon.UI.sliderBottomPad or 0
+        -- Tracking panel is anchored sliderH+sliderBotPad above the frame bottom;
+        -- account for that extra lift when computing the scroll frame's bottom offset.
         extra = trackingHeight + Addon.UI.trackTopPad
+              + sliderH + sliderBotPad - Addon.UI.scrollBottom
     end
 
     scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -Addon.UI.scrollRight, Addon.UI.scrollBottom + extra)
@@ -891,6 +901,9 @@ function Addon:ApplyUIScale()
     end
     local iw = self._ilvlRefWindow
     if iw and iw._ilvlReflow then iw._ilvlReflow() end
+    -- Keep in-frame slider in sync with whatever changed the value.
+    local sf = self._inFrameScaleSlider
+    if sf and sf.Sync then sf.Sync() end
 end
 
 local function Key(sectionId, itemId)
@@ -1629,6 +1642,16 @@ function Addon:CreateFrame()
             self.db.global.charClasses = self.db.global.charClasses or {}
             self.db.global.charClasses[profileKey] = classToken
         end
+        -- Remove stale generic-profile entries (e.g. "Default") that don't match
+        -- the "CharName - Realm" format; they cause wrong class colours in the picker.
+        local classes = self.db.global.charClasses
+        if classes then
+            for k in pairs(classes) do
+                if not tostring(k):find(" %- ") then
+                    classes[k] = nil
+                end
+            end
+        end
     end
 
     frame:Hide()
@@ -2074,8 +2097,23 @@ function Addon:CreateFrame()
                     local isOwn    = (charKey == ownKey) or (charKey:lower() == ownKey:lower())
                     local isHidden = gdb and gdb.hiddenChars and gdb.hiddenChars[charKey]
                     if not isOwn and not isHidden then
-                        hasPickable = true
-                        break
+                        -- Must also pass the same class + snapshot guards used by Populate().
+                        local classToken = gdb and gdb.charClasses and gdb.charClasses[charKey]
+                        local snap = gdb and gdb.chars and gdb.chars[charKey] and gdb.chars[charKey].trackingSnapshot
+                        local usable = snap and (
+                            snap.leftLines ~= nil or
+                            (function()
+                                if type(snap.rightRows) ~= "table" then return false end
+                                for _, row in ipairs(snap.rightRows) do
+                                    if row.qty and row.qty > 0 then return true end
+                                end
+                                return false
+                            end)()
+                        )
+                        if classToken and usable then
+                            hasPickable = true
+                            break
+                        end
                     end
                 end
             end

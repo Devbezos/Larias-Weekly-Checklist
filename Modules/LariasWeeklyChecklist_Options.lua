@@ -144,6 +144,13 @@ function Addon:InitOptionsTab(frame, optionsPanel)
 end
 
 function Addon:ToggleHiddenCharsDropdown()
+    -- Don't open when nothing is hidden.
+    local gdbT   = self.db and self.db.global
+    local hidMap = gdbT and gdbT.hiddenChars or {}
+    local anyHidden = false
+    for _, v in pairs(hidMap) do if v then anyHidden = true; break end end
+    if not anyHidden then return end
+
     local picker = self._hiddenCharsPicker
     if picker and picker.IsShown and picker:IsShown() then
         picker:Hide()
@@ -202,16 +209,17 @@ function Addon:ToggleHiddenCharsDropdown()
         end)
         self._hiddenCharsPicker = picker
     end
-    -- Position below the trigger button (lives on the Blizzard options panel).
-    local trigBtn = Addon._blizzOptHiddenCharsTrigger
+    -- Position below the trigger button (in the gear popup).
+    local trigBtn = Addon._gearHiddenCharsTrigger
     picker:ClearAllPoints()
     if trigBtn then
         picker:SetPoint("TOPLEFT", trigBtn, "BOTTOMLEFT", 0, -4)
     else
         picker:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     end
-    self:RefreshHiddenCharsList()
+    -- Show first so IsShown() is true when RefreshHiddenCharsList checks it.
     picker:Show()
+    self:RefreshHiddenCharsList()
 end
 
 function Addon:RefreshHiddenCharsList()
@@ -230,22 +238,35 @@ function Addon:RefreshHiddenCharsList()
     end
     table.sort(hidden)
 
-    -- Update trigger button label (lives on the Blizzard options panel).
-    local trigBtn = self._blizzOptHiddenCharsTrigger
+    -- Update trigger button label (lives in the gear popup).
+    local trigBtn = self._gearHiddenCharsTrigger
     if trigBtn and trigBtn.SetText then
-        local label = string.format("%s (%d) |TInterface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up:10:10|t", L.OPTIONS_HIDDEN_CHARS_TITLE or "Hidden", #hidden)
-        trigBtn:SetText(label)
+        if #hidden == 0 then
+            -- No hidden chars: plain label, no dropdown arrow, button disabled.
+            trigBtn:SetText(string.format("%s (0)", L.OPTIONS_HIDDEN_CHARS_TITLE or "Hidden"))
+            trigBtn:SetEnabled(false)
+        else
+            trigBtn:SetEnabled(true)
+            local label = string.format("%s (%d) |TInterface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up:10:10|t", L.OPTIONS_HIDDEN_CHARS_TITLE or "Hidden", #hidden)
+            trigBtn:SetText(label)
+        end
     end
 
     -- If the dropdown isn't open, nothing else to do.
     local picker = self._hiddenCharsPicker
+    if #hidden == 0 then
+        -- Close the picker if it was left open and a char was just unhidden.
+        if picker and picker.IsShown and picker:IsShown() then picker:Hide() end
+        return
+    end
     if not (picker and picker.IsShown and picker:IsShown()) then return end
 
     -- Release existing rows back to pool.
     for _, b in ipairs(picker._buttons) do
         b:Hide()
         b:ClearAllPoints()
-        b:SetScript("OnClick", nil)
+        -- b is a plain Frame; clear scripts on the child button.
+        if b._nameBtn then b._nameBtn:SetScript("OnClick", nil) end
         tinsert(picker._pool, b)
     end
     wipe(picker._buttons)
@@ -254,49 +275,44 @@ function Addon:RefreshHiddenCharsList()
         local f = tremove(picker._pool)
         if not f then
             f = CreateFrame("Frame", nil, picker)
-            -- name button
+            -- name button spans full row width
             local nb = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
             nb:SetHeight(ROW_H)
-            nb:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
+            nb:SetPoint("TOPLEFT",  f, "TOPLEFT",  0, 0)
+            nb:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 0)
             if Addon._styleActionButton then Addon._styleActionButton(nb) end
-            if nb.SetTextInsets then nb:SetTextInsets(4, 4, 0, 0) end
+            -- StyleMainTabButton resets backdrop colors; re-apply theme after it runs.
+            if nb.SetBackdrop then
+                nb:SetBackdrop({
+                    bgFile   = "Interface\\Buttons\\WHITE8x8",
+                    edgeFile = "Interface\\Buttons\\WHITE8x8",
+                    tile = false, edgeSize = 1,
+                    insets = { left = 1, right = 1, top = 1, bottom = 1 },
+                })
+                if nb.SetBackdropColor then
+                    nb:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, Addon.THEME.bg.a)
+                end
+                if nb.SetBackdropBorderColor then
+                    nb:SetBackdropBorderColor(Addon.THEME.border.r, Addon.THEME.border.g, Addon.THEME.border.b, Addon.THEME.border.a)
+                end
+            end
             local ntr = nb.Text or (nb.GetFontString and nb:GetFontString())
             if ntr then
                 if ntr.SetJustifyH then ntr:SetJustifyH("LEFT") end
                 if ntr.SetJustifyV then ntr:SetJustifyV("MIDDLE") end
+                if ntr.ClearAllPoints and ntr.SetPoint then
+                    ntr:ClearAllPoints()
+                    ntr:SetPoint("LEFT",  nb, "LEFT",  6, 0)
+                    ntr:SetPoint("RIGHT", nb, "RIGHT", -4, 0)
+                end
             end
             f._nameBtn = nb
-            -- unhide button
-            local ub = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-            ub:SetSize(BTN_W, ROW_H)
-            ub:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 0)
-            if Addon._styleActionButton then Addon._styleActionButton(ub) end
-            if ub.SetTextInsets then ub:SetTextInsets(0, 0, 0, 0) end
-            local utr = ub.Text or (ub.GetFontString and ub:GetFontString())
-            if utr and utr.SetJustifyH then utr:SetJustifyH("CENTER") end
-            ub:SetText("|TInterface\\RaidFrame\\ReadyCheck-Ready:12:12|t")
-            f._unhideBtn = ub
         end
         f:Show()
         return f
     end
 
-    if #hidden == 0 then
-        -- Single disabled row saying "None".
-        local f = AcquireRow()
-        f._nameBtn:SetText(L.OPTIONS_HIDDEN_CHARS_NONE or "None")
-        f._nameBtn:SetEnabled(false)
-        f._unhideBtn:Hide()
-        f._nameBtn:SetWidth(NAME_W_MIN)
-        f:SetSize(NAME_W_MIN + PAD * 2, ROW_H)
-        f:SetPoint("TOPLEFT", picker, "TOPLEFT", PAD, -PAD)
-        tinsert(picker._buttons, f)
-        picker:SetSize(NAME_W_MIN + PAD * 2, ROW_H + PAD * 2)
-        return
-    end
-
-    local posY   = -PAD
-    local bestW  = NAME_W_MIN
+    local posY = -PAD
     for i, key in ipairs(hidden) do
         local charName    = (key:match("^(.-)%s*%-") or key):gsub("^%s+",""):gsub("%s+$","")
         local realm       = (key:match("%-(.+)$") or ""):gsub("^%s+",""):gsub("%s+$","")
@@ -304,7 +320,6 @@ function Addon:RefreshHiddenCharsList()
 
         local f = AcquireRow()
         f._nameBtn:SetEnabled(true)
-        f._unhideBtn:Show()
 
         -- Class colour.
         local classToken = gdb and gdb.charClasses and gdb.charClasses[key]
@@ -323,21 +338,13 @@ function Addon:RefreshHiddenCharsList()
             if gdbU and gdbU.hiddenChars then gdbU.hiddenChars[_key] = nil end
             if Addon.RefreshHiddenCharsList then Addon:RefreshHiddenCharsList() end
             if Addon.LayoutHeaderButtons    then Addon:LayoutHeaderButtons() end
-            -- If the char picker button just became visible, open its dropdown
-            -- so the player can immediately switch to the newly unhidden character.
-            if C_Timer and C_Timer.After then
-                C_Timer.After(0, function()
-                    local cpBtn = Addon._cpEnsureBtn and Addon._cpEnsureBtn()
-                    if cpBtn and cpBtn.IsShown and cpBtn:IsShown() then
-                        if Addon._cpOnClick then Addon._cpOnClick() end
-                    end
-                end)
-            end
         end
-        f._nameBtn:SetScript("OnClick",   doUnhide)
-        f._unhideBtn:SetScript("OnClick", doUnhide)
+        f._nameBtn:SetScript("OnClick", doUnhide)
 
-        f:SetPoint("TOPLEFT", picker, "TOPLEFT", PAD, posY)
+        -- Rows span the full picker width edge-to-edge.
+        f:SetPoint("TOPLEFT",  picker, "TOPLEFT",  0, posY)
+        f:SetPoint("TOPRIGHT", picker, "TOPRIGHT", 0, posY)
+        f:SetHeight(ROW_H)
         posY = posY - ROW_H
         tinsert(picker._buttons, f)
     end
@@ -345,7 +352,7 @@ function Addon:RefreshHiddenCharsList()
     local totalH = -posY + PAD
     picker:SetHeight(math.max(40, totalH))
 
-    -- Deferred width sizing (same pattern as header picker).
+    -- Deferred width sizing: measure text, resize picker, update nameBtn widths.
     if C_Timer and C_Timer.After then
         C_Timer.After(0, function()
             if not (picker and picker.IsShown and picker:IsShown()) then return end
@@ -360,21 +367,12 @@ function Addon:RefreshHiddenCharsList()
                 end
                 if w > bw then bw = w end
             end
-            local newW = math.max(160, math.min(400, math.ceil(bw) + BTN_W + PAD * 3 + 8))
+            local newW = math.max(120, math.min(400, math.ceil(bw) + PAD * 2 + 10))
             picker:SetWidth(newW)
-            for _, f in ipairs(picker._buttons) do
-                f:SetSize(newW - PAD * 2, ROW_H)
-                f._nameBtn:SetWidth(newW - PAD * 2 - BTN_W - 4)
-            end
         end)
     end
     -- Initial width.
-    local initW = NAME_W_MIN + BTN_W + PAD * 3 + 8
-    picker:SetWidth(initW)
-    for _, f in ipairs(picker._buttons) do
-        f:SetSize(initW - PAD * 2, ROW_H)
-        f._nameBtn:SetWidth(initW - PAD * 2 - BTN_W - 4)
-    end
+    picker:SetWidth(NAME_W_MIN + PAD * 2 + 10)
 end
 
 function Addon:SyncOptionsTabControls()
@@ -600,6 +598,7 @@ function Addon:InitBlizzOptionsPanel(panel)
         if Addon.LayoutHeaderButtons    then Addon:LayoutHeaderButtons() end
         if Addon.SyncOptionsTabControls then Addon:SyncOptionsTabControls() end
         if Addon.SyncBlizzOptionsPanel  then Addon:SyncBlizzOptionsPanel() end
+        if Addon.ApplyUIScale           then Addon:ApplyUIScale() end
         if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
     end)
     self._blizzOptResetBtn = resetBtn
@@ -628,36 +627,140 @@ function Addon:SyncBlizzOptionsPanel()
     if self.RefreshHiddenCharsList then self:RefreshHiddenCharsList() end
 end
 
--- Creates and registers the Blizzard Interface Options panel (once).
--- Must be called early (e.g. OnInitialize) so the panel appears in the AddOns list.
-function Addon:CreateBlizzOptionsPanel()
-    if self._blizzOptPanel then return self._blizzOptPanel end
+-- ── In-frame scale slider ──────────────────────────────────────────────────
+-- A compact, custom-styled slider placed below the great vault / currency panel
+-- inside the main addon frame.  Width is intentionally non-full-width so it
+-- doesn't dominate the bottom of the frame.
+function Addon:CreateInFrameScaleSlider(parentFrame)
+    if self._inFrameScaleSlider then return end
 
-    local panelName = (self.L and self.L.DISPLAY_NAME) or addonName
+    local THEME  = Addon.THEME   or {}
+    local bdr    = THEME.border  or { r=0.30, g=0.30, b=0.30, a=0.90 }
+    local txt    = THEME.text    or { r=1.00, g=1.00, b=1.00, a=1.00 }
+    local txtD   = THEME.textDim or txt
 
-    local panel = CreateFrame("Frame")
-    panel.name  = panelName
+    local MIN_V  = 80
+    local MAX_V  = 120
+    local STEP_V = 5
 
-    local initialized = false
-    panel:SetScript("OnShow", function()
-        if not initialized then
-            initialized = true
-            Addon:InitBlizzOptionsPanel(panel)
-        end
-        Addon:SyncBlizzOptionsPanel()
-    end)
+    -- Dimensions
+    local TRACK_H  = 10      -- track bar height
+    local THUMB_SZ = 16      -- square thumb side length
+    local TRACK_W  = 110     -- usable track width
+    local LBL_W    = 38      -- "Scale" label
+    local PCT_W    = 36      -- "100%" readout
+    local GAP      = 5
+    local SLIDER_W = LBL_W + GAP + TRACK_W + GAP + PCT_W
+    local SLIDER_H = math.max(THUMB_SZ, Addon.UI.sliderH or 20)
 
-    -- Modern API (10.x / 11.x / 12.x): RegisterCanvasLayoutCategory returns a
-    -- category object that must then be passed to RegisterAddOnCategory.
-    if Settings and Settings.RegisterCanvasLayoutCategory then
-        local category = Settings.RegisterCanvasLayoutCategory(panel, panelName)
-        Settings.RegisterAddOnCategory(category)
-        self._blizzOptCategory = category
-    elseif InterfaceOptions_AddCategory then
-        -- Legacy fallback (pre-10.x).
-        InterfaceOptions_AddCategory(panel)
+    -- Outer container
+    local sf = CreateFrame("Frame", nil, parentFrame)
+    sf:SetSize(SLIDER_W, SLIDER_H)
+    sf:SetPoint("BOTTOMLEFT", parentFrame, "BOTTOMLEFT", Addon.UI.sectionInsetX or 14, Addon.UI.sliderBottomPad or 4)
+    self._inFrameScaleSlider = sf
+
+    -- "Scale" label
+    local scaleLbl = sf:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    scaleLbl:SetPoint("LEFT", sf, "LEFT", 0, 0)
+    scaleLbl:SetWidth(LBL_W)
+    scaleLbl:SetJustifyH("RIGHT")
+    scaleLbl:SetTextColor(txt.r, txt.g, txt.b, txt.a)
+    scaleLbl:SetText("Scale")
+
+    -- Track container (mouse receiver + clipping context)
+    local trackCont = CreateFrame("Frame", nil, sf)
+    trackCont:SetSize(TRACK_W, SLIDER_H)
+    trackCont:SetPoint("LEFT", scaleLbl, "RIGHT", GAP, 0)
+
+    -- Track bar (thin rectangle centred vertically)
+    local trackBar = trackCont:CreateTexture(nil, "BACKGROUND")
+    trackBar:SetHeight(TRACK_H)
+    trackBar:SetPoint("LEFT",  trackCont, "LEFT",  0, 0)
+    trackBar:SetPoint("RIGHT", trackCont, "RIGHT", 0, 0)
+    trackBar:SetColorTexture(bdr.r, bdr.g, bdr.b, 0.7)
+
+    -- Square white thumb (purely visual – mouse handled by trackCont)
+    local thumb = CreateFrame("Frame", nil, trackCont)
+    thumb:SetSize(THUMB_SZ, THUMB_SZ)
+    thumb:SetFrameLevel(trackCont:GetFrameLevel() + 1)
+    local thumbTex = thumb:CreateTexture(nil, "ARTWORK")
+    thumbTex:SetAllPoints(thumb)
+    thumbTex:SetColorTexture(txt.r, txt.g, txt.b, 0.9)
+
+    -- Percentage readout
+    local pctLbl = sf:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    pctLbl:SetPoint("LEFT", trackCont, "RIGHT", GAP, 0)
+    pctLbl:SetWidth(PCT_W)
+    pctLbl:SetJustifyH("LEFT")
+    pctLbl:SetTextColor(txtD.r, txtD.g, txtD.b, txtD.a)
+
+    -- ── Logic ─────────────────────────────────────────────────────────────
+
+    local USABLE = TRACK_W - THUMB_SZ
+
+    local function GetCurrentPct()
+        local gdb = Addon.db and Addon.db.global
+        return (gdb and tonumber(gdb.uiScalePct)) or 100
     end
 
-    self._blizzOptPanel = panel
-    return panel
+    local function UpdateVisuals(pct)
+        pct = math.max(MIN_V, math.min(MAX_V, pct))
+        local frac = (pct - MIN_V) / (MAX_V - MIN_V)
+        local offX = math.floor(frac * USABLE)
+        thumb:ClearAllPoints()
+        thumb:SetPoint("LEFT", trackCont, "LEFT", offX, 0)
+        pctLbl:SetText(math.floor(pct + 0.5) .. "%")
+    end
+
+    local function SetPct(pct)
+        pct = math.max(MIN_V, math.min(MAX_V, pct))
+        pct = math.floor((pct + STEP_V / 2) / STEP_V) * STEP_V
+        local gdb = Addon.db and Addon.db.global
+        if gdb then gdb.uiScalePct = pct end
+        UpdateVisuals(pct)
+        if Addon.ApplyUIScale then Addon:ApplyUIScale() end
+    end
+
+    sf.Sync = function() UpdateVisuals(GetCurrentPct()) end
+
+    -- Divide cursor by the frame's OWN effective scale to get coordinates in
+    -- the same space as GetLeft() / GetWidth().  Using UIParent:GetEffectiveScale()
+    -- alone is wrong whenever the main frame has SetScale() applied.
+    local function PctFromCursor()
+        local scale = trackCont:GetEffectiveScale()
+        local cx    = GetCursorPosition() / scale
+        local left  = trackCont:GetLeft()
+        if not left then return nil end
+        local frac  = (cx - left) / TRACK_W
+        return MIN_V + math.max(0, math.min(1, frac)) * (MAX_V - MIN_V)
+    end
+
+    -- All mouse interaction through trackCont so extremes are never blocked.
+    trackCont:EnableMouse(true)
+    trackCont:SetScript("OnMouseDown", function(self_, btn)
+        if btn ~= "LeftButton" then return end
+        self_._dragging = true
+        local pct = PctFromCursor()
+        if pct then UpdateVisuals(pct) end
+    end)
+    trackCont:SetScript("OnMouseUp", function(self_, btn)
+        if btn ~= "LeftButton" then return end
+        self_._dragging = false
+        local pct = PctFromCursor()
+        if pct then SetPct(pct) end
+    end)
+    trackCont:SetScript("OnUpdate", function(self_)
+        if not self_._dragging then return end
+        local pct = PctFromCursor()
+        if pct then UpdateVisuals(pct) end
+    end)
+
+    sf:SetScript("OnShow", function() UpdateVisuals(GetCurrentPct()) end)
+    UpdateVisuals(GetCurrentPct())
+end
+
+-- CreateBlizzOptionsPanel: no longer registers with Blizzard Interface → AddOns.
+-- Options are now accessed via the gear icon / minimap right-click (gear popup).
+function Addon:CreateBlizzOptionsPanel()
+    -- Intentionally a no-op; kept so call-sites don't error.
 end
