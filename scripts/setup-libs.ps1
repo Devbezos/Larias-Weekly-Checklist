@@ -7,6 +7,7 @@ $Libs = @{
     "LibDataBroker-1.1" = "https://github.com/tekkub/libdatabroker-1-1.git"
     "LibDBIcon-1.0" = "https://github.com/zerosnake0/LibDBIcon-1.0.git"
     "Ace3" = "https://github.com/WoWUIDev/Ace3.git"
+    # LibWindow-1.1 is bundled directly in the repo (not cloned) — do not add it here.
 }
 
 # Some repos (especially when packaged) can leave placeholder directories behind.
@@ -17,6 +18,7 @@ $LibSentinels = @{
 	"LibDataBroker-1.1" = "LibDataBroker-1.1.lua"
 	"LibDBIcon-1.0" = "LibDBIcon-1.0.lua"
 	"Ace3" = (Join-Path "AceTimer-3.0" "AceTimer-3.0.lua")
+	# LibWindow-1.1 is bundled in the repo; no sentinel needed.
 }
 
 if (-not (git --version 2>$null)) {

@@ -11,6 +11,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 LIB_DIR="$SCRIPT_DIR/Libs"
 
 # Define libraries as associative array
+# LibWindow-1.1 is bundled directly in the repo and is not cloned here.
 declare -A LIBRARIES=(
     [LibStub]="https://github.com/zerosnake0/LibStub.git"
     [CallbackHandler-1.0]="https://github.com/zerosnake0/CallbackHandler-1.0.git"

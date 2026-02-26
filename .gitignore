@@ -1,1 +1,3 @@
 ﻿scripts/deploy_to_wow.ps1
+Libs/*
+!Libs/LibWindow-1.1
