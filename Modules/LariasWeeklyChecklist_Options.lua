@@ -804,14 +804,18 @@ function Addon:ToggleGearPopup(anchor)
             end,
         }
 
-        local prevCb = nil
+        local N      = #checks
+        local TILE_H = ROW_H + 8          -- height of each equal slice
+        local totalH = N * TILE_H
+        p:SetHeight(totalH)
+
         for i, info in ipairs(checks) do
+            -- Each tile occupies an equal vertical slice of the popup.
+            local tileTopY = -((i - 1) * TILE_H)
+            local cbOffY   = tileTopY - math.floor((TILE_H - ROW_H) / 2)
+
             local cb = CreateFrame("CheckButton", nil, p, "UICheckButtonTemplate")
-            if i == 1 then
-                cb:SetPoint("TOPLEFT", p, "TOPLEFT", PAD, -PAD)
-            else
-                cb:SetPoint("TOPLEFT", prevCb, "BOTTOMLEFT", 0, -4)
-            end
+            cb:SetPoint("TOPLEFT", p, "TOPLEFT", PAD, cbOffY)
             StyleCheckButton(cb)
             local _key = info.key
             local function FireToggle(newState)
@@ -823,41 +827,23 @@ function Addon:ToggleGearPopup(anchor)
             end)
             p[info.key] = cb
 
-            -- Full-width hit area anchored directly to cb so it's pixel-perfect.
-            local row = CreateFrame("Button", nil, p)
-            row:SetPoint("TOPLEFT",  cb, "TOPLEFT", -PAD, 0)
-            row:SetPoint("TOPRIGHT", p,  "TOPRIGHT", 0,   0)
-            row:SetHeight(ROW_H)
-            row:SetFrameLevel(p:GetFrameLevel())   -- below CheckButton (p+1)
-            local rowHL = row:CreateTexture(nil, "HIGHLIGHT")
-            rowHL:SetAllPoints(row)
-            rowHL:SetColorTexture(1, 1, 1, 0.06)
-            row:SetScript("OnClick", function()
+            -- Hit region: full popup width × 1/N height, zero gaps.
+            local hit = CreateFrame("Button", nil, p)
+            hit:SetPoint("TOPLEFT",  p, "TOPLEFT",  0, tileTopY)
+            hit:SetPoint("TOPRIGHT", p, "TOPRIGHT", 0, tileTopY)
+            hit:SetHeight(TILE_H)
+            hit:SetFrameLevel(p:GetFrameLevel())   -- below CheckButton (p+1)
+            local hl = hit:CreateTexture(nil, "HIGHLIGHT")
+            hl:SetAllPoints(hit)
+            hl:SetColorTexture(1, 1, 1, 0.06)
+            hit:SetScript("OnClick", function()
                 local newVal = not (cb:GetChecked() and true or false)
                 cb:SetChecked(newVal)
                 FireToggle(newVal)
             end)
-
-            prevCb = cb
         end
 
-        -- Size the panel to fit all rows: use the actual bottom edge of the
-        -- last checkbox rather than a fixed formula, then add bottom padding.
-        local totalH
-        if prevCb and prevCb.GetBottom and p.GetTop then
-            -- Heights are only valid after the first layout pass, so defer one frame.
-            C_Timer.After(0, function()
-                local pTop  = p:GetTop()
-                local cbBot = prevCb:GetBottom()
-                if pTop and cbBot then
-                    p:SetHeight(math.ceil(pTop - cbBot) + PAD + 4)
-                end
-            end)
-            totalH = PAD + (#checks) * (ROW_H + 4) + PAD * 2  -- safe initial estimate
-        else
-            totalH = PAD + (#checks) * (ROW_H + 4) + PAD * 2
-        end
-        p:SetHeight(totalH)
+        -- No deferred resize needed; height is fixed from the tile formula.
 
         self._gearPopup = p
     end

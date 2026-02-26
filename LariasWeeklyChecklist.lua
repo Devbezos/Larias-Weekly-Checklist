@@ -2110,20 +2110,7 @@ function Addon:CreateFrame()
         -- changeWeekBtn sits below cpBtn when both are visible, otherwise in the top row.
         if showCW then
             local btn = EnsureChangeWeekBtn_()
-            -- Label = current week's date range, or fallback to locale string.
             local cwLabel = L.CHANGE_WEEK_BUTTON or "Change Week"
-            do
-                local db0       = Addon:EnsureDB()
-                local curId     = tostring(db0.startAtSectionId or "")
-                if curId == "" and Addon._order and Addon._order[1] then
-                    curId = tostring(Addon._order[1])
-                end
-                local secDef = curId ~= "" and Addon._sectionsById and Addon._sectionsById[curId]
-                if secDef then
-                    local extracted = ExtractMonthRangeLabel(secDef.title or curId)
-                    if extracted ~= "" then cwLabel = extracted end
-                end
-            end
             btn:SetText(cwLabel .. " |TInterface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up:10:10|t")
             -- Auto-size button width to fit the label text.
             -- Deferred one frame so WoW has performed its layout pass
