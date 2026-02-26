@@ -55,7 +55,7 @@ function Addon:ToggleHiddenCharsDropdown()
         catcher:SetFrameStrata("FULLSCREEN_DIALOG")
         catcher:SetFrameLevel(picker:GetFrameLevel() - 1)
         catcher:Hide()
-        catcher:SetScript("OnClick", function()
+        catcher:SetScript("OnMouseDown", function()
             picker:Hide()
             catcher:Hide()
         end)
@@ -266,44 +266,38 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
     local STEP_V = 1
 
     -- Dimensions
-    local TRACK_H  = 10      -- track bar height
-    local THUMB_SZ = 16      -- square thumb side length
-    local TRACK_W  = 110     -- usable track width
-    local LBL_W    = 38      -- "Scale" label
-    local PCT_W    = 36      -- "100%" readout
-    local GAP      = 5
-    local SLIDER_W = LBL_W + GAP + TRACK_W + GAP + PCT_W
-    local SLIDER_H = math.max(THUMB_SZ, Addon.UI.sliderH or 20)
+    local TRACK_H   = 10     -- track bar height
+    local THUMB_W   = 34     -- wide enough to show "100%"
+    local THUMB_H   = 16     -- thumb height
+    local TRACK_W   = 100    -- usable track width
+    local MIN_LBL_W = 26     -- "50%" label
+    local MAX_LBL_W = 32     -- "unc." / "150%" label
+    local GAP       = 6
+    local SLIDER_W  = MIN_LBL_W + GAP + TRACK_W + GAP + MAX_LBL_W
+    local SLIDER_H  = math.max(THUMB_H, Addon.UI.sliderH or 20)
 
     -- Outer container
     local sf = CreateFrame("Frame", nil, parentFrame)
     sf:SetSize(SLIDER_W, SLIDER_H)
     sf:SetPoint("BOTTOMLEFT", parentFrame, "BOTTOMLEFT", Addon.UI.sectionInsetX or 14, Addon.UI.sliderBottomPad or 4)
-    sf:EnableMouse(true)  -- consume all clicks so right-clicks don't propagate to parent
+    sf:EnableMouse(true)
     self._inFrameScaleSlider = sf
 
-    -- "Scale" label
-    local scaleLbl = sf:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    scaleLbl:SetPoint("LEFT", sf, "LEFT", 0, 0)
-    scaleLbl:SetWidth(LBL_W)
-    scaleLbl:SetJustifyH("RIGHT")
-    scaleLbl:SetWordWrap(false)
-    scaleLbl:SetTextColor(txt.r, txt.g, txt.b, txt.a)
     local L = self.L or {}
-    scaleLbl:SetText(L.UI_SCALE_LABEL or "Scale")
 
-    -- Percentage readout — sits right after the "Scale" label
-    local pctLbl = sf:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    pctLbl:SetPoint("LEFT", scaleLbl, "RIGHT", GAP, 0)
-    pctLbl:SetWidth(PCT_W)
-    pctLbl:SetJustifyH("LEFT")
-    pctLbl:SetWordWrap(false)
-    pctLbl:SetTextColor(txtD.r, txtD.g, txtD.b, txtD.a)
+    -- Min label ("50%")
+    local minLbl = sf:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    minLbl:SetPoint("LEFT", sf, "LEFT", 0, 0)
+    minLbl:SetWidth(MIN_LBL_W)
+    minLbl:SetJustifyH("RIGHT")
+    minLbl:SetWordWrap(false)
+    minLbl:SetTextColor(txtD.r, txtD.g, txtD.b, 0.65)
+    minLbl:SetText(L.UI_SCALE_MIN_LABEL or "50%")
 
-    -- Track container (mouse receiver + clipping context) — right of the readout
+    -- Track container (mouse receiver) — right of min label
     local trackCont = CreateFrame("Frame", nil, sf)
     trackCont:SetSize(TRACK_W, SLIDER_H)
-    trackCont:SetPoint("LEFT", pctLbl, "RIGHT", GAP, 0)
+    trackCont:SetPoint("LEFT", minLbl, "RIGHT", GAP, 0)
 
     -- Track bar (thin rectangle centred vertically)
     local trackBar = trackCont:CreateTexture(nil, "BACKGROUND")
@@ -312,17 +306,33 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
     trackBar:SetPoint("RIGHT", trackCont, "RIGHT", 0, 0)
     trackBar:SetColorTexture(bdr.r, bdr.g, bdr.b, 0.7)
 
-    -- Square white thumb (purely visual – mouse handled by trackCont)
+    -- Thumb — shows the current percentage as text
     local thumb = CreateFrame("Frame", nil, trackCont)
-    thumb:SetSize(THUMB_SZ, THUMB_SZ)
+    thumb:SetSize(THUMB_W, THUMB_H)
     thumb:SetFrameLevel(trackCont:GetFrameLevel() + 1)
     local thumbTex = thumb:CreateTexture(nil, "ARTWORK")
     thumbTex:SetAllPoints(thumb)
     thumbTex:SetColorTexture(txt.r, txt.g, txt.b, 0.9)
+    -- Text inside the thumb (black on white so it's readable)
+    local thumbLbl = thumb:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    thumbLbl:SetAllPoints(thumb)
+    thumbLbl:SetJustifyH("CENTER")
+    thumbLbl:SetJustifyV("MIDDLE")
+    thumbLbl:SetWordWrap(false)
+    thumbLbl:SetTextColor(0, 0, 0, 1)
+
+    -- Max label ("unc." for enUS, "150%" for other locales)
+    local maxLbl = sf:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    maxLbl:SetPoint("LEFT", trackCont, "RIGHT", GAP, 0)
+    maxLbl:SetWidth(MAX_LBL_W)
+    maxLbl:SetJustifyH("LEFT")
+    maxLbl:SetWordWrap(false)
+    maxLbl:SetTextColor(txtD.r, txtD.g, txtD.b, 0.65)
+    maxLbl:SetText(L.UI_SCALE_MAX_LABEL or "150%")
 
     -- ── Logic ─────────────────────────────────────────────────────────────
 
-    local USABLE = TRACK_W - THUMB_SZ
+    local USABLE = TRACK_W - THUMB_W
 
     local function GetCurrentPct()
         local gdb = Addon.db and Addon.db.global
@@ -335,7 +345,9 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
         local offX = math.floor(frac * USABLE)
         thumb:ClearAllPoints()
         thumb:SetPoint("LEFT", trackCont, "LEFT", offX, 0)
-        pctLbl:SetText(math.floor(pct + 0.5) .. "%")
+        local rounded = math.floor(pct + 0.5)
+        local label = (rounded >= MAX_V) and "unc." or (rounded .. "%")
+        thumbLbl:SetText(label)
     end
 
     local function SetPct(pct)
@@ -349,41 +361,72 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
 
     sf.Sync = function() UpdateVisuals(GetCurrentPct()) end
 
-    -- The main frame always has SetScale(1); content scaling is applied to
-    -- scrollChild and the tracking frame instead of the outer window.
-    -- GetEffectiveScale() here is just UIParent's scale, which is the correct
-    -- divisor for mapping raw cursor pixels to frame-local coordinates.
     local function PctFromCursor()
-        local scale = trackCont:GetEffectiveScale()
-        local cx    = GetCursorPosition() / scale
-        local left  = trackCont:GetLeft()
+        local uiScale = UIParent and UIParent:GetScale() or 1
+        local cx      = GetCursorPosition() / uiScale
+        -- During drag: use cursor DELTA from start rather than cursor vs track origin.
+        -- This is completely immune to the track position changing when the frame
+        -- rescales, eliminating the feedback loop that locked the slider at extremes.
+        local startCx  = trackCont._dragStartCursorX
+        local startPct = trackCont._dragStartPct
+        local trackPxW = trackCont._dragTrackPxW
+        if startCx and startPct and trackPxW and trackPxW > 0 then
+            local delta    = cx - startCx
+            local pctDelta = (delta / trackPxW) * (MAX_V - MIN_V)
+            return math.max(MIN_V, math.min(MAX_V, startPct + pctDelta))
+        end
+        -- Fallback (MouseUp / no active drag): absolute cursor vs track position.
+        local left = trackCont:GetLeft()
         if not left then return nil end
-        local frac  = (cx - left) / TRACK_W
+        local mfScale = (Addon._mainFrame and Addon._mainFrame:GetScale()) or 1
+        local frac = (cx - left) / (TRACK_W * mfScale)
         return MIN_V + math.max(0, math.min(1, frac)) * (MAX_V - MIN_V)
     end
 
-    -- All mouse interaction through trackCont so extremes are never blocked.
     trackCont:EnableMouse(true)
     trackCont:SetScript("OnMouseDown", function(self_, btn)
         if btn ~= "LeftButton" then return end
-        self_._dragging = true
-        local pct = PctFromCursor()
-        if pct then SetPct(pct) end
+        local uiScale_d = UIParent and UIParent:GetScale() or 1
+        local cx_d      = GetCursorPosition() / uiScale_d
+        local mf        = Addon._mainFrame
+        local mfScale   = (mf and mf:GetScale()) or 1
+        local left_d    = trackCont:GetLeft()
+        local clickPct  = GetCurrentPct()
+        if left_d then
+            local frac_d = (cx_d - left_d) / (TRACK_W * mfScale)
+            clickPct = MIN_V + math.max(0, math.min(1, frac_d)) * (MAX_V - MIN_V)
+        end
+        self_._dragging         = true
+        self_._dragStartCursorX = cx_d
+        self_._dragStartPct     = clickPct
+        self_._dragTrackPxW     = TRACK_W * mfScale
+        UpdateVisuals(clickPct)
     end)
     trackCont:SetScript("OnMouseUp", function(self_, btn)
         if btn ~= "LeftButton" then return end
-        self_._dragging = false
-        local pct = PctFromCursor()
-        if pct then SetPct(pct) end
+        local pct = PctFromCursor()  -- delta path still active here
+        self_._dragging         = false
+        self_._dragStartCursorX = nil
+        self_._dragStartPct     = nil
+        self_._dragTrackPxW     = nil
+        if pct then SetPct(pct) end  -- full commit: saves, applies scale + layout
     end)
     trackCont:SetScript("OnUpdate", function(self_)
         if not self_._dragging then return end
         local pct = PctFromCursor()
-        if pct then SetPct(pct) end
+        if not pct then return end
+        UpdateVisuals(pct)
+        -- Live preview: frame is BOTTOMLEFT-anchored so SetScale expands up+right only.
+        local dragScale = math.max(0.5, math.min(1.5, math.floor(pct + 0.5) / 100))
+        local mf = Addon._mainFrame
+        if mf then mf:SetScale(dragScale) end
     end)
 
     sf:SetScript("OnShow", function() UpdateVisuals(GetCurrentPct()) end)
     UpdateVisuals(GetCurrentPct())
+
+    -- Apply saved visibility preference.
+    if Addon.ApplyScaleSliderVisibility then Addon:ApplyScaleSliderVisibility() end
 end
 
 -- CreateBlizzOptionsPanel: no longer registers with Blizzard Interface → AddOns.

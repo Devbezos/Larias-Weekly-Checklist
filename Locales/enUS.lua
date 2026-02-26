@@ -32,6 +32,9 @@ local STRINGS = {
 	OPTIONS_HIDDEN_CHARS_NONE = "None",
 	RESET_BUTTON = "Reset List",
 	UI_SCALE_LABEL = "Scale",
+	UI_SCALE_MIN_LABEL = "50%",
+	UI_SCALE_MAX_LABEL = "150%",
+	OPTIONS_HIDE_SCALE_SLIDER = "Hide scale slider",
 
 	-- List tab
 	DONE_PREFIX = "[Done] ",
@@ -77,7 +80,7 @@ local STRINGS = {
 	-- Main window
 	TAB_OPTIONS = "Options",
 	CHANGE_WEEK_BUTTON = "Change Week",
-	ILVLREF_BUTTON = "Ilvl Refs",
+	ILVLREF_BUTTON = "View Item Levels",
 
 	-- Item level reference popup
 	ILVLREF_WINDOW_TITLE  = "Midnight Season 1 Item Level Reference",

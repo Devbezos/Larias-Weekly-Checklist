@@ -55,6 +55,8 @@ function Addon:SyncGearPopup()
          L.OPTIONS_HIDE_ILVL_REF_BTN or "Hide ilvl references")
     Sync(p._cbHideCharPicker,   db.showCharPickerBtn == false,
          L.OPTIONS_HIDE_CHAR_SELECT  or "Hide character selector")
+    Sync(p._cbHideScaleSlider,  db.showScaleSlider == false,
+         L.OPTIONS_HIDE_SCALE_SLIDER or "Hide scale slider")
 
     -- Reset button label.
     if p._gearResetBtn then
@@ -85,20 +87,50 @@ function Addon:SyncGearPopup()
         if pk.IsShown and pk:IsShown() then pk:Hide() end
     end
 
-    -- Recalculate popup height based on visible content.
+    -- Recalculate popup height based on visible content, and reposition any rows
+    -- below the (possibly-hidden) char picker slot so no gap is left behind.
     do
         local PAD_   = 10
         local ROW_H_ = 26
         local TILE_H_= ROW_H_ + 8   -- 34
-        local N_TOTAL = 6
+        local N_TOTAL = 7
         local rstStartY_  = PAD_
         local div1StartY_ = rstStartY_ + 22 + 6
         local cbsY_       = div1StartY_ + 1 + 8
+        -- Char picker is always slot index 6; scale slider is always slot index 7.
+        -- When char picker is hidden, slide the scale slider up into slot 6.
+        local SLIDER_IDX  = 7
+        local sliderVisIdx = showCharRow and SLIDER_IDX or (SLIDER_IDX - 1)
+        local cbSlider = p._cbHideScaleSlider
+        if cbSlider then
+            local tileTopY = -(cbsY_ + (sliderVisIdx - 1) * TILE_H_)
+            local cbOffY   = tileTopY - math.floor((TILE_H_ - ROW_H_) / 2)
+            cbSlider:ClearAllPoints()
+            cbSlider:SetPoint("TOPLEFT", p, "TOPLEFT", PAD_, cbOffY)
+            if cbSlider._hit then
+                cbSlider._hit:ClearAllPoints()
+                cbSlider._hit:SetPoint("TOPLEFT",  p, "TOPLEFT",  0, tileTopY)
+                cbSlider._hit:SetPoint("TOPRIGHT", p, "TOPRIGHT", 0, tileTopY)
+            end
+        end
+
         local nVisible    = showCharRow and N_TOTAL or (N_TOTAL - 1)
+        -- Reposition the hidden-chars divider and trigger to follow the last checkbox.
+        local div2StartY_ = cbsY_ + nVisible * TILE_H_ + 6
+        local hidStartY_  = div2StartY_ + 1 + 8
+        if p._gearHiddenCharsDiv then
+            p._gearHiddenCharsDiv:ClearAllPoints()
+            p._gearHiddenCharsDiv:SetPoint("TOPLEFT",  p, "TOPLEFT",  PAD_,  -div2StartY_)
+            p._gearHiddenCharsDiv:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PAD_, -div2StartY_)
+        end
+        if p._gearHiddenCharsTrigger then
+            p._gearHiddenCharsTrigger:ClearAllPoints()
+            p._gearHiddenCharsTrigger:SetPoint("TOPLEFT",  p, "TOPLEFT",  PAD_,  -hidStartY_)
+            p._gearHiddenCharsTrigger:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PAD_, -hidStartY_)
+        end
+
         local totalH
         if showHiddenSect then
-            local div2StartY_ = cbsY_ + nVisible * TILE_H_ + 6
-            local hidStartY_  = div2StartY_ + 1 + 8
             totalH = hidStartY_ + 22 + PAD_
         else
             totalH = cbsY_ + nVisible * TILE_H_ + PAD_
@@ -162,7 +194,10 @@ function Addon:ToggleGearPopup(anchor)
         catcher:SetFrameLevel(p:GetFrameLevel() - 1)
         catcher:EnableMouse(true)
         catcher:Hide()
-        catcher:SetScript("OnClick", function() p:Hide() end)
+        -- Use OnMouseDown so the catcher hides before the click resolves,
+        -- letting the MouseUp event pass through to whatever is underneath.
+        -- OnClick would consume the full click, blocking the next action.
+        catcher:SetScript("OnMouseDown", function() p:Hide() end)
         p:SetScript("OnHide", function() catcher:Hide() end)
         p:SetScript("OnShow", function()
             catcher:Show()
@@ -201,12 +236,14 @@ function Addon:ToggleGearPopup(anchor)
                     cdb.startAtSectionId = ""
                 end
             end
-            -- Reset main frame position and size back to defaults.
+            -- Reset main frame position, size, and UI scale back to defaults.
             local gdb = Addon.db and Addon.db.global
             if gdb then
                 gdb.mainFramePos  = nil
                 gdb.mainFrameSize = nil
+                gdb.uiScalePct    = 100
             end
+            if Addon.ApplyUIScale then Addon:ApplyUIScale() end
             local mf = Addon._mainFrame
             if mf then
                 mf:ClearAllPoints()
@@ -233,12 +270,13 @@ function Addon:ToggleGearPopup(anchor)
 
         -- ── 6 Checkboxes ──────────────────────────────────────────────────
         local checks = {
-            { key = "_cbHideCompleted",  },
-            { key = "_cbHideGreatVault", },
-            { key = "_cbHideCurrency",   },
-            { key = "_cbHideChangeWeek", },
-            { key = "_cbHideIlvlRef",    },
-            { key = "_cbHideCharPicker", },
+            { key = "_cbHideCompleted",   },
+            { key = "_cbHideGreatVault",  },
+            { key = "_cbHideCurrency",    },
+            { key = "_cbHideChangeWeek",  },
+            { key = "_cbHideIlvlRef",     },
+            { key = "_cbHideCharPicker",  },
+            { key = "_cbHideScaleSlider", },
         }
         local callbacks = {
             _cbHideCompleted  = function(checked)
@@ -270,6 +308,11 @@ function Addon:ToggleGearPopup(anchor)
                 local db = Addon:EnsureDB()
                 db.showCharPickerBtn = not checked
                 if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
+            end,
+            _cbHideScaleSlider = function(checked)
+                local db = Addon:EnsureDB()
+                db.showScaleSlider = not checked
+                if Addon.ApplyScaleSliderVisibility then Addon:ApplyScaleSliderVisibility() end
             end,
         }
 

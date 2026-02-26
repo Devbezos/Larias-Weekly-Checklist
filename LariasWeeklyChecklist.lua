@@ -275,6 +275,7 @@ local CHAR_DEFAULTS = {
     showChangeWeekBtn     = true,
     showIlvlRefBtn        = true,
     showCharPickerBtn     = true,
+    showScaleSlider       = true,
     debug                 = false,
     startAtSectionId      = "",
 }
@@ -801,7 +802,7 @@ function Addon:UpdateLocalizedUI()
 
     local ilvlRefBtn = frame._lariasIlvlRefBtn
     if ilvlRefBtn and ilvlRefBtn.SetText then
-        ilvlRefBtn:SetText(L.ILVLREF_BUTTON or "Ilvl Refs")
+        ilvlRefBtn:SetText(L.ILVLREF_BUTTON or "View Item Levels")
     end
 
     local trackingFrame = self._trackingFrame
@@ -842,28 +843,19 @@ function Addon:ApplyScrollLayout()
     if (db.showGreatVault or db.showCurrency) and IsFrameShown(self._trackingFrame) then
         local trackingHeight = (self._trackingFrame.GetHeight and self._trackingFrame:GetHeight()) or Addon.UI.trackH
         trackingHeight = tonumber(trackingHeight) or Addon.UI.trackH
-        -- Multiply by the tracking frame's own scale so the reserved space matches
-        -- the actual visual height after the scale slider adjusts content size.
-        local tfScale = (self._trackingFrame.GetScale and self._trackingFrame:GetScale()) or 1
-        trackingHeight = trackingHeight * tfScale
-        local sliderH        = Addon.UI.sliderH         or 0
-        local sliderBotPad   = Addon.UI.sliderBottomPad or 0
-        -- Tracking panel is anchored sliderH+sliderBotPad above the frame bottom;
-        -- account for that extra lift when computing the scroll frame's bottom offset.
+        local sf           = self._inFrameScaleSlider
+        local sliderShown  = sf and sf.IsShown and sf:IsShown()
+        local sliderH      = sliderShown and (Addon.UI.sliderH         or 0) or 0
+        local sliderBotPad = sliderShown and (Addon.UI.sliderBottomPad or 0) or 0
         extra = trackingHeight + Addon.UI.trackTopPad
               + sliderH + sliderBotPad - Addon.UI.scrollBottom
     end
 
     scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -Addon.UI.scrollRight, Addon.UI.scrollBottom + extra)
-    -- Always keep the outer frame at scale 1.0 — scaling is applied only to
-    -- content children (scrollChild, trackingFrame) so resize/drag cursor
-    -- coordinates stay in sync with the frame's coordinate space.
-    frame:SetScale(1)
 
     -- Recompute itemTextWidth from the live frame width so text never over-runs
-    -- or wastes space after a resize.
-    -- Formula: frameW - padOuterX - scrollRight - 2*sectionInsetX - checkboxOffset
-    -- checkboxOffset (32 box + 6 gap) = 38
+    -- or wastes space after a resize. Frame and all children share the same
+    -- coordinate space (frame:SetScale scales visually without changing logical sizes).
     local currentFrameW = frame:GetWidth() or Addon.UI.frameW
     local newTextW = math.max(120, math.floor(
         currentFrameW
@@ -905,21 +897,45 @@ function Addon:GetUIScale()
 end
 
 function Addon:ApplyUIScale()
-    -- Scale only content frames so text and checklist items grow/shrink while
-    -- the outer window stays at whatever size the user dragged it to.
-    -- The outer frame is always kept at scale 1.0 so resize/drag coordinates
-    -- remain in sync with cursor coordinates.
     local scale = self:GetUIScale()
-    if scrollChild then scrollChild:SetScale(scale) end
-    local tf = self._trackingFrame
-    if tf and tf.SetScale then tf:SetScale(scale) end
-    -- Re-anchor scroll frame so it accounts for the tracking panel's new visual height.
-    if self.ApplyScrollLayout then self:ApplyScrollLayout() end
+    -- Frame is BOTTOMLEFT-anchored so SetScale expands up+right only — no drift.
+    if frame and frame.SetScale then
+        frame:SetSize(Addon.UI.frameW, Addon.UI.frameH)
+        frame:SetScale(scale)
+    end
+    -- The ilvl ref window is parented to UIParent; scale it independently.
     local iw = self._ilvlRefWindow
+    if iw and iw.SetScale then iw:SetScale(scale) end
     if iw and iw._ilvlReflow then iw._ilvlReflow() end
+    -- Re-anchor scroll frame (text width recompute, tracking panel offset).
+    if self.ApplyScrollLayout then self:ApplyScrollLayout() end
     -- Keep in-frame slider in sync with whatever changed the value.
     local sf = self._inFrameScaleSlider
     if sf and sf.Sync then sf.Sync() end
+end
+
+function Addon:ApplyScaleSliderVisibility()
+    local sf = self._inFrameScaleSlider
+    if not sf then return end
+    local db   = self:EnsureDB()
+    local show = db.showScaleSlider ~= false
+    sf:SetShown(show)
+    -- Re-anchor the tracking panel bottom so it fills the freed space when
+    -- the slider is hidden, and retreats above the slider when visible.
+    local tf = self._trackingFrame
+    if tf then
+        local inset = Addon.UI.sectionInsetX or 14
+        local botY  = show
+            and ((Addon.UI.sliderBottomPad or 4) + (Addon.UI.sliderH or 20))
+            or  (Addon.UI.sliderBottomPad or 4)
+        tf:ClearAllPoints()
+        tf:SetPoint("BOTTOMLEFT",  tf:GetParent(), "BOTTOMLEFT",  inset,  botY)
+        tf:SetPoint("BOTTOMRIGHT", tf:GetParent(), "BOTTOMRIGHT", -inset, botY)
+        -- Do NOT force SetHeight here — ResizeTrackingPanelToContent already sized
+        -- the frame to fit its content.  Resetting to trackH would create empty
+        -- space at the bottom whenever the content is shorter than the default.
+    end
+    if self.ApplyScrollLayout then self:ApplyScrollLayout() end
 end
 
 local function Key(sectionId, itemId)
@@ -1628,59 +1644,31 @@ function Addon:CreateFrame()
     end
 
     frame:SetSize(Addon.UI.frameW, Addon.UI.frameH)
-    local _savedMainSize = Addon.db and Addon.db.global and Addon.db.global.mainFrameSize
-    if _savedMainSize then
-        local _clampMinW = math.floor(Addon.UI.frameW * 0.8)
-        local _clampMinH = math.floor(Addon.UI.frameH * 0.8)
-        local _clampMaxW = math.floor(Addon.UI.frameW * 1.0)
-        local _clampMaxH = math.floor(Addon.UI.frameH * 1.0)
-        if _savedMainSize.w then frame:SetWidth( math.max(_clampMinW, math.min(_clampMaxW, _savedMainSize.w))) end
-        if _savedMainSize.h then frame:SetHeight(math.max(_clampMinH, math.min(_clampMaxH, _savedMainSize.h))) end
-    end
     frame:SetClampedToScreen(true)
     local _savedMainPos = Addon.db and Addon.db.global and Addon.db.global.mainFramePos
-    if _savedMainPos and _savedMainPos.x and _savedMainPos.y then
-        -- y stores the top edge (TOPLEFT anchor) so StartSizing("BOTTOMRIGHT") always
-        -- has a stable fixed corner without any re-anchoring on mouse-down.
-        frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", _savedMainPos.x, _savedMainPos.y)
+    if _savedMainPos and _savedMainPos.bl_x and _savedMainPos.bl_y then
+        frame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", _savedMainPos.bl_x, _savedMainPos.bl_y)
     else
         frame:SetPoint("CENTER")
     end
     frame:SetMovable(true)
-    frame:SetResizable(true)
-    local _maxW = math.floor(Addon.UI.frameW * 1.0)
-    local _maxH = math.floor(Addon.UI.frameH * 1.0)
-    local _minW0 = math.floor(Addon.UI.frameW * 0.8)
-    local _minH0 = math.floor(Addon.UI.frameH * 0.8)
-    if frame.SetResizeBounds then
-        frame:SetResizeBounds(_minW0, _minH0, _maxW, _maxH)
-    else
-        if frame.SetMinResize then frame:SetMinResize(_minW0, _minH0) end
-        if frame.SetMaxResize then frame:SetMaxResize(_maxW, _maxH) end
-    end
     frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", function()
         frame:StopMovingOrSizing()
-        -- StartMoving() changes the frame's internal anchors during movement.
-        -- Re-normalise to a single TOPLEFT anchor so that the next
-        -- StartSizing("BOTTOMRIGHT") call always has a stable fixed corner.
-        local left = frame:GetLeft()
-        local top  = frame:GetTop()
+        -- Normalise to BOTTOMLEFT anchor: SetScale expands up+right from this
+        -- corner, so scaling never moves the visible bottom-left of the window.
+        local l = frame:GetLeft()
+        local b = frame:GetBottom()
         frame:ClearAllPoints()
-        frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
-        local _gdb = Addon.db and Addon.db.global
-        if _gdb then
-            _gdb.mainFramePos = { x = left, y = top }
+        if l and b then
+            frame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", l, b)
+            local _gdb = Addon.db and Addon.db.global
+            if _gdb then _gdb.mainFramePos = { bl_x = l, bl_y = b } end
+        else
+            frame:SetPoint("CENTER")
         end
-    end)
-    frame:SetScript("OnSizeChanged", function()
-        Addon:ApplyScrollLayout()
-        -- Queue a full refresh to recompute header heights (which may change if
-        -- a section title wraps differently at the new width). Debounced to once
-        -- per tick, so rapid resize drag doesn't spam rebuilds.
-        if Addon.RequestRefresh then Addon:RequestRefresh() end
     end)
     -- Hide the week picker whenever the main frame is hidden (close button,
     -- Toggle(), ESC, or any other dismiss path). The picker is parented to
@@ -1734,18 +1722,52 @@ function Addon:CreateFrame()
 
     self:ApplyTheme(frame)
 
-    local closeBtn = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
+    -- Close button: FontString "✕" tinted gold to match the theme.
+    local closeBtn = CreateFrame("Button", nil, frame)
+    closeBtn:SetSize(20, 20)
     closeBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -Addon.UI.closeInset, -Addon.UI.closeInset)
+    do
+        local th = Addon.THEME
+        local norm = closeBtn:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+        norm:SetAllPoints(closeBtn)
+        norm:SetJustifyH("CENTER")
+        norm:SetJustifyV("MIDDLE")
+        norm:SetTextColor(th.header.r, th.header.g, th.header.b, 0.85)
+        norm:SetText("X")
+        closeBtn:SetFontString(norm)
+        local hl = closeBtn:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints(closeBtn)
+        hl:SetColorTexture(1, 1, 1, 0.10)
+        closeBtn:SetHighlightTexture(hl)
+        local pushed = closeBtn:CreateTexture(nil, "OVERLAY")
+        pushed:SetAllPoints(closeBtn)
+        pushed:SetColorTexture(th.header.r, th.header.g, th.header.b, 0.15)
+        closeBtn:SetPushedTexture(pushed)
+    end
     closeBtn:SetScript("OnClick", function() frame:Hide() end)
 
-    -- Gear / settings button: sits left of the close button, opens a toggle popup.
+    -- Gear / settings button: white at rest, gold on hover.
     local gearBtn = CreateFrame("Button", nil, frame)
     gearBtn:SetSize(20, 20)
     gearBtn:SetPoint("RIGHT", closeBtn, "LEFT", -2, 0)
-    gearBtn:SetNormalTexture("Interface\\Buttons\\UI-OptionsButton")
-    local gearHL = gearBtn:CreateTexture(nil, "HIGHLIGHT")
-    gearHL:SetAllPoints(gearBtn)
-    gearHL:SetColorTexture(1, 1, 1, 0.18)
+    do
+        local th = Addon.THEME
+        local norm = gearBtn:CreateTexture(nil, "BORDER")
+        norm:SetTexture("Interface\\Buttons\\UI-OptionsButton")
+        norm:SetAllPoints(gearBtn)
+        norm:SetVertexColor(th.text.r, th.text.g, th.text.b, 0.65)
+        gearBtn:SetNormalTexture(norm)
+        local pushed = gearBtn:CreateTexture(nil, "OVERLAY")
+        pushed:SetTexture("Interface\\Buttons\\UI-OptionsButton")
+        pushed:SetAllPoints(gearBtn)
+        pushed:SetVertexColor(th.header.r * 0.75, th.header.g * 0.75, th.header.b * 0.75, 1)
+        gearBtn:SetPushedTexture(pushed)
+        local hl = gearBtn:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetTexture("Interface\\Buttons\\UI-OptionsButton")
+        hl:SetAllPoints(gearBtn)
+        hl:SetVertexColor(th.header.r, th.header.g, th.header.b, 1)
+        gearBtn:SetHighlightTexture(hl)
+    end
     gearBtn:SetScript("OnClick", function()
         if Addon.ToggleGearPopup then Addon:ToggleGearPopup(gearBtn) end
     end)
@@ -1756,63 +1778,6 @@ function Addon:CreateFrame()
     end)
     gearBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
     frame._lariasGearBtn = gearBtn
-
-    -- Draggable resize grip (bottom-right corner).
-    local mainResizeBtn = CreateFrame("Button", nil, frame)
-    mainResizeBtn:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -4, 4)
-    mainResizeBtn:SetSize(16, 16)
-    mainResizeBtn:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
-    mainResizeBtn:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
-    mainResizeBtn:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
-
-    local _rsData = nil  -- {startCX, startCY, startW, startH, left, top}
-
-    mainResizeBtn:SetScript("OnMouseDown", function(self_, btn)
-        if btn ~= "LeftButton" then return end
-        local left = frame:GetLeft()
-        local top  = frame:GetTop()
-        local w    = frame:GetWidth()
-        local h    = frame:GetHeight()
-        frame:ClearAllPoints()
-        frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
-        frame:SetSize(w, h)
-        local uiScale = UIParent:GetEffectiveScale()
-        local cx, cy  = GetCursorPosition()
-        _rsData = {
-            startCX = cx / uiScale,
-            startCY = cy / uiScale,
-            startW  = w,
-            startH  = h,
-            left    = left,
-            top     = top,
-        }
-    end)
-
-    mainResizeBtn:SetScript("OnUpdate", function()
-        if not _rsData then return end
-        local uiScale = UIParent:GetEffectiveScale()
-        local cx, cy  = GetCursorPosition()
-        cx = cx / uiScale
-        cy = cy / uiScale
-        local minW = math.floor(Addon.UI.frameW * 0.8)
-        local minH = math.floor(Addon.UI.frameH * 0.8)
-        local maxW = math.floor(Addon.UI.frameW * 1.0)
-        local maxH = math.floor(Addon.UI.frameH * 1.0)
-        local newW = math.max(minW, math.min(maxW, math.floor(_rsData.startW + (cx - _rsData.startCX))))
-        local newH = math.max(minH, math.min(maxH, math.floor(_rsData.startH - (cy - _rsData.startCY))))
-        frame:SetSize(newW, newH)
-        Addon:ApplyScrollLayout()
-    end)
-
-    mainResizeBtn:SetScript("OnMouseUp", function(self_, btn)
-        if btn ~= "LeftButton" then return end
-        _rsData = nil
-        local _gdb = Addon.db and Addon.db.global
-        if _gdb then
-            _gdb.mainFrameSize = { w = frame:GetWidth(), h = frame:GetHeight() }
-        end
-        if Addon.RequestRefresh then Addon:RequestRefresh() end
-    end)
 
     local frameName = frame.GetName and frame:GetName() or nil
 
@@ -1907,9 +1872,9 @@ function Addon:CreateFrame()
     local function EnsureIlvlRefBtn_()
         if ilvlRefBtn then return ilvlRefBtn end
         local btn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        btn:SetSize(108, 22)
+        btn:SetSize(140, 22)
         StyleMainTabButton(btn)
-        btn:SetText(L.ILVLREF_BUTTON or "Ilvl Refs")
+        btn:SetText(L.ILVLREF_BUTTON or "View Item Levels")
         btn:SetScript("OnClick", function()
             Addon:ToggleIlvlRefWindow()
         end)
@@ -1968,7 +1933,7 @@ function Addon:CreateFrame()
         catcher:SetFrameLevel(199)  -- directly below picker (200) and its buttons (201)
         catcher:EnableMouse(true)
         catcher:Hide()
-        catcher:SetScript("OnClick", function() picker:Hide() end)
+        catcher:SetScript("OnMouseDown", function() picker:Hide() end)
 
         -- Tie catcher lifetime to the picker so nothing else needs to manage it.
         picker:SetScript("OnShow", function()
@@ -2234,7 +2199,10 @@ function Addon:CreateFrame()
                     if Addon._cpOnClick then Addon._cpOnClick() end
                 end)
                 cpBtn:ClearAllPoints()
-                cpBtn:SetPoint("TOPRIGHT", gearBtn, "TOPLEFT", -6, -2)
+                -- Sit at the bottom-right of the frame, vertically aligned with the
+                -- scale slider on the opposite (left) side.
+                cpBtn:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT",
+                    -(Addon.UI.sectionInsetX or 14), Addon.UI.sliderBottomPad or 4)
                 if Addon._cpUpdateLabel then Addon._cpUpdateLabel() end
                 cpBtn:Show()
             else
@@ -2301,16 +2269,31 @@ function Addon:CreateFrame()
             changeWeekBtn:Hide()
         end
 
-        -- ilvlRefBtn anchors to the LEFT of cpBtn (if shown), otherwise just left of closeBtn.
+        -- ilvlRefBtn anchors left of gearBtn always (cpBtn is now at the bottom, not the header).
         if showIR then
             local btn = EnsureIlvlRefBtn_()
             btn:ClearAllPoints()
-            if showCP and cpBtn then
-                btn:SetPoint("TOPRIGHT", cpBtn, "TOPLEFT", -6, 0)
-            else
-                btn:SetPoint("TOPRIGHT", gearBtn, "TOPLEFT", -6, -2)
-            end
+            btn:SetPoint("TOPRIGHT", gearBtn, "TOPLEFT", -6, -2)
             btn:Show()
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0, function()
+                    if not (btn and btn.IsShown and btn:IsShown()) then return end
+                    local fs = btn.GetFontString and btn:GetFontString()
+                    local w  = 0
+                    if fs then
+                        if fs.GetUnboundedStringWidth then
+                            w = tonumber(fs:GetUnboundedStringWidth()) or 0
+                        end
+                        if w <= 0 and fs.GetStringWidth then
+                            w = tonumber(fs:GetStringWidth()) or 0
+                        end
+                    end
+                    if w <= 0 and btn.GetTextWidth then
+                        w = tonumber(btn:GetTextWidth()) or 0
+                    end
+                    btn:SetWidth(max(108, math.ceil(w) + 24))
+                end)
+            end
         elseif ilvlRefBtn then
             ilvlRefBtn:Hide()
             if Addon._ilvlRefWindow and Addon._ilvlRefWindow.IsShown and Addon._ilvlRefWindow:IsShown() then
@@ -2322,8 +2305,7 @@ function Addon:CreateFrame()
         local _insetX = (Addon.UI.padOuterX or 14) + (Addon.UI.sectionInsetX or 14)
         local _leftW  = _insetX + (showCW and (108 + 6) or 0)
         local _rightW = (Addon.UI.closeInset or 4) + 32 + 2 + 20  -- close + gear
-        if showCP then _rightW = _rightW + 6 + 108 end
-        if showIR then _rightW = _rightW + 6 + 108 end
+        if showIR then _rightW = _rightW + 6 + 140 end
         local _minW = _leftW + 20 + _rightW  -- 20px breathing room between sides
         -- Never go below the 80/120% design bounds, regardless of button layout.
         local _absMinW = math.floor(Addon.UI.frameW * 0.8)
@@ -2331,12 +2313,6 @@ function Addon:CreateFrame()
         local _maxW2   = math.floor(Addon.UI.frameW * 1.0)
         local _maxH2   = math.floor(Addon.UI.frameH * 1.0)
         _minW = math.max(_minW, _absMinW)
-        if frame.SetResizeBounds then
-            frame:SetResizeBounds(_minW, _absMinH, _maxW2, _maxH2)
-        else
-            if frame.SetMinResize then frame:SetMinResize(_minW, _absMinH) end
-            if frame.SetMaxResize then frame:SetMaxResize(_maxW2, _maxH2) end
-        end
         -- Snap existing width up if it's already narrower than the new minimum.
         local currentW = frame:GetWidth()
         if currentW < _minW then

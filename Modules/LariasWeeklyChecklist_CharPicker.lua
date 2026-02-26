@@ -174,7 +174,7 @@ function Addon:InitCharPickerUI(frame, styleFunc)
         catcher:SetFrameLevel(199)
         catcher:EnableMouse(true)
         catcher:Hide()
-        catcher:SetScript("OnClick", function() p:Hide() end)
+        catcher:SetScript("OnMouseDown", function() p:Hide() end)
         p:SetScript("OnShow", function()
             catcher:Show()
             if UIFrameFadeIn then UIFrameFadeIn(p, 0.15, 0, 1)
@@ -467,7 +467,8 @@ function Addon:InitCharPickerUI(frame, styleFunc)
         end
         local btn = EnsureBtn()
         p:ClearAllPoints()
-        p:SetPoint("TOPLEFT", btn, "BOTTOMLEFT", 0, -6)
+        -- Button is at the bottom of the frame, so open the dropdown upward.
+        p:SetPoint("BOTTOMLEFT", btn, "TOPLEFT", 0, 6)
         p:Show()
         if C_Timer and C_Timer.After then
             C_Timer.After(0, Populate)

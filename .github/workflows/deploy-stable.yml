@@ -143,6 +143,7 @@ jobs:
         run: |
           set -euo pipefail
           git fetch --tags --force
+          git reset --hard ${{ steps.commitstep.outputs.tag }}
 
       - name: Package + Upload (CurseForge & Wago)
         if: steps.commitstep.outputs.released == 'true'

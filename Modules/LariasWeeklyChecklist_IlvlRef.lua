@@ -509,51 +509,36 @@ local function BuildIlvlRefWindow()
             if sb then sb:Show() end
         end
 
-        -- Apply UI scale to the scroll content only; the outer window stays at
-        -- whatever size the user has set so drag/resize coordinates stay correct.
-        sc:SetScale(Addon.GetUIScale and Addon:GetUIScale() or 1.0)
+        -- The outer window (win) is scaled uniformly via win:SetScale() in
+        -- ApplyUIScale, so no separate content scale is needed here.
 
         _reflowing = false
     end
 
     win._ilvlReflow = ReflowIlvlSections
 
-    -- Toggle button: NE arrow = maximize (3-col), SW arrow = minimize (1-col scrollable).
-    -- Uses WoW's built-in panel expand/collapse diagonal-arrow textures.
-    local EXPAND_NORM   = "Interface\\Buttons\\UI-Panel-ExpandButton-Up"
-    local EXPAND_PUSH   = "Interface\\Buttons\\UI-Panel-ExpandButton-Down"
-    local COLLAPSE_NORM = "Interface\\Buttons\\UI-Panel-CollapseButton-Up"
-    local COLLAPSE_PUSH = "Interface\\Buttons\\UI-Panel-CollapseButton-Down"
-
-    local toggleBtn = CreateFrame("Button", nil, win)
+    -- Toggle button: text button showing "Expand" / "Shrink".
+    local toggleBtn = CreateFrame("Button", nil, win, "UIPanelButtonTemplate")
     toggleBtn:SetPoint("TOPRIGHT", closeBtn, "TOPLEFT", 4, 0)
-    toggleBtn:SetSize(18, 18)
-    local toggleHL = toggleBtn:CreateTexture(nil, "HIGHLIGHT")
-    toggleHL:SetAllPoints()
-    toggleHL:SetColorTexture(1, 1, 1, 0.15)
+    toggleBtn:SetSize(60, 20)
+    if Addon._styleActionButton then Addon._styleActionButton(toggleBtn) end
 
     local function UpdateToggleTexture()
-        if _isMaximized then
-            toggleBtn:SetNormalTexture(EXPAND_NORM)
-            toggleBtn:SetPushedTexture(EXPAND_PUSH)
-        else
-            toggleBtn:SetNormalTexture(COLLAPSE_NORM)
-            toggleBtn:SetPushedTexture(COLLAPSE_PUSH)
-        end
+        toggleBtn:SetText(_isMaximized
+            and (Locale.ILVLREF_TOGGLE_SHRINK or "Shrink")
+            or  (Locale.ILVLREF_TOGGLE_EXPAND or "Expand"))
     end
     UpdateToggleTexture()
 
-    toggleBtn:SetScript("OnEnter", function()
-        GameTooltip:SetOwner(toggleBtn, "ANCHOR_BOTTOM")
-        GameTooltip:SetText(_isMaximized and (Locale.ILVLREF_TOGGLE_SHRINK or "Shrink") or (Locale.ILVLREF_TOGGLE_EXPAND or "Expand"))
-        GameTooltip:Show()
-    end)
-    toggleBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
     toggleBtn:SetScript("OnClick", function()
         _isMaximized = not _isMaximized
         local _gdb = Addon.db and Addon.db.global
         if _gdb then _gdb.ilvlRefMaximized = _isMaximized end
         UpdateToggleTexture()
+        -- Freeze the horizontal center so the window grows/shrinks
+        -- symmetrically left and right from its current position.
+        local pinCX  = win:GetLeft() + win:GetWidth() / 2
+        local pinTop = win:GetTop()
         if _isMaximized then
             -- Widen to fit 3-col before reflow so layout branch is chosen correctly.
             -- +1 for the right-border pixel on the last table (see ReflowIlvlSections).
@@ -561,6 +546,8 @@ local function BuildIlvlRefWindow()
         else
             win:SetWidth(wSingle + PAD * 2 + 22)
         end
+        win:ClearAllPoints()
+        win:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", pinCX - win:GetWidth() / 2, pinTop)
         ReflowIlvlSections()
     end)
 
