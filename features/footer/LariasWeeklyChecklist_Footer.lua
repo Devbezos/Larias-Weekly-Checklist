@@ -11,6 +11,18 @@ local LOCALE_REGISTRY_KEY = "LARIASWEEKLYCHECKLIST_LOCALE_REGISTRY"
 local BANNER_H   = 14  -- banner height in scaled frame pixels
 local BANNER_PAD = 3   -- gap between banner bottom and frame bottom edge
 
+-- Returns how many numeric version steps myVer trails newestVer.
+-- Works on any freeform string; uses the last integer found ("Week 5" → 5).
+local function SheetVersionsBehind(myVer, newestVer)
+    local function lastNum(s)
+        local n = 0
+        for m in tostring(s or ""):gmatch("%d+") do n = tonumber(m) or n end
+        return n
+    end
+    local diff = lastNum(newestVer) - lastNum(myVer)
+    return diff > 0 and diff or 0
+end
+
 -- ── Addon:CreateStatusBanner ──────────────────────────────────────────────────
 -- Creates the one-line informational bar at the very bottom of the main frame.
 -- Called once from CreateTrackingPanel (features/body/LariasWeeklyChecklist_Currency.lua).
@@ -47,13 +59,25 @@ function Addon:UpdateStatusBanner()
     local db = self:EnsureDB()
     local L  = self.L or {}
 
-    -- Priority 1: update available.
-    if db.hideUpdateNotice ~= true and self.ShouldShowUpdateNotice and self:ShouldShowUpdateNotice() then
-        local myVer  = (self.GetMyVersion and self:GetMyVersion()) or ""
-        local newVer = tostring(db._newestSeenRemoteVersion or "")
-        local fmt    = L.STATUS_UPDATE_AVAILABLE_FMT or "Update available! You have %s, newest is %s."
+    -- Priority 1a: spreadsheet data is newer than ours.
+    if db.hideUpdateNotice ~= true and self.ShouldShowSheetUpdateNotice and self:ShouldShowSheetUpdateNotice() then
+        local reg    = _G[LOCALE_REGISTRY_KEY]
+        local mySV   = (reg and type(reg.sheet_version) == "string" and reg.sheet_version) or ""
+        local newSV  = tostring(db._newestSeenRemoteSheetVersion or "")
+        local behind = SheetVersionsBehind(mySV, newSV)
+        local fmt    = L.STATUS_SHEET_UPDATE_FMT
+                    or "Spreadsheet Update Detected - You are %d version(s) behind the spreadsheet"
         banner._label:SetJustifyH("CENTER")
-        banner._label:SetText(string.format(fmt, myVer, newVer))
+        banner._label:SetText(string.format(fmt, behind))
+        banner._label:SetTextColor(1, 0.65, 0.0, 1)
+        return
+    end
+
+    -- Priority 1b: addon update available (no sheet-version info or sheet is current).
+    if db.hideUpdateNotice ~= true and self.ShouldShowUpdateNotice and self:ShouldShowUpdateNotice() then
+        local txt = L.UPDATE_AVAILABLE_TEXT or "New version available"
+        banner._label:SetJustifyH("CENTER")
+        banner._label:SetText(txt)
         banner._label:SetTextColor(1, 0.2, 0.2, 1)
         return
     end

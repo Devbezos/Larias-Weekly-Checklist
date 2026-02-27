@@ -144,6 +144,21 @@ local function GetAddonVersion(name)
     return ""
 end
 
+local LOCALE_REGISTRY_KEY_COMMS = "LARIASWEEKLYCHECKLIST_LOCALE_REGISTRY"
+
+local function GetMySheetVersion()
+    local reg = _G[LOCALE_REGISTRY_KEY_COMMS]
+    return (reg and type(reg.sheet_version) == "string" and reg.sheet_version) or ""
+end
+
+-- Extract the last integer found in a freeform sheet-version string.
+-- e.g. "Week 5 - Apr 14" → 5,  "Pre-Season Week 2" → 2
+local function SheetVersionToNum(s)
+    local n = 0
+    for m in tostring(s or ""):gmatch("%d+") do n = tonumber(m) or n end
+    return n
+end
+
 function Addon:GetMyVersion()
     -- Cached in CommsOnEnable.
     return self._myVersion or ""
@@ -151,6 +166,16 @@ end
 
 local function IsVersionNewer(versionA, versionB)
     return CompareVersions(versionA, versionB) > 0
+end
+
+function Addon:ShouldShowSheetUpdateNotice()
+    -- Returns true when a group/guild member has broadcast a newer sheet version.
+    local database = self:EnsureDB()
+    local myVer = self:GetMyVersion()
+    if myVer == "" or not IsLiveVersion(myVer) then return false end
+    local newestSV = tostring(database._newestSeenRemoteSheetVersion or "")
+    if newestSV == "" then return false end
+    return SheetVersionToNum(newestSV) > SheetVersionToNum(GetMySheetVersion())
 end
 
 function Addon:ShouldShowUpdateNotice()
@@ -232,7 +257,7 @@ function Addon:BroadcastVersion(force)
 
     local myVersion = self:GetMyVersion()
     if myVersion == "" then return end
-    local payloadStructured = SerializeCommMessage({ t = "V", v = myVersion })
+    local payloadStructured = SerializeCommMessage({ t = "V", v = myVersion, sv = GetMySheetVersion() })
     if not payloadStructured then return end
 
     local channel = GetGroupChannel()
@@ -338,6 +363,19 @@ function Addon:OnAddonMessage(prefix, message, sender)
             database._newestSeenRemoteSender = tostring(sender or "")
             -- Immediately refresh the status banner so the update notice appears.
             if Addon.UpdateStatusBanner then Addon:UpdateStatusBanner() end
+        end
+    end
+
+    -- Track remote sheet version for spreadsheet-update notices.
+    local remoteSV = (type(decoded.sv) == "string" and decoded.sv ~= "") and decoded.sv or nil
+    if remoteSV then
+        local database = self:EnsureDB()
+        if SheetVersionToNum(remoteSV) > SheetVersionToNum(GetMySheetVersion()) then
+            local storedSV = tostring(database._newestSeenRemoteSheetVersion or "")
+            if storedSV == "" or SheetVersionToNum(remoteSV) > SheetVersionToNum(storedSV) then
+                database._newestSeenRemoteSheetVersion = remoteSV
+                if Addon.UpdateStatusBanner then Addon:UpdateStatusBanner() end
+            end
         end
     end
 end
