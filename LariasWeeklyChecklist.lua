@@ -1868,6 +1868,15 @@ function Addon:CreateFrame()
         -- Center-justify so shorter week labels sit in the middle of the fixed-width button.
         local _fs = btn.GetFontString and btn:GetFontString()
         if _fs and _fs.SetJustifyH then _fs:SetJustifyH("CENTER") end
+        -- Reserve space on the right for the pinned arrow icon (10px icon + 4px gap + 4px margin).
+        if btn.SetTextInsets then btn:SetTextInsets(12, 18, 4, 4) end
+        -- Arrow texture pinned to the right edge, always visible regardless of label length.
+        local arrowTex = btn:CreateTexture(nil, "ARTWORK")
+        arrowTex:SetTexture("Interface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up")
+        arrowTex:SetSize(10, 10)
+        arrowTex:SetPoint("RIGHT", btn, "RIGHT", -5, 0)
+        arrowTex:SetVertexColor(1, 1, 1, 0.85)
+        btn._lariasArrowTex        = arrowTex
         changeWeekBtn              = btn
         frame._lariasChangeWeekBtn = btn
         return btn
@@ -2204,7 +2213,7 @@ function Addon:CreateFrame()
                 local extracted = ExtractMonthRangeLabel((section and section.title) or currentId or "")
                 cwWeekLabel = (extracted ~= "") and extracted or (L.CHANGE_WEEK_BUTTON or "Change Week")
             end
-            btn:SetText(cwWeekLabel .. " |TInterface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up:10:10|t")
+            btn:SetText(cwWeekLabel)
             local cwTip = L.CHANGE_WEEK_BUTTON or "Change Week"
             btn:SetScript("OnEnter", function(self_)
                 GameTooltip:SetOwner(self_, "ANCHOR_BOTTOMLEFT")
@@ -2339,8 +2348,7 @@ function Addon:CreateFrame()
         local extracted = ExtractMonthRangeLabel(
             (section and section.title) or tostring(sectionId or ""))
         local label = (extracted ~= "") and extracted or (L.CHANGE_WEEK_BUTTON or "Change Week")
-        local arrow = " |TInterface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up:10:10|t"
-        btn:SetText(label .. arrow)
+        btn:SetText(label)
     end
 
     -- Calculates and sets the change-week button to the width of its widest possible
@@ -2369,14 +2377,15 @@ function Addon:CreateFrame()
             btn._lariasMeasureFS = scratch
         end
         local scratch      = btn._lariasMeasureFS
-        local arrow        = " |TInterface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up:10:10|t"
         local sectionsById = Addon._sectionsById or {}
         local maxW         = 108
+        -- Padding = 12 (left inset) + 18 (right inset reserved for arrow icon) = 30.
+        local PAD          = 30
         for i = 1, #order do
             local sec       = sectionsById[tostring(order[i])]
             local extracted = ExtractMonthRangeLabel((sec and sec.title) or tostring(order[i] or ""))
             local label     = (extracted ~= "") and extracted or (L.CHANGE_WEEK_BUTTON or "Change Week")
-            scratch:SetText(label .. arrow)
+            scratch:SetText(label)
             local w = 0
             if scratch.GetUnboundedStringWidth then
                 w = tonumber(scratch:GetUnboundedStringWidth()) or 0
@@ -2384,7 +2393,7 @@ function Addon:CreateFrame()
             if w <= 0 and scratch.GetStringWidth then
                 w = tonumber(scratch:GetStringWidth()) or 0
             end
-            maxW = max(maxW, math.ceil(w) + 24)
+            maxW = max(maxW, math.ceil(w) + PAD)
         end
         btn:SetWidth(maxW)
     end
