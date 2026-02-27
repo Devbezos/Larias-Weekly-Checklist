@@ -1732,18 +1732,9 @@ function Addon:CreateFrame()
 
     frame:Hide()
 
-    -- Handle ESC via keyboard input. When the ilvl ref window is open it consumes
-    -- ESC itself (SetPropagateKeyboardInput(false)), so only this frame sees ESC
-    -- when ilvl ref is already closed.
-    frame:EnableKeyboard(true)
-    frame:SetScript("OnKeyDown", function(self, key)
-        if key == "ESCAPE" then
-            self:SetPropagateKeyboardInput(false)
-            self:Hide()
-        else
-            self:SetPropagateKeyboardInput(true)
-        end
-    end)
+    -- Register with UISpecialFrames so ESC closes this frame without needing
+    -- the protected SetPropagateKeyboardInput (which triggers ADDON_ACTION_BLOCKED).
+    tinsert(UISpecialFrames, "LariasWeeklyChecklistFrame")
 
     self:ApplyTheme(frame)
 

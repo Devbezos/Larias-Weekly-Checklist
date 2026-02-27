@@ -398,16 +398,9 @@ local function BuildIlvlRefWindow()
     closeBtn:SetPoint("TOPRIGHT", win, "TOPRIGHT", -4, -4)
     closeBtn:SetScript("OnClick", function() win:Hide() end)
 
-    -- Handle ESC via keyboard input so only this window closes (not the main frame).
-    win:EnableKeyboard(true)
-    win:SetScript("OnKeyDown", function(self, key)
-        if key == "ESCAPE" then
-            self:SetPropagateKeyboardInput(false)
-            self:Hide()
-        else
-            self:SetPropagateKeyboardInput(true)
-        end
-    end)
+    -- Register with UISpecialFrames so ESC closes this window via Blizzard's
+    -- secure ESC chain rather than the protected SetPropagateKeyboardInput.
+    tinsert(UISpecialFrames, "LariasIlvlRefFrame")
 
     -- Scroll frame (auto-adapts to win size; content reflows instead of scaling)
     local sf = CreateFrame("ScrollFrame", nil, win, "UIPanelScrollFrameTemplate")
