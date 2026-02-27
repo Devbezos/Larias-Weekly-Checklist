@@ -264,14 +264,21 @@ function Addon:CreateHeader(frame)
         if storedStart ~= "" then
             currentId = storedStart
         else
+            -- No explicit pick: find the last section that has at least one checked item.
+            -- This keeps the ">" marker on the week the user was most recently working on
+            -- rather than jumping forward to the next incomplete week the moment the current
+            -- one is fully done (which would feel premature before the Tuesday reset).
             local order = Addon._order or {}
+            local lastActiveId = nil
             for i = 1, #order do
-                if Addon._IsSectionCompleteById and not Addon._IsSectionCompleteById(order[i], db0) then
-                    currentId = tostring(order[i])
-                    break
+                if Addon._HasAnySectionItemChecked and Addon._HasAnySectionItemChecked(order[i], db0) then
+                    lastActiveId = tostring(order[i])
                 end
             end
-            if not currentId and Addon._order and Addon._order[1] then
+            if lastActiveId then
+                currentId = lastActiveId
+            elseif Addon._order and Addon._order[1] then
+                -- Nothing checked yet: default to the first section.
                 currentId = tostring(Addon._order[1])
             end
         end

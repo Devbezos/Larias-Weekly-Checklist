@@ -1080,6 +1080,24 @@ end
 -- Expose for use by the Header module (PopulateHeaderPicker, LayoutHeaderButtons_).
 Addon._IsSectionCompleteById = IsSectionCompleteById
 
+local function HasAnySectionItemChecked(sectionId, db)
+    -- Returns true if at least one item in the section has been checked.
+    local section = Addon._sectionsById[sectionId]
+    if not section then return false end
+    db = db or Addon:EnsureDB()
+    local checked = db.checked
+    local items = section.items or {}
+    local prefix = tostring(sectionId) .. ":"
+    for i = 1, #items do
+        if checked[prefix .. tostring(items[i].id)] then
+            return true
+        end
+    end
+    return false
+end
+-- Expose for the Header module so the picker can track the last actively-worked week.
+Addon._HasAnySectionItemChecked = HasAnySectionItemChecked
+
 -- UI pooling: we reuse section frames and checkboxes to avoid allocations during refresh.
 local function AcquireSectionFrame()
     local sectionFrame = tremove(Addon._sectionPool)
@@ -1387,30 +1405,11 @@ local function OnCheckboxClick(selfBtn)
         SetSectionCollapsed(sectionId, true, database)
     end
 
-    -- Auto-advance: when the user manually completes the current active week,
-    -- advance startAtSectionId to the next week so explicit navigation stays in sync.
-    -- Also repopulate the picker unconditionally so the ">" marker refreshes.
+    -- Refresh the picker ">" marker whenever a section completes.
+    -- We no longer auto-advance startAtSectionId here: the picker fallback
+    -- already tracks the most-recently-active week via HasAnySectionItemChecked,
+    -- so advancing on completion would jump to the following week too soon.
     if secCompleteNow then
-        local order    = Addon._order or {}
-        local curStart = tostring(database.startAtSectionId or "")
-        -- Only update startAtSectionId when it's explicitly set (i.e. the user
-        -- navigated via the picker). When it's "" the picker computes current
-        -- dynamically from completion state, so no write is needed.
-        if curStart ~= "" then
-            local curId = curStart
-            if tostring(sectionId) == curId then
-                for i = 1, #order do
-                    if tostring(order[i]) == curId then
-                        local nextId = order[i + 1]
-                        if nextId then
-                            database.startAtSectionId = tostring(nextId)
-                        end
-                        break
-                    end
-                end
-            end
-        end
-        -- Refresh picker ">" regardless of how currentId is derived.
         if Addon._PopulateHeaderPicker then
             Addon._PopulateHeaderPicker()
         end
