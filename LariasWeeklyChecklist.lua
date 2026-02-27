@@ -300,7 +300,7 @@ local function SetupAddonDB()
             ilvlRefPos    = false,
             ilvlRefSize   = false,
             uiScalePct    = 100,
-            uiOpacityPct  = 100,
+            uiOpacityPct  = 65,
             minimap       = {},  -- LibDBIcon position/hide state (account-wide)
             charClasses   = {},  -- [profileKey] = classToken (e.g. "WARRIOR")
             hiddenChars   = {},  -- [profileKey] = true (hidden from char picker dropdown)
@@ -1014,9 +1014,13 @@ function Addon:ApplyScaleSliderVisibility()
 end
 
 function Addon:ApplyOpacity()
-    local pct   = (self.db and self.db.global and tonumber(self.db.global.uiOpacityPct)) or 100
+    local pct   = (self.db and self.db.global and tonumber(self.db.global.uiOpacityPct)) or 65
     local alpha = math.max(0.1, math.min(1.0, pct / 100))
-    if frame and frame.SetAlpha then frame:SetAlpha(alpha) end
+    -- Only change the background fill's alpha, not the whole frame tree.
+    if frame and frame.SetBackdropColor then
+        frame:SetBackdropColor(
+            Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, alpha)
+    end
     -- Keep the opacity slider thumb in sync.
     local sf = self._inFrameScaleSlider
     if sf and sf.SyncOpacity then sf.SyncOpacity() end

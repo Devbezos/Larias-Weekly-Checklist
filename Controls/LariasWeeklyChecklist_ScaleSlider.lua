@@ -234,7 +234,7 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
 
     local function GetOpacityVal()
         local gdb = Addon.db and Addon.db.global
-        return (gdb and tonumber(gdb.uiOpacityPct)) or 100
+        return (gdb and tonumber(gdb.uiOpacityPct)) or 65
     end
 
     local opacSync = BuildSlider(
