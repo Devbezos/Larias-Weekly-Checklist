@@ -41,6 +41,7 @@ local STRINGS = {
 	OPTIONS_HIDE_MINIMAP_BTN    = "Hide Minimap Button",
 	-- Status banner (shown below the slider row)
 	STATUS_UPDATE_AVAILABLE_FMT  = "Update available! You have %s, newest is %s.",
+	STATUS_SHEET_UPDATE_FMT      = "Spreadsheet Update Detected - You are %d version(s) behind the spreadsheet",
 	STATUS_NO_TRANSLATION_FMT    = "No translation available for %s. Consider contributing!",
 	STATUS_TRANSLATION_NOTICE    = "This is a translation of the English guide. Notice any issues? Consider contributing!",
 	UI_OPACITY_LABEL     = "Opacity",
