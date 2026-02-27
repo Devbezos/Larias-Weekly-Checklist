@@ -1495,6 +1495,16 @@ function Addon:CreateTrackingPanel(parentFrame)
         local GAP    = 6
         local BORDER = 1
         local CINSET = 4
+        -- Cache the last valid targetH so width-only callers (ResizeTrackingCols)
+        -- can pass nil and still use the correct height from the last content render.
+        -- If no height has ever been established, skip — don't collapse the initial
+        -- static layout to the minimum-height fallback before content renders.
+        if targetH and targetH > 0 then
+            TrackingUI.left._lastGvH = targetH
+        else
+            targetH = TrackingUI.left._lastGvH
+            if not (targetH and targetH > 0) then return end
+        end
         -- Height-first layout: divide targetH evenly over 3 sections.
         local availGridW = math.max(60, (leftCol:GetWidth() or 0) - GV_GRID_X)
         local cellW = math.max(30, math.floor(availGridW / 3))
