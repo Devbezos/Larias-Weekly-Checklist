@@ -28,11 +28,10 @@ if not Addon then return end
 --       onToggle(checked:bool) fires on any state change.
 --
 --   Addon.Controls.NewExpandButton(parent [, onToggle [, initialExpanded
---                                  [, expandText [, shrinkText]]]])
---       Styled toggle button that switches between expand/shrink states.
---       Defaults to "▲" (shrunk) / "▼" (expanded) unless custom text is given.
---       btn._expanded  — current state (bool)
---       btn:SetExpanded(bool) — update state + text without firing onToggle
+--                                  [, expandTip [, shrinkTip]]]])
+--       Branded 20×20 toggle button: dark backdrop, gold ▼/▲ glyph, white hover.
+--       btn._expanded        — current state (bool)
+--       btn:SetExpanded(val) — update state + glyph + tooltip without firing onToggle
 
 Addon.Controls = Addon.Controls or {}
 local C = Addon.Controls
@@ -324,37 +323,80 @@ function C.NewCheckBox(parent, onToggle)
 end
 
 -- ── Expand / shrink button ────────────────────────────────────────────────────
--- Creates a styled toggle button (UIPanelButtonTemplate + StyleButton) that
--- switches between expanded and shrunk states.
+-- Branded 20×20 toggle button: dark backdrop, gold ▼/▲ glyph, white on hover.
 --
--- Text shown when content IS shrunk   → expandText (default "▲"; click = expand)
--- Text shown when content IS expanded → shrinkText (default "▼"; click = shrink)
--- Pass locale strings (e.g. "Expand" / "Shrink") to override the glyphs.
+-- initialExpanded=true  → shows ▼ ("content visible; click to shrink")
+-- initialExpanded=false → shows ▲ ("content hidden; click to expand")
 --
--- onToggle(expanded:bool) fires after each state flip.
--- initialExpanded defaults to true.
+-- expandTip / shrinkTip  — tooltip text shown when content IS shrunk/expanded.
+--   Defaults: "Expand" / "Shrink"
+-- onToggle(expanded:bool) fires after each click (NOT from SetExpanded).
 --
--- btn._expanded           — current state (bool)
--- btn:SetExpanded(bool)   — update state + text without firing onToggle
-function C.NewExpandButton(parent, onToggle, initialExpanded, expandText, shrinkText)
-    local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-    C.StyleButton(btn)
+-- btn._expanded        — current state (bool)
+-- btn:SetExpanded(val) — update state + glyph + tooltip without firing onToggle
+function C.NewExpandButton(parent, onToggle, initialExpanded, expandTip, shrinkTip)
+    local btn = CreateFrame("Button", nil, parent)
+    btn:SetSize(20, 20)
+    Addon:ApplyTheme(btn)
 
-    local _expandText = expandText or "\226\150\178"  -- UTF-8 bytes for ▲
-    local _shrinkText = shrinkText or "\226\150\188"  -- UTF-8 bytes for ▼
+    local T  = Addon.THEME or {}
+    local th = T.header or { r = 1.00, g = 0.82, b = 0.00 }  -- gold
+
+    -- ▼ U+25BC = \226\150\188 (expanded: click to shrink)
+    -- ▲ U+25B2 = \226\150\178 (shrunk:   click to expand)
+    local GLYPH_DOWN = "\226\150\188"
+    local GLYPH_UP   = "\226\150\178"
+
+    local _expandTip = expandTip or "Expand"
+    local _shrinkTip = shrinkTip or "Shrink"
+
+    local norm = btn:CreateFontString(nil, "OVERLAY")
+    norm:SetFont("Fonts\\FRIZQT__.TTF", 14, "OUTLINE")
+    norm:SetAllPoints(btn)
+    norm:SetJustifyH("CENTER")
+    norm:SetJustifyV("MIDDLE")
+    norm:SetTextColor(th.r, th.g, th.b, 1)
+    btn:SetFontString(norm)
+
+    local hl = btn:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetAllPoints(btn)
+    hl:SetColorTexture(1, 1, 1, 0.10)
+    btn:SetHighlightTexture(hl)
 
     btn._expanded = (initialExpanded ~= false)
 
-    function btn:SetExpanded(val)
-        self._expanded = val and true or false
-        self:SetText(self._expanded and _shrinkText or _expandText)
+    -- Internal helper ─ sync glyph; does NOT touch tooltip (OnEnter handles that).
+    local function RefreshGlyph()
+        norm:SetText(btn._expanded and GLYPH_DOWN or GLYPH_UP)
     end
 
-    btn:SetExpanded(btn._expanded)  -- set initial glyph
+    function btn:SetExpanded(val)
+        self._expanded = val and true or false
+        RefreshGlyph()
+    end
 
+    RefreshGlyph()
+
+    btn:SetScript("OnEnter", function(self_)
+        norm:SetTextColor(1, 1, 1, 1)
+        local tip = self_._expanded and _shrinkTip or _expandTip
+        GameTooltip:SetOwner(self_, "ANCHOR_BOTTOMLEFT")
+        GameTooltip:SetText(tip, 1, 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    btn:SetScript("OnLeave", function()
+        norm:SetTextColor(th.r, th.g, th.b, 1)
+        GameTooltip:Hide()
+    end)
     btn:SetScript("OnClick", function(self_)
         self_:SetExpanded(not self_._expanded)
         if onToggle then onToggle(self_._expanded) end
+        -- Refresh the tooltip text live if the cursor is still over the button.
+        if GameTooltip:GetOwner() == self_ then
+            local tip = self_._expanded and _shrinkTip or _expandTip
+            GameTooltip:SetText(tip, 1, 1, 1, 1, true)
+            GameTooltip:Show()
+        end
     end)
 
     return btn

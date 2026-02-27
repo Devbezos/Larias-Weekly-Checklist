@@ -500,16 +500,18 @@ local function BuildIlvlRefWindow()
 
     win._ilvlReflow = ReflowIlvlSections
 
-    -- Toggle button: text button showing "Expand" / "Shrink".
-    local toggleBtn = CreateFrame("Button", nil, win, "UIPanelButtonTemplate")
-    toggleBtn:SetPoint("TOPRIGHT", closeBtn, "TOPLEFT", 4, 0)
-    toggleBtn:SetSize(60, 20)
-    if Addon._styleActionButton then Addon._styleActionButton(toggleBtn) end
+    -- Toggle button: branded expand/shrink icon matching the header button row.
+    local toggleBtn = Addon.Controls.NewExpandButton(win,
+        nil,  -- OnClick wired below
+        not _isMaximized,  -- shrunk = expanded=true shows the ▼ ("click to shrink") glyph
+        Locale.ILVLREF_TOGGLE_EXPAND or "Expand",
+        Locale.ILVLREF_TOGGLE_SHRINK or "Shrink")
+    -- Sit immediately left of the close button, vertically aligned.
+    toggleBtn:SetPoint("TOPRIGHT", closeBtn, "TOPLEFT", -2, 0)
 
     local function UpdateToggleTexture()
-        toggleBtn:SetText(_isMaximized
-            and (Locale.ILVLREF_TOGGLE_SHRINK or "Shrink")
-            or  (Locale.ILVLREF_TOGGLE_EXPAND or "Expand"))
+        -- expanded=true means the window IS maximized (down arrow, click to shrink).
+        toggleBtn:SetExpanded(_isMaximized)
     end
     UpdateToggleTexture()
 
