@@ -26,6 +26,7 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
     local LABEL_H   = Addon.UI.sliderLabelH or 14
     local LABEL_GAP = 2
     local TOTAL_H   = LABEL_H + LABEL_GAP + SLIDER_H
+    local CONTENT_W = MIN_LBL_W + GAP + TRACK_W + GAP + MAX_LBL_W  -- total fixed slider row width
 
     -- Outer container spanning the full bottom width of the frame.
     local sf = CreateFrame("Frame", nil, parentFrame)
@@ -37,21 +38,15 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
     sf:EnableMouse(true)
     self._inFrameScaleSlider = sf
 
-    -- Re-anchor the slider container's right edge so it stops before the char-
-    -- picker button when that button is visible (avoids overlap in the bottom row).
-    sf.AdjustForCpBtn = function(cpBtn)
-        local inset   = Addon.UI.sectionInsetX  or 14
-        local botPad  = (Addon.UI.sliderBottomPad or 4) + (sf._bannerBotExtra or 0)
-        local rightInset
-        if cpBtn and cpBtn.IsShown and cpBtn:IsShown() then
-            local cpW = (cpBtn.GetWidth and math.ceil(cpBtn:GetWidth())) or 108
-            rightInset = inset + cpW + 8   -- 8px gap between slider edge and button
-        else
-            rightInset = inset
-        end
+    -- Re-anchor the slider container to absorb any banner height change.
+    -- The char-picker button is now placed ABOVE the slider row by LayoutHeaderButtons_
+    -- so no right-edge shrinking is needed.
+    sf.AdjustForCpBtn = function(_ignore)
+        local inset  = Addon.UI.sectionInsetX  or 14
+        local botPad = (Addon.UI.sliderBottomPad or 4) + (sf._bannerBotExtra or 0)
         sf:ClearAllPoints()
-        sf:SetPoint("BOTTOMLEFT",  parentFrame, "BOTTOMLEFT",  inset,       botPad)
-        sf:SetPoint("BOTTOMRIGHT", parentFrame, "BOTTOMRIGHT", -rightInset, botPad)
+        sf:SetPoint("BOTTOMLEFT",  parentFrame, "BOTTOMLEFT",  inset,  botPad)
+        sf:SetPoint("BOTTOMRIGHT", parentFrame, "BOTTOMRIGHT", -inset, botPad)
     end
 
     -- BuildSlider: populates `pane` (height = TOTAL_H) with the interactive
@@ -60,10 +55,12 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
                                minLabel, maxLabel, fmtFn, liveApply)
         local USABLE = TRACK_W - THUMB_W
 
-        -- Min label anchored to the bottom-left of the pane (track zone).
+        -- Min label anchored to the bottom-centre of the pane so the entire
+        -- content block (minLbl + track + maxLbl) is horizontally centred,
+        -- keeping the title label (which spans the full pane) aligned over the track.
         local minLbl = pane:CreateFontString(nil, "OVERLAY")
         minLbl:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
-        minLbl:SetPoint("BOTTOMLEFT", pane, "BOTTOMLEFT", 0, 0)
+        minLbl:SetPoint("BOTTOMLEFT", pane, "BOTTOM", -CONTENT_W / 2, 0)
         minLbl:SetSize(MIN_LBL_W, SLIDER_H)
         minLbl:SetJustifyH("RIGHT")
         minLbl:SetJustifyV("MIDDLE")

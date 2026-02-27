@@ -1108,16 +1108,27 @@ function Addon:ApplyScaleSliderVisibility()
         or 0
     sf._bannerBotExtra = bannerExtra
 
-    -- Re-adjust slider right boundary so it doesn't overlap the Swap Profile button.
+    -- Re-adjust slider position for banner height (cpBtn is no longer shrinking the slider).
     if sf.AdjustForCpBtn then
-        local cpBtn = Addon._cpEnsureBtn and Addon._cpEnsureBtn()
-        sf.AdjustForCpBtn(cpBtn)
+        sf.AdjustForCpBtn(nil)
     end
 
     -- Determine whether the char-picker button is also in the bottom row.
     local featureOn = (self.FEATURE_FLAGS and self.FEATURE_FLAGS.ENABLE_CHAR_SELECTOR) ~= false
     local hasChars  = featureOn and (self.HasPickableChars and self:HasPickableChars())
     local cpVisible = featureOn and hasChars and (db.showCharPickerBtn ~= false)
+
+    -- When sliders are visible, push cpBtn above them so it never overlaps the track.
+    local cpBtnRef = self._mainFrame and self._mainFrame._lariasCharPickerBtn
+    if cpBtnRef and cpBtnRef.IsShown and cpBtnRef:IsShown() then
+        local _cpY = (Addon.UI.sliderBottomPad or 4) + bannerExtra
+        if anySlider then
+            _cpY = _cpY + (sf:GetHeight() or 36) + 4
+        end
+        cpBtnRef:ClearAllPoints()
+        cpBtnRef:SetPoint("BOTTOMRIGHT", self._mainFrame, "BOTTOMRIGHT",
+            -(Addon.UI.sectionInsetX or 14), _cpY)
+    end
 
     -- Re-anchor the tracking panel so it clears the entire bottom row.
     local tf = self._trackingFrame
@@ -1127,7 +1138,9 @@ function Addon:ApplyScaleSliderVisibility()
         local topPad       = Addon.UI.sliderTopPad    or 4
         local sliderTot    = (Addon.UI.sliderH or 20) + (Addon.UI.sliderLabelH or 14) + 2
         local botY
-        if anySlider then
+        if anySlider and cpVisible then
+            botY = botPad + sliderTot + 4 + 22 + topPad  -- slider + gap + cpBtn + topPad
+        elseif anySlider then
             botY = botPad + sliderTot + topPad  -- label row + track row
         elseif cpVisible then
             botY = botPad + 22 + topPad         -- only the char-picker button (22px)
@@ -2349,13 +2362,18 @@ function Addon:CreateFrame()
                     if Addon._cpOnClick then Addon._cpOnClick() end
                 end)
                 cpBtn:ClearAllPoints()
-                -- Sit at the bottom-right of the frame, above the status banner,
-                -- vertically aligned with the scale slider on the opposite (left) side.
+                -- Sit at the bottom-right of the frame, above any visible sliders so
+                -- it never overlaps the slider track (slider content is 170px fixed-width).
                 local _cpBannerExtra = Addon._statusBanner
                     and ((Addon._statusBannerH or BANNER_H) + (Addon._statusBannerPad or BANNER_PAD))
                     or 0
+                local _spf = Addon._inFrameScaleSlider
+                local _cpY = (Addon.UI.sliderBottomPad or 4) + _cpBannerExtra
+                if _spf and _spf.IsShown and _spf:IsShown() then
+                    _cpY = _cpY + (_spf:GetHeight() or 36) + 4  -- 4px gap above slider
+                end
                 cpBtn:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT",
-                    -(Addon.UI.sectionInsetX or 14), (Addon.UI.sliderBottomPad or 4) + _cpBannerExtra)
+                    -(Addon.UI.sectionInsetX or 14), _cpY)
                 if Addon._cpUpdateLabel then Addon._cpUpdateLabel() end
                 cpBtn:Show()
                 -- Shrink the slider container's right edge to stop before the button.
