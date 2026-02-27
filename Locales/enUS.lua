@@ -38,7 +38,7 @@ local STRINGS = {
 	OPTIONS_HIDE_SLIDERS        = "Hide sliders",
 	OPTIONS_HIDE_OPACITY_SLIDER = "Hide opacity slider",
 	OPTIONS_HIDE_UPDATE_NOTICE  = "Hide update notices",
-
+     OPTIONS_HIDE_MINIMAP_BTN    = "Hide minimap button",
 	-- Status banner (shown below the slider row)
 	STATUS_UPDATE_AVAILABLE_FMT  = "Update available! You have %s, newest is %s.",
 	STATUS_NO_TRANSLATION_FMT    = "No translation available for %s. Consider contributing!",

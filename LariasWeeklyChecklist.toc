@@ -43,6 +43,7 @@ components\LariasWeeklyChecklist_Options.lua
 
 # Feature modules
 features\LariasWeeklyChecklist_Comms.lua
+features\LariasWeeklyChecklist_Settings.lua
 features\header\LariasWeeklyChecklist_GearPopup.lua
 features\header\LariasWeeklyChecklist_IlvlRef.lua
 features\header\LariasWeeklyChecklist_Header.lua

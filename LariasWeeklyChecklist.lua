@@ -493,6 +493,11 @@ function Addon:OnEnable()
         self:ConfigureTrackingEvents(nil, true, true)
     end
 
+    -- Register the Interface → AddOns settings panel.
+    if self.RegisterSettingsPanel then
+        self:RegisterSettingsPanel()
+    end
+
     -- Version announce happens in CommsOnEnable.
 end
 
