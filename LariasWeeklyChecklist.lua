@@ -1317,9 +1317,9 @@ local function EmphasizeText(text)
         s, e = text:find("%S+", pos)
         if not s then break end
         local word = text:sub(s, e)
-        -- Emphasise if the word contains 2+ consecutive alpha chars
-        -- that are all uppercase (e.g. "RENOWN", "DONT", "XP" — not "DMFx").
-        local letters = word:match("[%a][%a]+")
+        -- Emphasise if the word contains 1+ consecutive alpha chars
+        -- that are all uppercase (e.g. "RENOWN", "A", "XP" — not "DMFx").
+        local letters = word:match("[%a]+")
         if letters and letters == letters:upper() then
             out[#out + 1] = OPEN .. word .. CLOSE
         else
