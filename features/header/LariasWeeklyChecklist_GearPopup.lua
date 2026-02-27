@@ -151,6 +151,15 @@ end
 
 function Addon:ToggleGearPopup(anchor, growRight)
     local p = self._gearPopup
+    -- Guard: the outside-click catcher fires OnMouseDown (closes the popup) and
+    -- then propagates the same input event to the gear button, whose OnClick
+    -- arrives in the same frame.  By then IsShown() is already false so the
+    -- naive toggle would re-open the popup immediately.  _lariasJustHidden is
+    -- set by the OnHide hook below and cleared one frame later via C_Timer.
+    if p and p._lariasJustHidden then
+        p._lariasJustHidden = nil
+        return
+    end
     if p and p.IsShown and p:IsShown() then
         p:Hide()
         return
@@ -349,7 +358,15 @@ function Addon:ToggleGearPopup(anchor, growRight)
         end
         verLabel:SetTextColor(0.45, 0.45, 0.45, 0.6)
 
-
+        -- When the popup is hidden (whether by its own catcher or programmatically),
+        -- set a one-frame flag so ToggleGearPopup can tell if the hide and the
+        -- next open request arrived in the same input event.
+        p:HookScript("OnHide", function(self_)
+            self_._lariasJustHidden = true
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0, function() self_._lariasJustHidden = nil end)
+            end
+        end)
 
         self._gearPopup = p
     end
