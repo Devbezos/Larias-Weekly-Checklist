@@ -31,7 +31,6 @@ local DATASET = {
             { id = "optional_kill_each_rare_once_in_each_zone_for_renown_these_are_a_weekly_lockout_for_each_rare", text = "(Optional) Kill each rare once in each zone for renown. These are a weekly lockout for each rare." },
             { id = "hunt_down_each_region_s_treasures_for_free_renown_see_doc_for_guide", text = "Hunt down each region's treasures for free Renown. See doc for guide" },
             { id = "complete_4x_prey_on_normal_difficulty_for_renown", text = "Complete 4x Prey on normal difficulty for renown" },
-            { id = "complete_delves_for_veteran_gear_seeing_screenshots_of_delves_awarding_2_6_veteran_which_is_only_1_step_below_m0_if_anyone_can_get_confirmation_if_these_are_endlessly_repeatable_please_reach_out_to_larias_on_discord_with_screenshots_thanks", text = "Complete delves for veteran gear? Seeing screenshots of Delves awarding 2/6 veteran which is only 1 step below m0. If anyone can get confirmation if these are endlessly repeatable, please reach out to Larias on discord with screenshots. Thanks!" },
             { id = "complete_side_quest_chains_for_renown_can_be_done_on_alts_to_level_at_same_time_new_darkmoon_faire_no_longer_gives_a_renown_buff", text = "Complete side quest chains for renown. (can be done on alts to level at same time). NEW: DARKMOON FAIRE NO LONGER GIVES A RENOWN BUFF!" },
         },
     },
