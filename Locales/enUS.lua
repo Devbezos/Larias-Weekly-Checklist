@@ -31,13 +31,17 @@ local STRINGS = {
 	OPTIONS_HIDDEN_CHARS_TITLE = "Hidden characters:",
 	OPTIONS_HIDDEN_CHARS_NONE = "None",
 	RESET_BUTTON = "Reset List",
-	UI_SCALE_LABEL = "Scale",
-	UI_SCALE_MIN_LABEL = "50%",
-	UI_SCALE_MAX_LABEL = "150%",
-	OPTIONS_HIDE_SCALE_SLIDER = "Hide scale slider",
-
-	-- List tab
-	DONE_PREFIX = "[Done] ",
+	UI_SCALE_LABEL       = "Scale",
+	UI_SCALE_MIN_LABEL   = "50%",
+	UI_SCALE_MAX_LABEL   = "150%",
+	OPTIONS_HIDE_SCALE_SLIDER   = "Hide scale slider",
+	OPTIONS_HIDE_OPACITY_SLIDER = "Hide opacity slider",
+	UI_OPACITY_LABEL     = "Opacity",
+	UI_OPACITY_MIN_LABEL = "10%",
+	UI_OPACITY_MAX_LABEL = "100%",
+	UI_OPACITY_LABEL     = "Opacity",
+	UI_OPACITY_MIN_LABEL = "10%",
+	UI_OPACITY_MAX_LABEL = "100%",
 
 	-- Tracking panel
 	TRACKING_GREAT_VAULT_TITLE = "Great Vault",

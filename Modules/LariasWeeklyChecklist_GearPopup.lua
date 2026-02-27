@@ -40,8 +40,10 @@ function Addon:SyncGearPopup()
          L.OPTIONS_HIDE_ILVL_REF_BTN or "Hide ilvl references")
     Sync(p._cbHideCharPicker,   db.showCharPickerBtn == false,
          L.OPTIONS_HIDE_CHAR_SELECT  or "Hide character selector")
-    Sync(p._cbHideScaleSlider,  db.showScaleSlider == false,
-         L.OPTIONS_HIDE_SCALE_SLIDER or "Hide scale slider")
+    Sync(p._cbHideScaleSlider,   db.showScaleSlider   == false,
+         L.OPTIONS_HIDE_SCALE_SLIDER   or "Hide scale slider")
+    Sync(p._cbHideOpacitySlider,  db.showOpacitySlider == false,
+         L.OPTIONS_HIDE_OPACITY_SLIDER or "Hide opacity slider")
 
     -- Reset button label.
     if p._gearResetBtn then
@@ -78,28 +80,33 @@ function Addon:SyncGearPopup()
         local PAD_   = 10
         local ROW_H_ = 16   -- custom checkbox visual box height
         local TILE_H_= 34   -- tile height unchanged
-        local N_TOTAL = 7
+        local N_TOTAL = 8
         local rstStartY_  = PAD_
         local div1StartY_ = rstStartY_ + 22 + 6
         local cbsY_       = div1StartY_ + 1 + 8
-        -- Char picker is always slot index 6; scale slider is always slot index 7.
-        -- When char picker is hidden, slide the scale slider up into slot 6.
-        local SLIDER_IDX  = 7
-        local sliderVisIdx = showCharRow and SLIDER_IDX or (SLIDER_IDX - 1)
-        local cbSlider = p._cbHideScaleSlider
-        if cbSlider then
-            local tileTopY = -(cbsY_ + (sliderVisIdx - 1) * TILE_H_)
+        -- Slots 1-5 always present; slot 6 = char picker (conditional);
+        -- slot 7 = scale slider; slot 8 = opacity slider.
+        -- When char picker is hidden both slider slots shift up by one.
+        local SCALE_IDX    = 7
+        local OPACITY_IDX  = 8
+        local scaleVisIdx   = showCharRow and SCALE_IDX   or (SCALE_IDX - 1)
+        local opacityVisIdx = showCharRow and OPACITY_IDX or (OPACITY_IDX - 1)
+        local function ReflowCb(cb, visIdx)
+            if not cb then return end
+            local tileTopY = -(cbsY_ + (visIdx - 1) * TILE_H_)
             local cbOffY   = tileTopY - math.floor((TILE_H_ - ROW_H_) / 2)
-            cbSlider:ClearAllPoints()
-            cbSlider:SetPoint("TOPLEFT", p, "TOPLEFT", PAD_, cbOffY)
-            if cbSlider._hit then
-                cbSlider._hit:ClearAllPoints()
-                cbSlider._hit:SetPoint("TOPLEFT",  p, "TOPLEFT",  0, tileTopY)
-                cbSlider._hit:SetPoint("TOPRIGHT", p, "TOPRIGHT", 0, tileTopY)
+            cb:ClearAllPoints()
+            cb:SetPoint("TOPLEFT", p, "TOPLEFT", PAD_, cbOffY)
+            if cb._hit then
+                cb._hit:ClearAllPoints()
+                cb._hit:SetPoint("TOPLEFT",  p, "TOPLEFT",  0, tileTopY)
+                cb._hit:SetPoint("TOPRIGHT", p, "TOPRIGHT", 0, tileTopY)
             end
         end
+        ReflowCb(p._cbHideScaleSlider,   scaleVisIdx)
+        ReflowCb(p._cbHideOpacitySlider, opacityVisIdx)
 
-        local nVisible    = showCharRow and N_TOTAL or (N_TOTAL - 1)
+        local nVisible = showCharRow and N_TOTAL or (N_TOTAL - 1)
         -- Reposition the hidden-chars divider and trigger to follow the last checkbox.
         local div2StartY_ = cbsY_ + nVisible * TILE_H_ + 6
         local hidStartY_  = div2StartY_ + 1 + 8
@@ -212,7 +219,8 @@ function Addon:ToggleGearPopup(anchor)
             { key = "_cbHideChangeWeek",  },
             { key = "_cbHideIlvlRef",     },
             { key = "_cbHideCharPicker",  },
-            { key = "_cbHideScaleSlider", },
+            { key = "_cbHideScaleSlider",   },
+            { key = "_cbHideOpacitySlider", },
         }
         local callbacks = {
             _cbHideCompleted  = function(checked)
@@ -243,11 +251,17 @@ function Addon:ToggleGearPopup(anchor)
             _cbHideCharPicker = function(checked)
                 local db = Addon:EnsureDB()
                 db.showCharPickerBtn = not checked
-                if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
+                if Addon.LayoutHeaderButtons        then Addon:LayoutHeaderButtons()        end
+                if Addon.ApplyScaleSliderVisibility then Addon:ApplyScaleSliderVisibility() end
             end,
             _cbHideScaleSlider = function(checked)
                 local db = Addon:EnsureDB()
                 db.showScaleSlider = not checked
+                if Addon.ApplyScaleSliderVisibility then Addon:ApplyScaleSliderVisibility() end
+            end,
+            _cbHideOpacitySlider = function(checked)
+                local db = Addon:EnsureDB()
+                db.showOpacitySlider = not checked
                 if Addon.ApplyScaleSliderVisibility then Addon:ApplyScaleSliderVisibility() end
             end,
         }

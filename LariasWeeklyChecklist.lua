@@ -102,7 +102,7 @@ do
 
         self.CONSTANTS.ui = self.CONSTANTS.ui or self.UI or {
             frameW = 520,
-            frameH = 650,
+            frameH = 720,
             padOuterX = 14,
             padOuterTop = 10,
             closeInset = 4,
@@ -123,6 +123,7 @@ do
             trackH = 250,
             trackTopPad = 10,
             sliderH = 20,
+            sliderLabelH = 14,
             sliderBottomPad = 4,
             sliderTopPad = 4,
         }
@@ -277,6 +278,7 @@ local CHAR_DEFAULTS = {
     showIlvlRefBtn        = true,
     showCharPickerBtn     = true,
     showScaleSlider       = true,
+    showOpacitySlider     = true,
     debug                 = false,
     startAtSectionId      = "",
 }
@@ -298,6 +300,7 @@ local function SetupAddonDB()
             ilvlRefPos    = false,
             ilvlRefSize   = false,
             uiScalePct    = 100,
+            uiOpacityPct  = 100,
             minimap       = {},  -- LibDBIcon position/hide state (account-wide)
             charClasses   = {},  -- [profileKey] = classToken (e.g. "WARRIOR")
             hiddenChars   = {},  -- [profileKey] = true (hidden from char picker dropdown)
@@ -870,7 +873,8 @@ function Addon:ApplyScrollLayout()
         trackingHeight = tonumber(trackingHeight) or Addon.UI.trackH
         local sf           = self._inFrameScaleSlider
         local sliderShown  = sf and sf.IsShown and sf:IsShown()
-        local sliderH      = sliderShown and (Addon.UI.sliderH         or 0) or 0
+        local sliderRowH   = (Addon.UI.sliderH or 0) + (Addon.UI.sliderLabelH or 0) + 2
+        local sliderH      = sliderShown and sliderRowH                     or 0
         local sliderBotPad = sliderShown and (Addon.UI.sliderBottomPad or 0) or 0
         local sliderTopPad = sliderShown and (Addon.UI.sliderTopPad    or 0) or 0
         extra = trackingHeight + Addon.UI.trackTopPad
@@ -964,25 +968,52 @@ end
 function Addon:ApplyScaleSliderVisibility()
     local sf = self._inFrameScaleSlider
     if not sf then return end
-    local db   = self:EnsureDB()
-    local show = db.showScaleSlider ~= false
-    sf:SetShown(show)
-    -- Re-anchor the tracking panel bottom so it fills the freed space when
-    -- the slider is hidden, and retreats above the slider when visible.
+    local db           = self:EnsureDB()
+    local scaleShown   = db.showScaleSlider   ~= false
+    local opacityShown = db.showOpacitySlider ~= false
+    local anySlider    = scaleShown or opacityShown
+
+    -- Show / hide individual slider panes then reflow the shared container.
+    if sf._scalePane   then sf._scalePane:SetShown(scaleShown)     end
+    if sf._opacityPane then sf._opacityPane:SetShown(opacityShown) end
+    if sf._layout      then sf._layout() end
+    sf:SetShown(anySlider)
+
+    -- Determine whether the char-picker button is also in the bottom row.
+    local featureOn = (self.FEATURE_FLAGS and self.FEATURE_FLAGS.ENABLE_CHAR_SELECTOR) ~= false
+    local hasChars  = featureOn and (self.HasPickableChars and self:HasPickableChars())
+    local cpVisible = featureOn and hasChars and (db.showCharPickerBtn ~= false)
+
+    -- Re-anchor the tracking panel so it clears the entire bottom row.
     local tf = self._trackingFrame
     if tf then
-        local inset = Addon.UI.sectionInsetX or 14
-        local botY  = show
-            and ((Addon.UI.sliderBottomPad or 4) + (Addon.UI.sliderH or 20) + (Addon.UI.sliderTopPad or 4))
-            or  (Addon.UI.sliderBottomPad or 4)
+        local inset     = Addon.UI.sectionInsetX  or 14
+        local botPad    = Addon.UI.sliderBottomPad or 4
+        local topPad    = Addon.UI.sliderTopPad    or 4
+        local sliderTot = (Addon.UI.sliderH or 20) + (Addon.UI.sliderLabelH or 14) + 2
+        local botY
+        if anySlider then
+            botY = botPad + sliderTot + topPad  -- label row + track row
+        elseif cpVisible then
+            botY = botPad + 22 + topPad         -- only the char-picker button (22px)
+        else
+            botY = botPad                        -- nothing in the bottom row
+        end
         tf:ClearAllPoints()
         tf:SetPoint("BOTTOMLEFT",  tf:GetParent(), "BOTTOMLEFT",  inset,  botY)
         tf:SetPoint("BOTTOMRIGHT", tf:GetParent(), "BOTTOMRIGHT", -inset, botY)
-        -- Do NOT force SetHeight here — ResizeTrackingPanelToContent already sized
-        -- the frame to fit its content.  Resetting to trackH would create empty
-        -- space at the bottom whenever the content is shorter than the default.
+        -- Do NOT force SetHeight — ResizeTrackingPanelToContent owns the height.
     end
     if self.ApplyScrollLayout then self:ApplyScrollLayout() end
+end
+
+function Addon:ApplyOpacity()
+    local pct   = (self.db and self.db.global and tonumber(self.db.global.uiOpacityPct)) or 100
+    local alpha = math.max(0.1, math.min(1.0, pct / 100))
+    if frame and frame.SetAlpha then frame:SetAlpha(alpha) end
+    -- Keep the opacity slider thumb in sync.
+    local sf = self._inFrameScaleSlider
+    if sf and sf.SyncOpacity then sf.SyncOpacity() end
 end
 
 local function Key(sectionId, itemId)
@@ -2422,7 +2453,8 @@ function Addon:CreateFrame()
 
     -- Restore persisted scale immediately so the frame never shows at 100%
     -- on first open after a reload before the slider is touched.
-    if self.ApplyUIScale then self:ApplyUIScale() end
+    if self.ApplyUIScale  then self:ApplyUIScale()  end
+    if self.ApplyOpacity  then self:ApplyOpacity()  end
 
     if scrollFrame then scrollFrame:Show() end
 end
