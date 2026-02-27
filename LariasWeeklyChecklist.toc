@@ -38,10 +38,10 @@ components\LariasWeeklyChecklist_Buttons.lua
 components\LariasWeeklyChecklist_Checkbox.lua
 components\LariasWeeklyChecklist_Dropdown.lua
 components\LariasWeeklyChecklist_ScaleSlider.lua
+components\LariasWeeklyChecklist_Options.lua
 
 # Feature modules
 features\LariasWeeklyChecklist_Comms.lua
-features\header\LariasWeeklyChecklist_Options.lua
 features\header\LariasWeeklyChecklist_GearPopup.lua
 features\header\LariasWeeklyChecklist_IlvlRef.lua
 features\header\LariasWeeklyChecklist_Header.lua
