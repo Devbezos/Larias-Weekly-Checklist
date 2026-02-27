@@ -36,10 +36,6 @@ function Addon:ToggleHiddenCharsDropdown()
         catcher:SetFrameStrata("FULLSCREEN_DIALOG")
         catcher:SetFrameLevel(picker:GetFrameLevel() - 1)
         catcher:Hide()
-        -- Pass the click through so it also reaches its intended target.
-        if catcher.SetPassThroughButtons then
-            catcher:SetPassThroughButtons("LeftButton", "RightButton", "MiddleButton")
-        end
         catcher:SetScript("OnMouseDown", function()
             picker:Hide()
             catcher:Hide()
