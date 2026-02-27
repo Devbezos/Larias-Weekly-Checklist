@@ -14,7 +14,10 @@ if not Addon then return end
 --       "Close" tooltip. onClick defaults to parent:Hide().
 --
 --   Addon.Controls.NewSettingsButton(parent [, onClick [, tooltip]])
---       Themed 20×20 gear-icon button (UI-OptionsButton), gold on hover.
+--       Branded 20×20 gear-icon button, dark backdrop, gold on hover.
+--
+--   Addon.Controls.NewIconButton(parent, texturePath [, onClick [, tooltip]])
+--       Branded 20×20 icon button (any texture), dark backdrop, gold on hover.
 --
 --   Addon.Controls.NewCheckBox(parent [, onToggle])
 --       Themed CheckButton + right-hand label (_label) + full-width hit area (_hit).
@@ -194,6 +197,57 @@ function C.NewSettingsButton(parent, onClick, tooltip)
         norm:SetVertexColor(tt.r, tt.g, tt.b, 0.65)  -- back to white/dim
         GameTooltip:Hide()
     end)
+    return btn
+end
+
+-- ── Generic icon button ─────────────────────────────────────────────────────────────
+-- Creates a 20×20 branded icon button with any texture (2 px inset so the dark
+-- backdrop border shows around it). White at rest, gold on hover. Tooltip shown
+-- on mouse-over.  onClick defaults to a no-op.
+function C.NewIconButton(parent, texturePath, onClick, tooltip)
+    local btn = CreateFrame("Button", nil, parent)
+    btn:SetSize(20, 20)
+
+    Addon:ApplyTheme(btn)
+
+    local T  = Addon.THEME or {}
+    local tt = T.text   or { r = 1, g = 1, b = 1 }
+    local th = T.header or { r = 1, g = 0.82, b = 0 }
+
+    local PAD = 2
+    local norm = btn:CreateTexture(nil, "BORDER")
+    norm:SetTexture(texturePath)
+    norm:SetPoint("TOPLEFT",     btn, "TOPLEFT",      PAD, -PAD)
+    norm:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -PAD,  PAD)
+    norm:SetVertexColor(tt.r, tt.g, tt.b, 0.65)
+    btn:SetNormalTexture(norm)
+
+    local pushed = btn:CreateTexture(nil, "OVERLAY")
+    pushed:SetTexture(texturePath)
+    pushed:SetPoint("TOPLEFT",     btn, "TOPLEFT",      PAD, -PAD)
+    pushed:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -PAD,  PAD)
+    pushed:SetVertexColor(th.r * 0.75, th.g * 0.75, th.b * 0.75, 1)
+    btn:SetPushedTexture(pushed)
+
+    local hl = btn:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetAllPoints(btn)
+    hl:SetColorTexture(1, 1, 1, 0.10)
+    btn:SetHighlightTexture(hl)
+
+    btn:SetScript("OnEnter", function(self_)
+        norm:SetVertexColor(th.r, th.g, th.b, 1)
+        if tooltip then
+            GameTooltip:SetOwner(self_, "ANCHOR_BOTTOMLEFT")
+            GameTooltip:SetText(tooltip, 1, 1, 1, 1, true)
+            GameTooltip:Show()
+        end
+    end)
+    btn:SetScript("OnLeave", function()
+        norm:SetVertexColor(tt.r, tt.g, tt.b, 0.65)
+        GameTooltip:Hide()
+    end)
+
+    btn:SetScript("OnClick", onClick or function() end)
     return btn
 end
 

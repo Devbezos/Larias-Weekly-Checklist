@@ -1869,14 +1869,13 @@ function Addon:CreateFrame()
 
     local function EnsureIlvlRefBtn_()
         if ilvlRefBtn then return ilvlRefBtn end
-        local btn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        btn:SetSize(140, 22)
-        StyleMainTabButton(btn)
-        btn:SetText(L.ILVLREF_BUTTON or "View Item Levels")
-        btn:SetScript("OnClick", function()
-            Addon:ToggleIlvlRefWindow()
-        end)
-        ilvlRefBtn             = btn
+        local C   = Addon.Controls
+        local tip = L.ILVLREF_BUTTON or "View Item Levels"
+        local btn = C.NewIconButton(frame,
+            "Interface\\Buttons\\UI-MicroButton-Character-Up",
+            function() Addon:ToggleIlvlRefWindow() end,
+            tip)
+        ilvlRefBtn              = btn
         frame._lariasIlvlRefBtn = btn
         return btn
     end
@@ -2262,27 +2261,8 @@ function Addon:CreateFrame()
         if showIR then
             local btn = EnsureIlvlRefBtn_()
             btn:ClearAllPoints()
-            btn:SetPoint("TOPRIGHT", gearBtn, "TOPLEFT", -6, -2)
+            btn:SetPoint("TOPRIGHT", gearBtn, "TOPLEFT", -4, 0)
             btn:Show()
-            if C_Timer and C_Timer.After then
-                C_Timer.After(0, function()
-                    if not (btn and btn.IsShown and btn:IsShown()) then return end
-                    local fs = btn.GetFontString and btn:GetFontString()
-                    local w  = 0
-                    if fs then
-                        if fs.GetUnboundedStringWidth then
-                            w = tonumber(fs:GetUnboundedStringWidth()) or 0
-                        end
-                        if w <= 0 and fs.GetStringWidth then
-                            w = tonumber(fs:GetStringWidth()) or 0
-                        end
-                    end
-                    if w <= 0 and btn.GetTextWidth then
-                        w = tonumber(btn:GetTextWidth()) or 0
-                    end
-                    btn:SetWidth(max(108, math.ceil(w) + 24))
-                end)
-            end
         elseif ilvlRefBtn then
             ilvlRefBtn:Hide()
             if Addon._ilvlRefWindow and Addon._ilvlRefWindow.IsShown and Addon._ilvlRefWindow:IsShown() then
@@ -2294,7 +2274,7 @@ function Addon:CreateFrame()
         local _insetX = (Addon.UI.padOuterX or 14) + (Addon.UI.sectionInsetX or 14)
         local _leftW  = _insetX + (showCW and (108 + 6) or 0)
         local _rightW = (Addon.UI.closeInset or 4) + 32 + 2 + 20  -- close + gear
-        if showIR then _rightW = _rightW + 6 + 140 end
+        if showIR then _rightW = _rightW + 4 + 20 end
         local _minW = _leftW + 20 + _rightW  -- 20px breathing room between sides
         -- Never go below the 80/120% design bounds, regardless of button layout.
         local _absMinW = math.floor(Addon.UI.frameW * 0.8)
