@@ -4,6 +4,10 @@ import re
 import sys
 from pathlib import Path
 
+# Matches the stored spreadsheet version comment written by this script.
+# Line format:  -- @sheet-version: <value>
+SHEET_VERSION_LINE_RE = re.compile(r"^--\s*@sheet-version:\s*(.+)$", re.MULTILINE)
+
 HEADER_PREFIX_RE = re.compile(r"^\s*(Early Access|Pre-Season|Season|Week(?:s)?)\b", re.IGNORECASE)
 
 MONTHS = r"(Jan|January|Feb|February|Mar|March|Apr|April|May|Jun|June|Jul|July|Aug|August|Sep|Sept|September|Oct|October|Nov|November|Dec|December)"
@@ -53,8 +57,29 @@ def detect_newline(text: str) -> str:
     return "\r\n" if "\r\n" in text else "\n"
 
 
-def build_enus_data_header() -> list[str]:
-    return [
+def get_sheet_version(rows: list) -> str:
+    """Return the value of cell F2 (row index 1, column index 5) as the sheet version.
+    Returns an empty string if the cell is missing or blank."""
+    try:
+        val = rows[1][5].strip() if len(rows) > 1 and len(rows[1]) > 5 else ""
+        return wow_safe_text(val)
+    except (IndexError, AttributeError):
+        return ""
+
+
+def get_stored_sheet_version(existing_text: str) -> str:
+    """Extract the @sheet-version value previously written into the Lua file."""
+    m = SHEET_VERSION_LINE_RE.search(existing_text)
+    return m.group(1).strip() if m else ""
+
+
+def strip_version_line(text: str) -> str:
+    """Remove the @sheet-version comment line so we can compare pure data content."""
+    return SHEET_VERSION_LINE_RE.sub("", text).strip()
+
+
+def build_enus_data_header(sheet_version: str = "") -> list[str]:
+    lines = [
         "--[[",
         "English (enUS) checklist data for Larias's Weekly Checklist",
         "",
@@ -63,10 +88,17 @@ def build_enus_data_header() -> list[str]:
         "]]",
         "",
     ]
+    if sheet_version:
+        lines.append(f"-- @sheet-version: {sheet_version}")
+        lines.append("")
+    return lines
 
 def main(csv_in: str, lua_out: str) -> None:
     with open(csv_in, encoding="utf-8", newline="") as f:
         rows = list(csv.reader(f))
+
+    # Read spreadsheet version from F2 (row 1, col 5).
+    sheet_version = get_sheet_version(rows)
 
     sections = []
     current = None
@@ -95,7 +127,7 @@ def main(csv_in: str, lua_out: str) -> None:
         existing_text = out_path.read_text(encoding="utf-8")
         nl = detect_newline(existing_text)
 
-    out.extend(build_enus_data_header())
+    out.extend(build_enus_data_header(sheet_version))
 
     out.append('local LOCALE = "enUS"')
     out.append("")
@@ -130,7 +162,18 @@ def main(csv_in: str, lua_out: str) -> None:
         new_text += nl
 
     if existing_text is not None:
-        if existing_text.replace("\r\n", "\n") == new_text.replace("\r\n", "\n"):
+        # Gate: only write when BOTH the sheet version has changed AND the
+        # underlying data content has changed.
+        stored_version = get_stored_sheet_version(existing_text)
+        version_changed = sheet_version != stored_version
+
+        # Compare content with the version line stripped so a pure version bump
+        # (no data change) never triggers a write, and vice-versa.
+        existing_data = strip_version_line(existing_text.replace("\r\n", "\n"))
+        new_data      = strip_version_line(new_text.replace("\r\n", "\n"))
+        content_changed = existing_data != new_data
+
+        if not version_changed or not content_changed:
             return
 
     out_path.write_text(new_text, encoding="utf-8")
