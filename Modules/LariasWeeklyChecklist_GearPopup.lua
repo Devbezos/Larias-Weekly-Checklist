@@ -77,13 +77,13 @@ function Addon:SyncGearPopup()
     -- Recalculate popup height based on visible content, and reposition any rows
     -- below the (possibly-hidden) char picker slot so no gap is left behind.
     do
-        local PAD_   = 10
-        local ROW_H_ = 16   -- custom checkbox visual box height
-        local TILE_H_= 34   -- tile height unchanged
-        local N_TOTAL = 8
-        local rstStartY_  = PAD_
-        local div1StartY_ = rstStartY_ + 22 + 6
-        local cbsY_       = div1StartY_ + 1 + 8
+        local PAD      = 10
+        local ROW_H    = 16   -- custom checkbox visual box height
+        local TILE_H   = 34   -- tile height
+        local N_TOTAL  = 8
+        local rstStartY  = PAD
+        local div1StartY = rstStartY + 22 + 6
+        local cbsY       = div1StartY + 1 + 8
         -- Slots 1-5 always present; slot 6 = char picker (conditional);
         -- slot 7 = scale slider; slot 8 = opacity slider.
         -- When char picker is hidden both slider slots shift up by one.
@@ -93,10 +93,10 @@ function Addon:SyncGearPopup()
         local opacityVisIdx = showCharRow and OPACITY_IDX or (OPACITY_IDX - 1)
         local function ReflowCb(cb, visIdx)
             if not cb then return end
-            local tileTopY = -(cbsY_ + (visIdx - 1) * TILE_H_)
-            local cbOffY   = tileTopY - math.floor((TILE_H_ - ROW_H_) / 2)
+            local tileTopY = -(cbsY + (visIdx - 1) * TILE_H)
+            local cbOffY   = tileTopY - math.floor((TILE_H - ROW_H) / 2)
             cb:ClearAllPoints()
-            cb:SetPoint("TOPLEFT", p, "TOPLEFT", PAD_, cbOffY)
+            cb:SetPoint("TOPLEFT", p, "TOPLEFT", PAD, cbOffY)
             if cb._hit then
                 cb._hit:ClearAllPoints()
                 cb._hit:SetPoint("TOPLEFT",  p, "TOPLEFT",  0, tileTopY)
@@ -108,24 +108,24 @@ function Addon:SyncGearPopup()
 
         local nVisible = showCharRow and N_TOTAL or (N_TOTAL - 1)
         -- Reposition the hidden-chars divider and trigger to follow the last checkbox.
-        local div2StartY_ = cbsY_ + nVisible * TILE_H_ + 6
-        local hidStartY_  = div2StartY_ + 1 + 8
+        local div2StartY = cbsY + nVisible * TILE_H + 6
+        local hidStartY  = div2StartY + 1 + 8
         if p._gearHiddenCharsDiv then
             p._gearHiddenCharsDiv:ClearAllPoints()
-            p._gearHiddenCharsDiv:SetPoint("TOPLEFT",  p, "TOPLEFT",  PAD_,  -div2StartY_)
-            p._gearHiddenCharsDiv:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PAD_, -div2StartY_)
+            p._gearHiddenCharsDiv:SetPoint("TOPLEFT",  p, "TOPLEFT",  PAD,  -div2StartY)
+            p._gearHiddenCharsDiv:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PAD, -div2StartY)
         end
         if p._gearHiddenCharsTrigger then
             p._gearHiddenCharsTrigger:ClearAllPoints()
-            p._gearHiddenCharsTrigger:SetPoint("TOPLEFT",  p, "TOPLEFT",  PAD_,  -hidStartY_)
-            p._gearHiddenCharsTrigger:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PAD_, -hidStartY_)
+            p._gearHiddenCharsTrigger:SetPoint("TOPLEFT",  p, "TOPLEFT",  PAD,  -hidStartY)
+            p._gearHiddenCharsTrigger:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PAD, -hidStartY)
         end
 
         local totalH
         if showHiddenSect then
-            totalH = hidStartY_ + 22 + PAD_
+            totalH = hidStartY + 22 + PAD
         else
-            totalH = cbsY_ + nVisible * TILE_H_ + PAD_
+            totalH = cbsY + nVisible * TILE_H + PAD
         end
         p:SetHeight(totalH)
     end
@@ -211,7 +211,7 @@ function Addon:ToggleGearPopup(anchor, growRight)
 
         -- ── Divider after Reset ────────────────────────────────────────────
         local div1StartY = rstStartY + 22 + 6
-        local div1 = Addon.Controls.NewDivider(p, -div1StartY, PAD, PAD)
+        Addon.Controls.NewDivider(p, -div1StartY, PAD, PAD)
 
         -- ── 6 Checkboxes ──────────────────────────────────────────────────
         local checks = {

@@ -39,7 +39,6 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
 
     -- Re-anchor the slider container's right edge so it stops before the char-
     -- picker button when that button is visible (avoids overlap in the bottom row).
-    sf._parentFrame = parentFrame
     sf.AdjustForCpBtn = function(cpBtn)
         local inset   = Addon.UI.sectionInsetX  or 14
         local botPad  = Addon.UI.sliderBottomPad or 4
