@@ -1015,11 +1015,10 @@ end
 
 function Addon:ApplyOpacity()
     local pct   = (self.db and self.db.global and tonumber(self.db.global.uiOpacityPct)) or 65
-    local alpha = math.max(0.1, math.min(1.0, pct / 100))
-    -- Only change the background fill's alpha, not the whole frame tree.
-    if frame and frame.SetBackdropColor then
-        frame:SetBackdropColor(
-            Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, alpha)
+    local alpha = math.max(0, math.min(1.0, pct / 100))
+    -- Drive only the dedicated background texture; child widgets are unaffected.
+    if frame and frame._lariaBgTex then
+        frame._lariaBgTex:SetAlpha(alpha)
     end
     -- Keep the opacity slider thumb in sync.
     local sf = self._inFrameScaleSlider
@@ -1817,8 +1816,18 @@ function Addon:CreateFrame()
     tinsert(UISpecialFrames, "LariasWeeklyChecklistFrame")
 
     self:ApplyTheme(frame)
-
-    -- Close button: branded ✕ via the shared Controls factory.
+    -- Replace the backdrop fill with a dedicated texture so opacity changes only
+    -- affect the background, not child widgets. The backdrop edge/border is kept.
+    do
+        local bg = frame:CreateTexture(nil, "BACKGROUND", nil, -8)
+        bg:SetAllPoints(frame)
+        bg:SetColorTexture(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, 1)
+        frame._lariaBgTex = bg
+        -- Suppress the backdrop bgFile fill; use our texture instead.
+        if frame.SetBackdropColor then
+            frame:SetBackdropColor(0, 0, 0, 0)
+        end
+    end
     local C = Addon.Controls
     local closeBtn = C.NewCloseButton(frame, function() frame:Hide() end)
     closeBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -Addon.UI.closeInset, -Addon.UI.closeInset)
