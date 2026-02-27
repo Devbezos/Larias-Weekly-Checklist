@@ -10,7 +10,8 @@ if not Addon then return end
 --       Apply the addon's dark-backdrop action-button style to any Button.
 --
 --   Addon.Controls.NewCloseButton(parent [, onClick])
---       Themed 20×20 "X" button. onClick defaults to parent:Hide().
+--       Branded 20×20 ✕ button: dark backdrop, gold glyph, red hover/push,
+--       "Close" tooltip. onClick defaults to parent:Hide().
 --
 --   Addon.Controls.NewSettingsButton(parent [, onClick [, tooltip]])
 --       Themed 20×20 gear-icon button (UI-OptionsButton), gold on hover.
@@ -91,31 +92,54 @@ end
 Addon._styleActionButton = C.StyleButton
 
 -- ── Close button ──────────────────────────────────────────────────────────────
--- Creates and returns a themed 20×20 "X" button as a child of `parent`.
+-- Creates and returns a branded 20×20 close button as a child of `parent`.
+-- Design: dark backdrop matching the frame theme, gold "✕" glyph at rest,
+-- white glyph + red bg tint on hover, deeper red on push, "Close" tooltip.
 -- onClick defaults to hiding parent.  Caller is responsible for positioning.
 function C.NewCloseButton(parent, onClick)
     local btn = CreateFrame("Button", nil, parent)
     btn:SetSize(20, 20)
-    local T  = Addon.THEME or {}
-    local th = T.header or { r = 1, g = 0.82, b = 0 }
 
-    local norm = btn:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+    -- Backdrop: same dark panel look as the rest of the addon.
+    Addon:ApplyTheme(btn)
+
+    local T  = Addon.THEME or {}
+    local th = T.header or { r = 1.00, g = 0.82, b = 0.00 }  -- gold accent
+
+    -- Glyph: Unicode heavy multiplication sign looks cleaner than ASCII "X".
+    local norm = btn:CreateFontString(nil, "OVERLAY")
+    norm:SetFont("Fonts\\FRIZQT__.TTF", 13, "OUTLINE")
     norm:SetAllPoints(btn)
     norm:SetJustifyH("CENTER")
     norm:SetJustifyV("MIDDLE")
-    norm:SetTextColor(th.r, th.g, th.b, 0.85)
-    norm:SetText("X")
+    norm:SetTextColor(th.r, th.g, th.b, 1)
+    norm:SetText("\xE2\x9C\x95")  -- UTF-8: ✕ (U+2715)
     btn:SetFontString(norm)
 
+    -- Hover: red bg tint (universal "danger/close" signal).
     local hl = btn:CreateTexture(nil, "HIGHLIGHT")
     hl:SetAllPoints(btn)
-    hl:SetColorTexture(1, 1, 1, 0.10)
+    hl:SetColorTexture(0.85, 0.10, 0.10, 0.30)
     btn:SetHighlightTexture(hl)
 
+    -- Push: deeper red flash.
     local pushed = btn:CreateTexture(nil, "OVERLAY")
     pushed:SetAllPoints(btn)
-    pushed:SetColorTexture(th.r, th.g, th.b, 0.15)
+    pushed:SetColorTexture(0.85, 0.10, 0.10, 0.50)
     btn:SetPushedTexture(pushed)
+
+    -- Text transitions gold → white on hover for contrast over the red bg.
+    btn:SetScript("OnEnter", function()
+        norm:SetTextColor(1, 1, 1, 1)
+        local tip = (Addon.L and Addon.L.CLOSE) or "Close"
+        GameTooltip:SetOwner(btn, "ANCHOR_BOTTOMLEFT")
+        GameTooltip:SetText(tip, 1, 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    btn:SetScript("OnLeave", function()
+        norm:SetTextColor(th.r, th.g, th.b, 1)
+        GameTooltip:Hide()
+    end)
 
     btn:SetScript("OnClick", onClick or function() parent:Hide() end)
     return btn

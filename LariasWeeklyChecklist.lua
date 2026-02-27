@@ -1774,29 +1774,10 @@ function Addon:CreateFrame()
 
     self:ApplyTheme(frame)
 
-    -- Close button: FontString "✕" tinted gold to match the theme.
-    local closeBtn = CreateFrame("Button", nil, frame)
-    closeBtn:SetSize(20, 20)
+    -- Close button: branded ✕ via the shared Controls factory.
+    local C = Addon.Controls
+    local closeBtn = C.NewCloseButton(frame, function() frame:Hide() end)
     closeBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -Addon.UI.closeInset, -Addon.UI.closeInset)
-    do
-        local th = Addon.THEME
-        local norm = closeBtn:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-        norm:SetAllPoints(closeBtn)
-        norm:SetJustifyH("CENTER")
-        norm:SetJustifyV("MIDDLE")
-        norm:SetTextColor(th.header.r, th.header.g, th.header.b, 0.85)
-        norm:SetText("X")
-        closeBtn:SetFontString(norm)
-        local hl = closeBtn:CreateTexture(nil, "HIGHLIGHT")
-        hl:SetAllPoints(closeBtn)
-        hl:SetColorTexture(1, 1, 1, 0.10)
-        closeBtn:SetHighlightTexture(hl)
-        local pushed = closeBtn:CreateTexture(nil, "OVERLAY")
-        pushed:SetAllPoints(closeBtn)
-        pushed:SetColorTexture(th.header.r, th.header.g, th.header.b, 0.15)
-        closeBtn:SetPushedTexture(pushed)
-    end
-    closeBtn:SetScript("OnClick", function() frame:Hide() end)
 
     -- Gear / settings button: white at rest, gold on hover.
     local gearBtn = CreateFrame("Button", nil, frame)

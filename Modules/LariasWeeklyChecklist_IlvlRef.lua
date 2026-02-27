@@ -384,10 +384,9 @@ local function BuildIlvlRefWindow()
     titleFS:SetTextColor(titleHeaderColor.r, titleHeaderColor.g, titleHeaderColor.b, titleHeaderColor.a)
     titleFS:SetText(Locale.ILVLREF_WINDOW_TITLE)
 
-    -- Close button
-    local closeBtn = CreateFrame("Button", nil, win, "UIPanelCloseButton")
-    closeBtn:SetPoint("TOPRIGHT", win, "TOPRIGHT", -4, -4)
-    closeBtn:SetScript("OnClick", function() win:Hide() end)
+    -- Close button: branded ✕ matching the addon theme.
+    local closeBtn = Addon.Controls.NewCloseButton(win, function() win:Hide() end)
+    closeBtn:SetPoint("TOPRIGHT", win, "TOPRIGHT", -2, -2)
 
     -- Register with UISpecialFrames so ESC closes this window via Blizzard's
     -- secure ESC chain rather than the protected SetPropagateKeyboardInput.
