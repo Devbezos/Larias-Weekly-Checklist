@@ -310,6 +310,7 @@ local function SetupAddonDB()
             ilvlRefSize   = false,
             uiScalePct    = 100,
             uiOpacityPct  = 65,
+            themeColors   = {},  -- { bgR, bgG, bgB, textR, textG, textB } nil values use compiled defaults
             minimap       = {},  -- LibDBIcon position/hide state (account-wide)
             charClasses   = {},  -- [profileKey] = classToken (e.g. "WARRIOR")
             hiddenChars   = {},  -- [profileKey] = true (hidden from char picker dropdown)
@@ -496,6 +497,12 @@ function Addon:OnEnable()
     -- Register the Interface → AddOns settings panel.
     if self.RegisterSettingsPanel then
         self:RegisterSettingsPanel()
+    end
+
+    -- Apply any saved theme-color overrides so THEME is correct before
+    -- the first frame is created.
+    if self.ApplyThemeColors then
+        self:ApplyThemeColors()
     end
 
     -- Version announce happens in CommsOnEnable.
@@ -810,6 +817,47 @@ function Addon:NewThemedFrame(name, parent)
     end
     self:ApplyTheme(f)
     return f
+end
+
+-- Apply saved theme-color overrides from db.global.themeColors to Addon.THEME,
+-- then re-apply the backdrop + repaint list items so changes are visible immediately.
+-- Hardcoded defaults here must match the initial values in CONSTANTS.theme.
+function Addon:ApplyThemeColors()
+    local gdb = self.db and self.db.global
+    local tc  = gdb and gdb.themeColors
+
+    -- Hard defaults (must match CONSTANTS.theme init values).
+    local defBgR,   defBgG,   defBgB   = 0.10, 0.10, 0.10
+    local defTextR, defTextG, defTextB = 1.00, 1.00, 1.00
+
+    -- Background color ─────────────────────────────────────────────────────
+    if tc and tc.bgR ~= nil then
+        self.THEME.bg.r = tc.bgR
+        self.THEME.bg.g = tc.bgG
+        self.THEME.bg.b = tc.bgB
+    else
+        self.THEME.bg.r = defBgR
+        self.THEME.bg.g = defBgG
+        self.THEME.bg.b = defBgB
+    end
+
+    -- List-text color ──────────────────────────────────────────────────────
+    if tc and tc.textR ~= nil then
+        self.THEME.text.r = tc.textR
+        self.THEME.text.g = tc.textG
+        self.THEME.text.b = tc.textB
+    else
+        self.THEME.text.r = defTextR
+        self.THEME.text.g = defTextG
+        self.THEME.text.b = defTextB
+    end
+
+    -- Re-apply backdrop to any already-open themed frames.
+    if self._mainFrame     then self:ApplyTheme(self._mainFrame)     end
+    if self._trackingFrame then self:ApplyTheme(self._trackingFrame) end
+
+    -- Repaint list item labels with the new text color.
+    if self.RequestRefresh then self:RequestRefresh() end
 end
 
 -- Recompute the scroll frame anchors.

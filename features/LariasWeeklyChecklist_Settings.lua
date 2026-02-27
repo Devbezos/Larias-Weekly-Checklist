@@ -15,7 +15,68 @@ local BTN_H  = 24   -- action button height
 
 -- ── Internal state ────────────────────────────────────────────────────────────
 local panelFrame         -- outer canvas WoW hosts
-local _checkboxes = {}   -- { cb, getVal, onChange }
+local _checkboxes = {}   -- { cb, row }
+local _colorSwatches = {} -- { swatch, def }
+
+-- ── Color-picker helpers ──────────────────────────────────────────────────────
+
+-- Opens the WoW color picker.  Supports the retail 10.x+ API and the
+-- legacy API used by Classic/pre-10.0 retail.
+-- onUpdate(r,g,b) is called live while the user drags the picker.
+-- onCancel(r,g,b) is called when the user presses Cancel/X.
+local function OpenColorPicker(r, g, b, onUpdate, onCancel)
+    if ColorPickerFrame.SetupColorPickerAndShow then
+        -- Retail 10.x+
+        ColorPickerFrame:SetupColorPickerAndShow({
+            r          = r,   g        = g,   b      = b,
+            hasOpacity = false,
+            swatchFunc = function()
+                local nr, ng, nb = ColorPickerFrame:GetColorRGB()
+                onUpdate(nr, ng, nb)
+            end,
+            cancelFunc = function(prev)
+                onCancel(prev.r, prev.g, prev.b)
+            end,
+        })
+    else
+        -- Legacy fallback (Classic / pre-10.0)
+        ColorPickerFrame.hasOpacity     = false
+        ColorPickerFrame.r              = r
+        ColorPickerFrame.g              = g
+        ColorPickerFrame.b              = b
+        ColorPickerFrame.previousValues = { r = r, g = g, b = b }
+        ColorPickerFrame.func = function()
+            local nr, ng, nb = ColorPickerFrame:GetColorRGB()
+            onUpdate(nr, ng, nb)
+        end
+        ColorPickerFrame.cancelFunc = function()
+            local pv = ColorPickerFrame.previousValues
+            onCancel(pv.r, pv.g, pv.b)
+        end
+        ShowUIPanel(ColorPickerFrame)
+    end
+end
+
+-- Creates a small colored swatch button on `parent`.
+-- Call swatch:SetColor(r,g,b) to update the display color.
+local function MakeSwatch(parent)
+    local btn = CreateFrame("Button", nil, parent)
+    btn:SetSize(22, 22)
+    -- Thin border layer (below the color fill)
+    local border = btn:CreateTexture(nil, "BACKGROUND", nil, 0)
+    border:SetPoint("TOPLEFT",     btn, "TOPLEFT",     -1,  1)
+    border:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT",  1, -1)
+    border:SetColorTexture(0.55, 0.55, 0.55, 1)
+    -- Colored fill
+    local fill = btn:CreateTexture(nil, "BACKGROUND", nil, 1)
+    fill:SetAllPoints(btn)
+    fill:SetColorTexture(1, 1, 1, 1)
+    btn._fill = fill
+    function btn:SetColor(r, g, b)
+        self._fill:SetVertexColor(r, g, b, 1)
+    end
+    return btn
+end
 
 -- ── Build the panel (lazy, called once) ───────────────────────────────────────
 local function BuildPanel()
@@ -73,9 +134,16 @@ local function BuildPanel()
             gdb.mainFrameSize = nil
             gdb.uiScalePct    = 100
             gdb.uiOpacityPct  = 65
+            gdb.themeColors   = {}   -- clear all color overrides → revert to defaults
         end
         if Addon.ApplyUIScale      then Addon:ApplyUIScale()      end
         if Addon.ApplyOpacity      then Addon:ApplyOpacity()      end
+        if Addon.ApplyThemeColors  then Addon:ApplyThemeColors()  end
+        -- Refresh swatch colors to reflect restored defaults.
+        for _, entry in ipairs(_colorSwatches) do
+            local r, g, b = entry.def.getColor()
+            entry.swatch:SetColor(r, g, b)
+        end
         local mf = Addon._mainFrame
         if mf then
             mf:ClearAllPoints()
@@ -221,13 +289,142 @@ local function BuildPanel()
         curY = curY - STEP
     end
 
+    -- ── Divider ───────────────────────────────────────────────────────────────
+    local div2 = canvas:CreateTexture(nil, "ARTWORK")
+    div2:SetColorTexture(0.3, 0.3, 0.3, 0.6)
+    div2:SetHeight(1)
+    div2:SetPoint("TOPLEFT",  canvas, "TOPLEFT",  PAD,  curY)
+    div2:SetPoint("TOPRIGHT", canvas, "TOPRIGHT", -PAD, curY)
+    curY = curY - 8
+
+    -- ── "Colors" section ──────────────────────────────────────────────────────
+    local secColors = canvas:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    secColors:SetPoint("TOPLEFT", canvas, "TOPLEFT", PAD, curY)
+    secColors:SetText("Colors")
+    curY = curY - 20 - 4
+
+    -- Color row definitions:
+    --   getColor()         → r, g, b   (returns current saved value or compiled default)
+    --   saveColor(r, g, b) → persists to db.global.themeColors and re-applies theme
+    --   resetColor()       → clears the saved value and re-applies theme
+    local colorDefs = {
+        {
+            label = "Background",
+            getColor = function()
+                local gdb = Addon.db and Addon.db.global
+                local tc  = gdb and gdb.themeColors
+                if tc and tc.bgR ~= nil then
+                    return tc.bgR, tc.bgG, tc.bgB
+                end
+                return 0.10, 0.10, 0.10   -- compiled default
+            end,
+            saveColor = function(r, g, b)
+                local gdb = Addon.db and Addon.db.global
+                if not gdb then return end
+                gdb.themeColors     = gdb.themeColors or {}
+                gdb.themeColors.bgR = r
+                gdb.themeColors.bgG = g
+                gdb.themeColors.bgB = b
+                if Addon.ApplyThemeColors then Addon:ApplyThemeColors() end
+            end,
+            resetColor = function()
+                local gdb = Addon.db and Addon.db.global
+                if gdb and gdb.themeColors then
+                    gdb.themeColors.bgR = nil
+                    gdb.themeColors.bgG = nil
+                    gdb.themeColors.bgB = nil
+                end
+                if Addon.ApplyThemeColors then Addon:ApplyThemeColors() end
+            end,
+        },
+        {
+            label = "List Text",
+            getColor = function()
+                local gdb = Addon.db and Addon.db.global
+                local tc  = gdb and gdb.themeColors
+                if tc and tc.textR ~= nil then
+                    return tc.textR, tc.textG, tc.textB
+                end
+                return 1.00, 1.00, 1.00   -- compiled default
+            end,
+            saveColor = function(r, g, b)
+                local gdb = Addon.db and Addon.db.global
+                if not gdb then return end
+                gdb.themeColors       = gdb.themeColors or {}
+                gdb.themeColors.textR = r
+                gdb.themeColors.textG = g
+                gdb.themeColors.textB = b
+                if Addon.ApplyThemeColors then Addon:ApplyThemeColors() end
+            end,
+            resetColor = function()
+                local gdb = Addon.db and Addon.db.global
+                if gdb and gdb.themeColors then
+                    gdb.themeColors.textR = nil
+                    gdb.themeColors.textG = nil
+                    gdb.themeColors.textB = nil
+                end
+                if Addon.ApplyThemeColors then Addon:ApplyThemeColors() end
+            end,
+        },
+    }
+
+    _colorSwatches = {}
+    for _, def in ipairs(colorDefs) do
+        local _def = def   -- upvalue capture
+
+        -- Label
+        local lbl = canvas:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        lbl:SetPoint("TOPLEFT", canvas, "TOPLEFT", PAD, curY - (ROW_H - 12) / 2)
+        lbl:SetText(_def.label)
+
+        -- Colored swatch button
+        local swatch = MakeSwatch(canvas)
+        swatch:SetPoint("TOPLEFT", canvas, "TOPLEFT", 140, curY - (ROW_H - 22) / 2)
+        local cr, cg, cb = _def.getColor()
+        swatch:SetColor(cr, cg, cb)
+        swatch:SetScript("OnClick", function()
+            local r, g, b = _def.getColor()
+            OpenColorPicker(r, g, b,
+                -- onUpdate: live preview while dragging
+                function(nr, ng, nb)
+                    _def.saveColor(nr, ng, nb)
+                    swatch:SetColor(nr, ng, nb)
+                end,
+                -- onCancel: restore previous color on X
+                function(pr, pg, pb)
+                    _def.saveColor(pr, pg, pb)
+                    swatch:SetColor(pr, pg, pb)
+                end
+            )
+        end)
+
+        -- Per-color Reset button
+        local resetColorBtn = CreateFrame("Button", nil, canvas, "UIPanelButtonTemplate")
+        resetColorBtn:SetPoint("TOPLEFT", canvas, "TOPLEFT", 170, curY - (ROW_H - BTN_H) / 2)
+        resetColorBtn:SetSize(60, BTN_H)
+        resetColorBtn:SetText("Reset")
+        if Addon._styleActionButton then Addon._styleActionButton(resetColorBtn) end
+        resetColorBtn:SetScript("OnClick", function()
+            _def.resetColor()
+            local dr, dg, db = _def.getColor()
+            swatch:SetColor(dr, dg, db)
+        end)
+
+        _colorSwatches[#_colorSwatches + 1] = { swatch = swatch, def = _def }
+        curY = curY - STEP
+    end
+
     canvas:SetHeight(math.abs(curY) + PAD)
 
-    -- Sync checkbox states from DB every time the panel is shown.
+    -- Sync checkbox states and swatch colors every time the panel is shown.
     panelFrame:SetScript("OnShow", function()
         local d = Addon:EnsureDB()
         for _, entry in ipairs(_checkboxes) do
             entry.cb:SetChecked(entry.row.getVal(d))
+        end
+        for _, entry in ipairs(_colorSwatches) do
+            local r, g, b = entry.def.getColor()
+            entry.swatch:SetColor(r, g, b)
         end
     end)
 
