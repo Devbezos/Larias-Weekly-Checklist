@@ -200,6 +200,7 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
     scaleTitleLbl:SetWordWrap(false)
     scaleTitleLbl:SetTextColor(txt.r, txt.g, txt.b, 0.75)
     scaleTitleLbl:SetText(L.UI_SCALE_LABEL or "Scale")
+    sf._scaleTitleLbl = scaleTitleLbl
 
     local function GetScaleVal()
         local gdb = Addon.db and Addon.db.global
@@ -221,12 +222,7 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
             local r = math.floor(v + 0.5)
             return (r >= 150) and "unc." or (r .. "%")
         end,
-        -- liveApply (called on every drag tick): SetScale only, no re-anchor.
-        function(pct)
-            local gdb = Addon.db and Addon.db.global
-            if gdb then gdb.uiScalePct = pct end
-            if Addon.ApplyUIScaleLive then Addon:ApplyUIScaleLive() end
-        end
+        nil  -- no liveApply: scale is applied only on mouse-up to avoid jank while dragging
     )
     sf._scalePane = scalePane
     sf.Sync       = function() scaleSync() end
@@ -244,6 +240,7 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
     opacTitleLbl:SetWordWrap(false)
     opacTitleLbl:SetTextColor(txt.r, txt.g, txt.b, 0.75)
     opacTitleLbl:SetText(L.UI_OPACITY_LABEL or "Opacity")
+    sf._opacTitleLbl = opacTitleLbl
 
     local function GetOpacityVal()
         local gdb = Addon.db and Addon.db.global

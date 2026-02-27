@@ -1,5 +1,4 @@
-﻿-- LariasWeeklyChecklist_IlvlRef.lua
--- Standalone popup window: Midnight Season 1 item-level reference tables.
+﻿-- IlvlRef module: standalone popup window with Midnight Season 1 item-level reference tables.
 -- Opened/closed via the "Item Levels" button in the main frame.
 
 local addonName = ...

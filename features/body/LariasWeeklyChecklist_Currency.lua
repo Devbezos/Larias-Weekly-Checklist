@@ -1145,7 +1145,7 @@ local function ApplyGreatVaultGrid(gridBlocks)
     end
 end
 
-local function SetRightRowPair(i, rowLabel, rowValue, iconFileID)
+local function SetRightRowPair(i, rowLabel, rowValue, iconFileID, currencyID)
     -- Write a {label,value} row and hide it if empty.
     local row = TrackingUI.right[RIGHT_ROW_KEYS[i]]
     if not (row and row.label and row.value) then return end
@@ -1158,9 +1158,13 @@ local function SetRightRowPair(i, rowLabel, rowValue, iconFileID)
     -- Icon: show when the row is visible and we have a valid file ID.
     if row.icon then
         if showRow and iconFileID and iconFileID ~= 0 then
-            row.icon:SetTexture(iconFileID)
+            -- icon is a Button; texture lives in icon._tex.
+            if row.icon._tex then row.icon._tex:SetTexture(iconFileID) end
+            -- Store the currency ID so the hover tooltip can call SetCurrencyByID.
+            row.icon._lariasIconCurrencyID = currencyID or nil
             SetShownIfChanged(row.icon, true)
         else
+            row.icon._lariasIconCurrencyID = nil
             SetShownIfChanged(row.icon, false)
         end
     end
@@ -1183,7 +1187,7 @@ local function ApplyRightColumnAsPairs()
         local rowLabel = (labelLines and labelLines[i]) or ""
         local rowValue = (valueLines and valueLines[i]) or ""
         if IsNonEmptyText(rowLabel) or IsNonEmptyText(rowValue) then
-            SetRightRowPair(idx, rowLabel, rowValue, GetCurrencyIconID(crestIDs[i]))
+            SetRightRowPair(idx, rowLabel, rowValue, GetCurrencyIconID(crestIDs[i]), crestIDs[i])
             idx = idx + 1
         end
     end
@@ -1191,21 +1195,24 @@ local function ApplyRightColumnAsPairs()
     local cLbl, cVal = GetCatalystParts()
     cLbl = cLbl or ""; cVal = cVal or ""
     if idx <= RIGHT_LINE_COUNT and (IsNonEmptyText(cLbl) or IsNonEmptyText(cVal)) then
-        SetRightRowPair(idx, cLbl, cVal, GetCurrencyIconID(tracking and tracking.catalystCurrencyID))
+        local cID = tracking and tracking.catalystCurrencyID
+        SetRightRowPair(idx, cLbl, cVal, GetCurrencyIconID(cID), cID)
         idx = idx + 1
     end
 
     local sLbl, sVal = GetSparksParts()
     sLbl = sLbl or ""; sVal = sVal or ""
     if idx <= RIGHT_LINE_COUNT and (IsNonEmptyText(sLbl) or IsNonEmptyText(sVal)) then
-        SetRightRowPair(idx, sLbl, sVal, GetCurrencyIconID(tracking and tracking.sparkCurrencyID))
+        local sID = tracking and tracking.sparkCurrencyID
+        SetRightRowPair(idx, sLbl, sVal, GetCurrencyIconID(sID), sID)
         idx = idx + 1
     end
 
     local kLbl, kVal = GetCofferKeysParts()
     kLbl = kLbl or ""; kVal = kVal or ""
     if idx <= RIGHT_LINE_COUNT and (IsNonEmptyText(kLbl) or IsNonEmptyText(kVal)) then
-        SetRightRowPair(idx, kLbl, kVal, GetCurrencyIconID(tracking and tracking.cofferKeysCurrencyID))
+        local kID = tracking and tracking.cofferKeysCurrencyID
+        SetRightRowPair(idx, kLbl, kVal, GetCurrencyIconID(kID), kID)
         idx = idx + 1
     end
 
@@ -1326,10 +1333,54 @@ function Addon:CreateTrackingPanel(parentFrame)
         return box
     end
 
+    -- A small transparent Button placed only over the title strip at the top of
+    -- each column (from the top of the decorative box down to where the column
+    -- content starts).  Height = title area (24px) + both BOX_PAD margins.
+    local function MakeTitleButton(col, tipText, onClick)
+        local btn = CreateFrame("Button", nil, trackingFrame)
+        btn:SetPoint("TOPLEFT",     col, "TOPLEFT",  -BOX_PAD,  24 + BOX_PAD)
+        btn:SetPoint("BOTTOMRIGHT", col, "TOPRIGHT",  BOX_PAD,  BOX_PAD)
+        btn:EnableMouse(true)
+        -- Subtle highlight only over the title strip on hover.
+        local hl = btn:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints()
+        hl:SetColorTexture(1, 1, 1, 0.07)
+        btn:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            GameTooltip:SetText(tipText, 1, 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        btn:RegisterForClicks("AnyUp")
+        if onClick then btn:SetScript("OnClick", onClick) end
+        return btn
+    end
+
     local leftBox  = MakeColBox(leftCol)
     local rightBox = MakeColBox(rightCol)
     trackingFrame._lariasLeftBox  = leftBox
     trackingFrame._lariasRightBox = rightBox
+
+    -- Great Vault title button: toggles the Weekly Rewards frame.
+    MakeTitleButton(leftCol,
+        L.TOOLTIP_OPEN_GREAT_VAULT or "Click to open the Great Vault",
+        function()
+            -- WeeklyRewardsFrame is lazily created; ensure the module is loaded.
+            if not WeeklyRewardsFrame then
+                C_AddOns.LoadAddOn("Blizzard_WeeklyRewards")
+            end
+            if WeeklyRewardsFrame then
+                if WeeklyRewardsFrame:IsShown() then WeeklyRewardsFrame:Hide()
+                else WeeklyRewardsFrame:Show() end
+            end
+        end)
+
+    -- Currency title button: toggles the currency panel.
+    MakeTitleButton(rightCol,
+        L.TOOLTIP_OPEN_CURRENCIES or "Click to open the Currency panel",
+        function()
+            ToggleCharacter("TokenFrame")
+        end)
 
     local rightTitle = trackingFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     rightTitle:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", padL + colW + colGap, -8)
@@ -1521,10 +1572,23 @@ function Addon:CreateTrackingPanel(parentFrame)
         row:SetHeight(16)
         row._lariasBaseY = y
 
-        local icon = row:CreateTexture(nil, "OVERLAY")
+        -- Use a Button for the icon so it can show a currency tooltip on hover.
+        local icon = CreateFrame("Button", nil, row)
         icon:SetSize(ROW_ICON_SZ, ROW_ICON_SZ)
         icon:SetPoint("LEFT", row, "LEFT", 0, 0)
         icon:Hide()
+        icon:EnableMouse(true)
+        local iconTex = icon:CreateTexture(nil, "ARTWORK")
+        iconTex:SetAllPoints(icon)
+        icon._tex = iconTex
+        icon:SetScript("OnEnter", function(self)
+            if self._lariasIconCurrencyID then
+                GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+                GameTooltip:SetCurrencyByID(self._lariasIconCurrencyID)
+                GameTooltip:Show()
+            end
+        end)
+        icon:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
         local label = row:CreateFontString(nil, "OVERLAY", template or "GameFontHighlightSmall")
         label:SetPoint("LEFT", row, "LEFT", ROW_ICON_SZ + ROW_ICON_GAP, 0)
@@ -1664,7 +1728,7 @@ function Addon:ApplyTrackingPanelOptions()
         if showGreatVault then
             if leftCol then
                 leftCol:SetWidth(fullW)
-                leftCol:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", padL, -32)
+                leftCol:SetPoint("TOP", trackingFrame, "TOP", 0, -32)
             end
         else
             if rightCol then

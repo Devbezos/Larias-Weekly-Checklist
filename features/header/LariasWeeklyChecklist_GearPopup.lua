@@ -327,6 +327,8 @@ function Addon:ToggleGearPopup(anchor, growRight)
         end
         verLabel:SetTextColor(0.45, 0.45, 0.45, 0.6)
 
+
+
         self._gearPopup = p
     end
 

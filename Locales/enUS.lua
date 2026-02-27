@@ -47,6 +47,10 @@ local STRINGS = {
 	UI_OPACITY_MIN_LABEL = "10%",
 	UI_OPACITY_MAX_LABEL = "100%",
 
+	-- Tracking panel header tooltips
+	TOOLTIP_OPEN_GREAT_VAULT  = "Click to open the Great Vault",
+	TOOLTIP_OPEN_CURRENCIES   = "Click to open the Currency panel",
+
 	-- Tracking panel
 	TRACKING_GREAT_VAULT_TITLE = "Great Vault",
 	TRACKING_CURRENCY_TITLE = "Currency",
