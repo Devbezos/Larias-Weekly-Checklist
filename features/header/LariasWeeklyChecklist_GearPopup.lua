@@ -126,7 +126,7 @@ function Addon:SyncGearPopup()
             p._gearHiddenCharsTrigger:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PAD, -hidStartY)
         end
 
-        local VER_PAD = 28  -- extra bottom room for two-line version + credits
+        local VER_PAD = 14  -- extra bottom room for single-line version + credits
         local totalH
         if showHiddenSect then
             totalH = hidStartY + 22 + PAD + VER_PAD
@@ -351,19 +351,12 @@ function Addon:ToggleGearPopup(anchor, growRight)
 
         local verLabel = p:CreateFontString(nil, "OVERLAY")
         verLabel:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
-        verLabel:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", 8, 18)
+        verLabel:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", 8, 5)
         verLabel:SetJustifyH("LEFT")
         local _ver = _getMeta(addonName, "Version") or ""
-        local _line1 = (_ver ~= "" and ("v" .. _ver .. "  \226\128\162  ") or "") .. "Built by Dev"
-        verLabel:SetText(_line1)
+        local _verPfx = _ver ~= "" and ("v" .. _ver .. "  \226\128\162  ") or ""
+        verLabel:SetText(_verPfx .. "Built by Dev  \226\128\162  Approved by Larias")
         verLabel:SetTextColor(0.45, 0.45, 0.45, 0.6)
-
-        local credLabel = p:CreateFontString(nil, "OVERLAY")
-        credLabel:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
-        credLabel:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", 8, 5)
-        credLabel:SetJustifyH("LEFT")
-        credLabel:SetText("Approved by Larias")
-        credLabel:SetTextColor(0.45, 0.45, 0.45, 0.6)
 
         -- When the popup is hidden (whether by its own catcher or programmatically),
         -- set a one-frame flag so ToggleGearPopup can tell if the hide and the
