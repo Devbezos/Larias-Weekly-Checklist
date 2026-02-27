@@ -62,13 +62,15 @@ Locales\\enUS_Data.lua
 
 # Addon source
 # Constants must load before the main file so TRACKING/THEME tables exist
-Modules\\LariasWeeklyChecklist_Constants.lua
+LariasWeeklyChecklist_Constants.lua
 
 # Core: addon object, DB setup, main frame, event wiring
 LariasWeeklyChecklist.lua
 
-# Controls: shared UI widget factories (buttons, checkboxes, sliders, etc.)
-Controls\\LariasWeeklyChecklist_Controls.lua
+# Controls: shared UI widget factories — one file per control type
+Controls\LariasWeeklyChecklist_Buttons.lua
+Controls\LariasWeeklyChecklist_Checkbox.lua
+Controls\LariasWeeklyChecklist_Dropdown.lua
 Controls\\LariasWeeklyChecklist_ScaleSlider.lua
 
 # Modules: feature panels loaded after the main frame is ready
