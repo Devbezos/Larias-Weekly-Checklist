@@ -1779,37 +1779,12 @@ function Addon:CreateFrame()
     local closeBtn = C.NewCloseButton(frame, function() frame:Hide() end)
     closeBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -Addon.UI.closeInset, -Addon.UI.closeInset)
 
-    -- Gear / settings button: white at rest, gold on hover.
-    local gearBtn = CreateFrame("Button", nil, frame)
-    gearBtn:SetSize(20, 20)
+    -- Gear / settings button: branded square matching the close button.
+    local gearBtn = C.NewSettingsButton(frame, nil, L.TAB_OPTIONS or "Options")
     gearBtn:SetPoint("RIGHT", closeBtn, "LEFT", -2, 0)
-    do
-        local th = Addon.THEME
-        local norm = gearBtn:CreateTexture(nil, "BORDER")
-        norm:SetTexture("Interface\\Buttons\\UI-OptionsButton")
-        norm:SetAllPoints(gearBtn)
-        norm:SetVertexColor(th.text.r, th.text.g, th.text.b, 0.65)
-        gearBtn:SetNormalTexture(norm)
-        local pushed = gearBtn:CreateTexture(nil, "OVERLAY")
-        pushed:SetTexture("Interface\\Buttons\\UI-OptionsButton")
-        pushed:SetAllPoints(gearBtn)
-        pushed:SetVertexColor(th.header.r * 0.75, th.header.g * 0.75, th.header.b * 0.75, 1)
-        gearBtn:SetPushedTexture(pushed)
-        local hl = gearBtn:CreateTexture(nil, "HIGHLIGHT")
-        hl:SetTexture("Interface\\Buttons\\UI-OptionsButton")
-        hl:SetAllPoints(gearBtn)
-        hl:SetVertexColor(th.header.r, th.header.g, th.header.b, 1)
-        gearBtn:SetHighlightTexture(hl)
-    end
     gearBtn:SetScript("OnClick", function()
         if Addon.ToggleGearPopup then Addon:ToggleGearPopup(gearBtn) end
     end)
-    gearBtn:SetScript("OnEnter", function(self_)
-        GameTooltip:SetOwner(self_, "ANCHOR_BOTTOMLEFT")
-        GameTooltip:SetText(L.TAB_OPTIONS or "Options", 1, 1, 1, 1, true)
-        GameTooltip:Show()
-    end)
-    gearBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
     frame._lariasGearBtn = gearBtn
 
     local frameName = frame.GetName and frame:GetName() or nil

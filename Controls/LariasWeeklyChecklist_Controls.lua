@@ -108,7 +108,7 @@ function C.NewCloseButton(parent, onClick)
 
     -- Glyph: Unicode heavy multiplication sign looks cleaner than ASCII "X".
     local norm = btn:CreateFontString(nil, "OVERLAY")
-    norm:SetFont("Fonts\\FRIZQT__.TTF", 13, "OUTLINE")
+    norm:SetFont("Fonts\\FRIZQT__.TTF", 16, "OUTLINE")
     norm:SetAllPoints(btn)
     norm:SetJustifyH("CENTER")
     norm:SetJustifyV("MIDDLE")
@@ -152,37 +152,48 @@ end
 function C.NewSettingsButton(parent, onClick, tooltip)
     local btn = CreateFrame("Button", nil, parent)
     btn:SetSize(20, 20)
+
+    -- Backdrop: same dark square as the close button.
+    Addon:ApplyTheme(btn)
+
     local T  = Addon.THEME or {}
     local tt = T.text   or { r = 1, g = 1, b = 1 }
     local th = T.header or { r = 1, g = 0.82, b = 0 }
 
+    -- Inset the gear icon 2 px so the backdrop border shows around it.
+    local PAD = 2
     local norm = btn:CreateTexture(nil, "BORDER")
     norm:SetTexture("Interface\\Buttons\\UI-OptionsButton")
-    norm:SetAllPoints(btn)
+    norm:SetPoint("TOPLEFT",     btn, "TOPLEFT",      PAD, -PAD)
+    norm:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -PAD,  PAD)
     norm:SetVertexColor(tt.r, tt.g, tt.b, 0.65)
     btn:SetNormalTexture(norm)
 
     local pushed = btn:CreateTexture(nil, "OVERLAY")
     pushed:SetTexture("Interface\\Buttons\\UI-OptionsButton")
-    pushed:SetAllPoints(btn)
+    pushed:SetPoint("TOPLEFT",     btn, "TOPLEFT",      PAD, -PAD)
+    pushed:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -PAD,  PAD)
     pushed:SetVertexColor(th.r * 0.75, th.g * 0.75, th.b * 0.75, 1)
     btn:SetPushedTexture(pushed)
 
     local hl = btn:CreateTexture(nil, "HIGHLIGHT")
-    hl:SetTexture("Interface\\Buttons\\UI-OptionsButton")
     hl:SetAllPoints(btn)
-    hl:SetVertexColor(th.r, th.g, th.b, 1)
+    hl:SetColorTexture(1, 1, 1, 0.10)
     btn:SetHighlightTexture(hl)
 
     btn:SetScript("OnClick", onClick or function() end)
 
     local tipText = tooltip or (Addon.L and Addon.L.TAB_OPTIONS) or "Options"
     btn:SetScript("OnEnter", function(self_)
+        norm:SetVertexColor(th.r, th.g, th.b, 1)  -- gold tint on hover
         GameTooltip:SetOwner(self_, "ANCHOR_BOTTOMLEFT")
         GameTooltip:SetText(tipText, 1, 1, 1, 1, true)
         GameTooltip:Show()
     end)
-    btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    btn:SetScript("OnLeave", function()
+        norm:SetVertexColor(tt.r, tt.g, tt.b, 0.65)  -- back to white/dim
+        GameTooltip:Hide()
+    end)
     return btn
 end
 
