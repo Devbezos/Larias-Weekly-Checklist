@@ -1827,7 +1827,7 @@ function Addon:CreateFrame()
     local gearBtn = C.NewIconButton(frame, "Interface\\Buttons\\UI-OptionsButton", nil, L.TAB_OPTIONS or "Options")
     gearBtn:SetPoint("RIGHT", closeBtn, "LEFT", -2, 0)
     gearBtn:SetScript("OnClick", function()
-        if Addon.ToggleGearPopup then Addon:ToggleGearPopup(gearBtn) end
+        if Addon.ToggleGearPopup then Addon:ToggleGearPopup(gearBtn, true) end
     end)
     frame._lariasGearBtn = gearBtn
 

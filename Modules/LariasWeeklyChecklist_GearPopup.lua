@@ -143,7 +143,7 @@ function Addon:SyncGearPopup()
     end
 end
 
-function Addon:ToggleGearPopup(anchor)
+function Addon:ToggleGearPopup(anchor, growRight)
     local p = self._gearPopup
     if p and p.IsShown and p:IsShown() then
         p:Hide()
@@ -317,10 +317,16 @@ function Addon:ToggleGearPopup(anchor)
     -- Sync current values and labels (includes hidden chars trigger label).
     self:SyncGearPopup()
 
-    -- Position below the anchor (gear button) or center if no anchor.
+    -- Position below the anchor or center if no anchor.
+    -- growRight=true  → popup grows rightward (TOPLEFT anchored to anchor BOTTOMLEFT)
+    -- growRight=false → popup grows leftward  (TOPRIGHT anchored to anchor BOTTOMRIGHT)
     p:ClearAllPoints()
     if anchor then
-        p:SetPoint("TOPRIGHT", anchor, "BOTTOMRIGHT", 0, -4)
+        if growRight then
+            p:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -4)
+        else
+            p:SetPoint("TOPRIGHT", anchor, "BOTTOMRIGHT", 0, -4)
+        end
     else
         p:SetPoint("CENTER", UIParent, "CENTER")
     end
