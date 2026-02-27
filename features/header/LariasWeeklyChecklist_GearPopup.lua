@@ -344,19 +344,26 @@ function Addon:ToggleGearPopup(anchor, growRight)
         p._gearHiddenCharsTrigger  = hiddenTrigger
         Addon._gearHiddenCharsTrigger = hiddenTrigger
 
-        -- ── Version label (subtle, bottom-right corner) ───────────────────
+        -- ── Version (bottom-left) and Credits (bottom-right) ─────────────
+        local _getMeta = (C_AddOns and C_AddOns.GetAddOnMetadata)
+                      or GetAddOnMetadata
+                      or function() return "" end
+
         local verLabel = p:CreateFontString(nil, "OVERLAY")
         verLabel:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
-        verLabel:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -8, 5)
-        verLabel:SetJustifyH("RIGHT")
-        local _ver = (C_AddOns and C_AddOns.GetAddOnMetadata
-                        and C_AddOns.GetAddOnMetadata(addonName, "Version"))
-                  or (GetAddOnMetadata and GetAddOnMetadata(addonName, "Version"))
-                  or ""
-        if _ver ~= "" then
-            verLabel:SetText("v" .. _ver)
-        end
+        verLabel:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", 8, 5)
+        verLabel:SetJustifyH("LEFT")
+        local _ver = _getMeta(addonName, "Version") or ""
+        verLabel:SetText(_ver ~= "" and ("v" .. _ver) or "")
         verLabel:SetTextColor(0.45, 0.45, 0.45, 0.6)
+
+        local credLabel = p:CreateFontString(nil, "OVERLAY")
+        credLabel:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
+        credLabel:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -8, 5)
+        credLabel:SetJustifyH("RIGHT")
+        local _cred = _getMeta(addonName, "X-Credits") or ""
+        credLabel:SetText(_cred)
+        credLabel:SetTextColor(0.45, 0.45, 0.45, 0.6)
 
         -- When the popup is hidden (whether by its own catcher or programmatically),
         -- set a one-frame flag so ToggleGearPopup can tell if the hide and the
