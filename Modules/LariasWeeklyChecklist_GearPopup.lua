@@ -192,8 +192,10 @@ function Addon:ToggleGearPopup(anchor)
                 gdb.mainFramePos  = nil
                 gdb.mainFrameSize = nil
                 gdb.uiScalePct    = 100
+                gdb.uiOpacityPct  = 65
             end
-            if Addon.ApplyUIScale then Addon:ApplyUIScale() end
+            if Addon.ApplyUIScale  then Addon:ApplyUIScale()  end
+            if Addon.ApplyOpacity  then Addon:ApplyOpacity()  end
             local mf = Addon._mainFrame
             if mf then
                 mf:ClearAllPoints()
