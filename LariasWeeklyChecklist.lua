@@ -1317,7 +1317,7 @@ end
 -- after an item is checked and the base colour dims.
 local function EmphasizeText(text)
     if type(text) ~= "string" or not text:find("%u%u") then return text end
-    local OPEN  = "|cFFFFBB00"
+    local OPEN  = "|cFFFF7700"
     local CLOSE = "|r"
     local out, pos, len = {}, 1, #text
     while pos <= len do
