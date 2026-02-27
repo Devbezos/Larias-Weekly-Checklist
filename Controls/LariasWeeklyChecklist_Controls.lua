@@ -227,6 +227,10 @@ function C.NewPopupPanel(strata, fadeTime)
     catcher:SetFrameLevel((p.GetFrameLevel and p:GetFrameLevel() or 200) - 1)
     catcher:EnableMouse(true)
     catcher:Hide()
+    -- Pass clicks through so the click that closes the panel also reaches its target.
+    if catcher.SetPassThroughButtons then
+        catcher:SetPassThroughButtons("LeftButton", "RightButton", "MiddleButton")
+    end
     catcher:SetScript("OnMouseDown", function() p:Hide() end)
     p:SetScript("OnHide", function() catcher:Hide() end)
     p:SetScript("OnShow", function()
