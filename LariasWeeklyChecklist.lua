@@ -1082,9 +1082,10 @@ function Addon:UpdateStatusBanner()
         return
     end
 
-    -- Default: attribution credit.
-    banner._label:SetText("Created by Devbezos, based on data provided by Larias")
-    banner._label:SetTextColor(0.45, 0.45, 0.45, 0.8)
+    -- Default: attribution credit (temporarily hidden).
+    -- banner._label:SetText("Created by Devbezos, based on data provided by Larias")
+    -- banner._label:SetTextColor(0.45, 0.45, 0.45, 0.8)
+    banner:Hide()
 end
 
 function Addon:ApplyScaleSliderVisibility()

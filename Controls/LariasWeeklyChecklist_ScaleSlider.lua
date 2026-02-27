@@ -277,20 +277,22 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
         local ov = opacityPane:IsShown()
         scalePane:ClearAllPoints()
         opacityPane:ClearAllPoints()
+        -- Shift the dividing point 30px right of centre so the opacity pane
+        -- sits further to the right (scale pane gets slightly more width).
+        local splitOffset = 30
         if sv and ov then
-            -- Side by side: each takes exactly half of sf's width.
-            scalePane:SetPoint("TOPLEFT",  sf, "TOPLEFT",  0, 0)
-            scalePane:SetPoint("TOPRIGHT", sf, "TOP",      0, 0)
-            opacityPane:SetPoint("TOPLEFT",  sf, "TOP",      0, 0)
-            opacityPane:SetPoint("TOPRIGHT", sf, "TOPRIGHT", 0, 0)
+            scalePane:SetPoint("TOPLEFT",  sf, "TOPLEFT",  0,           0)
+            scalePane:SetPoint("TOPRIGHT", sf, "TOP",      splitOffset, 0)
+            opacityPane:SetPoint("TOPLEFT",  sf, "TOP",      splitOffset, 0)
+            opacityPane:SetPoint("TOPRIGHT", sf, "TOPRIGHT", 0,           0)
         elseif sv then
             -- Only scale: keep it in the LEFT half so its position is consistent.
-            scalePane:SetPoint("TOPLEFT",  sf, "TOPLEFT",  0, 0)
-            scalePane:SetPoint("TOPRIGHT", sf, "TOP",      0, 0)
+            scalePane:SetPoint("TOPLEFT",  sf, "TOPLEFT",  0,           0)
+            scalePane:SetPoint("TOPRIGHT", sf, "TOP",      splitOffset, 0)
         elseif ov then
-            -- Only opacity: keep it in the RIGHT half, mirroring scale on the left.
-            opacityPane:SetPoint("TOPLEFT",  sf, "TOP",      0, 0)
-            opacityPane:SetPoint("TOPRIGHT", sf, "TOPRIGHT", 0, 0)
+            -- Only opacity: keep it in the RIGHT half.
+            opacityPane:SetPoint("TOPLEFT",  sf, "TOP",      splitOffset, 0)
+            opacityPane:SetPoint("TOPRIGHT", sf, "TOPRIGHT", 0,           0)
         end
     end
     sf._layout = LayoutSliderPanes
