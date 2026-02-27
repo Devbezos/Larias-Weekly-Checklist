@@ -1488,7 +1488,8 @@ function Addon:CreateTrackingPanel(parentFrame)
     trackingFrame._lariasGvGrids = gvGrids
 
     -- ReflowGVGrid: repositions and resizes all GV grid elements inside leftCol.
-    -- Cell size is width-driven: each cell is always a perfect square.
+    -- Cell size is width-driven, then height is derived from the aspect ratio so
+    -- cells stay proportioned like the real WoW Great Vault UI (~1.67 wide:tall).
     -- targetH is accepted for call-site compatibility but not used for sizing.
     local function ReflowGVGrid(targetH)  -- luacheck: ignore 212 (targetH unused)
         local grds = TrackingUI.left.gvGrids
@@ -1496,11 +1497,12 @@ function Addon:CreateTrackingPanel(parentFrame)
         local GAP    = 6
         local BORDER = 1
         local CINSET = 4
-        -- Width-first square layout: cellW = availGridW / 3, rowH = cellW.
+        -- Width-first aspect-ratio layout: cellW = availGridW / 3,
+        -- rowH = cellW / GV_CELL_ASPECT  (~1.667 → roughly 3:5 portrait cell).
         -- Available px for grid = leftCol width minus the section-label zone.
         local availGridW = math.max(60, (leftCol:GetWidth() or 0) - GV_GRID_X)
         local cellW = math.max(30, math.floor(availGridW / 3))
-        local rowH  = cellW                  -- square: height equals width
+        local rowH  = math.max(10, math.floor(cellW / GV_CELL_ASPECT))
         local gridH = BORDER + rowH + BORDER -- top border + row + bottom border
         local gridW = cellW * 3
 
