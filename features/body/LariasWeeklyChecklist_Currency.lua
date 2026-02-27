@@ -1496,6 +1496,13 @@ function Addon:CreateTrackingPanel(parentFrame)
         local GAP    = 6
         local BORDER = 1
         local CINSET = 4
+        -- When called for a width-only reflow (no right-col content to match),
+        -- derive the vertical extent from the sentinel's tracked base Y position.
+        if not targetH or targetH <= 0 then
+            local sentinel = TrackingUI.left._gvSentinel
+            local baseY    = sentinel and sentinel._lariasBaseY
+            targetH = baseY and math.abs(baseY) or (GV_BLOCK_STEP * 3)
+        end
         -- Single-row grid: divide target height evenly across 3 sections.
         local gridH = math.max(14, math.floor((targetH - GAP * 2) / 3))
         local rowH  = math.max(10, gridH - BORDER * 2)  -- row fills grid minus borders
@@ -1503,9 +1510,10 @@ function Addon:CreateTrackingPanel(parentFrame)
         -- Cap cellW so the grid never overflows the left column.
         -- Available px for grid = leftCol width minus the label+gap zone.
         local availGridW = math.max(60, (leftCol:GetWidth() or 0) - GV_GRID_X)
-        local cellW = math.min(
-            math.floor(availGridW / 3),
-            math.max(30, math.ceil(rowH * GV_CELL_ASPECT)))
+        -- Fill available width evenly across 3 cells; floor at 30px so they're
+        -- always legible.  No aspect-ratio cap: when currency is hidden the column
+        -- is full-width and we want the cells to grow to fill that space.
+        local cellW = math.max(30, math.floor(availGridW / 3))
         local gridW = cellW * 3
 
         for bi = 1, 3 do
@@ -2128,7 +2136,12 @@ function Addon:ResizeTrackingCols()
         end
     end
 
-    -- GV grids are fixed-width (GV_GRID_W) so no repositioning needed on resize.
+    -- GV grid cells fill the left column: reflow so cells expand/contract to
+    -- match the new column width (important when currency is hidden and GV takes
+    -- the full panel width).
+    if leftShown and Addon._reflowGVGrid then
+        Addon._reflowGVGrid(nil)
+    end
 
     tf._lariasColW = newColW
 end
