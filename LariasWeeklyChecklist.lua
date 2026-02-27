@@ -1674,6 +1674,9 @@ function Addon:Refresh()
 
     SyncAllDataAndFrames()
 
+    -- Size the change-week button to fit the widest week label in the dataset.
+    if self._calcChangeWeekBtnWidth then self._calcChangeWeekBtnWidth() end
+
     -- Re-run after SyncAllDataAndFrames so _sectionsById is fully populated and
     -- the change-week button shows the real current week from the very first load.
     if self.LayoutHeaderButtons then self:LayoutHeaderButtons() end
@@ -1862,6 +1865,9 @@ function Addon:CreateFrame()
         local btn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
         btn:SetSize(108, 22)
         StyleMainTabButton(btn)
+        -- Center-justify so shorter week labels sit in the middle of the fixed-width button.
+        local _fs = btn.GetFontString and btn:GetFontString()
+        if _fs and _fs.SetJustifyH then _fs:SetJustifyH("CENTER") end
         changeWeekBtn              = btn
         frame._lariasChangeWeekBtn = btn
         return btn
@@ -2208,28 +2214,6 @@ function Addon:CreateFrame()
             btn:SetScript("OnLeave", function()
                 GameTooltip:Hide()
             end)
-            -- Auto-size button width to fit the label text.
-            -- Deferred one frame so WoW has performed its layout pass
-            -- and GetStringWidth returns real pixel widths.
-            if C_Timer and C_Timer.After then
-                C_Timer.After(0, function()
-                    if not (btn and btn.IsShown and btn:IsShown()) then return end
-                    local fs = btn.GetFontString and btn:GetFontString()
-                    local w  = 0
-                    if fs then
-                        if fs.GetUnboundedStringWidth then
-                            w = tonumber(fs:GetUnboundedStringWidth()) or 0
-                        end
-                        if w <= 0 and fs.GetStringWidth then
-                            w = tonumber(fs:GetStringWidth()) or 0
-                        end
-                    end
-                    if w <= 0 and btn.GetTextWidth then
-                        w = tonumber(btn:GetTextWidth()) or 0
-                    end
-                    btn:SetWidth(max(108, math.ceil(w) + 24))
-                end)
-            end
             btn:SetScript("OnClick", function()
                 local p = EnsureHeaderPicker()
                 if p and p.IsShown and p:IsShown() then
@@ -2357,30 +2341,57 @@ function Addon:CreateFrame()
         local label = (extracted ~= "") and extracted or (L.CHANGE_WEEK_BUTTON or "Change Week")
         local arrow = " |TInterface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up:10:10|t"
         btn:SetText(label .. arrow)
-        -- Resize button to fit the new label (deferred one frame for accurate measurement).
-        if C_Timer and C_Timer.After then
-            C_Timer.After(0, function()
-                if not (btn and btn.IsShown and btn:IsShown()) then return end
-                local fs = btn.GetFontString and btn:GetFontString()
-                local w  = 0
-                if fs then
-                    if fs.GetUnboundedStringWidth then
-                        w = tonumber(fs:GetUnboundedStringWidth()) or 0
-                    end
-                    if w <= 0 and fs.GetStringWidth then
-                        w = tonumber(fs:GetStringWidth()) or 0
-                    end
-                end
-                if w <= 0 and btn.GetTextWidth then
-                    w = tonumber(btn:GetTextWidth()) or 0
-                end
-                btn:SetWidth(max(108, math.ceil(w) + 24))
-            end)
-        end
     end
 
-    -- Expose so Refresh/RebuildList can call it after sections repopulate.
-    Addon._refreshChangeWeekLabel = RefreshChangeWeekLabel_
+    -- Calculates and sets the change-week button to the width of its widest possible
+    -- label across all sections. Called once after data loads so the button never
+    -- resizes while scrolling. Uses a hidden scratch FontString for measurement.
+    local function CalcChangeWeekBtnWidth_()
+        local btn = changeWeekBtn
+        if not (btn and frame) then return end
+        local order = Addon._order or {}
+        if #order == 0 then return end
+
+        if not btn._lariasMeasureFS then
+            local scratch = frame:CreateFontString(nil, "ARTWORK")
+            scratch:Hide()
+            local bfs = btn.GetFontString and btn:GetFontString()
+            if bfs then
+                local fontPath, fontH, fontFlags = bfs:GetFont()
+                if fontPath then
+                    scratch:SetFont(fontPath, fontH or 12, fontFlags or "")
+                else
+                    scratch:SetFontObject(GameFontNormal)
+                end
+            else
+                scratch:SetFontObject(GameFontNormal)
+            end
+            btn._lariasMeasureFS = scratch
+        end
+        local scratch      = btn._lariasMeasureFS
+        local arrow        = " |TInterface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up:10:10|t"
+        local sectionsById = Addon._sectionsById or {}
+        local maxW         = 108
+        for i = 1, #order do
+            local sec       = sectionsById[tostring(order[i])]
+            local extracted = ExtractMonthRangeLabel((sec and sec.title) or tostring(order[i] or ""))
+            local label     = (extracted ~= "") and extracted or (L.CHANGE_WEEK_BUTTON or "Change Week")
+            scratch:SetText(label .. arrow)
+            local w = 0
+            if scratch.GetUnboundedStringWidth then
+                w = tonumber(scratch:GetUnboundedStringWidth()) or 0
+            end
+            if w <= 0 and scratch.GetStringWidth then
+                w = tonumber(scratch:GetStringWidth()) or 0
+            end
+            maxW = max(maxW, math.ceil(w) + 24)
+        end
+        btn:SetWidth(maxW)
+    end
+
+    -- Expose so Refresh/RebuildList can call them after sections repopulate.
+    Addon._refreshChangeWeekLabel  = RefreshChangeWeekLabel_
+    Addon._calcChangeWeekBtnWidth  = CalcChangeWeekBtnWidth_
 
     -- Hook scrollbar value changes and scroll-range changes.
     local _sb = scrollFrame.ScrollBar
