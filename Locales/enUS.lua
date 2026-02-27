@@ -85,6 +85,7 @@ local STRINGS = {
 	TAB_OPTIONS = "Options",
 	CHANGE_WEEK_BUTTON = "Change Week",
 	CHAR_PICKER_BUTTON = "Swap Profile",
+	CHAR_PICKER_TOOLTIP_REMOVE = "To remove a character, use the Options menu.",
 	ILVLREF_BUTTON = "View Item Levels",
 
 	-- Item level reference popup

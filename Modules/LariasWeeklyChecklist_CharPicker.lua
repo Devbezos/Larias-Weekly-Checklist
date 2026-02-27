@@ -107,6 +107,14 @@ function Addon:InitCharPickerUI(frame, styleFunc)
         if styleFunc then styleFunc(btn) end
         charPickerBtn              = btn
         frame._lariasCharPickerBtn = btn
+        btn:SetScript("OnEnter", function(self_)
+            local L = Addon.L or {}
+            GameTooltip:SetOwner(self_, "ANCHOR_BOTTOMLEFT")
+            GameTooltip:SetText(L.CHAR_PICKER_BUTTON or "Swap Profile", 1, 1, 1)
+            GameTooltip:AddLine(L.CHAR_PICKER_TOOLTIP_REMOVE or "To remove a character, use the Options menu.", 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
         return btn
     end
 

@@ -377,9 +377,11 @@ local function BuildIlvlRefWindow()
     local bg = Addon.THEME.bg
     win:SetBackdropColor(bg.r, bg.g, bg.b, 1.0)
 
-    -- Title
+    -- Title (centered, leaves room for close button on the right)
     local titleFS = win:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    titleFS:SetPoint("TOPLEFT", win, "TOPLEFT", PAD, -10)
+    titleFS:SetPoint("TOPLEFT",  win, "TOPLEFT",  PAD,  -10)
+    titleFS:SetPoint("TOPRIGHT", win, "TOPRIGHT", -30,  -10)
+    titleFS:SetJustifyH("CENTER")
     local titleHeaderColor = Addon.THEME.header
     titleFS:SetTextColor(titleHeaderColor.r, titleHeaderColor.g, titleHeaderColor.b, titleHeaderColor.a)
     titleFS:SetText(Locale.ILVLREF_WINDOW_TITLE)
