@@ -28,6 +28,8 @@ Locales\\enUS.lua
 Locales\\enUS_Data.lua
 Modules\\LariasWeeklyChecklist_Constants.lua
 LariasWeeklyChecklist.lua
+Controls\\LariasWeeklyChecklist_Controls.lua
+Controls\\LariasWeeklyChecklist_ScaleSlider.lua
 Modules\\LariasWeeklyChecklist_CharPicker.lua
 Modules\\LariasWeeklyChecklist_Options.lua
 Modules\\LariasWeeklyChecklist_GearPopup.lua

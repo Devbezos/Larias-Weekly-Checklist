@@ -1,0 +1,267 @@
+local addonName = ...
+local Addon = _G[addonName]
+if not Addon then return end
+
+-- ── Shared custom UI controls ─────────────────────────────────────────────────
+-- Factory functions for every custom-styled button and checkbox used throughout
+-- the addon. Define once here, call everywhere:
+--
+--   Addon.Controls.StyleButton(btn)
+--       Apply the addon's dark-backdrop action-button style to any Button.
+--
+--   Addon.Controls.NewCloseButton(parent [, onClick])
+--       Themed 20×20 "X" button. onClick defaults to parent:Hide().
+--
+--   Addon.Controls.NewSettingsButton(parent [, onClick [, tooltip]])
+--       Themed 20×20 gear-icon button (UI-OptionsButton), gold on hover.
+--
+--   Addon.Controls.NewCheckBox(parent [, onToggle])
+--       Themed CheckButton + right-hand label (_label) + full-width hit area (_hit).
+--       onToggle(checked:bool) fires on any state change.
+--
+--   Addon.Controls.NewExpandButton(parent [, onToggle [, initialExpanded
+--                                  [, expandText [, shrinkText]]]])
+--       Styled toggle button that switches between expand/shrink states.
+--       Defaults to "▲" (shrunk) / "▼" (expanded) unless custom text is given.
+--       btn._expanded  — current state (bool)
+--       btn:SetExpanded(bool) — update state + text without firing onToggle
+
+Addon.Controls = Addon.Controls or {}
+local C = Addon.Controls
+
+-- ── Action button styler ──────────────────────────────────────────────────────
+-- Strips Blizzard default art and applies the addon's dark-backdrop theme.
+-- Replaces the old local StyleMainTabButton / Addon._styleActionButton.
+function C.StyleButton(btn)
+    if not btn then return end
+
+    Addon:ApplyTheme(btn)
+    -- Buttons use a slightly lower bg alpha than panels.
+    if btn.SetBackdropColor then
+        local T = Addon.THEME
+        if T then
+            btn:SetBackdropColor(T.bg.r, T.bg.g, T.bg.b, math.max(0, (tonumber(T.bg.a) or 1) - 0.28))
+        end
+    end
+
+    local function ClearTex(t)
+        if not t then return end
+        if t.SetTexture then t:SetTexture(nil) end
+        if t.SetAlpha   then t:SetAlpha(0)     end
+        if t.Hide       then t:Hide()          end
+    end
+    if btn.GetNormalTexture    then ClearTex(btn:GetNormalTexture())    end
+    if btn.GetPushedTexture    then ClearTex(btn:GetPushedTexture())    end
+    if btn.GetDisabledTexture  then ClearTex(btn:GetDisabledTexture())  end
+    if btn.GetHighlightTexture then ClearTex(btn:GetHighlightTexture()) end
+
+    if btn.Left   and btn.Left.Hide   then btn.Left:Hide()   end
+    if btn.Middle and btn.Middle.Hide then btn.Middle:Hide() end
+    if btn.Right  and btn.Right.Hide  then btn.Right:Hide()  end
+
+    if btn.SetTextInsets then btn:SetTextInsets(12, 12, 4, 4) end
+
+    local tr = btn.Text or (btn.GetFontString and btn:GetFontString())
+    if tr then
+        if tr.SetJustifyV then tr:SetJustifyV("MIDDLE") end
+        if tr.ClearAllPoints and tr.SetPoint then
+            tr:ClearAllPoints()
+            tr:SetPoint("CENTER", btn, "CENTER", 0, 0)
+        end
+        if tr.SetTextColor then tr:SetTextColor(1, 1, 1, 1) end
+    end
+
+    if btn.CreateTexture and not btn._lariasCustomHighlight then
+        local hl = btn:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints(btn)
+        local T = Addon.THEME
+        if T then
+            hl:SetColorTexture(T.text.r, T.text.g, T.text.b, 0.06)
+        else
+            hl:SetColorTexture(1, 1, 1, 0.06)
+        end
+        btn._lariasCustomHighlight = hl
+    end
+
+    btn._lariasTabStyled = true
+end
+
+-- Expose as the legacy global reference so all existing code that calls
+-- Addon._styleActionButton(btn) continues to work without any changes.
+Addon._styleActionButton = C.StyleButton
+
+-- ── Close button ──────────────────────────────────────────────────────────────
+-- Creates and returns a themed 20×20 "X" button as a child of `parent`.
+-- onClick defaults to hiding parent.  Caller is responsible for positioning.
+function C.NewCloseButton(parent, onClick)
+    local btn = CreateFrame("Button", nil, parent)
+    btn:SetSize(20, 20)
+    local T  = Addon.THEME or {}
+    local th = T.header or { r = 1, g = 0.82, b = 0 }
+
+    local norm = btn:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+    norm:SetAllPoints(btn)
+    norm:SetJustifyH("CENTER")
+    norm:SetJustifyV("MIDDLE")
+    norm:SetTextColor(th.r, th.g, th.b, 0.85)
+    norm:SetText("X")
+    btn:SetFontString(norm)
+
+    local hl = btn:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetAllPoints(btn)
+    hl:SetColorTexture(1, 1, 1, 0.10)
+    btn:SetHighlightTexture(hl)
+
+    local pushed = btn:CreateTexture(nil, "OVERLAY")
+    pushed:SetAllPoints(btn)
+    pushed:SetColorTexture(th.r, th.g, th.b, 0.15)
+    btn:SetPushedTexture(pushed)
+
+    btn:SetScript("OnClick", onClick or function() parent:Hide() end)
+    return btn
+end
+
+-- ── Settings / gear button ────────────────────────────────────────────────────
+-- Creates and returns a 20×20 gear-icon button (UI-OptionsButton texture).
+-- White at rest, gold on hover.  tooltip shown on mouse-over.
+-- onClick defaults to a no-op; override with SetScript after creation if needed.
+function C.NewSettingsButton(parent, onClick, tooltip)
+    local btn = CreateFrame("Button", nil, parent)
+    btn:SetSize(20, 20)
+    local T  = Addon.THEME or {}
+    local tt = T.text   or { r = 1, g = 1, b = 1 }
+    local th = T.header or { r = 1, g = 0.82, b = 0 }
+
+    local norm = btn:CreateTexture(nil, "BORDER")
+    norm:SetTexture("Interface\\Buttons\\UI-OptionsButton")
+    norm:SetAllPoints(btn)
+    norm:SetVertexColor(tt.r, tt.g, tt.b, 0.65)
+    btn:SetNormalTexture(norm)
+
+    local pushed = btn:CreateTexture(nil, "OVERLAY")
+    pushed:SetTexture("Interface\\Buttons\\UI-OptionsButton")
+    pushed:SetAllPoints(btn)
+    pushed:SetVertexColor(th.r * 0.75, th.g * 0.75, th.b * 0.75, 1)
+    btn:SetPushedTexture(pushed)
+
+    local hl = btn:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetTexture("Interface\\Buttons\\UI-OptionsButton")
+    hl:SetAllPoints(btn)
+    hl:SetVertexColor(th.r, th.g, th.b, 1)
+    btn:SetHighlightTexture(hl)
+
+    btn:SetScript("OnClick", onClick or function() end)
+
+    local tipText = tooltip or (Addon.L and Addon.L.TAB_OPTIONS) or "Options"
+    btn:SetScript("OnEnter", function(self_)
+        GameTooltip:SetOwner(self_, "ANCHOR_BOTTOMLEFT")
+        GameTooltip:SetText(tipText, 1, 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    return btn
+end
+
+-- ── Checkbox ──────────────────────────────────────────────────────────────────
+-- Creates a themed CheckButton with:
+--   cb._label  — FontString anchored LEFT of cb, RIGHT of parent
+--   cb._hit    — full-width hit area (caller must SetPoint + SetHeight)
+--   cb:RefreshTint() — re-applies theme vertex colors after SetChecked() resets them
+--
+-- onToggle(checked:bool) fires whenever the state changes via cb or _hit.
+function C.NewCheckBox(parent, onToggle)
+    local cb = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
+
+    -- Apply theme tinting.
+    local norm = cb.GetNormalTexture   and cb:GetNormalTexture()
+    local chk  = cb.GetCheckedTexture  and cb:GetCheckedTexture()
+    local hi   = cb.GetHighlightTexture and cb:GetHighlightTexture()
+    if norm then norm:SetVertexColor(0.55, 0.55, 0.55, 1) end
+    if chk  then
+        local T = Addon.THEME
+        if T and T.header then chk:SetVertexColor(T.header.r, T.header.g, T.header.b, 1) end
+    end
+    if hi   then hi:SetVertexColor(1, 1, 1, 0.12) end
+
+    -- Explicit label FontString (anonymous frames cannot reference $parenttext).
+    local lbl = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    lbl:SetPoint("LEFT",  cb,     "RIGHT", 2,   0)
+    lbl:SetPoint("RIGHT", parent, "RIGHT", -10, 0)
+    lbl:SetJustifyH("LEFT")
+    if Addon.THEME and Addon.THEME.text then
+        local t = Addon.THEME.text
+        lbl:SetTextColor(t.r, t.g, t.b, t.a or 1)
+    end
+    cb._label = lbl
+
+    -- Full-width hit area; caller positions it with SetPoint + SetHeight.
+    local hit = CreateFrame("Button", nil, parent)
+    hit:SetFrameLevel(parent:GetFrameLevel())
+    local hitHl = hit:CreateTexture(nil, "HIGHLIGHT")
+    hitHl:SetAllPoints(hit)
+    hitHl:SetColorTexture(1, 1, 1, 0.06)
+    cb._hit = hit
+
+    -- Re-applies tinting after SetChecked() resets Blizzard vertex colors.
+    function cb:RefreshTint()
+        local n = self.GetNormalTexture   and self:GetNormalTexture()
+        local c = self.GetCheckedTexture  and self:GetCheckedTexture()
+        local h = self.GetHighlightTexture and self:GetHighlightTexture()
+        if n then n:SetVertexColor(0.55, 0.55, 0.55, 1) end
+        if c then
+            local T = Addon.THEME
+            if T and T.header then c:SetVertexColor(T.header.r, T.header.g, T.header.b, 1) end
+        end
+        if h then h:SetVertexColor(1, 1, 1, 0.12) end
+    end
+
+    cb:SetScript("OnClick", function(self_)
+        cb:RefreshTint()
+        if onToggle then onToggle(self_:GetChecked() and true or false) end
+    end)
+    hit:SetScript("OnClick", function()
+        local newVal = not (cb:GetChecked() and true or false)
+        cb:SetChecked(newVal)
+        cb:RefreshTint()
+        if onToggle then onToggle(newVal) end
+    end)
+
+    return cb
+end
+
+-- ── Expand / shrink button ────────────────────────────────────────────────────
+-- Creates a styled toggle button (UIPanelButtonTemplate + StyleButton) that
+-- switches between expanded and shrunk states.
+--
+-- Text shown when content IS shrunk   → expandText (default "▲"; click = expand)
+-- Text shown when content IS expanded → shrinkText (default "▼"; click = shrink)
+-- Pass locale strings (e.g. "Expand" / "Shrink") to override the glyphs.
+--
+-- onToggle(expanded:bool) fires after each state flip.
+-- initialExpanded defaults to true.
+--
+-- btn._expanded           — current state (bool)
+-- btn:SetExpanded(bool)   — update state + text without firing onToggle
+function C.NewExpandButton(parent, onToggle, initialExpanded, expandText, shrinkText)
+    local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+    C.StyleButton(btn)
+
+    local _expandText = expandText or "\226\150\178"  -- UTF-8 bytes for ▲
+    local _shrinkText = shrinkText or "\226\150\188"  -- UTF-8 bytes for ▼
+
+    btn._expanded = (initialExpanded ~= false)
+
+    function btn:SetExpanded(val)
+        self._expanded = val and true or false
+        self:SetText(self._expanded and _shrinkText or _expandText)
+    end
+
+    btn:SetExpanded(btn._expanded)  -- set initial glyph
+
+    btn:SetScript("OnClick", function(self_)
+        self_:SetExpanded(not self_._expanded)
+        if onToggle then onToggle(self_._expanded) end
+    end)
+
+    return btn
+end
