@@ -344,7 +344,7 @@ function Addon:ToggleGearPopup(anchor, growRight)
         p._gearHiddenCharsTrigger  = hiddenTrigger
         Addon._gearHiddenCharsTrigger = hiddenTrigger
 
-        -- ── Version and Credits — two stacked left-aligned lines ─────────
+        -- ── Version + Author (line 1) and Credits / Larias (line 2) ─────
         local _getMeta = (C_AddOns and C_AddOns.GetAddOnMetadata)
                       or GetAddOnMetadata
                       or function() return "" end
@@ -353,8 +353,13 @@ function Addon:ToggleGearPopup(anchor, growRight)
         verLabel:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
         verLabel:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", 8, 18)
         verLabel:SetJustifyH("LEFT")
-        local _ver = _getMeta(addonName, "Version") or ""
-        verLabel:SetText(_ver ~= "" and ("v" .. _ver) or "")
+        local _ver    = _getMeta(addonName, "Version") or ""
+        local _author = _getMeta(addonName, "Author")  or ""
+        local _verLine = (_ver ~= "" and ("v" .. _ver) or "")
+        if _author ~= "" then
+            _verLine = _verLine ~= "" and (_verLine .. "  \226\128\162  " .. _author) or _author
+        end
+        verLabel:SetText(_verLine)
         verLabel:SetTextColor(0.45, 0.45, 0.45, 0.6)
 
         local credLabel = p:CreateFontString(nil, "OVERLAY")
