@@ -126,7 +126,7 @@ function Addon:SyncGearPopup()
             p._gearHiddenCharsTrigger:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PAD, -hidStartY)
         end
 
-        local VER_PAD = 14  -- extra bottom room for the version label
+        local VER_PAD = 28  -- extra bottom room for two-line version + credits
         local totalH
         if showHiddenSect then
             totalH = hidStartY + 22 + PAD + VER_PAD
@@ -344,14 +344,14 @@ function Addon:ToggleGearPopup(anchor, growRight)
         p._gearHiddenCharsTrigger  = hiddenTrigger
         Addon._gearHiddenCharsTrigger = hiddenTrigger
 
-        -- ── Version (bottom-left) and Credits (bottom-right) ─────────────
+        -- ── Version and Credits — two stacked left-aligned lines ─────────
         local _getMeta = (C_AddOns and C_AddOns.GetAddOnMetadata)
                       or GetAddOnMetadata
                       or function() return "" end
 
         local verLabel = p:CreateFontString(nil, "OVERLAY")
         verLabel:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
-        verLabel:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", 8, 5)
+        verLabel:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", 8, 18)
         verLabel:SetJustifyH("LEFT")
         local _ver = _getMeta(addonName, "Version") or ""
         verLabel:SetText(_ver ~= "" and ("v" .. _ver) or "")
@@ -359,8 +359,8 @@ function Addon:ToggleGearPopup(anchor, growRight)
 
         local credLabel = p:CreateFontString(nil, "OVERLAY")
         credLabel:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
-        credLabel:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -8, 5)
-        credLabel:SetJustifyH("RIGHT")
+        credLabel:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", 8, 5)
+        credLabel:SetJustifyH("LEFT")
         local _cred = _getMeta(addonName, "X-Credits") or ""
         credLabel:SetText(_cred)
         credLabel:SetTextColor(0.45, 0.45, 0.45, 0.6)
