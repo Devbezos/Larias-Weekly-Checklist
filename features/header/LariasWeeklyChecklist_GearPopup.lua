@@ -344,7 +344,7 @@ function Addon:ToggleGearPopup(anchor, growRight)
         p._gearHiddenCharsTrigger  = hiddenTrigger
         Addon._gearHiddenCharsTrigger = hiddenTrigger
 
-        -- ── Version + Author (line 1) and Credits / Larias (line 2) ─────
+        -- ── Version + credit — two stacked left-aligned lines ────────────
         local _getMeta = (C_AddOns and C_AddOns.GetAddOnMetadata)
                       or GetAddOnMetadata
                       or function() return "" end
@@ -353,21 +353,16 @@ function Addon:ToggleGearPopup(anchor, growRight)
         verLabel:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
         verLabel:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", 8, 18)
         verLabel:SetJustifyH("LEFT")
-        local _ver    = _getMeta(addonName, "Version") or ""
-        local _author = _getMeta(addonName, "Author")  or ""
-        local _verLine = (_ver ~= "" and ("v" .. _ver) or "")
-        if _author ~= "" then
-            _verLine = _verLine ~= "" and (_verLine .. "  \226\128\162  " .. _author) or _author
-        end
-        verLabel:SetText(_verLine)
+        local _ver = _getMeta(addonName, "Version") or ""
+        local _line1 = (_ver ~= "" and ("v" .. _ver .. "  \226\128\162  ") or "") .. "Built by Dev"
+        verLabel:SetText(_line1)
         verLabel:SetTextColor(0.45, 0.45, 0.45, 0.6)
 
         local credLabel = p:CreateFontString(nil, "OVERLAY")
         credLabel:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
         credLabel:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", 8, 5)
         credLabel:SetJustifyH("LEFT")
-        local _cred = _getMeta(addonName, "X-Credits") or ""
-        credLabel:SetText(_cred)
+        credLabel:SetText("Approved by Larias")
         credLabel:SetTextColor(0.45, 0.45, 0.45, 0.6)
 
         -- When the popup is hidden (whether by its own catcher or programmatically),
