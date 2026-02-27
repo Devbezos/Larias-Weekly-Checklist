@@ -1780,6 +1780,7 @@ function Addon:CreateFrame()
     -- Toggle(), ESC, or any other dismiss path). The picker is parented to
     -- UIParent so it won't hide automatically when the main frame does.
     frame:SetScript("OnHide", function()
+        -- Close all floating panels attached to the addon.
         local picker = frame._lariasHeaderPicker
         if picker and picker.IsShown and picker:IsShown() then
             picker:Hide()
@@ -1787,6 +1788,13 @@ function Addon:CreateFrame()
         if Addon._ilvlRefWindow and Addon._ilvlRefWindow.IsShown and Addon._ilvlRefWindow:IsShown() then
             Addon._ilvlRefWindow:Hide()
         end
+        if Addon._gearPopup and Addon._gearPopup.IsShown and Addon._gearPopup:IsShown() then
+            Addon._gearPopup:Hide()
+        end
+        if Addon._hiddenCharsPicker and Addon._hiddenCharsPicker.IsShown and Addon._hiddenCharsPicker:IsShown() then
+            Addon._hiddenCharsPicker:Hide()
+        end
+        if Addon._cpClose then Addon._cpClose() end
     end)
     -- Record this character's class the first time the list is opened so the
     -- character picker can colour-code entries. Intentionally deferred from

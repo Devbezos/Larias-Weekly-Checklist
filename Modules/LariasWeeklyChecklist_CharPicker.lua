@@ -364,6 +364,11 @@ function Addon:InitCharPickerUI(frame, styleFunc)
     Addon._cpUpdateLabel   = UpdateLabel
     Addon._cpPopulate      = Populate
     Addon._cpOnClick       = OnPickerBtnClick
+    Addon._cpClose         = function()
+        if charPickerPanel and charPickerPanel.IsShown and charPickerPanel:IsShown() then
+            charPickerPanel:Hide()
+        end
+    end
     -- Also expose UpdateLabel under the old name used by SetViewingChar above.
     Addon.UpdateCharPickerBtnLabel = UpdateLabel
 end
