@@ -1296,25 +1296,6 @@ local function SetHeaderText(sectionFrame, sectionId, complete)
     sectionFrame._title:SetText(titleText)
 end
 
--- Sets the checklist item label text and colour based on checked state.
--- Re-sets the text string so inline |c...| emphasis codes are either
--- applied (unchecked) or stripped (checked, where plain grey is enough).
-local function RefreshItemTextColor(checkbox)
-    local lbl = checkbox.text or checkbox.Text
-    if not lbl then return end
-    local raw = checkbox._rawItemText or (lbl.GetText and lbl:GetText()) or ""
-    if checkbox:GetChecked() then
-        lbl:SetText(raw)
-        lbl:SetTextColor(0.45, 0.45, 0.45, 0.85)
-    else
-        lbl:SetText(EmphasizeText(raw))
-        -- THEME is always populated before any checkbox exists; avoid the
-        -- guarded lookup and the potential table allocation on every call.
-        local t = Addon.THEME.text
-        lbl:SetTextColor(t.r, t.g, t.b, t.a)
-    end
-end
-
 -- Wraps any ALL-CAPS token (2+ consecutive uppercase letters, no lowercase)
 -- in an orange colour so it stands out as an important note or warning.
 -- RefreshItemTextColor re-sets the raw text when checked so the codes are
@@ -1347,6 +1328,25 @@ local function EmphasizeText(text)
         pos = e + 1
     end
     return table.concat(out)
+end
+
+-- Sets the checklist item label text and colour based on checked state.
+-- Re-sets the text string so inline |c...| emphasis codes are either
+-- applied (unchecked) or stripped (checked, where plain grey is enough).
+local function RefreshItemTextColor(checkbox)
+    local lbl = checkbox.text or checkbox.Text
+    if not lbl then return end
+    local raw = checkbox._rawItemText or (lbl.GetText and lbl:GetText()) or ""
+    if checkbox:GetChecked() then
+        lbl:SetText(raw)
+        lbl:SetTextColor(0.45, 0.45, 0.45, 0.85)
+    else
+        lbl:SetText(EmphasizeText(raw))
+        -- THEME is always populated before any checkbox exists; avoid the
+        -- guarded lookup and the potential table allocation on every call.
+        local t = Addon.THEME.text
+        lbl:SetTextColor(t.r, t.g, t.b, t.a)
+    end
 end
 
 local function OnCheckboxClick(selfBtn)
