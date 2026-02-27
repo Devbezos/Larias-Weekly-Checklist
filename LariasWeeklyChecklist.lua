@@ -1702,6 +1702,14 @@ function Addon:Refresh()
     if self.UpdateTracking then
         self:UpdateTracking()
     end
+
+    -- Sync the change-week button label to whatever section is at the top of
+    -- the viewport after the list has been (re)built and laid out.
+    if self._refreshChangeWeekLabel and C_Timer and C_Timer.After then
+        C_Timer.After(0, self._refreshChangeWeekLabel)
+    elseif self._refreshChangeWeekLabel then
+        self._refreshChangeWeekLabel()
+    end
 end
 
 function Addon:CreateFrame()
@@ -2304,6 +2312,80 @@ function Addon:CreateFrame()
     scrollChild = CreateFrame("Frame", nil, scrollFrame)
     scrollChild:SetSize(1, 1)
     scrollFrame:SetScrollChild(scrollChild)
+
+    -- Returns the _sectionId of the topmost section that is at or above the
+    -- current scroll position (i.e. the section the user has scrolled into).
+    local function GetTopVisibleSectionId_()
+        if not (scrollFrame and scrollChild) then return nil end
+        local scrollOffset = scrollFrame:GetVerticalScroll() or 0
+        local childTop     = scrollChild:GetTop()
+        if not childTop then return nil end
+        local best, bestOff = nil, -1
+        local sections = Addon._activeSections or {}
+        for i = 1, #sections do
+            local sf = sections[i]
+            if sf and sf.IsShown and sf:IsShown() and sf._sectionId then
+                local sfTop = sf:GetTop()
+                if sfTop then
+                    -- sfOff: pixels from the top of scrollChild to this section header.
+                    local sfOff = childTop - sfTop
+                    -- Section qualifies if its header has been scrolled past (or is at) the top.
+                    if sfOff >= -1 and sfOff <= scrollOffset + 1 and sfOff > bestOff then
+                        bestOff = sfOff
+                        best    = sf._sectionId
+                    end
+                end
+            end
+        end
+        return best
+    end
+
+    -- Refreshes the change-week button text to reflect whichever week header is
+    -- currently at the top of the visible scroll area.
+    local function RefreshChangeWeekLabel_()
+        local btn = changeWeekBtn
+        if not (btn and btn.IsShown and btn:IsShown()) then return end
+        local sectionId = GetTopVisibleSectionId_()
+        local section   = sectionId and Addon._sectionsById
+                          and Addon._sectionsById[tostring(sectionId)]
+        local extracted = ExtractMonthRangeLabel(
+            (section and section.title) or tostring(sectionId or ""))
+        local label = (extracted ~= "") and extracted or (L.CHANGE_WEEK_BUTTON or "Change Week")
+        local arrow = " |TInterface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up:10:10|t"
+        btn:SetText(label .. arrow)
+        -- Resize button to fit the new label (deferred one frame for accurate measurement).
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, function()
+                if not (btn and btn.IsShown and btn:IsShown()) then return end
+                local fs = btn.GetFontString and btn:GetFontString()
+                local w  = 0
+                if fs then
+                    if fs.GetUnboundedStringWidth then
+                        w = tonumber(fs:GetUnboundedStringWidth()) or 0
+                    end
+                    if w <= 0 and fs.GetStringWidth then
+                        w = tonumber(fs:GetStringWidth()) or 0
+                    end
+                end
+                if w <= 0 and btn.GetTextWidth then
+                    w = tonumber(btn:GetTextWidth()) or 0
+                end
+                btn:SetWidth(max(108, math.ceil(w) + 24))
+            end)
+        end
+    end
+
+    -- Expose so Refresh/RebuildList can call it after sections repopulate.
+    Addon._refreshChangeWeekLabel = RefreshChangeWeekLabel_
+
+    -- Hook scrollbar value changes and scroll-range changes.
+    local _sb = scrollFrame.ScrollBar
+    if _sb and _sb.HookScript then
+        _sb:HookScript("OnValueChanged", function() RefreshChangeWeekLabel_() end)
+    end
+    if scrollFrame.HookScript then
+        scrollFrame:HookScript("OnScrollRangeChanged", function() RefreshChangeWeekLabel_() end)
+    end
 
     local db = self:EnsureDB()
     if (db.showGreatVault or db.showCurrency) and self.CreateTrackingPanel and not self._trackingFrame then
