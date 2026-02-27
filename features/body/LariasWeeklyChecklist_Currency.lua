@@ -1499,7 +1499,7 @@ function Addon:CreateTrackingPanel(parentFrame)
         local availGridW = math.max(60, (leftCol:GetWidth() or 0) - GV_GRID_X)
         local cellW = math.max(30, math.floor(availGridW / 3))
         local gridW = cellW * 3
-        local gridH = math.max(14, math.floor((math.max(0, targetH) - GAP * 2) / 3))
+        local gridH = math.max(14, math.floor((math.max(0, targetH or 0) - GAP * 2) / 3))
         local rowH  = math.max(10, gridH - BORDER * 2)
         gridH = BORDER + rowH + BORDER  -- normalise to exact px
 
