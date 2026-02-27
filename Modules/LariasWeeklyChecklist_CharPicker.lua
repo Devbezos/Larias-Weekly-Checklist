@@ -128,10 +128,8 @@ function Addon:InitCharPickerUI(frame, styleFunc)
         if charPickerPanel then return charPickerPanel end
         local p = Addon.Controls.NewPopupPanel("HIGH", 0.15)
         p:SetSize(160, 40)
-        p._buttons     = {}
-        p._buttonPool  = {}
-        p._xButtons    = {}
-        p._xButtonPool = {}
+        p._buttons    = {}
+        p._buttonPool = {}
         charPickerPanel = p
         return p
     end
@@ -151,20 +149,6 @@ function Addon:InitCharPickerUI(frame, styleFunc)
             end
         end
         p._buttons = {}
-        if p._xButtons then
-            for i = #p._xButtons, 1, -1 do
-                local xBtn = p._xButtons[i]
-                p._xButtons[i] = nil
-                if xBtn then
-                    xBtn:Hide()
-                    xBtn:ClearAllPoints()
-                    xBtn:SetScript("OnClick", nil)
-                    p._xButtonPool = p._xButtonPool or {}
-                    tinsert(p._xButtonPool, xBtn)
-                end
-            end
-            p._xButtons = {}
-        end
     end
 
     local function AcquireBtn(p)
@@ -187,24 +171,6 @@ function Addon:InitCharPickerUI(frame, styleFunc)
                 end
             end
         end
-        btn:Show()
-        return btn
-    end
-
-    local function AcquireXBtn(p)
-        local btn = p._xButtonPool and tremove(p._xButtonPool)
-        if not btn then
-            btn = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
-            btn:SetFrameStrata("HIGH")
-            if styleFunc then styleFunc(btn) end
-            local tr = btn.Text or (btn.GetFontString and btn:GetFontString())
-            if tr then
-                if tr.SetJustifyH then tr:SetJustifyH("CENTER") end
-            end
-        end
-        btn:SetSize(20, CPICK_ROW_H)
-        if btn.SetTextInsets then btn:SetTextInsets(0, 0, 0, 0) end
-        btn:SetText("|TInterface\\RaidFrame\\ReadyCheck-NotReady:12:12|t")
         btn:Show()
         return btn
     end
@@ -332,35 +298,6 @@ function Addon:InitCharPickerUI(frame, styleFunc)
                     end)
                 end
                 tinsert(p._buttons, btn)
-
-                -- X button: sits outside the panel, anchored to its right edge.
-                if not isViewing then
-                    local xBtn = AcquireXBtn(p)
-                    xBtn:ClearAllPoints()
-                    xBtn:SetPoint("TOPLEFT", p, "TOPRIGHT", 2, posY)
-                    xBtn:SetSize(20, CPICK_ROW_H)
-                    local _pkHide = profileKey
-                    xBtn:SetScript("OnClick", function()
-                        local gdbH = Addon.db and Addon.db.global
-                        if gdbH then
-                            gdbH.hiddenChars = gdbH.hiddenChars or {}
-                            gdbH.hiddenChars[_pkHide] = true
-                        end
-                        -- If currently viewing the hidden char, return to own.
-                        if Addon._viewingChar == _pkHide then
-                            Addon:SetViewingChar(nil)  -- also calls LayoutHeaderButtons
-                        elseif Addon.LayoutHeaderButtons then
-                            -- Re-evaluate button visibility (may now be empty).
-                            Addon:LayoutHeaderButtons()
-                        end
-                        if Addon.RefreshHiddenCharsList then
-                            Addon:RefreshHiddenCharsList()
-                        end
-                        -- Refresh the dropdown in-place; don't close it.
-                        Populate()
-                    end)
-                    tinsert(p._xButtons, xBtn)
-                end
                 posY = posY - CPICK_ROW_H
                 end  -- classToken guard
             end
@@ -405,8 +342,7 @@ function Addon:InitCharPickerUI(frame, styleFunc)
         end
         local btn = EnsureBtn()
         p:ClearAllPoints()
-        -- Button is at the bottom of the frame, so open the dropdown upward.
-        p:SetPoint("BOTTOMLEFT", btn, "TOPLEFT", 0, 6)
+        p:SetPoint("TOPLEFT", btn, "BOTTOMLEFT", 0, -4)
         p:Show()
         if C_Timer and C_Timer.After then
             C_Timer.After(0, Populate)
