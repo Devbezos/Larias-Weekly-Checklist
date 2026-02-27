@@ -544,21 +544,35 @@ function Addon:CreateHeader(frame)
             end
         end
 
-        -- Normal scroll: first section whose top is at or below the viewport top.
+        -- Normal scroll: find the deepest section whose header has reached or
+        -- passed the viewport top (top >= sfViewTop). Iterating forward through
+        -- visual order (section 1 → section N) and keeping the last match means
+        -- the result is the section currently sitting at the top of the view.
+        --
+        -- Wrong approach (old): return on first section where top <= sfViewTop.
+        -- That immediately picks section 2 the instant section 1 moves 1px above
+        -- the fold, because section 2's top is also <= sfViewTop (it's just lower).
         local sfViewTop = sf and sf.GetTop and sf:GetTop()
         if sfViewTop then
+            local bestId = nil
             for i = 1, #sections do
                 local s = sections[i]
                 if s and s.IsShown and s:IsShown() and s._sectionId then
                     local top = s:GetTop()
-                    if top and top <= sfViewTop + 1 then
-                        local section   = Addon._sectionsById and Addon._sectionsById[tostring(s._sectionId)]
-                        local extracted = ExtractMonthRangeLabel((section and section.title) or tostring(s._sectionId))
-                        local label     = (extracted ~= "") and extracted or (L.CHANGE_WEEK_BUTTON or "Change Week")
-                        btn:SetText(label)
-                        return
+                    -- top >= sfViewTop - 1: this section's header has reached or
+                    -- passed the viewport top; keep updating so the last (lowest)
+                    -- qualifying one wins.
+                    if top and top >= sfViewTop - 1 then
+                        bestId = s._sectionId
                     end
                 end
+            end
+            if bestId then
+                local section   = Addon._sectionsById and Addon._sectionsById[tostring(bestId)]
+                local extracted = ExtractMonthRangeLabel((section and section.title) or tostring(bestId))
+                local label     = (extracted ~= "") and extracted or (L.CHANGE_WEEK_BUTTON or "Change Week")
+                btn:SetText(label)
+                return
             end
         end
 
