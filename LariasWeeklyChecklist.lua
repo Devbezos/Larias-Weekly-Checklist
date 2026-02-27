@@ -1297,53 +1297,13 @@ local function SetHeaderText(sectionFrame, sectionId, complete)
 end
 
 -- Wraps any ALL-CAPS token (2+ consecutive uppercase letters, no lowercase)
--- in an orange colour so it stands out as an important note or warning.
--- RefreshItemTextColor re-sets the raw text when checked so the codes are
--- not present in the greyed-out version.
-local function EmphasizeText(text)
-    if type(text) ~= "string" or not text:find("%u%u") then return text end
-    local OPEN  = "|cFFFF7700"
-    local CLOSE = "|r"
-    local out, pos, len = {}, 1, #text
-    while pos <= len do
-        -- Consume leading whitespace (preserve it verbatim).
-        local s, e = text:find("%s+", pos)
-        if s == pos then
-            out[#out + 1] = text:sub(s, e)
-            pos = e + 1
-        end
-        if pos > len then break end
-        -- Consume the next non-space token.
-        s, e = text:find("%S+", pos)
-        if not s then break end
-        local word = text:sub(s, e)
-        -- Emphasise if the word contains 1+ consecutive alpha chars
-        -- that are all uppercase (e.g. "RENOWN", "A", "XP" — not "DMFx").
-        local letters = word:match("[%a]+")
-        if letters and letters == letters:upper() then
-            out[#out + 1] = OPEN .. word .. CLOSE
-        else
-            out[#out + 1] = word
-        end
-        pos = e + 1
-    end
-    return table.concat(out)
-end
-
--- Sets the checklist item label text and colour based on checked state.
--- Re-sets the text string so inline |c...| emphasis codes are either
--- applied (unchecked) or stripped (checked, where plain grey is enough).
+-- Sets the checklist item label text colour based on checked state.
 local function RefreshItemTextColor(checkbox)
     local lbl = checkbox.text or checkbox.Text
     if not lbl then return end
-    local raw = checkbox._rawItemText or (lbl.GetText and lbl:GetText()) or ""
     if checkbox:GetChecked() then
-        lbl:SetText(raw)
         lbl:SetTextColor(0.45, 0.45, 0.45, 0.85)
     else
-        lbl:SetText(EmphasizeText(raw))
-        -- THEME is always populated before any checkbox exists; avoid the
-        -- guarded lookup and the potential table allocation on every call.
         local t = Addon.THEME.text
         lbl:SetTextColor(t.r, t.g, t.b, t.a)
     end
@@ -1460,8 +1420,7 @@ local function SyncCheckboxesForSection(sectionFrame, sectionId, db)
         local textLabel = checkbox.text or checkbox.Text
         if textLabel then
             textLabel:SetWidth(itemTextWidth)
-            checkbox._rawItemText = tostring(item.text or item.id)
-            textLabel:SetText(EmphasizeText(checkbox._rawItemText))
+            textLabel:SetText(tostring(item.text or item.id))
 
             local textHeight = 0
             if textLabel.GetStringHeight then
