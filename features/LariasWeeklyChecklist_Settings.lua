@@ -49,6 +49,7 @@ local function BuildPanel()
     resetBtn:SetPoint("TOPLEFT", canvas, "TOPLEFT", PAD, curY)
     resetBtn:SetSize(160, BTN_H)
     resetBtn:SetText(L.RESET_BUTTON or "Reset List")
+    if Addon._styleActionButton then Addon._styleActionButton(resetBtn) end
     resetBtn:SetScript("OnClick", function()
         local currentKey = Addon._viewingChar
             or (Addon.GetCurrentProfileKey and Addon:GetCurrentProfileKey())

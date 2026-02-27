@@ -42,7 +42,10 @@ function C.NewPopupPanel(strata, fadeTime)
     -- without this the catcher eats every click while it is shown.
     if catcher.SetPropagateMouseClicks then catcher:SetPropagateMouseClicks(true) end
     catcher:Hide()
-    catcher:SetScript("OnMouseDown", function() p:Hide() end)
+    catcher:SetScript("OnMouseDown", function()
+        p._lariasJustClosed = true
+        p:Hide()
+    end)
 
     p:SetScript("OnHide", function() catcher:Hide() end)
     p:SetScript("OnShow", function()

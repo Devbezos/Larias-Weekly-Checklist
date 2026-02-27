@@ -11,8 +11,8 @@ function Addon:ToggleHiddenCharsDropdown()
     if not anyHidden then return end
 
     local picker = self._hiddenCharsPicker
-    if picker and picker._lariasLastCloseTime and (GetTime() - picker._lariasLastCloseTime) < 0.05 then
-        picker._lariasLastCloseTime = nil
+    if picker and picker._lariasJustClosed then
+        picker._lariasJustClosed = nil
         return
     end
     if picker and picker.IsShown and picker:IsShown() then
@@ -43,13 +43,13 @@ function Addon:ToggleHiddenCharsDropdown()
         if catcher.SetPropagateMouseClicks then catcher:SetPropagateMouseClicks(true) end
         catcher:Hide()
         catcher:SetScript("OnMouseDown", function()
+            picker._lariasJustClosed = true
             picker:Hide()
             catcher:Hide()
         end)
         picker._catcher = catcher
         picker:SetScript("OnHide", function(self_)
             catcher:Hide()
-            self_._lariasLastCloseTime = GetTime()
         end)
         picker:SetScript("OnShow", function()
             catcher:Show()

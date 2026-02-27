@@ -155,8 +155,8 @@ function Addon:ToggleGearPopup(anchor, growRight)
     -- may propagate the same input event to the gear button, whose OnClick could
     -- arrive after the catcher already hid it.  We record the close timestamp
     -- and ignore any open request within 0.05 s of the last close.
-    if p and p._lariasLastCloseTime and (GetTime() - p._lariasLastCloseTime) < 0.05 then
-        p._lariasLastCloseTime = nil
+    if p and p._lariasJustClosed then
+        p._lariasJustClosed = nil
         return
     end
     if p and p.IsShown and p:IsShown() then
@@ -363,12 +363,6 @@ function Addon:ToggleGearPopup(anchor, growRight)
         verLabel:SetJustifyH("LEFT")
         verLabel:SetText(_ver ~= "" and ("v" .. _ver) or "")
         verLabel:SetTextColor(0.45, 0.45, 0.45, 0.6)
-
-        -- Record the close time so ToggleGearPopup can ignore a same-click
-        -- reopen if the outside-click catcher propagates to the gear button.
-        p:HookScript("OnHide", function(self_)
-            self_._lariasLastCloseTime = GetTime()
-        end)
 
         self._gearPopup = p
     end
