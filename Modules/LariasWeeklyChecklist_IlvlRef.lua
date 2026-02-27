@@ -380,7 +380,8 @@ local function BuildIlvlRefWindow()
     -- Title (centered, leaves room for close button on the right)
     local titleFS = win:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     titleFS:SetPoint("TOPLEFT",  win, "TOPLEFT",  PAD,  -10)
-    titleFS:SetPoint("TOPRIGHT", win, "TOPRIGHT", -30,  -10)
+    -- Leave room for two (SCROLLTOP-4)=28px buttons + 2px gaps + 2px right margin = 64px.
+    titleFS:SetPoint("TOPRIGHT", win, "TOPRIGHT", -64,  -10)
     titleFS:SetJustifyH("CENTER")
     local titleHeaderColor = Addon.THEME.header
     titleFS:SetTextColor(titleHeaderColor.r, titleHeaderColor.g, titleHeaderColor.b, titleHeaderColor.a)
@@ -389,6 +390,8 @@ local function BuildIlvlRefWindow()
     -- Close button: branded ✕ matching the addon theme.
     local closeBtn = Addon.Controls.NewCloseButton(win, function() win:Hide() end)
     closeBtn:SetPoint("TOPRIGHT", win, "TOPRIGHT", -2, -2)
+    closeBtn:SetSize(SCROLLTOP - 4, SCROLLTOP - 4)
+    closeBtn:SetBackdropBorderColor(0, 0, 0, 0)
 
     -- Register with UISpecialFrames so ESC closes this window via Blizzard's
     -- secure ESC chain rather than the protected SetPropagateKeyboardInput.
@@ -510,6 +513,8 @@ local function BuildIlvlRefWindow()
         Locale.ILVLREF_TOGGLE_SHRINK or "Shrink")
     -- Sit immediately left of the close button, vertically aligned.
     toggleBtn:SetPoint("TOPRIGHT", closeBtn, "TOPLEFT", -2, 0)
+    toggleBtn:SetSize(SCROLLTOP - 4, SCROLLTOP - 4)
+    toggleBtn:SetBackdropBorderColor(0, 0, 0, 0)
 
     local function UpdateToggleTexture()
         -- expanded=true means the window IS maximized (down arrow, click to shrink).
