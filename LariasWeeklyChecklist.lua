@@ -2392,7 +2392,7 @@ function Addon:CreateFrame()
         -- resizes the container (icons scale with available scroll area).
         local _rawSetSize = egg.SetSize
         function egg:SetSize(w, h)
-            local iconSize = math.max(32, math.min(128, math.floor(h * 0.35)))
+            local iconSize = math.max(32, math.min(160, math.floor(h * 0.43)))
             local gap      = math.max(4,  math.floor(iconSize * 0.10))
             local plusW    = math.max(16, math.floor(iconSize * 0.45))
             local totalW   = iconSize + gap + plusW + gap + iconSize
