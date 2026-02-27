@@ -1296,14 +1296,18 @@ local function SetHeaderText(sectionFrame, sectionId, complete)
     sectionFrame._title:SetText(titleText)
 end
 
--- Sets the checklist item label colour based on checked state.
--- Called after every SetChecked() so the text stays in sync with the box.
+-- Sets the checklist item label text and colour based on checked state.
+-- Re-sets the text string so inline |c...| emphasis codes are either
+-- applied (unchecked) or stripped (checked, where plain grey is enough).
 local function RefreshItemTextColor(checkbox)
     local lbl = checkbox.text or checkbox.Text
     if not lbl then return end
+    local raw = checkbox._rawItemText or (lbl.GetText and lbl:GetText()) or ""
     if checkbox:GetChecked() then
+        lbl:SetText(raw)
         lbl:SetTextColor(0.45, 0.45, 0.45, 0.85)
     else
+        lbl:SetText(EmphasizeText(raw))
         -- THEME is always populated before any checkbox exists; avoid the
         -- guarded lookup and the potential table allocation on every call.
         local t = Addon.THEME.text
@@ -1312,9 +1316,9 @@ local function RefreshItemTextColor(checkbox)
 end
 
 -- Wraps any ALL-CAPS token (2+ consecutive uppercase letters, no lowercase)
--- in a warm amber colour so it stands out as an important note or warning.
--- WoW inline |c...| codes survive SetTextColor, so emphasis persists even
--- after an item is checked and the base colour dims.
+-- in an orange colour so it stands out as an important note or warning.
+-- RefreshItemTextColor re-sets the raw text when checked so the codes are
+-- not present in the greyed-out version.
 local function EmphasizeText(text)
     if type(text) ~= "string" or not text:find("%u%u") then return text end
     local OPEN  = "|cFFFF7700"
@@ -1456,7 +1460,8 @@ local function SyncCheckboxesForSection(sectionFrame, sectionId, db)
         local textLabel = checkbox.text or checkbox.Text
         if textLabel then
             textLabel:SetWidth(itemTextWidth)
-            textLabel:SetText(EmphasizeText(tostring(item.text or item.id)))
+            checkbox._rawItemText = tostring(item.text or item.id)
+            textLabel:SetText(EmphasizeText(checkbox._rawItemText))
 
             local textHeight = 0
             if textLabel.GetStringHeight then
