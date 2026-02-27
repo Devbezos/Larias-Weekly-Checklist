@@ -8,6 +8,9 @@ from pathlib import Path
 # Line format:  -- @sheet-version: <value>
 SHEET_VERSION_LINE_RE = re.compile(r"^--\s*@sheet-version:\s*(.+)$", re.MULTILINE)
 
+# Matches the runtime Lua variable line  reg.sheet_version = "<value>"
+SHEET_VERSION_VAR_RE  = re.compile(r'^reg\.sheet_version\s*=\s*"[^"]*"$', re.MULTILINE)
+
 HEADER_PREFIX_RE = re.compile(r"^\s*(Early Access|Pre-Season|Season|Week(?:s)?)\b", re.IGNORECASE)
 
 MONTHS = r"(Jan|January|Feb|February|Mar|March|Apr|April|May|Jun|June|Jul|July|Aug|August|Sep|Sept|September|Oct|October|Nov|November|Dec|December)"
@@ -74,8 +77,11 @@ def get_stored_sheet_version(existing_text: str) -> str:
 
 
 def strip_version_line(text: str) -> str:
-    """Remove the @sheet-version comment line so we can compare pure data content."""
-    return SHEET_VERSION_LINE_RE.sub("", text).strip()
+    """Remove both the @sheet-version comment and the reg.sheet_version variable
+    line so we can compare pure data content, independent of version changes."""
+    text = SHEET_VERSION_LINE_RE.sub("", text)
+    text = SHEET_VERSION_VAR_RE.sub("", text)
+    return text.strip()
 
 
 def build_enus_data_header(sheet_version: str = "") -> list[str]:
@@ -139,6 +145,8 @@ def main(csv_in: str, lua_out: str) -> None:
     out.append("    _G[LOCALE_REGISTRY_KEY] = reg")
     out.append("end")
     out.append('if type(reg.data) ~= "table" then reg.data = {} end')
+    if sheet_version:
+        out.append(f'reg.sheet_version = "{lua_escape(sheet_version)}"')
     out.append("")
     out.append("local DATASET = {")
     out.append("")

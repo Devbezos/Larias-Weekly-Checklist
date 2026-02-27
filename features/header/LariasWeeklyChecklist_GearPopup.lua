@@ -126,7 +126,7 @@ function Addon:SyncGearPopup()
             p._gearHiddenCharsTrigger:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PAD, -hidStartY)
         end
 
-        local VER_PAD = 14  -- extra bottom room for single-line version + credits
+        local VER_PAD = 28  -- extra bottom room for three-line version + credits block
         local totalH
         if showHiddenSect then
             totalH = hidStartY + 22 + PAD + VER_PAD
@@ -343,12 +343,15 @@ function Addon:ToggleGearPopup(anchor, growRight)
         p._gearHiddenCharsTrigger  = hiddenTrigger
         Addon._gearHiddenCharsTrigger = hiddenTrigger
 
-        -- ── Version + credit — two stacked left-aligned lines ────────────
+        -- ── Version + credit — three stacked left-aligned lines ───────────
         local _getMeta = (C_AddOns and C_AddOns.GetAddOnMetadata)
                       or GetAddOnMetadata
                       or function() return "" end
 
         local _ver = _getMeta(addonName, "Version") or ""
+        local _locReg  = _G["LARIASWEEKLYCHECKLIST_LOCALE_REGISTRY"]
+        local _dataVer = (_locReg and type(_locReg.sheet_version) == "string")
+                         and _locReg.sheet_version or ""
 
         local creditLabel = p:CreateFontString(nil, "OVERLAY")
         creditLabel:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
@@ -363,6 +366,13 @@ function Addon:ToggleGearPopup(anchor, growRight)
         verLabel:SetJustifyH("LEFT")
         verLabel:SetText(_ver ~= "" and ("v" .. _ver) or "")
         verLabel:SetTextColor(0.45, 0.45, 0.45, 0.6)
+
+        local dataVerLabel = p:CreateFontString(nil, "OVERLAY")
+        dataVerLabel:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
+        dataVerLabel:SetPoint("BOTTOMLEFT", verLabel, "TOPLEFT", 0, 2)
+        dataVerLabel:SetJustifyH("LEFT")
+        dataVerLabel:SetText(_dataVer ~= "" and ("Data: " .. _dataVer) or "")
+        dataVerLabel:SetTextColor(0.45, 0.45, 0.45, 0.6)
 
         self._gearPopup = p
     end
