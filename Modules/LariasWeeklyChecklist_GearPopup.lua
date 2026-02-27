@@ -120,11 +120,12 @@ function Addon:SyncGearPopup()
             p._gearHiddenCharsTrigger:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PAD, -hidStartY)
         end
 
+        local VER_PAD = 14  -- extra bottom room for the version label
         local totalH
         if showHiddenSect then
-            totalH = hidStartY + 22 + PAD
+            totalH = hidStartY + 22 + PAD + VER_PAD
         else
-            totalH = cbsY + nVisible * TILE_H + PAD
+            totalH = cbsY + nVisible * TILE_H + PAD + VER_PAD
         end
         p:SetHeight(totalH)
     end
@@ -311,6 +312,20 @@ function Addon:ToggleGearPopup(anchor, growRight)
         end)
         p._gearHiddenCharsTrigger  = hiddenTrigger
         Addon._gearHiddenCharsTrigger = hiddenTrigger
+
+        -- ── Version label (subtle, bottom-right corner) ───────────────────
+        local verLabel = p:CreateFontString(nil, "OVERLAY")
+        verLabel:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
+        verLabel:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -8, 5)
+        verLabel:SetJustifyH("RIGHT")
+        local _ver = (C_AddOns and C_AddOns.GetAddOnMetadata
+                        and C_AddOns.GetAddOnMetadata(addonName, "Version"))
+                  or (GetAddOnMetadata and GetAddOnMetadata(addonName, "Version"))
+                  or ""
+        if _ver ~= "" then
+            verLabel:SetText("v" .. _ver)
+        end
+        verLabel:SetTextColor(0.45, 0.45, 0.45, 0.6)
 
         self._gearPopup = p
     end
