@@ -2321,10 +2321,12 @@ function Addon:CreateFrame()
         local childTop     = scrollChild:GetTop()
         if not childTop then return nil end
         local best, bestOff = nil, -1
+        local firstVisible  = nil
         local sections = Addon._activeSections or {}
         for i = 1, #sections do
             local sf = sections[i]
             if sf and sf.IsShown and sf:IsShown() and sf._sectionId then
+                if not firstVisible then firstVisible = sf._sectionId end
                 local sfTop = sf:GetTop()
                 if sfTop then
                     -- sfOff: pixels from the top of scrollChild to this section header.
@@ -2337,7 +2339,9 @@ function Addon:CreateFrame()
                 end
             end
         end
-        return best
+        -- At the top of the list nothing has been "scrolled past" yet; show the
+        -- first section's label rather than falling back to the stored week.
+        return best or firstVisible
     end
 
     -- Refreshes the change-week button text to reflect whichever week header is
