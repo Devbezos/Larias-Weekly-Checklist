@@ -35,6 +35,7 @@ local STRINGS = {
 	UI_SCALE_MIN_LABEL   = "50%",
 	UI_SCALE_MAX_LABEL   = "150%",
 	OPTIONS_HIDE_SCALE_SLIDER   = "Hide scale slider",
+	OPTIONS_HIDE_SLIDERS        = "Hide sliders",
 	OPTIONS_HIDE_OPACITY_SLIDER = "Hide opacity slider",
 	UI_OPACITY_LABEL     = "Opacity",
 	UI_OPACITY_MIN_LABEL = "10%",
