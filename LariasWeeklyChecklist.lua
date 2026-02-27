@@ -941,40 +941,63 @@ function Addon:GetUIScale()
     return math.max(0.5, math.min(1.5, pct / 100))
 end
 
+-- Shared helper: pin the frame's TOPLEFT to the same screen pixel after a
+-- scale change.  Before scaling we capture the TOPLEFT in screen-space pixels
+-- (frame-local coords × current scale).  After SetScale we re-anchor TOPLEFT
+-- so that same pixel stays fixed — the window expands down and to the right
+-- only, with zero drift.  Returns true if it was able to re-anchor.
+local function PinTopLeftScale(f, newScale)
+    if not (f and f.SetScale) then return false end
+    local oldScale   = f:GetScale() or 1
+    local screenLeft = f:GetLeft()
+    local screenTop  = f:GetTop()
+    if not (screenLeft and screenTop) then
+        f:SetScale(newScale)
+        return false
+    end
+    -- Convert to UIParent-relative screen pixels.
+    screenLeft = screenLeft * oldScale
+    screenTop  = screenTop  * oldScale
+    f:SetScale(newScale)
+    f:ClearAllPoints()
+    -- TOPLEFT offset from UIParent BOTTOMLEFT (WoW's default anchor origin).
+    f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT",
+        screenLeft / newScale,
+        screenTop  / newScale)
+    return true
+end
+
+-- Live-preview variant: pin TOPLEFT, no LibWindow save.
+-- Called on every drag tick so there is no positional bounce.
+function Addon:ApplyUIScaleLive()
+    local scale = self:GetUIScale()
+    PinTopLeftScale(self._mainFrame, scale)
+    local iw = self._ilvlRefWindow
+    if iw and iw.SetScale then iw:SetScale(scale) end
+end
+
 function Addon:ApplyUIScale()
     local scale = self:GetUIScale()
-    if frame and frame.SetScale then
-        -- Scale around the visual center: capture screen-absolute center coords
-        -- before scaling, apply SetScale, then re-anchor so the same screen pixel
-        -- sits at the center of the (now larger/smaller) frame.
-        -- Finally call LW.SavePosition so LibWindow's storage matches.
-        local oldScale = frame:GetScale()
-        local fl = frame:GetLeft()
-        local fb = frame:GetBottom()
-        local fw = frame:GetWidth()
-        local fh = frame:GetHeight()
-        if fl and fb and fw and fh then
-            local screenCX = (fl + fw / 2) * oldScale
-            local screenCY = (fb + fh / 2) * oldScale
-            local parent   = frame:GetParent() or UIParent
-            frame:SetScale(scale)
-            frame:ClearAllPoints()
-            frame:SetPoint("CENTER", parent, "CENTER",
-                (screenCX - parent:GetWidth()  / 2) / scale,
-                (screenCY - parent:GetHeight() / 2) / scale)
-            local LW = LibStub("LibWindow-1.1", true)
-            if LW then LW.SavePosition(frame) end
-        else
+    if frame then
+        local reanchored = PinTopLeftScale(frame, scale)
+        if not reanchored then
+            -- Fallback: delegate to LibWindow if PinTopLeftScale couldn't read coords.
             local LW = LibStub("LibWindow-1.1", true)
             if LW then LW.SetScale(frame, scale) else frame:SetScale(scale) end
         end
+        -- Persist position so LibWindow restores correctly on next login.
+        local LW = LibStub("LibWindow-1.1", true)
+        if LW then LW.SavePosition(frame) end
     end
     -- The ilvl ref window is parented to UIParent; scale it independently.
     local iw = self._ilvlRefWindow
     if iw and iw.SetScale then iw:SetScale(scale) end
     if iw and iw._ilvlReflow then iw._ilvlReflow() end
-    -- Re-anchor scroll frame (text width recompute, tracking panel offset).
-    if self.ApplyScrollLayout then self:ApplyScrollLayout() end
+    -- Do NOT call ApplyScrollLayout here.  SetScale only changes the visual
+    -- size of the root frame; the logical frame dimensions are unchanged, so
+    -- there is nothing to reflow.  ClearAllPoints+SetPoint inside
+    -- ApplyScrollLayout causes the scroll frame to collapse for one frame
+    -- (the snap/bounce the user sees), even when the values are identical.
     -- Keep in-frame slider in sync with whatever changed the value.
     local sf = self._inFrameScaleSlider
     if sf and sf.Sync then sf.Sync() end

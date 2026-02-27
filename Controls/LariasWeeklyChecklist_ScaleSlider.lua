@@ -57,7 +57,7 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
     -- BuildSlider: populates `pane` (height = TOTAL_H) with the interactive
     -- track, thumb knob, and min/max labels.  Returns a Sync() closure.
     local function BuildSlider(pane, minV, maxV, stepV, getVal, applyFn,
-                               minLabel, maxLabel, fmtFn)
+                               minLabel, maxLabel, fmtFn, liveApply)
         local USABLE = TRACK_W - THUMB_W
 
         -- Min label anchored to the bottom-left of the pane (track zone).
@@ -163,7 +163,17 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
             UpdateVisuals(clickVal)
             trackCont:SetScript("OnUpdate", function()
                 local v = ValFromCursor()
-                if v then UpdateVisuals(v) end
+                if v then
+                    UpdateVisuals(v)
+                    if liveApply then
+                        local snapped = math.floor((v + stepV / 2) / stepV) * stepV
+                        if type(liveApply) == "function" then
+                            liveApply(snapped)
+                        else
+                            applyFn(snapped)
+                        end
+                    end
+                end
             end)
         end)
         trackCont:SetScript("OnMouseUp", function(self_, btn)
@@ -202,6 +212,7 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
     local scaleSync = BuildSlider(
         scalePane, 50, 150, 1,
         GetScaleVal,
+        -- applyFn (called on mouse-up): save + full re-anchor via ApplyUIScale.
         function(pct)
             local gdb = Addon.db and Addon.db.global
             if gdb then gdb.uiScalePct = pct end
@@ -212,6 +223,12 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
         function(v)
             local r = math.floor(v + 0.5)
             return (r >= 150) and "unc." or (r .. "%")
+        end,
+        -- liveApply (called on every drag tick): SetScale only, no re-anchor.
+        function(pct)
+            local gdb = Addon.db and Addon.db.global
+            if gdb then gdb.uiScalePct = pct end
+            if Addon.ApplyUIScaleLive then Addon:ApplyUIScaleLive() end
         end
     )
     sf._scalePane = scalePane
@@ -246,7 +263,8 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
         end,
         L.UI_OPACITY_MIN_LABEL or "10%",
         L.UI_OPACITY_MAX_LABEL or "100%",
-        function(v) return math.floor(v + 0.5) .. "%" end
+        function(v) return math.floor(v + 0.5) .. "%" end,
+        true  -- liveApply: update opacity on every drag tick
     )
     sf._opacityPane = opacityPane
     sf.SyncOpacity  = function() opacSync() end
