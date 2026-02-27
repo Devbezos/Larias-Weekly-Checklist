@@ -41,7 +41,6 @@ local GV_BLOCK_STEP  = GV_GRID_H + 6                      -- 32px between sectio
 local GV_BLOCK_Y     = { 0, -GV_BLOCK_STEP, -GV_BLOCK_STEP * 2 } -- {0, -32, -64}
 local GV_CELL_W      = 40   -- wider single cell (no threshold row sharing width)
 local GV_GRID_W      = GV_CELL_W * 3                                -- total grid width = 120px
-local GV_CELL_ASPECT = GV_CELL_W / GV_ROW_H  -- preserved when cells scale (≈1.667)
 local GV_THRESHOLDS  = { {2,4,6}, {1,4,8}, {2,4,8} }            -- raid, dungeons, world
 local GV_SECTION_KEYS   = { "TRACKING_GV_RAID", "TRACKING_GV_DUNGEONS", "TRACKING_GV_WORLD" }
 local GV_SECTION_LABELS = { "Raid", "Dungeons", "World" }
@@ -1488,23 +1487,21 @@ function Addon:CreateTrackingPanel(parentFrame)
     trackingFrame._lariasGvGrids = gvGrids
 
     -- ReflowGVGrid: repositions and resizes all GV grid elements inside leftCol.
-    -- Cell size is width-driven, then height is derived from the aspect ratio so
-    -- cells stay proportioned like the real WoW Great Vault UI (~1.67 wide:tall).
-    -- targetH is accepted for call-site compatibility but not used for sizing.
-    local function ReflowGVGrid(targetH)  -- luacheck: ignore 212 (targetH unused)
+    -- Rows fill the available Y space (targetH) evenly across 3 sections.
+    -- cellW is independently width-driven from available horizontal space.
+    local function ReflowGVGrid(targetH)
         local grds = TrackingUI.left.gvGrids
         if not grds then return end
         local GAP    = 6
         local BORDER = 1
         local CINSET = 4
-        -- Width-first aspect-ratio layout: cellW = availGridW / 3,
-        -- rowH = cellW / GV_CELL_ASPECT  (~1.667 → roughly 3:5 portrait cell).
-        -- Available px for grid = leftCol width minus the section-label zone.
+        -- Height-first layout: divide targetH evenly over 3 sections.
         local availGridW = math.max(60, (leftCol:GetWidth() or 0) - GV_GRID_X)
         local cellW = math.max(30, math.floor(availGridW / 3))
-        local rowH  = math.max(10, math.floor(cellW / GV_CELL_ASPECT))
-        local gridH = BORDER + rowH + BORDER -- top border + row + bottom border
         local gridW = cellW * 3
+        local gridH = math.max(14, math.floor((math.max(0, targetH) - GAP * 2) / 3))
+        local rowH  = math.max(10, gridH - BORDER * 2)
+        gridH = BORDER + rowH + BORDER  -- normalise to exact px
 
         for bi = 1, 3 do
             local blockY   = -(bi - 1) * (gridH + GAP)
