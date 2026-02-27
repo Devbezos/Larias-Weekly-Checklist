@@ -29,24 +29,24 @@ function Addon:SyncGearPopup()
         end
     end
     Sync(p._cbHideCompleted,    db.hideCompletedSections and true or false,
-         L.HIDE_COMPLETED_WEEKS      or "Hide completed weeks")
+         L.HIDE_COMPLETED_WEEKS      or "Hide Completed Weeks")
     Sync(p._cbHideGreatVault,   not db.showGreatVault,
          L.OPTIONS_HIDE_GREAT_VAULT  or "Hide Great Vault")
     Sync(p._cbHideCurrency,     not db.showCurrency,
          L.OPTIONS_HIDE_CURRENCY     or "Hide Currency")
     Sync(p._cbHideChangeWeek,   db.showChangeWeekBtn == false,
-         L.OPTIONS_HIDE_CHANGE_WEEK_BTN or "Hide week selector")
+         L.OPTIONS_HIDE_CHANGE_WEEK_BTN or "Hide Week Selector")
     Sync(p._cbHideIlvlRef,      db.showIlvlRefBtn == false,
-         L.OPTIONS_HIDE_ILVL_REF_BTN or "Hide ilvl references")
+         L.OPTIONS_HIDE_ILVL_REF_BTN or "Hide Ilvl Reference")
     Sync(p._cbHideCharPicker,   db.showCharPickerBtn == false,
-         L.OPTIONS_HIDE_CHAR_SELECT  or "Hide character selector")
+         L.OPTIONS_HIDE_CHAR_SELECT  or "Hide Character Selector")
     Sync(p._cbHideSliders, db.showScaleSlider == false,
-         L.OPTIONS_HIDE_SLIDERS or "Hide sliders")
+         L.OPTIONS_HIDE_SLIDERS or "Hide Sliders")
     Sync(p._cbHideUpdateNotice, db.hideUpdateNotice and true or false,
-         L.OPTIONS_HIDE_UPDATE_NOTICE or "Hide update notices")
+         L.OPTIONS_HIDE_UPDATE_NOTICE or "Hide Update Notices")
     local gdb0 = Addon.db and Addon.db.global
     Sync(p._cbHideMinimapBtn, gdb0 and gdb0.minimap and gdb0.minimap.hide and true or false,
-         L.OPTIONS_HIDE_MINIMAP_BTN or "Hide minimap button")
+         L.OPTIONS_HIDE_MINIMAP_BTN or "Hide Minimap Button")
 
     -- Reset button label.
     if p._gearResetBtn then

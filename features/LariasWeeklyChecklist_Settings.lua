@@ -105,7 +105,7 @@ local function BuildPanel()
     -- Row definitions: { label, getVal(db) → bool, onChange(v) }
     local rows = {
         {
-            label    = L.HIDE_COMPLETED_WEEKS or "Hide completed weeks",
+            label    = L.HIDE_COMPLETED_WEEKS or "Hide Completed Weeks",
             getVal   = function(d) return d.hideCompletedSections and true or false end,
             onChange = function(v)
                 Addon:EnsureDB().hideCompletedSections = v
@@ -129,7 +129,7 @@ local function BuildPanel()
             end,
         },
         {
-            label    = L.OPTIONS_HIDE_CHANGE_WEEK_BTN or "Hide week selector",
+            label    = L.OPTIONS_HIDE_CHANGE_WEEK_BTN or "Hide Week Selector",
             getVal   = function(d) return d.showChangeWeekBtn == false end,
             onChange = function(v)
                 Addon:EnsureDB().showChangeWeekBtn = not v
@@ -137,7 +137,7 @@ local function BuildPanel()
             end,
         },
         {
-            label    = L.OPTIONS_HIDE_ILVL_REF_BTN or "Hide ilvl references",
+            label    = L.OPTIONS_HIDE_ILVL_REF_BTN or "Hide Ilvl Reference",
             getVal   = function(d) return d.showIlvlRefBtn == false end,
             onChange = function(v)
                 Addon:EnsureDB().showIlvlRefBtn = not v
@@ -145,7 +145,7 @@ local function BuildPanel()
             end,
         },
         {
-            label    = L.OPTIONS_HIDE_CHAR_SELECT or "Hide character selector",
+            label    = L.OPTIONS_HIDE_CHAR_SELECT or "Hide Character Selector",
             getVal   = function(d) return d.showCharPickerBtn == false end,
             onChange = function(v)
                 Addon:EnsureDB().showCharPickerBtn = not v
@@ -154,7 +154,7 @@ local function BuildPanel()
             end,
         },
         {
-            label    = L.OPTIONS_HIDE_SLIDERS or "Hide sliders",
+            label    = L.OPTIONS_HIDE_SLIDERS or "Hide Sliders",
             getVal   = function(d) return d.showScaleSlider == false end,
             onChange = function(v)
                 local d = Addon:EnsureDB()
@@ -164,7 +164,7 @@ local function BuildPanel()
             end,
         },
         {
-            label    = L.OPTIONS_HIDE_UPDATE_NOTICE or "Hide update notices",
+            label    = L.OPTIONS_HIDE_UPDATE_NOTICE or "Hide Update Notices",
             getVal   = function(d) return d.hideUpdateNotice and true or false end,
             onChange = function(v)
                 Addon:EnsureDB().hideUpdateNotice = v
@@ -172,7 +172,7 @@ local function BuildPanel()
             end,
         },
         {
-            label    = L.OPTIONS_HIDE_MINIMAP_BTN or "Hide minimap button",
+            label    = L.OPTIONS_HIDE_MINIMAP_BTN or "Hide Minimap Button",
             getVal   = function(_d)
                 local g = Addon.db and Addon.db.global
                 return g and g.minimap and g.minimap.hide and true or false
