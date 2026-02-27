@@ -2365,15 +2365,55 @@ function Addon:CreateFrame()
     scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", Addon.UI.padOuterX, -Addon.UI.scrollTop)
 
     do
-        local pig = scrollFrame:CreateTexture(nil, "ARTWORK")
-        pig:SetPoint("CENTER", scrollFrame, "CENTER", 0, 0)
-        pig:SetTexture("Interface\\Icons\\INV_Pig")
-        if pig.SetTexCoord then
-            pig:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        -- Easter egg: "touch grass" trio — hand + plus + grass icons.
+        local egg = CreateFrame("Frame", nil, scrollFrame)
+        egg:SetPoint("CENTER", scrollFrame, "CENTER", 0, 0)
+        egg:SetSize(1, 1)
+        egg:Hide()
+
+        local handTex = egg:CreateTexture(nil, "ARTWORK")
+        handTex:SetTexture("Interface\\Icons\\Spell_Holy_LayOnHands")
+        if handTex.SetTexCoord then handTex:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+        handTex:SetAlpha(0.95)
+
+        local plusFS = egg:CreateFontString(nil, "OVERLAY")
+        plusFS:SetFont("Fonts\\FRIZQT__.TTF", 32, "OUTLINE")
+        plusFS:SetText("+")
+        plusFS:SetTextColor(1, 1, 1, 0.95)
+        plusFS:SetJustifyH("CENTER")
+        plusFS:SetJustifyV("MIDDLE")
+
+        local grassTex = egg:CreateTexture(nil, "ARTWORK")
+        grassTex:SetTexture("Interface\\Icons\\Ability_Druid_Flourish")
+        if grassTex.SetTexCoord then grassTex:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+        grassTex:SetAlpha(0.95)
+
+        -- Override SetSize so the three elements reflow whenever the caller
+        -- resizes the container (icons scale with available scroll area).
+        local _rawSetSize = egg.SetSize
+        function egg:SetSize(w, h)
+            local iconSize = math.max(32, math.floor(h * 0.55))
+            local gap      = math.max(4,  math.floor(iconSize * 0.10))
+            local plusW    = math.max(16, math.floor(iconSize * 0.45))
+            local totalW   = iconSize + gap + plusW + gap + iconSize
+            _rawSetSize(self, totalW, iconSize)
+
+            handTex:SetSize(iconSize, iconSize)
+            handTex:ClearAllPoints()
+            handTex:SetPoint("LEFT", self, "LEFT", 0, 0)
+
+            plusFS:SetSize(plusW, iconSize)
+            plusFS:ClearAllPoints()
+            plusFS:SetPoint("LEFT", handTex, "RIGHT", gap, 0)
+            plusFS:SetFont("Fonts\\FRIZQT__.TTF",
+                math.max(14, math.floor(iconSize * 0.55)), "OUTLINE")
+
+            grassTex:SetSize(iconSize, iconSize)
+            grassTex:ClearAllPoints()
+            grassTex:SetPoint("LEFT", plusFS, "RIGHT", gap, 0)
         end
-        pig:SetAlpha(0.95)
-        pig:Hide()
-        frame._lariasPigTexture = pig
+
+        frame._lariasPigTexture = egg
     end
 
     scrollChild = CreateFrame("Frame", nil, scrollFrame)
