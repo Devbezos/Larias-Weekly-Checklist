@@ -17,21 +17,6 @@ local function SetCheckText(checkButton, text)
     end
 end
 
--- Tints the standard UICheckButtonTemplate textures to match the dark theme.
--- Normal (unchecked box) → grey;  Checked mark → gold accent;  Hover → subtle white.
-local function StyleCheckButton(cb)
-    if not cb then return end
-    local norm = cb.GetNormalTexture and cb:GetNormalTexture()
-    if norm then norm:SetVertexColor(0.55, 0.55, 0.55, 1) end
-    local chk = cb.GetCheckedTexture and cb:GetCheckedTexture()
-    if chk then
-        local th = Addon.THEME and Addon.THEME.header
-        if th then chk:SetVertexColor(th.r, th.g, th.b, 1) end
-    end
-    local hi = cb.GetHighlightTexture and cb:GetHighlightTexture()
-    if hi then hi:SetVertexColor(1, 1, 1, 0.12) end
-end
-
 function Addon:SyncGearPopup()
     local p = self._gearPopup
     if not p then return end
@@ -91,8 +76,8 @@ function Addon:SyncGearPopup()
     -- below the (possibly-hidden) char picker slot so no gap is left behind.
     do
         local PAD_   = 10
-        local ROW_H_ = 26
-        local TILE_H_= ROW_H_ + 8   -- 34
+        local ROW_H_ = 16   -- custom checkbox visual box height
+        local TILE_H_= 34   -- tile height unchanged
         local N_TOTAL = 7
         local rstStartY_  = PAD_
         local div1StartY_ = rstStartY_ + 22 + 6
@@ -166,7 +151,6 @@ function Addon:ToggleGearPopup(anchor)
 
         -- Layout constants.
         local PAD    = 10
-        local ROW_H  = 26   -- UICheckButtonTemplate actual height
 
         -- ── Reset List button (top of popup) ───────────────────────────────
         local rstStartY = PAD          -- px from popup top
@@ -269,50 +253,28 @@ function Addon:ToggleGearPopup(anchor)
         }
 
         local N          = #checks
-        local TILE_H     = ROW_H + 8
+        local CBX_H      = 16    -- custom checkbox visual box height
+        local TILE_H     = 34    -- total tile height (box + padding)
         local cbsY       = div1StartY + 1 + 8   -- checkboxes section top (px from popup top)
 
         for i, info in ipairs(checks) do
             local tileTopY = -(cbsY + (i - 1) * TILE_H)
-            local cbOffY   = tileTopY - math.floor((TILE_H - ROW_H) / 2)
+            local cbOffY   = tileTopY - math.floor((TILE_H - CBX_H) / 2)
 
-            local cb = CreateFrame("CheckButton", nil, p, "UICheckButtonTemplate")
-            cb:SetPoint("TOPLEFT", p, "TOPLEFT", PAD, cbOffY)
-            StyleCheckButton(cb)
-            -- Explicit label (anonymous frames can't access $parenttext)
-            local lbl = p:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-            lbl:SetPoint("LEFT", cb, "RIGHT", 2, 0)
-            lbl:SetPoint("RIGHT", p, "RIGHT", -PAD, 0)
-            lbl:SetJustifyH("LEFT")
-            if Addon.THEME and Addon.THEME.text then
-                local t = Addon.THEME.text
-                lbl:SetTextColor(t.r, t.g, t.b, t.a or 1)
-            end
-            cb._label = lbl
             local _key = info.key
-            local function FireToggle(newState)
+            local cb = Addon.Controls.NewCheckBox(p, function(newState)
                 callbacks[_key](newState)
                 if Addon.SyncGearPopup then Addon:SyncGearPopup() end
-            end
-            cb:SetScript("OnClick", function(self_)
-                FireToggle(self_:GetChecked() and true or false)
             end)
+            cb:SetPoint("TOPLEFT", p, "TOPLEFT", PAD, cbOffY)
+            cb._label:SetPoint("RIGHT", p, "RIGHT", -PAD, 0)
             p[info.key] = cb
 
-            local hit = CreateFrame("Button", nil, p)
+            -- Wire the pre-created _hit to span the full tile width.
+            local hit = cb._hit
             hit:SetPoint("TOPLEFT",  p, "TOPLEFT",  0, tileTopY)
             hit:SetPoint("TOPRIGHT", p, "TOPRIGHT", 0, tileTopY)
             hit:SetHeight(TILE_H)
-            hit:SetFrameLevel(p:GetFrameLevel())
-            local hl = hit:CreateTexture(nil, "HIGHLIGHT")
-            hl:SetAllPoints(hit)
-            hl:SetColorTexture(1, 1, 1, 0.06)
-            hit:SetScript("OnClick", function()
-                local newVal = not (cb:GetChecked() and true or false)
-                cb:SetChecked(newVal)
-                FireToggle(newVal)
-            end)
-            cb._hit = hit  -- stored so SyncGearPopup can show/hide the row
         end
 
         -- ── Divider before Hidden Characters ──────────────────────────────

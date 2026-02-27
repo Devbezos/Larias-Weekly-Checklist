@@ -1095,25 +1095,13 @@ local function ReleaseSectionFrame(sectionFrame)
 end
 
 local function AcquireCheckbox(parentSectionFrame)
-    -- Acquire (or create) a checkbox row for an item.
+    -- Acquire (or create) a fully addon-themed checkbox row for an item.
     local checkbox = tremove(Addon._checkboxPool)
     if checkbox then
         checkbox:SetParent(parentSectionFrame)
         checkbox:Show()
     else
-        checkbox = CreateFrame("CheckButton", nil, parentSectionFrame, "UICheckButtonTemplate")
-        local boxSize = 32
-        local function PinTexture(tex)
-            if not tex then return end
-            tex:ClearAllPoints()
-            tex:SetSize(boxSize, boxSize)
-            tex:SetPoint("LEFT", checkbox, "LEFT", 0, 0)
-        end
-        PinTexture(checkbox.GetNormalTexture and checkbox:GetNormalTexture())
-        PinTexture(checkbox.GetPushedTexture and checkbox:GetPushedTexture())
-        PinTexture(checkbox.GetHighlightTexture and checkbox:GetHighlightTexture())
-        PinTexture(checkbox.GetCheckedTexture and checkbox:GetCheckedTexture())
-        PinTexture(checkbox.GetDisabledTexture and checkbox:GetDisabledTexture())
+        checkbox = Addon.Controls.NewCheckBox(parentSectionFrame, nil, 32)
     end
 
     local textLabel = checkbox.text or checkbox.Text
@@ -1342,6 +1330,9 @@ end
 
 local function OnCheckboxClick(selfBtn)
     -- Item click handler: update saved state, collapse/hide completed sections, relayout.
+    -- Custom Button (not CheckButton) doesn't auto-toggle; flip state manually first so
+    -- GetChecked() returns the new value for the rest of this handler.
+    selfBtn:SetChecked(not selfBtn:GetChecked())
     local database = Addon:EnsureDB()
     local checked = selfBtn:GetChecked() and true or nil
     database.checked[selfBtn._dbKey or Key(selfBtn._sectionId, selfBtn._itemId)] = checked

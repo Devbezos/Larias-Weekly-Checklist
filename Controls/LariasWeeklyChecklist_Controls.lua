@@ -23,9 +23,10 @@ if not Addon then return end
 --   Addon.Controls.NewDivider(parent [, y [, leftPad [, rightPad]]])
 --       1 px horizontal hairline rule in the border theme color.
 --
---   Addon.Controls.NewCheckBox(parent [, onToggle])
---       Themed CheckButton + right-hand label (_label) + full-width hit area (_hit).
---       onToggle(checked:bool) fires on any state change.
+--   Addon.Controls.NewCheckBox(parent [, onToggle [, boxSize]])
+--       Fully custom checkbox: dark square, gold ✓ glyph, no Blizzard art.
+--       cb.text/cb._label = label FontString; cb._box = visual frame; cb._hit = hit area.
+--       cb:GetChecked() / cb:SetChecked(bool). onToggle(checked:bool) fires on click.
 --
 --   Addon.Controls.NewExpandButton(parent [, onToggle [, initialExpanded
 --                                  [, expandTip [, shrinkTip]]]])
@@ -256,66 +257,100 @@ function C.NewDivider(parent, y, leftPad, rightPad)
 end
 
 -- ── Checkbox ──────────────────────────────────────────────────────────────────
--- Creates a themed CheckButton with:
---   cb._label  — FontString anchored LEFT of cb, RIGHT of parent
---   cb._hit    — full-width hit area (caller must SetPoint + SetHeight)
---   cb:RefreshTint() — re-applies theme vertex colors after SetChecked() resets them
+-- Fully addon-themed checkbox — no Blizzard UICheckButtonTemplate used.
 --
--- onToggle(checked:bool) fires whenever the state changes via cb or _hit.
-function C.NewCheckBox(parent, onToggle)
-    local cb = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
+-- Visual:  dark bordered square (_box) with a gold ✓ glyph when checked.
+-- Layout:  label FontString (.text / ._label) anchored LEFT of the box.
+--          No right anchor set — caller adds cb._label:SetPoint("RIGHT",...)
+--          or calls textLabel:SetWidth(w) for multi-line row use.
+--
+-- Pooling: _box, _label/_tick are children of cb → survive SetParent() safely.
+-- Hit:     _hit is an unsized Button (child of cb at parent's frame level).
+--          Caller positions + sizes it for full-row click coverage.
+--
+-- API shims (CheckButton-compatible):
+--   cb:GetChecked()     → bool
+--   cb:SetChecked(val)  → sets _checked, shows/hides tick
+--   cb:RefreshTint()    → no-op (no Blizzard textures to re-tint)
+--
+-- onToggle(checked:bool) fires after every click via cb or _hit (NOT SetChecked).
+-- boxSize defaults to 16.
+function C.NewCheckBox(parent, onToggle, boxSize)
+    boxSize = boxSize or 16
 
-    -- Apply theme tinting.
-    local norm = cb.GetNormalTexture   and cb:GetNormalTexture()
-    local chk  = cb.GetCheckedTexture  and cb:GetCheckedTexture()
-    local hi   = cb.GetHighlightTexture and cb:GetHighlightTexture()
-    if norm then norm:SetVertexColor(0.55, 0.55, 0.55, 1) end
-    if chk  then
-        local T = Addon.THEME
-        if T and T.header then chk:SetVertexColor(T.header.r, T.header.g, T.header.b, 1) end
-    end
-    if hi   then hi:SetVertexColor(1, 1, 1, 0.12) end
+    local T  = Addon.THEME or {}
+    local th = T.header or { r = 1.00, g = 0.82, b = 0.00, a = 1 }
+    local tc = T.text   or { r = 1,    g = 1,    b = 1,    a = 1 }
 
-    -- Explicit label FontString (anonymous frames cannot reference $parenttext).
-    local lbl = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    lbl:SetPoint("LEFT",  cb,     "RIGHT", 2,   0)
-    lbl:SetPoint("RIGHT", parent, "RIGHT", -10, 0)
+    -- Outer button: interaction container.  Caller may SetHeight for multiline rows.
+    local cb = CreateFrame("Button", nil, parent)
+    cb:SetSize(boxSize, boxSize)
+
+    -- Visual box: fixed size, always pinned to the top-left corner of cb.
+    local box = CreateFrame("Frame", nil, cb)
+    box:SetSize(boxSize, boxSize)
+    box:SetPoint("TOPLEFT", cb, "TOPLEFT", 0, 0)
+    Addon:ApplyTheme(box)
+    cb._box = box
+
+    -- HIGHLIGHT anchored to the box area (cb is a Button so HIGHLIGHT works).
+    local hl = cb:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetPoint("TOPLEFT",     box, "TOPLEFT",     0, 0)
+    hl:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", 0, 0)
+    hl:SetColorTexture(1, 1, 1, 0.15)
+
+    -- Gold checkmark glyph: ✓ U+2713 = \226\156\147.
+    local tick = box:CreateFontString(nil, "OVERLAY")
+    tick:SetFont("Fonts\\FRIZQT__.TTF", math.floor(boxSize * 0.75), "OUTLINE")
+    tick:SetAllPoints(box)
+    tick:SetJustifyH("CENTER")
+    tick:SetJustifyV("MIDDLE")
+    tick:SetTextColor(th.r, th.g, th.b, 1)
+    tick:SetText("\226\156\147")   -- ✓
+    tick:Hide()
+    cb._tick = tick
+
+    -- Label FontString: child of cb so it survives SetParent / pool reuse.
+    local lbl = cb:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    lbl:SetPoint("LEFT", box, "RIGHT", 4, 0)
     lbl:SetJustifyH("LEFT")
-    if Addon.THEME and Addon.THEME.text then
-        local t = Addon.THEME.text
-        lbl:SetTextColor(t.r, t.g, t.b, t.a or 1)
-    end
+    if lbl.SetWordWrap then lbl:SetWordWrap(true) end
+    lbl:SetTextColor(tc.r, tc.g, tc.b, tc.a or 1)
     cb._label = lbl
+    cb.text   = lbl   -- compat: code reads checkbox.text or checkbox.Text
 
-    -- Full-width hit area; caller positions it with SetPoint + SetHeight.
-    local hit = CreateFrame("Button", nil, parent)
+    -- Hit area: unsized Button child of cb; caller positions and sizes it.
+    local hit = CreateFrame("Button", nil, cb)
     hit:SetFrameLevel(parent:GetFrameLevel())
     local hitHl = hit:CreateTexture(nil, "HIGHLIGHT")
     hitHl:SetAllPoints(hit)
     hitHl:SetColorTexture(1, 1, 1, 0.06)
     cb._hit = hit
 
-    -- Re-applies tinting after SetChecked() resets Blizzard vertex colors.
-    function cb:RefreshTint()
-        local n = self.GetNormalTexture   and self:GetNormalTexture()
-        local c = self.GetCheckedTexture  and self:GetCheckedTexture()
-        local h = self.GetHighlightTexture and self:GetHighlightTexture()
-        if n then n:SetVertexColor(0.55, 0.55, 0.55, 1) end
-        if c then
-            local T = Addon.THEME
-            if T and T.header then c:SetVertexColor(T.header.r, T.header.g, T.header.b, 1) end
-        end
-        if h then h:SetVertexColor(1, 1, 1, 0.12) end
+    -- State API ---------------------------------------------------------------
+    cb._checked = false
+
+    function cb:GetChecked()
+        return self._checked
     end
 
+    function cb:SetChecked(val)
+        self._checked = val and true or false
+        if self._checked then tick:Show() else tick:Hide() end
+    end
+
+    function cb:RefreshTint()
+        -- No-op: compat shim for callers that still invoke it.
+    end
+
+    -- Clicks ------------------------------------------------------------------
     cb:SetScript("OnClick", function(self_)
-        cb:RefreshTint()
-        if onToggle then onToggle(self_:GetChecked() and true or false) end
+        self_:SetChecked(not self_._checked)
+        if onToggle then onToggle(self_._checked) end
     end)
     hit:SetScript("OnClick", function()
-        local newVal = not (cb:GetChecked() and true or false)
+        local newVal = not cb._checked
         cb:SetChecked(newVal)
-        cb:RefreshTint()
         if onToggle then onToggle(newVal) end
     end)
 
