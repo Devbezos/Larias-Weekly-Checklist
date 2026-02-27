@@ -369,32 +369,11 @@ local function GetCurrencyQualityColor(currencyID)
 end
 
 local function GetCrestLabelText(currencyID)
-    -- Use the live game currency name first so the full in-game name is always
-    -- shown (e.g. "Harbinger Adventurer Crest").  Fall back to the locale map
-    -- for offline/unsupported clients, then to a generic "Crest <id>:" string.
-    local idNum = tonumber(currencyID)
-
     local gameName = GetCurrencyName(currencyID)
     if type(gameName) == "string" and gameName ~= "" then
         return gameName
     end
-
-    local nameMap = L.TRACKING_CREST_NAMES_BY_ID
-    if type(nameMap) == "table" then
-        local name = nameMap[idNum or currencyID]
-        if type(name) == "string" and name ~= "" then
-            return name
-        end
-    end
-
-    local fmt = L.TRACKING_CREST_ID_LABEL_FMT
-    if type(fmt) == "string" and fmt ~= "" then
-        return fmt:format(tostring(currencyID))
-    end
-
-    local base = L.TRACKING_CREST_LABEL
-    if type(base) ~= "string" or base == "" then base = "Crest" end
-    return base .. " " .. tostring(currencyID)
+    return "Crest " .. tostring(currencyID)
 end
 
 local function BottomFor(obj)

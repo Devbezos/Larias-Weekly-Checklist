@@ -66,17 +66,6 @@ local STRINGS = {
 	TRACKING_QUEST_DELVERS_BOUNTY = "Delver's Bounty",
 	TRACKING_QUEST_WEEKLY_PREY = "Weekly Prey",
 
-	TRACKING_CREST_LABEL = "Crest",
-	TRACKING_CREST_ID_LABEL_FMT = "Crest %s",
-	-- Optional: if present, crest labels are taken from this table instead of the game currency name.
-	-- Keys are currency IDs; values should be display names (with or without a trailing ':').
-	TRACKING_CREST_NAMES_BY_ID = {
-		[3383] = "Adventurer",
-		[3341] = "Veteran",
-		[3343] = "Champion",
-		[3345] = "Hero",
-		[3347] = "Myth",
-	},
 	TRACKING_NO_ID = "No ID",
 	TRACKING_TRADE_UP_SUFFIX = " Trade Up)",
 
