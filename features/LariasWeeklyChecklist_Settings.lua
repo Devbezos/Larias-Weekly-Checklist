@@ -366,6 +366,35 @@ local function BuildPanel()
                 if Addon.ApplyThemeColors then Addon:ApplyThemeColors() end
             end,
         },
+        {
+            label = "Header Text",
+            getColor = function()
+                local gdb = Addon.db and Addon.db.global
+                local tc  = gdb and gdb.themeColors
+                if tc and tc.headerR ~= nil then
+                    return tc.headerR, tc.headerG, tc.headerB
+                end
+                return 1.00, 0.82, 0.00   -- compiled default (gold)
+            end,
+            saveColor = function(r, g, b)
+                local gdb = Addon.db and Addon.db.global
+                if not gdb then return end
+                gdb.themeColors         = gdb.themeColors or {}
+                gdb.themeColors.headerR = r
+                gdb.themeColors.headerG = g
+                gdb.themeColors.headerB = b
+                if Addon.ApplyThemeColors then Addon:ApplyThemeColors() end
+            end,
+            resetColor = function()
+                local gdb = Addon.db and Addon.db.global
+                if gdb and gdb.themeColors then
+                    gdb.themeColors.headerR = nil
+                    gdb.themeColors.headerG = nil
+                    gdb.themeColors.headerB = nil
+                end
+                if Addon.ApplyThemeColors then Addon:ApplyThemeColors() end
+            end,
+        },
     }
 
     _colorSwatches = {}

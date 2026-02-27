@@ -1,4 +1,4 @@
--- Main addon entry point.
+﻿-- Main addon entry point.
 -- Responsibilities:
 -- - Initialize locale registry + apply locale overlay.
 -- - Load tracking/constants.
@@ -856,6 +856,41 @@ function Addon:ApplyThemeColors()
     if self._mainFrame     then self:ApplyTheme(self._mainFrame)     end
     if self._trackingFrame then self:ApplyTheme(self._trackingFrame) end
 
+    -- Header text color
+    local defHdrR, defHdrG, defHdrB = 1.00, 0.82, 0.00
+    if tc and tc.headerR ~= nil then
+        self.THEME.header.r = tc.headerR
+        self.THEME.header.g = tc.headerG
+        self.THEME.header.b = tc.headerB
+    else
+        self.THEME.header.r = defHdrR
+        self.THEME.header.g = defHdrG
+        self.THEME.header.b = defHdrB
+    end
+
+    -- Update tracking panel column title colors.
+    local tf = self._trackingFrame
+    if tf then
+        local h = self.THEME.header
+        if tf._lariasLeftTitle  then tf._lariasLeftTitle:SetTextColor(h.r, h.g, h.b, h.a)  end
+        if tf._lariasRightTitle then tf._lariasRightTitle:SetTextColor(h.r, h.g, h.b, h.a) end
+    end
+
+    -- Refresh slider widget colors (title labels, min/max, thumb).
+    local sf = self._inFrameScaleSlider
+    if sf and sf.RefreshColors then sf.RefreshColors() end
+
+    -- Refresh active section header title colors immediately.
+    for _, sec in ipairs(self._activeSections or {}) do
+        if sec._title then
+            local h = self.THEME.header
+            sec._title:SetTextColor(h.r, h.g, h.b, h.a)
+        end
+    end
+
+    -- Refresh char picker button label color if it exists.
+    if self._cpUpdateLabel then self._cpUpdateLabel() end
+
     -- Repaint list item labels with the new text color.
     if self.RequestRefresh then self:RequestRefresh() end
 end
@@ -1068,6 +1103,11 @@ local function AcquireSectionFrame()
     local sectionFrame = tremove(Addon._sectionPool)
     if sectionFrame then
         sectionFrame:Show()
+        -- Re-apply header color in case THEME.header changed since last use.
+        if sectionFrame._title then
+            local h = Addon.THEME.header
+            sectionFrame._title:SetTextColor(h.r, h.g, h.b, h.a)
+        end
         return sectionFrame
     end
 
