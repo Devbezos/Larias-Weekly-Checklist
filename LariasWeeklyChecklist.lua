@@ -2789,11 +2789,44 @@ function Addon:ToggleCommand(input)
             return
         end
 
-        -- Keep it simple: accept common casing, normalize.
-        local value = arg
-        if value:lower() == "auto" then value = "auto" end
-        if value:lower() == "enus" then value = "enUS" end
-        if value:lower() == "esmx" then value = "esMX" end
+        -- Normalize casing: do a case-insensitive match against all registered locales
+        -- plus the special "auto" token.
+        local raw   = arg
+        local lower = raw:lower()
+        local value
+
+        if lower == "auto" then
+            value = "auto"
+        else
+            -- Scan registry for a case-insensitive match.
+            local reg2    = GetLocaleRegistry()
+            local strings2 = reg2 and reg2.strings or {}
+            local data2    = reg2 and reg2.data    or {}
+            for k in pairs(strings2) do
+                if k:lower() == lower then value = k; break end
+            end
+            if not value then
+                for k in pairs(data2) do
+                    if k:lower() == lower then value = k; break end
+                end
+            end
+        end
+
+        if not value then
+            -- Build a sorted list of available locale codes from the registry.
+            local reg2    = GetLocaleRegistry()
+            local strings2 = reg2 and reg2.strings or {}
+            local data2    = reg2 and reg2.data    or {}
+            local seen2, list2 = {}, {}
+            for k in pairs(strings2) do if not seen2[k] then seen2[k]=true; tinsert(list2,k) end end
+            for k in pairs(data2)   do if not seen2[k] then seen2[k]=true; tinsert(list2,k) end end
+            table.sort(list2)
+            local available = (#list2 > 0) and table.concat(list2, "|")
+                              or "enUS"
+            self:Print((L.SLASH_LOCALE_NOT_FOUND
+                or "Unknown locale '%s'. Available: auto|%s"):format(tostring(raw), available))
+            return
+        end
 
         self:SetLocaleOverride(value)
         local effective = (self.GetEffectiveLocaleCode and self:GetEffectiveLocaleCode()) or ""

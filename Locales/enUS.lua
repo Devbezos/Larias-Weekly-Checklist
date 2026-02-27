@@ -142,6 +142,7 @@ local STRINGS = {
 	SLASH_USAGE_TOGGLE = "Usage: /larias or /lcl to toggle the checklist",
 	SLASH_USAGE_LOCALE = "Usage: /larias locale auto|enUS|deDE|esES|esMX|frFR|itIT|ptBR|ruRU",
 	SLASH_LOCALE_SET_FMT = "Locale override set to %s (effective: %s)",
+	SLASH_LOCALE_NOT_FOUND = "Unknown locale '%s'. Available: auto|%s",
 }
 
 for key, value in pairs(STRINGS) do
