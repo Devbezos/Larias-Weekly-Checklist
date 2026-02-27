@@ -2,7 +2,7 @@
 -- Opened/closed via the "Item Levels" button in the main frame.
 
 local addonName = ...
-local Addon = LibStub("AceAddon-3.0"):GetAddon(addonName, true)
+local Addon = _G[addonName]
 if not Addon then return end
 
 local CreateFrame = CreateFrame

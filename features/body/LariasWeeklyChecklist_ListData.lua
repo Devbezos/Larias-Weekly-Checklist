@@ -7,8 +7,9 @@
     correspond to known sections or items.
 ]]
 
-local addonName = "LariasWeeklyChecklist"
-local Addon = LibStub("AceAddon-3.0"):GetAddon(addonName)
+local addonName = ...
+local Addon = _G[addonName]
+if not Addon then return end
 
 -- ── GetLocaleRegistry ─────────────────────────────────────────────────────────
 -- Returns the shared locale registry table written by enUS_Data.lua and the

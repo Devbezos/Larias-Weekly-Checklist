@@ -393,7 +393,7 @@ end
 local function SetupMinimapIcon()
     local LDB = LibStub("LibDataBroker-1.1")
     local icon = LibStub("LibDBIcon-1.0")
-    
+
     local dataObject = LDB:NewDataObject(addonName, {
         type = "data source",
         text = addonName,
@@ -428,7 +428,7 @@ local function SetupMinimapIcon()
             end
         end,
     })
-    
+
     -- Store minimap config in the global DB so LibDBIcon persists the icon
     -- position and hide-state across sessions, and so Reset List never touches it.
     local gdb = Addon.db and Addon.db.global
@@ -464,7 +464,7 @@ function Addon:OnEnable()
         self._listeningForAddonLoaded = true
         self:RegisterEvent("ADDON_LOADED", "OnAddonLoaded")
     end
-    
+
     if self.CommsOnEnable then
         self:CommsOnEnable()
     end

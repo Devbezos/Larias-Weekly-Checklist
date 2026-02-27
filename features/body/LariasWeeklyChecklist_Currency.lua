@@ -597,7 +597,7 @@ local function GetGreatVaultBlockLines()
     for idx = 1, #activities do
         local activity = activities[idx]
         local activityType = activity and activity.type
-        
+
         if activityType == TYPE_RAID then
             raidTotal = raidTotal + 1
             local level = 0
@@ -610,10 +610,10 @@ local function GetGreatVaultBlockLines()
                 if level > raidMaxIlvl then raidMaxIlvl = level end
             end
             cache.rIlvls[#cache.rIlvls + 1] = level
-            
+
             local exLevel = GetExampleRewardIlvlForActivity(activity)
             if exLevel > raidExampleMax then raidExampleMax = exLevel end
-            
+
         elseif activityType == TYPE_MPLUS then
             mythicTotal = mythicTotal + 1
             local level = 0
@@ -626,7 +626,7 @@ local function GetGreatVaultBlockLines()
                 if level > mythicMaxIlvl then mythicMaxIlvl = level end
             end
             cache.mIlvls[#cache.mIlvls + 1] = level
-            
+
             local exLevel = GetExampleRewardIlvlForActivity(activity)
             if exLevel > dungeonExampleMax then dungeonExampleMax = exLevel end
 
