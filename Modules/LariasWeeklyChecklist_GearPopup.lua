@@ -1,4 +1,4 @@
--- Gear popup: small floating panel with the 6 display toggles.
+-- Gear popup: small floating panel with the 8 display toggles.
 -- Appears when the gear icon in the main window header is clicked.
 local addonName = ...
 local Addon = _G[addonName]
@@ -42,6 +42,8 @@ function Addon:SyncGearPopup()
          L.OPTIONS_HIDE_CHAR_SELECT  or "Hide character selector")
     Sync(p._cbHideSliders, db.showScaleSlider == false,
          L.OPTIONS_HIDE_SLIDERS or "Hide sliders")
+    Sync(p._cbHideUpdateNotice, db.hideUpdateNotice and true or false,
+         L.OPTIONS_HIDE_UPDATE_NOTICE or "Hide update notices")
 
     -- Reset button label.
     if p._gearResetBtn then
@@ -77,14 +79,17 @@ function Addon:SyncGearPopup()
     do
         local PAD      = 10
         local TILE_H   = 34   -- tile height
-        local N_TOTAL  = 7
+        local N_TOTAL  = 8
         local rstStartY  = PAD
         local div1StartY = rstStartY + 22 + 6
         local cbsY       = div1StartY + 1 + 8
         -- Slots 1-5 always present; slot 6 = char picker (conditional);
-        -- slot 7 = sliders (combined). When char picker is hidden slot shifts up by one.
-        local SLIDERS_IDX  = 7
-        local slidersVisIdx = showCharRow and SLIDERS_IDX or (SLIDERS_IDX - 1)
+        -- slot 7 = sliders (combined); slot 8 = update notice.
+        -- When char picker is hidden, slots 7 and 8 each shift up by one.
+        local SLIDERS_IDX       = 7
+        local UPDATE_NOTICE_IDX = 8
+        local slidersVisIdx     = showCharRow and SLIDERS_IDX      or (SLIDERS_IDX      - 1)
+        local updateNoticeVisIdx = showCharRow and UPDATE_NOTICE_IDX or (UPDATE_NOTICE_IDX - 1)
         local function ReflowCb(cb, visIdx)
             if not cb then return end
             local tileTopY = -(cbsY + (visIdx - 1) * TILE_H)
@@ -97,7 +102,8 @@ function Addon:SyncGearPopup()
                 cb._hit:SetPoint("TOPRIGHT", p, "TOPRIGHT", 0, tileTopY)
             end
         end
-        ReflowCb(p._cbHideSliders, slidersVisIdx)
+        ReflowCb(p._cbHideSliders,       slidersVisIdx)
+        ReflowCb(p._cbHideUpdateNotice,  updateNoticeVisIdx)
 
         local nVisible = showCharRow and N_TOTAL or (N_TOTAL - 1)
         -- Reposition the hidden-chars divider and trigger to follow the last checkbox.
@@ -206,7 +212,7 @@ function Addon:ToggleGearPopup(anchor, growRight)
         local div1StartY = rstStartY + 22 + 6
         Addon.Controls.NewDivider(p, -div1StartY, PAD, PAD)
 
-        -- ── 6 Checkboxes ──────────────────────────────────────────────────
+        -- ── 8 Checkboxes ──────────────────────────────────────────────────
         local checks = {
             { key = "_cbHideCompleted",   },
             { key = "_cbHideGreatVault",  },
@@ -215,6 +221,7 @@ function Addon:ToggleGearPopup(anchor, growRight)
             { key = "_cbHideIlvlRef",     },
             { key = "_cbHideCharPicker",  },
             { key = "_cbHideSliders", },
+            { key = "_cbHideUpdateNotice", },
         }
         local callbacks = {
             _cbHideCompleted  = function(checked)
@@ -253,6 +260,11 @@ function Addon:ToggleGearPopup(anchor, growRight)
                 db.showScaleSlider  = not checked
                 db.showOpacitySlider = not checked
                 if Addon.ApplyScaleSliderVisibility then Addon:ApplyScaleSliderVisibility() end
+            end,
+            _cbHideUpdateNotice = function(checked)
+                local db = Addon:EnsureDB()
+                db.hideUpdateNotice = checked
+                if Addon.UpdateStatusBanner then Addon:UpdateStatusBanner() end
             end,
         }
 

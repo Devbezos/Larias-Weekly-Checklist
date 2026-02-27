@@ -41,7 +41,7 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
     -- picker button when that button is visible (avoids overlap in the bottom row).
     sf.AdjustForCpBtn = function(cpBtn)
         local inset   = Addon.UI.sectionInsetX  or 14
-        local botPad  = Addon.UI.sliderBottomPad or 4
+        local botPad  = (Addon.UI.sliderBottomPad or 4) + (sf._bannerBotExtra or 0)
         local rightInset
         if cpBtn and cpBtn.IsShown and cpBtn:IsShown() then
             local cpW = (cpBtn.GetWidth and math.ceil(cpBtn:GetWidth())) or 108
@@ -266,10 +266,12 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
             opacityPane:SetPoint("TOPLEFT",  sf, "TOP",      0, 0)
             opacityPane:SetPoint("TOPRIGHT", sf, "TOPRIGHT", 0, 0)
         elseif sv then
+            -- Only scale: keep it in the LEFT half so its position is consistent.
             scalePane:SetPoint("TOPLEFT",  sf, "TOPLEFT",  0, 0)
-            scalePane:SetPoint("TOPRIGHT", sf, "TOPRIGHT", 0, 0)
+            scalePane:SetPoint("TOPRIGHT", sf, "TOP",      0, 0)
         elseif ov then
-            opacityPane:SetPoint("TOPLEFT",  sf, "TOPLEFT",  0, 0)
+            -- Only opacity: keep it in the RIGHT half, mirroring scale on the left.
+            opacityPane:SetPoint("TOPLEFT",  sf, "TOP",      0, 0)
             opacityPane:SetPoint("TOPRIGHT", sf, "TOPRIGHT", 0, 0)
         end
     end

@@ -37,9 +37,12 @@ local STRINGS = {
 	OPTIONS_HIDE_SCALE_SLIDER   = "Hide scale slider",
 	OPTIONS_HIDE_SLIDERS        = "Hide sliders",
 	OPTIONS_HIDE_OPACITY_SLIDER = "Hide opacity slider",
-	UI_OPACITY_LABEL     = "Opacity",
-	UI_OPACITY_MIN_LABEL = "10%",
-	UI_OPACITY_MAX_LABEL = "100%",
+	OPTIONS_HIDE_UPDATE_NOTICE  = "Hide update notices",
+
+	-- Status banner (shown below the slider row)
+	STATUS_UPDATE_AVAILABLE_FMT  = "Update available! You have %s, newest is %s.",
+	STATUS_NO_TRANSLATION_FMT    = "No translation available for %s. Consider contributing!",
+	STATUS_TRANSLATION_NOTICE    = "This is a translation of the English guide. Notice any issues? Consider contributing!",
 	UI_OPACITY_LABEL     = "Opacity",
 	UI_OPACITY_MIN_LABEL = "10%",
 	UI_OPACITY_MAX_LABEL = "100%",

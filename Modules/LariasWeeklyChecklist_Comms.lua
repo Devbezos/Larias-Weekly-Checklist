@@ -336,6 +336,8 @@ function Addon:OnAddonMessage(prefix, message, sender)
         if newestSeenVersion == "" or IsVersionNewer(remoteVersion, newestSeenVersion) then
             database._newestSeenRemoteVersion = remoteVersion
             database._newestSeenRemoteSender = tostring(sender or "")
+            -- Immediately refresh the status banner so the update notice appears.
+            if Addon.UpdateStatusBanner then Addon:UpdateStatusBanner() end
         end
     end
 end

@@ -102,7 +102,7 @@ do
 
         self.CONSTANTS.ui = self.CONSTANTS.ui or self.UI or {
             frameW = 520,
-            frameH = 720,
+            frameH = 737,
             padOuterX = 14,
             padOuterTop = 10,
             closeInset = 4,
@@ -226,9 +226,6 @@ function Addon:IsLocalizationCompanionLoaded()
     if type(C_AddOns) == "table" and type(C_AddOns.IsAddOnLoaded) == "function" then
         return C_AddOns.IsAddOnLoaded(LOCALIZATION_ADDON_NAME)
     end
-    if type(IsAddOnLoaded) == "function" then
-        return IsAddOnLoaded(LOCALIZATION_ADDON_NAME)
-    end
     return false
 end
 
@@ -279,6 +276,7 @@ local CHAR_DEFAULTS = {
     showCharPickerBtn     = true,
     showScaleSlider       = true,
     showOpacitySlider     = true,
+    hideUpdateNotice      = false,
     debug                 = false,
     startAtSectionId      = "",
 }
@@ -726,7 +724,6 @@ function Addon:SetLocaleOverride(value)
 end
 
 -- Opens the Blizzard Interface Options panel to the addon's category.
--- Right-click on the minimap icon calls this.
 function Addon:OpenOptions()
     if self.CreateBlizzOptionsPanel then
         self:CreateBlizzOptionsPanel()
@@ -734,15 +731,11 @@ function Addon:OpenOptions()
     if self._blizzOptCategory and Settings and Settings.OpenToCategory then
         local catId = self._blizzOptCategory.GetID and self._blizzOptCategory:GetID() or self._blizzOptCategory
         Settings.OpenToCategory(catId)
-    elseif InterfaceOptionsFrame_OpenToCategory and self._blizzOptPanel then
-        InterfaceOptionsFrame_OpenToCategory(self._blizzOptPanel)
-    elseif InterfaceOptionsFrame then
-        InterfaceOptionsFrame:Show()
     end
 end
 
--- Options tab removed; SelectMainTab is kept as a no-op stub for call-site safety.
-function Addon:SelectMainTab(tabId)
+-- Forces the main list panel to re-render; kept for call-site compatibility.
+function Addon:SelectMainTab()
     self:CreateFrame()
     if not frame then return end
     if scrollFrame and scrollFrame.SetShown then
@@ -822,7 +815,24 @@ function Addon:UpdateLocalizedUI()
         if trackingFrame._lariasRightTitle and trackingFrame._lariasRightTitle.SetText then
             trackingFrame._lariasRightTitle:SetText(L.TRACKING_CURRENCY_TITLE or "Currency")
         end
+        -- Update the three GV section row headers (Raid / Dungeons / World).
+        local gvKeysByIndex = { "TRACKING_GV_RAID", "TRACKING_GV_DUNGEONS", "TRACKING_GV_WORLD" }
+        local gvFallbacks   = { "Raid", "Dungeons", "World" }
+        local grids = trackingFrame._lariasGvGrids
+        if type(grids) == "table" then
+            for bi = 1, 3 do
+                local grid = grids[bi]
+                if grid and grid.header and grid.header.SetText then
+                    grid.header:SetText(L[gvKeysByIndex[bi]] or gvFallbacks[bi])
+                end
+            end
+        end
+        -- Re-render currency rows (labels are written during the tracking update).
+        if self.RequestTrackingUpdate then self:RequestTrackingUpdate() end
     end
+
+    -- Refresh the status banner text (locale strings may have changed).
+    if self.UpdateStatusBanner then self:UpdateStatusBanner() end
 end
 
 -- Apply the shared theme backdrop to a frame.
@@ -875,7 +885,12 @@ function Addon:ApplyScrollLayout()
         local sliderShown  = sf and sf.IsShown and sf:IsShown()
         local sliderRowH   = (Addon.UI.sliderH or 0) + (Addon.UI.sliderLabelH or 0) + 2
         local sliderH      = sliderShown and sliderRowH                     or 0
-        local sliderBotPad = sliderShown and (Addon.UI.sliderBottomPad or 0) or 0
+        -- Banner row always occupies space (frame is permanently visible).
+        local bannerExtra  = self._statusBanner
+            and ((self._statusBannerH or 14) + (self._statusBannerPad or 3))
+            or 0
+        -- Banner always occupies space; include its height even when sliders are hidden.
+        local sliderBotPad = (sliderShown and (Addon.UI.sliderBottomPad or 0) or 0) + bannerExtra
         local sliderTopPad = sliderShown and (Addon.UI.sliderTopPad    or 0) or 0
         extra = trackingHeight + Addon.UI.trackTopPad
               + sliderH + sliderBotPad + sliderTopPad - Addon.UI.scrollBottom
@@ -965,6 +980,90 @@ function Addon:ApplyUIScale()
     if sf and sf.Sync then sf.Sync() end
 end
 
+-- ── Status banner ─────────────────────────────────────────────────────────────
+-- A one-line informational bar that lives in the empty space below the
+-- scale/opacity slider row.  Three possible states (highest priority first):
+--   1. Red    – a newer addon version is available (and update notices are on).
+--   2. Amber  – the WoW client locale has no translation in the registry.
+--   3. Gray   – the WoW client locale has a translation (consider contributing).
+-- Hidden when none of the above apply (e.g. enUS client, current version).
+
+local BANNER_H   = 14   -- banner height in frame-local pixels
+local BANNER_PAD = 3    -- space between frame bottom edge and banner bottom
+
+function Addon:CreateStatusBanner(parentFrame)
+    if self._statusBanner then return end
+    local inset = Addon.UI.sectionInsetX or 14
+    local bannerFrame = CreateFrame("Frame", nil, parentFrame)
+    bannerFrame:SetHeight(BANNER_H)
+    bannerFrame:SetPoint("BOTTOMLEFT",  parentFrame, "BOTTOMLEFT",   inset,  BANNER_PAD)
+    bannerFrame:SetPoint("BOTTOMRIGHT", parentFrame, "BOTTOMRIGHT", -inset,  BANNER_PAD)
+    -- Always shown so it permanently reserves its space; text changes instead of show/hide.
+    bannerFrame:Show()
+    local lbl = bannerFrame:CreateFontString(nil, "OVERLAY")
+    lbl:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
+    lbl:SetAllPoints(bannerFrame)
+    lbl:SetJustifyH("CENTER")
+    lbl:SetJustifyV("MIDDLE")
+    lbl:SetWordWrap(false)
+    bannerFrame._label   = lbl
+    self._statusBanner   = bannerFrame
+    self._statusBannerH  = BANNER_H
+    self._statusBannerPad = BANNER_PAD
+end
+
+function Addon:UpdateStatusBanner()
+    local banner = self._statusBanner
+    if not banner then return end
+    local db = self:EnsureDB()
+    local L  = self.L or {}
+
+    -- Priority 1: update available (only if the user hasn't hidden these).
+    if db.hideUpdateNotice ~= true and self.ShouldShowUpdateNotice and self:ShouldShowUpdateNotice() then
+        local myVer  = (self.GetMyVersion and self:GetMyVersion()) or ""
+        local newVer = tostring(db._newestSeenRemoteVersion or "")
+        local fmt    = L.STATUS_UPDATE_AVAILABLE_FMT or "Update available! You have %s, newest is %s."
+        banner._label:SetText(string.format(fmt, myVer, newVer))
+        banner._label:SetTextColor(1, 0.2, 0.2, 1)
+        return
+    end
+
+    -- Priority 2/3: locale status notice for non-English clients.
+    -- On pre-release builds (version contains "-") also honour the /larias locale
+    -- slash-command override so locale banners can be tested without changing the
+    -- WoW client language.
+    local myVer2     = (self.GetMyVersion and self:GetMyVersion()) or ""
+    local isDevBuild = myVer2:find("%-") ~= nil
+    local wowLocale
+    if isDevBuild and self.GetEffectiveLocaleCode then
+        wowLocale = self:GetEffectiveLocaleCode()
+    else
+        wowLocale = (GetLocale and GetLocale()) or "enUS"
+    end
+    if wowLocale ~= "enUS" then
+        local reg = _G[LOCALE_REGISTRY_KEY]
+        local hasLocale = reg
+            and type(reg.strings) == "table"
+            and type(reg.strings[wowLocale]) == "table"
+        if not hasLocale then
+            -- No translation at all for this locale.
+            local fmt = L.STATUS_NO_TRANSLATION_FMT or "No translation available for %s. Consider contributing!"
+            banner._label:SetText(string.format(fmt, wowLocale))
+            banner._label:SetTextColor(0.9, 0.7, 0.3, 1)
+        else
+            -- Translation exists; mention contribution anyway (dim, non-intrusive).
+            local txt = L.STATUS_TRANSLATION_NOTICE or "This is a translation of the English guide. Notice any issues? Consider contributing!"
+            banner._label:SetText(txt)
+            banner._label:SetTextColor(0.65, 0.65, 0.65, 0.8)
+        end
+        return
+    end
+
+    -- Default: attribution credit.
+    banner._label:SetText("Created by Devbezos, based on data provided by Larias")
+    banner._label:SetTextColor(0.45, 0.45, 0.45, 0.8)
+end
+
 function Addon:ApplyScaleSliderVisibility()
     local sf = self._inFrameScaleSlider
     if not sf then return end
@@ -978,6 +1077,12 @@ function Addon:ApplyScaleSliderVisibility()
     if sf._opacityPane then sf._opacityPane:SetShown(opacityShown) end
     if sf._layout      then sf._layout() end
     sf:SetShown(anySlider)
+
+    -- The banner row always occupies space (it is always shown, text just changes).
+    local bannerExtra = self._statusBanner
+        and ((self._statusBannerH or BANNER_H) + (self._statusBannerPad or BANNER_PAD))
+        or 0
+    sf._bannerBotExtra = bannerExtra
 
     -- Re-adjust slider right boundary so it doesn't overlap the Swap Profile button.
     if sf.AdjustForCpBtn then
@@ -993,10 +1098,10 @@ function Addon:ApplyScaleSliderVisibility()
     -- Re-anchor the tracking panel so it clears the entire bottom row.
     local tf = self._trackingFrame
     if tf then
-        local inset     = Addon.UI.sectionInsetX  or 14
-        local botPad    = Addon.UI.sliderBottomPad or 4
-        local topPad    = Addon.UI.sliderTopPad    or 4
-        local sliderTot = (Addon.UI.sliderH or 20) + (Addon.UI.sliderLabelH or 14) + 2
+        local inset        = Addon.UI.sectionInsetX  or 14
+        local botPad       = (Addon.UI.sliderBottomPad or 4) + bannerExtra
+        local topPad       = Addon.UI.sliderTopPad    or 4
+        local sliderTot    = (Addon.UI.sliderH or 20) + (Addon.UI.sliderLabelH or 14) + 2
         local botY
         if anySlider then
             botY = botPad + sliderTot + topPad  -- label row + track row
@@ -1092,19 +1197,11 @@ local function AcquireSectionFrame()
     sectionFrame._header = header
 
     local title = header:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    title:SetPoint("LEFT", header, "LEFT", 6, 0)  -- 6px left indent: 3px accent bar + 3px gap
+    title:SetPoint("LEFT", header, "LEFT", 3, 0)
     title:SetTextColor(Addon.THEME.header.r, Addon.THEME.header.g, Addon.THEME.header.b, Addon.THEME.header.a)
     title:SetJustifyH("LEFT")
     if title.SetWordWrap then title:SetWordWrap(true) end
     sectionFrame._title = title
-
-    -- Colored left-edge accent bar that spans the full header height.
-    local accentBar = header:CreateTexture(nil, "BORDER")
-    accentBar:SetWidth(3)
-    accentBar:SetPoint("TOPLEFT",    header, "TOPLEFT",    0, 0)
-    accentBar:SetPoint("BOTTOMLEFT", header, "BOTTOMLEFT", 0, 0)
-    accentBar:SetColorTexture(Addon.THEME.header.r, Addon.THEME.header.g, Addon.THEME.header.b, 0.80)
-    sectionFrame._accentBar = accentBar
 
     return sectionFrame
 end
@@ -2228,10 +2325,13 @@ function Addon:CreateFrame()
                     if Addon._cpOnClick then Addon._cpOnClick() end
                 end)
                 cpBtn:ClearAllPoints()
-                -- Sit at the bottom-right of the frame, vertically aligned with the
-                -- scale slider on the opposite (left) side.
+                -- Sit at the bottom-right of the frame, above the status banner,
+                -- vertically aligned with the scale slider on the opposite (left) side.
+                local _cpBannerExtra = Addon._statusBanner
+                    and ((Addon._statusBannerH or BANNER_H) + (Addon._statusBannerPad or BANNER_PAD))
+                    or 0
                 cpBtn:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT",
-                    -(Addon.UI.sectionInsetX or 14), Addon.UI.sliderBottomPad or 4)
+                    -(Addon.UI.sectionInsetX or 14), (Addon.UI.sliderBottomPad or 4) + _cpBannerExtra)
                 if Addon._cpUpdateLabel then Addon._cpUpdateLabel() end
                 cpBtn:Show()
                 -- Shrink the slider container's right edge to stop before the button.
@@ -2254,9 +2354,16 @@ function Addon:CreateFrame()
                     if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
                 end
                 cpBtn:Hide()
-                -- Restore slider to full width.
+                -- Restore slider to full width (defer one frame to match the show-path
+                -- timer, so this always fires last and wins over any stale show timer).
                 local sf = Addon._inFrameScaleSlider
-                if sf and sf.AdjustForCpBtn then sf.AdjustForCpBtn(nil) end
+                if sf and sf.AdjustForCpBtn then
+                    if C_Timer and C_Timer.After then
+                        C_Timer.After(0, function() sf.AdjustForCpBtn(nil) end)
+                    else
+                        sf.AdjustForCpBtn(nil)
+                    end
+                end
             end  -- else (not showCP)
         end  -- if cpBtn
 
@@ -2287,6 +2394,7 @@ function Addon:CreateFrame()
                 local extracted = ExtractMonthRangeLabel((section and section.title) or currentId or "")
                 cwWeekLabel = (extracted ~= "") and extracted or (L.CHANGE_WEEK_BUTTON or "Change Week")
             end
+            btn._lariasSelectedLabel = cwWeekLabel
             btn:SetText(cwWeekLabel)
             local cwTip = L.CHANGE_WEEK_BUTTON or "Change Week"
             btn:SetScript("OnEnter", function(self_)
@@ -2420,49 +2528,39 @@ function Addon:CreateFrame()
     scrollChild:SetSize(1, 1)
     scrollFrame:SetScrollChild(scrollChild)
 
-    -- Returns the _sectionId of the topmost section that is at or above the
-    -- current scroll position (i.e. the section the user has scrolled into).
-    local function GetTopVisibleSectionId_()
-        if not (scrollFrame and scrollChild) then return nil end
-        local scrollOffset = scrollFrame:GetVerticalScroll() or 0
-        local childTop     = scrollChild:GetTop()
-        if not childTop then return nil end
-        local best, bestOff = nil, -1
-        local firstVisible  = nil
-        local sections = Addon._activeSections or {}
-        for i = 1, #sections do
-            local sf = sections[i]
-            if sf and sf.IsShown and sf:IsShown() and sf._sectionId then
-                if not firstVisible then firstVisible = sf._sectionId end
-                local sfTop = sf:GetTop()
-                if sfTop then
-                    -- sfOff: pixels from the top of scrollChild to this section header.
-                    local sfOff = childTop - sfTop
-                    -- Section qualifies if its header has been scrolled past (or is at) the top.
-                    if sfOff >= -1 and sfOff <= scrollOffset + 1 and sfOff > bestOff then
-                        bestOff = sfOff
-                        best    = sf._sectionId
-                    end
-                end
-            end
-        end
-        -- At the top of the list nothing has been "scrolled past" yet; show the
-        -- first section's label rather than falling back to the stored week.
-        return best or firstVisible
-    end
-
-    -- Refreshes the change-week button text to reflect whichever week header is
-    -- currently at the top of the visible scroll area.
+    -- Refreshes the change-week button text.
+    -- Normally the button shows the selected week (set by LayoutHeaderButtons_).
+    -- The only exception is when the scroll bar is at the very bottom of the list,
+    -- in which case the button shows the final/last week's label.
     local function RefreshChangeWeekLabel_()
         local btn = changeWeekBtn
         if not (btn and btn.IsShown and btn:IsShown()) then return end
-        local sectionId = GetTopVisibleSectionId_()
-        local section   = sectionId and Addon._sectionsById
-                          and Addon._sectionsById[tostring(sectionId)]
-        local extracted = ExtractMonthRangeLabel(
-            (section and section.title) or tostring(sectionId or ""))
-        local label = (extracted ~= "") and extracted or (L.CHANGE_WEEK_BUTTON or "Change Week")
-        btn:SetText(label)
+        if scrollFrame and scrollFrame.GetVerticalScroll and scrollFrame.GetVerticalScrollRange then
+            local scrollOffset = scrollFrame:GetVerticalScroll() or 0
+            local scrollRange  = (scrollFrame.GetVerticalScrollRange and scrollFrame:GetVerticalScrollRange()) or 0
+            if scrollRange > 0 and scrollOffset >= scrollRange - 1 then
+                -- Scrolled to the very bottom: find the last visible section.
+                local lastVisible = nil
+                local sections = Addon._activeSections or {}
+                for i = 1, #sections do
+                    local sf = sections[i]
+                    if sf and sf.IsShown and sf:IsShown() and sf._sectionId then
+                        lastVisible = sf._sectionId
+                    end
+                end
+                if lastVisible then
+                    local section   = Addon._sectionsById and Addon._sectionsById[tostring(lastVisible)]
+                    local extracted = ExtractMonthRangeLabel((section and section.title) or tostring(lastVisible))
+                    local label     = (extracted ~= "") and extracted or (L.CHANGE_WEEK_BUTTON or "Change Week")
+                    btn:SetText(label)
+                    return
+                end
+            end
+        end
+        -- Not at the bottom: restore the selected-week label.
+        if btn._lariasSelectedLabel then
+            btn:SetText(btn._lariasSelectedLabel)
+        end
     end
 
     -- Calculates and sets the change-week button to the width of its widest possible
