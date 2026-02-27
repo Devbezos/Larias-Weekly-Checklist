@@ -2231,7 +2231,7 @@ function Addon:CreateFrame()
                 cpBtn:Hide()
                 -- Restore slider to full width.
                 local sf = Addon._inFrameScaleSlider
-                if sf and sf.AdjustForCpBtn then sf.AdjustForCpBtn(nil) end when both are visible, otherwise in the top row.
+                if sf and sf.AdjustForCpBtn then sf.AdjustForCpBtn(nil) end
         if showCW then
             local btn = EnsureChangeWeekBtn_()
             -- Show the current week's short label (e.g. "Mar 17") so the button
