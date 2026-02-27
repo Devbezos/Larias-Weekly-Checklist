@@ -1283,6 +1283,10 @@ local function SetHeaderText(sectionFrame, sectionId, complete)
         complete = IsSectionCompleteById(sectionId)
     end
     local titleText = tostring((section and section.title) or sectionId)
+    -- The week-picker dropdown already shows the part before the first " - "
+    -- (e.g. "Week 3"), so strip that prefix from the list header to avoid
+    -- repeating it.  Falls back to the full title if there's no " - " at all.
+    titleText = titleText:match("^.-%s%-%s(.+)$") or titleText
     if complete then titleText = (L.DONE_PREFIX or "") .. titleText end
     sectionFrame._title:SetText(titleText)
 end
