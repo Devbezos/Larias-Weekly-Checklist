@@ -979,6 +979,12 @@ function Addon:ApplyScaleSliderVisibility()
     if sf._layout      then sf._layout() end
     sf:SetShown(anySlider)
 
+    -- Re-adjust slider right boundary so it doesn't overlap the Swap Profile button.
+    if sf.AdjustForCpBtn then
+        local cpBtn = Addon._cpEnsureBtn and Addon._cpEnsureBtn()
+        sf.AdjustForCpBtn(cpBtn)
+    end
+
     -- Determine whether the char-picker button is also in the bottom row.
     local featureOn = (self.FEATURE_FLAGS and self.FEATURE_FLAGS.ENABLE_CHAR_SELECTOR) ~= false
     local hasChars  = featureOn and (self.HasPickableChars and self:HasPickableChars())
@@ -2203,6 +2209,16 @@ function Addon:CreateFrame()
                     -(Addon.UI.sectionInsetX or 14), Addon.UI.sliderBottomPad or 4)
                 if Addon._cpUpdateLabel then Addon._cpUpdateLabel() end
                 cpBtn:Show()
+                -- Shrink the slider container's right edge to stop before the button.
+                local sf = Addon._inFrameScaleSlider
+                if sf and sf.AdjustForCpBtn then
+                    -- Defer one frame so cpBtn:GetWidth() returns its actual post-layout size.
+                    if C_Timer and C_Timer.After then
+                        C_Timer.After(0, function() sf.AdjustForCpBtn(cpBtn) end)
+                    else
+                        sf.AdjustForCpBtn(cpBtn)
+                    end
+                end
             else
                 -- Return to own character before hiding the picker.
                 -- Inline reset instead of SetViewingChar() to avoid re-entering
@@ -2213,10 +2229,9 @@ function Addon:CreateFrame()
                     if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
                 end
                 cpBtn:Hide()
-            end
-        end
-
-        -- changeWeekBtn sits below cpBtn when both are visible, otherwise in the top row.
+                -- Restore slider to full width.
+                local sf = Addon._inFrameScaleSlider
+                if sf and sf.AdjustForCpBtn then sf.AdjustForCpBtn(nil) end when both are visible, otherwise in the top row.
         if showCW then
             local btn = EnsureChangeWeekBtn_()
             -- Show the current week's short label (e.g. "Mar 17") so the button

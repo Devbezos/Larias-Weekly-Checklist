@@ -37,6 +37,24 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
     sf:EnableMouse(true)
     self._inFrameScaleSlider = sf
 
+    -- Re-anchor the slider container's right edge so it stops before the char-
+    -- picker button when that button is visible (avoids overlap in the bottom row).
+    sf._parentFrame = parentFrame
+    sf.AdjustForCpBtn = function(cpBtn)
+        local inset   = Addon.UI.sectionInsetX  or 14
+        local botPad  = Addon.UI.sliderBottomPad or 4
+        local rightInset
+        if cpBtn and cpBtn.IsShown and cpBtn:IsShown() then
+            local cpW = (cpBtn.GetWidth and math.ceil(cpBtn:GetWidth())) or 108
+            rightInset = inset + cpW + 8   -- 8px gap between slider edge and button
+        else
+            rightInset = inset
+        end
+        sf:ClearAllPoints()
+        sf:SetPoint("BOTTOMLEFT",  parentFrame, "BOTTOMLEFT",  inset,       botPad)
+        sf:SetPoint("BOTTOMRIGHT", parentFrame, "BOTTOMRIGHT", -rightInset, botPad)
+    end
+
     -- BuildSlider: populates `pane` (height = TOTAL_H) with the interactive
     -- track, thumb knob, and min/max labels.  Returns a Sync() closure.
     local function BuildSlider(pane, minV, maxV, stepV, getVal, applyFn,
