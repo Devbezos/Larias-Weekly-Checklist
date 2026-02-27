@@ -1311,6 +1311,40 @@ local function RefreshItemTextColor(checkbox)
     end
 end
 
+-- Wraps any ALL-CAPS token (2+ consecutive uppercase letters, no lowercase)
+-- in a warm amber colour so it stands out as an important note or warning.
+-- WoW inline |c...| codes survive SetTextColor, so emphasis persists even
+-- after an item is checked and the base colour dims.
+local function EmphasizeText(text)
+    if type(text) ~= "string" or not text:find("%u%u") then return text end
+    local OPEN  = "|cFFFFBB00"
+    local CLOSE = "|r"
+    local out, pos, len = {}, 1, #text
+    while pos <= len do
+        -- Consume leading whitespace (preserve it verbatim).
+        local s, e = text:find("%s+", pos)
+        if s == pos then
+            out[#out + 1] = text:sub(s, e)
+            pos = e + 1
+        end
+        if pos > len then break end
+        -- Consume the next non-space token.
+        s, e = text:find("%S+", pos)
+        if not s then break end
+        local word = text:sub(s, e)
+        -- Emphasise if the word contains 2+ consecutive alpha chars
+        -- that are all uppercase (e.g. "RENOWN", "DONT", "XP" — not "DMFx").
+        local letters = word:match("[%a][%a]+")
+        if letters and letters == letters:upper() then
+            out[#out + 1] = OPEN .. word .. CLOSE
+        else
+            out[#out + 1] = word
+        end
+        pos = e + 1
+    end
+    return table.concat(out)
+end
+
 local function OnCheckboxClick(selfBtn)
     -- Item click handler: update saved state, collapse/hide completed sections, relayout.
     -- Custom Button (not CheckButton) doesn't auto-toggle; flip state manually first so
@@ -1422,7 +1456,7 @@ local function SyncCheckboxesForSection(sectionFrame, sectionId, db)
         local textLabel = checkbox.text or checkbox.Text
         if textLabel then
             textLabel:SetWidth(itemTextWidth)
-            textLabel:SetText(tostring(item.text or item.id))
+            textLabel:SetText(EmphasizeText(tostring(item.text or item.id)))
 
             local textHeight = 0
             if textLabel.GetStringHeight then
