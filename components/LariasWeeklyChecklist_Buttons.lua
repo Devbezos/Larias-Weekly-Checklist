@@ -199,29 +199,35 @@ function C.NewExpandButton(parent, onToggle, initialExpanded, expandTip, shrinkT
     local T  = Addon.THEME or {}
     local th = T.header or { r = 1.00, g = 0.82, b = 0.00 }
 
-    local GLYPH_DOWN = "\226\150\188"  -- ▼
-    local GLYPH_UP   = "\226\150\178"  -- ▲
-
     local _expandTip = expandTip or "Expand"
     local _shrinkTip = shrinkTip or "Shrink"
 
-    local norm = btn:CreateFontString(nil, "OVERLAY")
-    norm:SetFont("Fonts\\FRIZQT__.TTF", 14, "OUTLINE")
-    norm:SetAllPoints(btn)
-    norm:SetJustifyH("CENTER")
-    norm:SetJustifyV("MIDDLE")
-    norm:SetTextColor(th.r, th.g, th.b, 1)
-    btn:SetFontString(norm)
+    -- Use WoW scrollbar arrow textures: reliable across all WoW clients and
+    -- fonts, unlike Unicode glyphs which FRIZQT__.TTF doesn't contain.
+    local TEX_DOWN = "Interface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up"
+    local TEX_UP   = "Interface\\Buttons\\UI-ScrollBar-ScrollUpButton-Up"
 
-    local hl = btn:CreateTexture(nil, "HIGHLIGHT")
-    hl:SetAllPoints(btn)
-    hl:SetColorTexture(1, 1, 1, 0.10)
-    btn:SetHighlightTexture(hl)
+    local normTex = btn:CreateTexture(nil, "ARTWORK")
+    normTex:SetAllPoints(btn)
+    normTex:SetVertexColor(th.r, th.g, th.b, 1)
+    btn:SetNormalTexture(normTex)
+
+    local hlTex = btn:CreateTexture(nil, "HIGHLIGHT")
+    hlTex:SetAllPoints(btn)
+    hlTex:SetColorTexture(1, 1, 1, 0.10)
+    btn:SetHighlightTexture(hlTex)
+
+    local pushedTex = btn:CreateTexture(nil, "ARTWORK")
+    pushedTex:SetAllPoints(btn)
+    pushedTex:SetVertexColor(1, 1, 1, 1)
+    btn:SetPushedTexture(pushedTex)
 
     btn._expanded = (initialExpanded ~= false)
 
     local function RefreshGlyph()
-        norm:SetText(btn._expanded and GLYPH_DOWN or GLYPH_UP)
+        local tex = btn._expanded and TEX_DOWN or TEX_UP
+        normTex:SetTexture(tex)
+        pushedTex:SetTexture(tex)
     end
 
     function btn:SetExpanded(val)
@@ -232,14 +238,14 @@ function C.NewExpandButton(parent, onToggle, initialExpanded, expandTip, shrinkT
     RefreshGlyph()
 
     btn:SetScript("OnEnter", function(self_)
-        norm:SetTextColor(1, 1, 1, 1)
+        normTex:SetVertexColor(1, 1, 1, 1)
         local tip = self_._expanded and _shrinkTip or _expandTip
         GameTooltip:SetOwner(self_, "ANCHOR_BOTTOMLEFT")
         GameTooltip:SetText(tip, 1, 1, 1, 1, true)
         GameTooltip:Show()
     end)
     btn:SetScript("OnLeave", function()
-        norm:SetTextColor(th.r, th.g, th.b, 1)
+        normTex:SetVertexColor(th.r, th.g, th.b, 1)
         GameTooltip:Hide()
     end)
     btn:SetScript("OnClick", function(self_)
