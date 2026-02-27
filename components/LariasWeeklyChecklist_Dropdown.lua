@@ -38,6 +38,9 @@ function C.NewPopupPanel(strata, fadeTime)
     catcher:SetFrameStrata(st)
     catcher:SetFrameLevel((p.GetFrameLevel and p:GetFrameLevel() or 200) - 1)
     catcher:EnableMouse(true)
+    -- Propagate so the click still reaches whatever frame is underneath;
+    -- without this the catcher eats every click while it is shown.
+    if catcher.SetPropagateMouseClicks then catcher:SetPropagateMouseClicks(true) end
     catcher:Hide()
     catcher:SetScript("OnMouseDown", function() p:Hide() end)
 
