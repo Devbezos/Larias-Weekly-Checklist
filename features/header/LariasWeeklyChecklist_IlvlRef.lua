@@ -396,12 +396,6 @@ local function BuildIlvlRefWindow()
     -- secure ESC chain rather than the protected SetPropagateKeyboardInput.
     tinsert(UISpecialFrames, "LariasIlvlRefFrame")
 
-    -- Credit: guide author
-    local creditFS = win:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    creditFS:SetPoint("BOTTOM", win, "BOTTOM", 0, 4)
-    creditFS:SetTextColor(0.45, 0.45, 0.45, 0.9)
-    creditFS:SetText("Based on dburnnzz's guide")
-
     -- Scroll frame (auto-adapts to win size; content reflows instead of scaling)
     local sf = CreateFrame("ScrollFrame", nil, win, "UIPanelScrollFrameTemplate")
     sf:SetPoint("TOPLEFT",     win, "TOPLEFT",  PAD,     -SCROLLTOP)
