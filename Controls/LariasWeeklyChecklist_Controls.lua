@@ -299,14 +299,12 @@ function C.NewCheckBox(parent, onToggle, boxSize)
     hl:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", 0, 0)
     hl:SetColorTexture(1, 1, 1, 0.15)
 
-    -- Gold checkmark glyph: ✓ U+2713 = \226\156\147.
-    local tick = box:CreateFontString(nil, "OVERLAY")
-    tick:SetFont("Fonts\\FRIZQT__.TTF", math.floor(boxSize * 0.75), "OUTLINE")
+    -- Gold checkmark: Blizzard's own UI-CheckBox-Check texture tinted gold.
+    -- Using a texture avoids font glyph coverage issues entirely.
+    local tick = box:CreateTexture(nil, "OVERLAY")
+    tick:SetTexture("Interface\\Buttons\\UI-CheckBox-Check")
     tick:SetAllPoints(box)
-    tick:SetJustifyH("CENTER")
-    tick:SetJustifyV("MIDDLE")
-    tick:SetTextColor(th.r, th.g, th.b, 1)
-    tick:SetText("\226\156\147")   -- ✓
+    tick:SetVertexColor(th.r, th.g, th.b, 1)
     tick:Hide()
     cb._tick = tick
 
