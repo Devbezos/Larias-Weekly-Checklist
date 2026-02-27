@@ -397,7 +397,7 @@ local function SetupMinimapIcon()
     local dataObject = LDB:NewDataObject(addonName, {
         type = "data source",
         text = addonName,
-        icon = "Interface\\AddOns\\LariasWeeklyChecklist\\Media\\icon",
+        icon = "Interface\\AddOns\\LariasWeeklyChecklist\\assets\\icon",
         OnClick = function(self_, button)
             if button == "LeftButton" then
                 if Addon.CreateFrame then
