@@ -59,15 +59,15 @@ local STRINGS = {
 	TRACKING_GV_WORLD    = "World",
 	TRACKING_NA = "N/A",
 
-	TRACKING_SPARKS_LABEL = "Sparks:",
+	TRACKING_SPARKS_LABEL = "Sparks",
 	TRACKING_DONE = "Done",
 	TRACKING_NOT_DONE = "Not done",
 
-	TRACKING_QUEST_DELVERS_BOUNTY = "Delver's Bounty:",
-	TRACKING_QUEST_WEEKLY_PREY = "Weekly Prey:",
+	TRACKING_QUEST_DELVERS_BOUNTY = "Delver's Bounty",
+	TRACKING_QUEST_WEEKLY_PREY = "Weekly Prey",
 
-	TRACKING_CREST_LABEL = "Crest:",
-	TRACKING_CREST_ID_LABEL_FMT = "Crest %s:",
+	TRACKING_CREST_LABEL = "Crest",
+	TRACKING_CREST_ID_LABEL_FMT = "Crest %s",
 	-- Optional: if present, crest labels are taken from this table instead of the game currency name.
 	-- Keys are currency IDs; values should be display names (with or without a trailing ':').
 	TRACKING_CREST_NAMES_BY_ID = {
@@ -80,7 +80,7 @@ local STRINGS = {
 	TRACKING_NO_ID = "No ID",
 	TRACKING_TRADE_UP_SUFFIX = " Trade Up)",
 
-	TRACKING_CATALYST_LABEL = "Catalyst:",
+	TRACKING_CATALYST_LABEL = "Catalyst",
 
 	TRACKING_INF = "INF",
 

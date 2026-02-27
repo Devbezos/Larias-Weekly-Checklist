@@ -376,32 +376,25 @@ local function GetCrestLabelText(currencyID)
 
     local gameName = GetCurrencyName(currencyID)
     if type(gameName) == "string" and gameName ~= "" then
-        if gameName:sub(-1) == ":" then return gameName end
-        return gameName .. ":"
+        return gameName
     end
 
     local nameMap = L.TRACKING_CREST_NAMES_BY_ID
     if type(nameMap) == "table" then
         local name = nameMap[idNum or currencyID]
         if type(name) == "string" and name ~= "" then
-            if name:sub(-1) == ":" then return name end
-            return name .. ":"
+            return name
         end
     end
 
     local fmt = L.TRACKING_CREST_ID_LABEL_FMT
     if type(fmt) == "string" and fmt ~= "" then
-        local out = fmt:format(tostring(currencyID))
-        if out:sub(-1) == ":" then return out end
-        return out .. ":"
+        return fmt:format(tostring(currencyID))
     end
 
     local base = L.TRACKING_CREST_LABEL
-    if type(base) ~= "string" or base == "" then base = "Crest:" end
-    if base:sub(-1) == ":" then
-        return base .. " " .. tostring(currencyID) .. ":"
-    end
-    return base .. ": " .. tostring(currencyID) .. ":"
+    if type(base) ~= "string" or base == "" then base = "Crest" end
+    return base .. " " .. tostring(currencyID)
 end
 
 local function BottomFor(obj)
