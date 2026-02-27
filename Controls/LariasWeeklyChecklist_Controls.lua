@@ -290,10 +290,10 @@ function C.NewCheckBox(parent, onToggle, boxSize)
     local cb = CreateFrame("Button", nil, parent)
     cb:SetSize(boxSize, boxSize)
 
-    -- Visual box: fixed size, always pinned to the top-left corner of cb.
+    -- Visual box: fixed size, vertically centered within cb's height.
     local box = CreateFrame("Frame", nil, cb)
     box:SetSize(boxSize, boxSize)
-    box:SetPoint("TOPLEFT", cb, "TOPLEFT", 0, 0)
+    box:SetPoint("LEFT", cb, "LEFT", 0, 0)
     Addon:ApplyTheme(box)
     cb._box = box
 

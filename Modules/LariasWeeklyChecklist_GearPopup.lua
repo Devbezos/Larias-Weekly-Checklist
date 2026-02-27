@@ -78,7 +78,6 @@ function Addon:SyncGearPopup()
     -- below the (possibly-hidden) char picker slot so no gap is left behind.
     do
         local PAD      = 10
-        local ROW_H    = 16   -- custom checkbox visual box height
         local TILE_H   = 34   -- tile height
         local N_TOTAL  = 8
         local rstStartY  = PAD
@@ -94,9 +93,9 @@ function Addon:SyncGearPopup()
         local function ReflowCb(cb, visIdx)
             if not cb then return end
             local tileTopY = -(cbsY + (visIdx - 1) * TILE_H)
-            local cbOffY   = tileTopY - math.floor((TILE_H - ROW_H) / 2)
             cb:ClearAllPoints()
-            cb:SetPoint("TOPLEFT", p, "TOPLEFT", PAD, cbOffY)
+            cb:SetPoint("TOPLEFT", p, "TOPLEFT", PAD, tileTopY)
+            cb:SetHeight(TILE_H)
             if cb._hit then
                 cb._hit:ClearAllPoints()
                 cb._hit:SetPoint("TOPLEFT",  p, "TOPLEFT",  0, tileTopY)
@@ -269,20 +268,21 @@ function Addon:ToggleGearPopup(anchor, growRight)
         }
 
         local N          = #checks
-        local CBX_H      = 16    -- custom checkbox visual box height
         local TILE_H     = 34    -- total tile height (box + padding)
         local cbsY       = div1StartY + 1 + 8   -- checkboxes section top (px from popup top)
 
         for i, info in ipairs(checks) do
             local tileTopY = -(cbsY + (i - 1) * TILE_H)
-            local cbOffY   = tileTopY - math.floor((TILE_H - CBX_H) / 2)
 
             local _key = info.key
             local cb = Addon.Controls.NewCheckBox(p, function(newState)
                 callbacks[_key](newState)
                 if Addon.SyncGearPopup then Addon:SyncGearPopup() end
             end)
-            cb:SetPoint("TOPLEFT", p, "TOPLEFT", PAD, cbOffY)
+            -- Span the full tile height so the box centers vertically even
+            -- when the label wraps to multiple lines.
+            cb:SetPoint("TOPLEFT",  p, "TOPLEFT",  PAD, tileTopY)
+            cb:SetHeight(TILE_H)
             cb._label:SetPoint("RIGHT", p, "RIGHT", -PAD, 0)
             p[info.key] = cb
 
