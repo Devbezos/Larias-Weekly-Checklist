@@ -80,6 +80,7 @@ local STRINGS = {
 	-- Main window
 	TAB_OPTIONS = "Options",
 	CHANGE_WEEK_BUTTON = "Change Week",
+	CHAR_PICKER_BUTTON = "Swap Profile",
 	ILVLREF_BUTTON = "View Item Levels",
 
 	-- Item level reference popup

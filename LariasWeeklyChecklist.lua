@@ -801,8 +801,9 @@ function Addon:UpdateLocalizedUI()
     end
 
     local changeWeekBtn = frame._lariasChangeWeekBtn
-    if changeWeekBtn and changeWeekBtn.SetText then
-        changeWeekBtn:SetText(L.CHANGE_WEEK_BUTTON or "Change Week")
+    if changeWeekBtn then
+        -- Change week button shows the current week label; re-run layout to refresh it.
+        if self.LayoutHeaderButtons then self:LayoutHeaderButtons() end
     end
 
     local ilvlRefBtn = frame._lariasIlvlRefBtn
@@ -2164,8 +2165,41 @@ function Addon:CreateFrame()
         -- changeWeekBtn sits below cpBtn when both are visible, otherwise in the top row.
         if showCW then
             local btn = EnsureChangeWeekBtn_()
-            local cwLabel = L.CHANGE_WEEK_BUTTON or "Change Week"
-            btn:SetText(cwLabel .. " |TInterface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up:10:10|t")
+            -- Show the current week's short label (e.g. "Mar 17") so the button
+            -- acts as a status indicator. The action name goes in the tooltip.
+            local cwWeekLabel
+            do
+                local db0 = Addon:EnsureDB()
+                local storedStart = tostring(db0.startAtSectionId or "")
+                local currentId
+                if storedStart ~= "" then
+                    currentId = storedStart
+                else
+                    local order = Addon._order or {}
+                    for i = 1, #order do
+                        if not IsSectionCompleteById(order[i], db0) then
+                            currentId = tostring(order[i])
+                            break
+                        end
+                    end
+                    if not currentId and Addon._order and Addon._order[1] then
+                        currentId = tostring(Addon._order[1])
+                    end
+                end
+                local section  = currentId and Addon._sectionsById and Addon._sectionsById[currentId]
+                local extracted = ExtractMonthRangeLabel((section and section.title) or currentId or "")
+                cwWeekLabel = (extracted ~= "") and extracted or (L.CHANGE_WEEK_BUTTON or "Change Week")
+            end
+            btn:SetText(cwWeekLabel .. " |TInterface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up:10:10|t")
+            local cwTip = L.CHANGE_WEEK_BUTTON or "Change Week"
+            btn:SetScript("OnEnter", function(self_)
+                GameTooltip:SetOwner(self_, "ANCHOR_BOTTOMLEFT")
+                GameTooltip:SetText(cwTip, 1, 1, 1, 1, true)
+                GameTooltip:Show()
+            end)
+            btn:SetScript("OnLeave", function()
+                GameTooltip:Hide()
+            end)
             -- Auto-size button width to fit the label text.
             -- Deferred one frame so WoW has performed its layout pass
             -- and GetStringWidth returns real pixel widths.

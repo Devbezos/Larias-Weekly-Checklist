@@ -113,31 +113,13 @@ function Addon:InitCharPickerUI(frame, styleFunc)
     local function UpdateLabel()
         local btn = charPickerBtn
         if not btn then return end
-        local ownKey     = Addon:GetCurrentProfileKey()
-        local displayKey = Addon._viewingChar or ownKey
-        -- For the logged-in character use the actual player name so the button never
-        -- shows "Default" when AceDB is using a shared profile key by that name.
-        local charName
-        if not Addon._viewingChar then
-            charName = (UnitName and UnitName("player")) or ""
-            if charName == "" then
-                charName = (displayKey:match("^(.-)%s*%-") or displayKey):gsub("^%s+",""):gsub("%s+$","")
-            end
-        else
-            charName = (displayKey:match("^(.-)%s*%-") or displayKey):gsub("^%s+",""):gsub("%s+$","")
-        end
-        if charName == "" then charName = "Me" end
-        btn:SetText(charName .. " |TInterface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up:10:10|t")
-        local gdb        = Addon.db and Addon.db.global
-        local classToken = gdb and gdb.charClasses and gdb.charClasses[displayKey]
-        local tr         = btn.Text or (btn.GetFontString and btn:GetFontString())
-        if tr then
-            local cc = classToken and RAID_CLASS_COLORS and RAID_CLASS_COLORS[classToken]
-            if cc then
-                tr:SetTextColor(cc.r, cc.g, cc.b, 1)
-            else
-                tr:SetTextColor(Addon.THEME.text.r, Addon.THEME.text.g, Addon.THEME.text.b, 1)
-            end
+        local L   = Addon.L or {}
+        local lbl = L.CHAR_PICKER_BUTTON or "Swap Profile"
+        btn:SetText(lbl .. " |TInterface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up:10:10|t")
+        local tr = btn.Text or (btn.GetFontString and btn:GetFontString())
+        if tr and Addon.THEME and Addon.THEME.text then
+            local t = Addon.THEME.text
+            tr:SetTextColor(t.r, t.g, t.b, 1)
         end
     end
 
