@@ -348,13 +348,20 @@ function Addon:ToggleGearPopup(anchor, growRight)
                       or GetAddOnMetadata
                       or function() return "" end
 
+        local _ver = _getMeta(addonName, "Version") or ""
+
+        local creditLabel = p:CreateFontString(nil, "OVERLAY")
+        creditLabel:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
+        creditLabel:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", 8, 5)
+        creditLabel:SetJustifyH("LEFT")
+        creditLabel:SetText("Built by Dev  \226\128\162  Approved by Larias")
+        creditLabel:SetTextColor(0.45, 0.45, 0.45, 0.6)
+
         local verLabel = p:CreateFontString(nil, "OVERLAY")
         verLabel:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
-        verLabel:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", 8, 5)
+        verLabel:SetPoint("BOTTOMLEFT", creditLabel, "TOPLEFT", 0, 2)
         verLabel:SetJustifyH("LEFT")
-        local _ver = _getMeta(addonName, "Version") or ""
-        local _verPfx = _ver ~= "" and ("v" .. _ver .. "  \226\128\162  ") or ""
-        verLabel:SetText(_verPfx .. "Built by Dev  \226\128\162  Approved by Larias")
+        verLabel:SetText(_ver ~= "" and ("v" .. _ver) or "")
         verLabel:SetTextColor(0.45, 0.45, 0.45, 0.6)
 
         -- Record the close time so ToggleGearPopup can ignore a same-click
