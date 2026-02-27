@@ -152,12 +152,11 @@ end
 function Addon:ToggleGearPopup(anchor, growRight)
     local p = self._gearPopup
     -- Guard: the outside-click catcher fires OnMouseDown (closes the popup) and
-    -- then propagates the same input event to the gear button, whose OnClick
-    -- arrives in the same frame.  By then IsShown() is already false so the
-    -- naive toggle would re-open the popup immediately.  _lariasJustHidden is
-    -- set by the OnHide hook below and cleared one frame later via C_Timer.
-    if p and p._lariasJustHidden then
-        p._lariasJustHidden = nil
+    -- may propagate the same input event to the gear button, whose OnClick could
+    -- arrive after the catcher already hid it.  We record the close timestamp
+    -- and ignore any open request within 0.05 s of the last close.
+    if p and p._lariasLastCloseTime and (GetTime() - p._lariasLastCloseTime) < 0.05 then
+        p._lariasLastCloseTime = nil
         return
     end
     if p and p.IsShown and p:IsShown() then
@@ -358,14 +357,10 @@ function Addon:ToggleGearPopup(anchor, growRight)
         verLabel:SetText(_verPfx .. "Built by Dev  \226\128\162  Approved by Larias")
         verLabel:SetTextColor(0.45, 0.45, 0.45, 0.6)
 
-        -- When the popup is hidden (whether by its own catcher or programmatically),
-        -- set a one-frame flag so ToggleGearPopup can tell if the hide and the
-        -- next open request arrived in the same input event.
+        -- Record the close time so ToggleGearPopup can ignore a same-click
+        -- reopen if the outside-click catcher propagates to the gear button.
         p:HookScript("OnHide", function(self_)
-            self_._lariasJustHidden = true
-            if C_Timer and C_Timer.After then
-                C_Timer.After(0, function() self_._lariasJustHidden = nil end)
-            end
+            self_._lariasLastCloseTime = GetTime()
         end)
 
         self._gearPopup = p
