@@ -113,7 +113,7 @@ function C.NewCloseButton(parent, onClick)
     norm:SetJustifyH("CENTER")
     norm:SetJustifyV("MIDDLE")
     norm:SetTextColor(th.r, th.g, th.b, 1)
-    norm:SetText("\xE2\x9C\x95")  -- UTF-8: ✕ (U+2715)
+    norm:SetText("\195\151")  -- × (U+00D7) — Latin-1 supported in all WoW fonts
     btn:SetFontString(norm)
 
     -- Hover: red bg tint (universal "danger/close" signal).
