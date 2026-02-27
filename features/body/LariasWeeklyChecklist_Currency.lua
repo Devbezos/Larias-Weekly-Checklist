@@ -2135,5 +2135,3 @@ function Addon:ResizeTrackingCols()
 
     tf._lariasColW = newColW
 end
-
-

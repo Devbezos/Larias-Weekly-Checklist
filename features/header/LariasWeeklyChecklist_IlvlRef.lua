@@ -24,7 +24,6 @@ local HERO  = "|cFF" .. (Addon.TRACKING and Addon.TRACKING.crestColors and Addon
 local MYTH  = "|cFF" .. (Addon.TRACKING and Addon.TRACKING.crestColors and Addon.TRACKING.crestColors[5] or "FFD100")  -- Myth/Gilded (gold)
 local COLOR_RESET = "|r"
 
-
 -- Create a FontString anchored at (x, posY) from parent's TOPLEFT.
 -- fontObj, r/g/b/a, w, align are optional.
 local function FS(parent, x, posY, text, fontObj, r, g, b, a, w, align)
@@ -552,7 +551,6 @@ local function BuildIlvlRefWindow()
 
     return win
 end
-
 
 function Addon:ToggleIlvlRefWindow()
     if self._ilvlRefWindow then

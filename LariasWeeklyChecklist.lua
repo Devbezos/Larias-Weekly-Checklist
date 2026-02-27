@@ -950,7 +950,6 @@ end
 -- Footer methods are defined in features/footer/LariasWeeklyChecklist_Footer.lua.
 -- (CreateStatusBanner, UpdateStatusBanner, ApplyScaleSliderVisibility, ApplyOpacity)
 
-
 local function Key(sectionId, itemId)
     -- Stable key for SavedVariables.checked.
     -- Kept as a string so it's easy to inspect/clear in SV files.
@@ -1803,7 +1802,6 @@ function Addon:CreateFrame()
     if Addon._wireScrollHeaderHooks then
         Addon._wireScrollHeaderHooks(scrollFrame)
     end
-
 
     local db = self:EnsureDB()
     if (db.showGreatVault or db.showCurrency) and self.CreateTrackingPanel and not self._trackingFrame then
