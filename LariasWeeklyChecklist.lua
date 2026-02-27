@@ -547,10 +547,13 @@ function Addon:EnsureDB()
     local chars = self.db.global.chars
     if not chars[key] then chars[key] = {} end
     local cdb = chars[key]
-    -- Apply defaults on first access (avoids relying on AceDB metatable defaults
-    -- for nested tables inside global).
-    for k, v in pairs(CHAR_DEFAULTS) do
-        if cdb[k] == nil then cdb[k] = v end
+    -- Apply defaults on first access only; guard with a flag so the pairs loop
+    -- does not run on every EnsureDB() call (it is called per-section on refresh).
+    if not cdb._lariasDefaultsApplied then
+        for k, v in pairs(CHAR_DEFAULTS) do
+            if cdb[k] == nil then cdb[k] = v end
+        end
+        cdb._lariasDefaultsApplied = true
     end
     if cdb.checked           == nil then cdb.checked           = {} end
     if cdb.collapsedSections == nil then cdb.collapsedSections = {} end
@@ -997,8 +1000,10 @@ local function IsSectionCompleteById(sectionId, db)
     db = db or Addon:EnsureDB()
     local checked = db.checked
     local items = section.items or {}
+    -- Pre-build the constant prefix once instead of Key(sectionId, id) per item.
+    local prefix = tostring(sectionId) .. ":"
     for i = 1, #items do
-        if not checked[Key(sectionId, items[i].id)] then
+        if not checked[prefix .. tostring(items[i].id)] then
             return false
         end
     end
@@ -1147,17 +1152,20 @@ local function LayoutFrom(startIndex)
     -- Re-anchor sections starting at startIndex to avoid O(n) layout on every click.
     local posY = -Addon.UI.sectionTopPad
     local paddingX = Addon.UI.sectionInsetX
+    -- Hoist sectionGap: avoids two table lookups (Addon → UI → sectionGap) per visible section.
+    local sectionGap = Addon.UI.sectionGap
+    local activeSections = Addon._activeSections
 
-    for i = 1, #Addon._activeSections do
-        local sectionFrame = Addon._activeSections[i]
+    for i = 1, #activeSections do
+        local sectionFrame = activeSections[i]
         if sectionFrame:IsShown() then
             if i < startIndex then
-                posY = posY - sectionFrame:GetHeight() - Addon.UI.sectionGap
+                posY = posY - sectionFrame:GetHeight() - sectionGap
             else
                 sectionFrame:ClearAllPoints()
                 sectionFrame:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", paddingX, posY)
                 sectionFrame:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", -paddingX, posY)
-                posY = posY - sectionFrame:GetHeight() - Addon.UI.sectionGap
+                posY = posY - sectionFrame:GetHeight() - sectionGap
             end
         end
     end
@@ -1306,8 +1314,10 @@ local function RefreshItemTextColor(checkbox)
     if checkbox:GetChecked() then
         lbl:SetTextColor(0.45, 0.45, 0.45, 0.85)
     else
-        local t = (Addon.THEME and Addon.THEME.text) or { r = 1, g = 1, b = 1, a = 1 }
-        lbl:SetTextColor(t.r, t.g, t.b, t.a or 1)
+        -- THEME is always populated before any checkbox exists; avoid the
+        -- guarded lookup and the potential table allocation on every call.
+        local t = Addon.THEME.text
+        lbl:SetTextColor(t.r, t.g, t.b, t.a)
     end
 end
 
@@ -1418,30 +1428,38 @@ local function SyncCheckboxesForSection(sectionFrame, sectionId, db)
         end
     end
 
+    -- Hoist loop-invariant UI constants so they are not re-looked-up per item.
+    local itemTextWidth  = Addon.UI.itemTextWidth
+    local itemTextPad    = Addon.UI.itemTextPad or 0
+    local minRowHeight   = max(32, Addon.UI.itemMinH or 0)
+    local checkedMap     = db.checked
+
     for i = 1, want do
         local item = items[i]
         local checkbox = sectionFrame._checkboxes[i]
 
         checkbox._sectionId = sectionId
         checkbox._itemId = item.id
-        checkbox._dbKey = Key(sectionId, item.id)
+        -- Compute once; reuse below instead of calling IsItemChecked (which
+        -- would call Key() a second time for the same sectionId/itemId pair).
+        local dbKey = Key(sectionId, item.id)
+        checkbox._dbKey = dbKey
 
         local textLabel = checkbox.text or checkbox.Text
-        local minRowHeight = max(32, Addon.UI.itemMinH or 0)
         if textLabel then
-            textLabel:SetWidth(Addon.UI.itemTextWidth)
+            textLabel:SetWidth(itemTextWidth)
             textLabel:SetText(tostring(item.text or item.id))
 
             local textHeight = 0
             if textLabel.GetStringHeight then
                 textHeight = textLabel:GetStringHeight() or 0
             end
-            checkbox:SetHeight(max(minRowHeight, textHeight + (Addon.UI.itemTextPad or 0)))
+            checkbox:SetHeight(max(minRowHeight, textHeight + itemTextPad))
         else
             checkbox:SetHeight(minRowHeight)
         end
 
-        checkbox:SetChecked(IsItemChecked(sectionId, item.id, db))
+        checkbox:SetChecked(checkedMap[dbKey] and true or false)
         RefreshItemTextColor(checkbox)
 
         checkbox:SetScript("OnClick", OnCheckboxClick)
@@ -1481,10 +1499,12 @@ UpdateSectionVisuals = function(sectionFrame, sectionId)
     local collapsed = IsSectionCollapsed(sectionId, database) or false
     if complete then collapsed = true end
 
+    local checkedMap = database.checked
     for i = 1, #sectionFrame._checkboxes do
         local checkbox = sectionFrame._checkboxes[i]
-        if checkbox and checkbox._itemId ~= nil then
-            checkbox:SetChecked(IsItemChecked(sectionId, checkbox._itemId, database))
+        -- Use the pre-built _dbKey instead of re-calling Key() inside IsItemChecked.
+        if checkbox and checkbox._dbKey ~= nil then
+            checkbox:SetChecked(checkedMap[checkbox._dbKey] and true or false)
             RefreshItemTextColor(checkbox)
         end
     end

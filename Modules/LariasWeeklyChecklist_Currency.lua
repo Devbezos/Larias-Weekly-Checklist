@@ -215,7 +215,9 @@ local COLORS = {
 
 local function ColorWrap(hex, txt)
     -- Wrap a string in WoW color codes.
-    return ("|c%s%s|r"):format(hex, tostring(txt or ""))
+    -- Direct concatenation is measurably faster than (':format()') for a fixed
+    -- 3-piece template because it skips format-string parsing/dispatch.
+    return "|c" .. hex .. tostring(txt or "") .. "|r"
 end
 
 local function SetTextIfChanged(fontString, text)
@@ -230,8 +232,10 @@ end
 
 local function IsNonEmptyText(text)
     -- Treat color-coded strings with only whitespace as empty.
+    -- |[cr][%x]* matches both |cAARRGGBB (opening) and |r (closing) in one
+    -- pass, halving the string allocations vs two separate gsub calls.
     if type(text) ~= "string" then return false end
-    text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    text = text:gsub("|[cr][%x]*", "")
     return text:match("%S") ~= nil
 end
 
@@ -1130,17 +1134,15 @@ local function ApplyGreatVaultGrid(gridBlocks)
             for col = 1, 3 do
                 local slot    = block.slots and block.slots[col]
                 local ilvl    = slot and slot.ilvl   or 0
-                -- done = number of completed vault slots; slot col is unlocked when done >= col
                 local unlocked = done >= col
-                -- Single cell: green for best reward, white for other unlocked, dim "-" locked.
-                grid.cells[col].bot:SetText(
-                    (unlocked and ilvl > 0)
+                local txt = (unlocked and ilvl > 0)
                     and ColorWrap((maxIlvl > 0 and ilvl == maxIlvl) and COLORS.green or COLORS.white, tostring(ilvl))
-                    or  ColorWrap(COLORS.dim, "-"))
+                    or  ColorWrap(COLORS.dim, "-")
+                SetTextIfChanged(grid.cells[col].bot, txt)
             end
         else
             for col = 1, 3 do
-                grid.cells[col].bot:SetText(ColorWrap(COLORS.dim, "-"))
+                SetTextIfChanged(grid.cells[col].bot, ColorWrap(COLORS.dim, "-"))
             end
         end
     end
