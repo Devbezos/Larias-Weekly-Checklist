@@ -144,14 +144,10 @@ function Addon:InitCharPickerUI(frame, styleFunc)
     -- ── Panel ─────────────────────────────────────────────────────────────────
     local function EnsurePanel()
         if charPickerPanel then return charPickerPanel end
-        local p
-        if BackdropTemplateMixin then
-            p = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
-        else
-            p = CreateFrame("Frame", nil, UIParent)
-            if BackdropTemplateMixin and Mixin and not p.SetBackdrop then
-                Mixin(p, BackdropTemplateMixin)
-            end
+        local p = Addon:NewThemedFrame(nil, UIParent)
+        -- Override bg alpha to fully opaque for the character picker dropdown.
+        if p.SetBackdropColor then
+            p:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, 1.0)
         end
         p:SetFrameStrata("HIGH")
         p:SetClampedToScreen(true)
@@ -159,10 +155,6 @@ function Addon:InitCharPickerUI(frame, styleFunc)
         p:Hide()
         if p.SetToplevel   then p:SetToplevel(true)  end
         if p.SetFrameLevel then p:SetFrameLevel(200) end
-        Addon:ApplyTheme(p)
-        if p.SetBackdropColor then
-            p:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, 1.0)
-        end
         p._buttons     = {}
         p._buttonPool  = {}
         p._xButtons    = {}
@@ -223,20 +215,7 @@ function Addon:InitCharPickerUI(frame, styleFunc)
             btn:SetFrameStrata("HIGH")
             if styleFunc then styleFunc(btn) end
             -- StyleMainTabButton resets backdrop colors; re-apply theme after it runs.
-            if btn.SetBackdrop then
-                btn:SetBackdrop({
-                    bgFile   = "Interface\\Buttons\\WHITE8x8",
-                    edgeFile = "Interface\\Buttons\\WHITE8x8",
-                    tile = false, edgeSize = 1,
-                    insets = { left = 1, right = 1, top = 1, bottom = 1 },
-                })
-                if btn.SetBackdropColor then
-                    btn:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, Addon.THEME.bg.a)
-                end
-                if btn.SetBackdropBorderColor then
-                    btn:SetBackdropBorderColor(Addon.THEME.border.r, Addon.THEME.border.g, Addon.THEME.border.b, Addon.THEME.border.a)
-                end
-            end
+            Addon:ApplyTheme(btn)
             local tr = btn.Text or (btn.GetFontString and btn:GetFontString())
             if tr then
                 if tr.SetJustifyH then tr:SetJustifyH("LEFT") end

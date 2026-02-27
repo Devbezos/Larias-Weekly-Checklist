@@ -340,15 +340,7 @@ local function BuildIlvlRefWindow()
     }, DELVES)
     local function tblW(cols) return cols[#cols].x + cols[#cols].w end
 
-    local win
-    if BackdropTemplateMixin then
-        win = CreateFrame("Frame", "LariasIlvlRefFrame", UIParent, "BackdropTemplate")
-    else
-        win = CreateFrame("Frame", "LariasIlvlRefFrame", UIParent)
-        if BackdropTemplateMixin and Mixin and not win.SetBackdrop then
-            Mixin(win, BackdropTemplateMixin)
-        end
-    end
+    local win = Addon:NewThemedFrame("LariasIlvlRefFrame", UIParent)
 
     -- Default width = 2-col layout (Tracks | everything else).  Set after
     -- BuildSection calls (wTracks/wRight2 not yet available here).
@@ -381,8 +373,7 @@ local function BuildIlvlRefWindow()
     win:SetFrameLevel(100)
     win:Hide()
 
-    Addon:ApplyTheme(win)
-    -- Override bg to fully opaque (the shared theme uses 0.65 alpha).
+    -- Override bg to fully opaque (NewThemedFrame sets theme defaults; bg.a is 0.65).
     local bg = Addon.THEME.bg
     win:SetBackdropColor(bg.r, bg.g, bg.b, 1.0)
 

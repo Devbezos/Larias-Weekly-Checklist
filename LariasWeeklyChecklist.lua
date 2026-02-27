@@ -822,8 +822,14 @@ function Addon:UpdateLocalizedUI()
 end
 
 -- Apply the shared theme backdrop to a frame.
+-- Also mixes in BackdropTemplateMixin when the frame lacks SetBackdrop, so
+-- callers don't need a separate Mixin guard before calling this.
 function Addon:ApplyTheme(frameObj)
-    if not frameObj or not frameObj.SetBackdrop then return end
+    if not frameObj then return end
+    if not frameObj.SetBackdrop and BackdropTemplateMixin and Mixin then
+        Mixin(frameObj, BackdropTemplateMixin)
+    end
+    if not frameObj.SetBackdrop then return end
     frameObj:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
         edgeFile = "Interface\\Buttons\\WHITE8x8",
@@ -833,6 +839,19 @@ function Addon:ApplyTheme(frameObj)
     })
     frameObj:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, Addon.THEME.bg.a)
     frameObj:SetBackdropBorderColor(Addon.THEME.border.r, Addon.THEME.border.g, Addon.THEME.border.b, Addon.THEME.border.a)
+end
+
+-- Create a new Frame, apply BackdropTemplate if available, and theme it.
+-- name is optional (nil = anonymous). parent defaults to UIParent.
+function Addon:NewThemedFrame(name, parent)
+    local f
+    if BackdropTemplateMixin then
+        f = CreateFrame("Frame", name, parent or UIParent, "BackdropTemplate")
+    else
+        f = CreateFrame("Frame", name, parent or UIParent)
+    end
+    self:ApplyTheme(f)
+    return f
 end
 
 -- Recompute the scroll frame anchors.
@@ -1699,9 +1718,6 @@ function Addon:CreateFrame()
 
     frame = CreateFrame("Frame", "LariasWeeklyChecklistFrame", UIParent)
     self._mainFrame = frame
-    if not frame.SetBackdrop and BackdropTemplateMixin and Mixin then
-        Mixin(frame, BackdropTemplateMixin)
-    end
 
     frame:SetSize(Addon.UI.frameW, Addon.UI.frameH)
     frame:SetClampedToScreen(true)
@@ -1822,19 +1838,9 @@ function Addon:CreateFrame()
         -- Some client builds error if SetNormalTexture(nil) is used, so we hide textures instead.
         if not tabButton then return end
 
-        if not tabButton.SetBackdrop and BackdropTemplateMixin and Mixin then
-            Mixin(tabButton, BackdropTemplateMixin)
-        end
-
-        if tabButton.SetBackdrop then
-            tabButton:SetBackdrop({
-                bgFile = "Interface\\Buttons\\WHITE8x8",
-                edgeFile = "Interface\\Buttons\\WHITE8x8",
-                tile = false,
-                edgeSize = 1,
-                insets = { left = 3, right = 3, top = 3, bottom = 3 },
-            })
-            tabButton:SetBackdropBorderColor(Addon.THEME.border.r, Addon.THEME.border.g, Addon.THEME.border.b, Addon.THEME.border.a)
+        Addon:ApplyTheme(tabButton)
+        -- Tab buttons use a slightly lower bg alpha so section text shows through.
+        if tabButton.SetBackdropColor then
             tabButton:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, max(0, (tonumber(Addon.THEME.bg.a) or 1) - 0.28))
         end
 
@@ -1932,14 +1938,10 @@ function Addon:CreateFrame()
             return frame._lariasHeaderPicker
         end
 
-        local picker
-        if BackdropTemplateMixin then
-            picker = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
-        else
-            picker = CreateFrame("Frame", nil, UIParent)
-        end
-        if not picker.SetBackdrop and BackdropTemplateMixin and Mixin then
-            Mixin(picker, BackdropTemplateMixin)
+        local picker = Addon:NewThemedFrame(nil, UIParent)
+        -- Override bg alpha to fully opaque for the week-picker dropdown.
+        if picker.SetBackdropColor then
+            picker:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, 1.0)
         end
 
         -- HIGH strata keeps picker above the main frame (MEDIUM) while allowing
@@ -1951,11 +1953,6 @@ function Addon:CreateFrame()
         picker:Hide()
         if picker.SetToplevel then picker:SetToplevel(true) end
         if picker.SetFrameLevel then picker:SetFrameLevel(200) end
-
-        Addon:ApplyTheme(picker)
-        if picker.SetBackdropColor then
-            picker:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, 1.0)
-        end
 
         picker._buttons    = {}
         picker._buttonPool = {}

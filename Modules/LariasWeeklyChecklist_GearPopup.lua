@@ -160,32 +160,16 @@ function Addon:ToggleGearPopup(anchor)
 
     -- Create lazily.
     if not p then
-        if BackdropTemplateMixin then
-            p = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
-        else
-            p = CreateFrame("Frame", nil, UIParent)
-            if BackdropTemplateMixin and Mixin then Mixin(p, BackdropTemplateMixin) end
-        end
+        p = Addon:NewThemedFrame(nil, UIParent)
+        -- Override colors to fully opaque for the popup.
+        if p.SetBackdropColor    then p:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, 1) end
+        if p.SetBackdropBorderColor then p:SetBackdropBorderColor(Addon.THEME.border.r, Addon.THEME.border.g, Addon.THEME.border.b, 1) end
         p:SetFrameStrata("DIALOG")
         p:SetClampedToScreen(true)
         p:SetSize(230, 10)   -- height set after rows are placed
         p:Hide()
         if p.SetToplevel   then p:SetToplevel(true)   end
         if p.SetFrameLevel then p:SetFrameLevel(200)  end
-
-        -- Backdrop
-        if p.SetBackdrop then
-            p:SetBackdrop({
-                bgFile   = "Interface\\Buttons\\WHITE8x8",
-                edgeFile = "Interface\\Buttons\\WHITE8x8",
-                tile = false, edgeSize = 1,
-                insets = { left=1, right=1, top=1, bottom=1 },
-            })
-            if Addon.THEME then
-                p:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, 1)
-                p:SetBackdropBorderColor(Addon.THEME.border.r, Addon.THEME.border.g, Addon.THEME.border.b, 1)
-            end
-        end
 
         -- Outside-click catcher.
         local catcher = CreateFrame("Button", nil, UIParent)

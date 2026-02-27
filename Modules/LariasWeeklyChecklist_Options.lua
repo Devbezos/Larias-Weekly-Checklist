@@ -17,13 +17,10 @@ function Addon:ToggleHiddenCharsDropdown()
     end
     -- Create picker frame lazily.
     if not picker then
-        if BackdropTemplateMixin then
-            picker = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
-        else
-            picker = CreateFrame("Frame", nil, UIParent)
-        end
-        if not picker.SetBackdrop and BackdropTemplateMixin and Mixin then
-            Mixin(picker, BackdropTemplateMixin)
+        picker = Addon:NewThemedFrame(nil, UIParent)
+        -- Override bg alpha to fully opaque for the picker dropdown.
+        if picker.SetBackdropColor then
+            picker:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, 1.0)
         end
         picker:SetFrameStrata("FULLSCREEN_DIALOG")
         picker:SetClampedToScreen(true)
@@ -31,22 +28,6 @@ function Addon:ToggleHiddenCharsDropdown()
         picker:Hide()
         if picker.SetToplevel then picker:SetToplevel(true) end
         if picker.SetFrameLevel then picker:SetFrameLevel(600) end
-        if picker.SetBackdrop then
-            picker:SetBackdrop({
-                bgFile   = "Interface\\Buttons\\WHITE8x8",
-                edgeFile = "Interface\\Buttons\\WHITE8x8",
-                tile = false, edgeSize = 1,
-                insets = { left=1, right=1, top=1, bottom=1 },
-            })
-        end
-        if Addon.THEME then
-            if picker.SetBackdropColor then
-                picker:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, 1.0)
-            end
-            if picker.SetBackdropBorderColor then
-                picker:SetBackdropBorderColor(Addon.THEME.border.r, Addon.THEME.border.g, Addon.THEME.border.b, Addon.THEME.border.a)
-            end
-        end
         picker._buttons = {}
         picker._pool    = {}
         -- Fullscreen catcher closes picker on outside click.
@@ -145,20 +126,7 @@ function Addon:RefreshHiddenCharsList()
             nb:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 0)
             if Addon._styleActionButton then Addon._styleActionButton(nb) end
             -- StyleMainTabButton resets backdrop colors; re-apply theme after it runs.
-            if nb.SetBackdrop then
-                nb:SetBackdrop({
-                    bgFile   = "Interface\\Buttons\\WHITE8x8",
-                    edgeFile = "Interface\\Buttons\\WHITE8x8",
-                    tile = false, edgeSize = 1,
-                    insets = { left = 1, right = 1, top = 1, bottom = 1 },
-                })
-                if nb.SetBackdropColor then
-                    nb:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, Addon.THEME.bg.a)
-                end
-                if nb.SetBackdropBorderColor then
-                    nb:SetBackdropBorderColor(Addon.THEME.border.r, Addon.THEME.border.g, Addon.THEME.border.b, Addon.THEME.border.a)
-                end
-            end
+            Addon:ApplyTheme(nb)
             local ntr = nb.Text or (nb.GetFontString and nb:GetFontString())
             if ntr then
                 if ntr.SetJustifyH then ntr:SetJustifyH("LEFT") end

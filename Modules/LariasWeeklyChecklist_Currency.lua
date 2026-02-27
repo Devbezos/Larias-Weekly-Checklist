@@ -1281,9 +1281,6 @@ function Addon:CreateTrackingPanel(parentFrame)
     local db = self:EnsureDB()
 
     local trackingFrame = CreateFrame("Frame", nil, parentFrame)
-    if not trackingFrame.SetBackdrop and BackdropTemplateMixin and Mixin then
-        Mixin(trackingFrame, BackdropTemplateMixin)
-    end
     -- Lift tracking panel above the in-frame scale slider that sits below it.
     local trackingBottomY = (Addon.UI.sliderBottomPad or 4) + (Addon.UI.sliderH or 20)
     trackingFrame:SetPoint("BOTTOMLEFT", parentFrame, "BOTTOMLEFT", Addon.UI.sectionInsetX, trackingBottomY)
@@ -1317,7 +1314,10 @@ function Addon:CreateTrackingPanel(parentFrame)
     local BOX_PAD = 6
     local function MakeColBox(col)
         local box = CreateFrame("Frame", nil, trackingFrame)
-        if BackdropTemplateMixin and Mixin then Mixin(box, BackdropTemplateMixin) end
+        Addon:ApplyTheme(box)
+        -- Col boxes use lower alpha so column content stands out.
+        if box.SetBackdropColor    then box:SetBackdropColor(THEME.bg.r, THEME.bg.g, THEME.bg.b, 0.55) end
+        if box.SetBackdropBorderColor then box:SetBackdropBorderColor(THEME.border.r, THEME.border.g, THEME.border.b, 0.65) end
         -- Keep box behind column content: match trackingFrame's level so
         -- OVERLAY-layer FontStrings in the columns always render on top.
         local tfLevel = trackingFrame.GetFrameLevel and trackingFrame:GetFrameLevel() or 1
@@ -1326,18 +1326,6 @@ function Addon:CreateTrackingPanel(parentFrame)
         -- Extend above the column to cover the title (title is 24px above col.TOPLEFT).
         box:SetPoint("TOPLEFT",     col, "TOPLEFT",     -BOX_PAD,  24 + BOX_PAD)
         box:SetPoint("BOTTOMRIGHT", col, "BOTTOMRIGHT",  BOX_PAD, -BOX_PAD)
-        if box.SetBackdrop then
-            box:SetBackdrop({
-                bgFile   = "Interface\\Buttons\\WHITE8x8",
-                edgeFile = "Interface\\Buttons\\WHITE8x8",
-                tile = false, edgeSize = 1,
-                insets = { left=1, right=1, top=1, bottom=1 },
-            })
-            local bg  = THEME and THEME.bg
-            local bdr = THEME and THEME.border
-            if bg  then box:SetBackdropColor(bg.r, bg.g, bg.b, 0.55) end
-            if bdr then box:SetBackdropBorderColor(bdr.r, bdr.g, bdr.b, 0.65) end
-        end
         return box
     end
 
