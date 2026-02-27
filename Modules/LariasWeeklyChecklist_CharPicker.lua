@@ -144,35 +144,12 @@ function Addon:InitCharPickerUI(frame, styleFunc)
     -- ── Panel ─────────────────────────────────────────────────────────────────
     local function EnsurePanel()
         if charPickerPanel then return charPickerPanel end
-        local p = Addon:NewThemedFrame(nil, UIParent)
-        -- Override bg alpha to fully opaque for the character picker dropdown.
-        if p.SetBackdropColor then
-            p:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, 1.0)
-        end
-        p:SetFrameStrata("HIGH")
-        p:SetClampedToScreen(true)
+        local p = Addon.Controls.NewPopupPanel("HIGH", 0.15)
         p:SetSize(160, 40)
-        p:Hide()
-        if p.SetToplevel   then p:SetToplevel(true)  end
-        if p.SetFrameLevel then p:SetFrameLevel(200) end
         p._buttons     = {}
         p._buttonPool  = {}
         p._xButtons    = {}
         p._xButtonPool = {}
-        -- Invisible full-screen button: catches outside clicks and closes the panel.
-        local catcher = CreateFrame("Button", nil, UIParent)
-        catcher:SetAllPoints(UIParent)
-        catcher:SetFrameStrata("HIGH")
-        catcher:SetFrameLevel(199)
-        catcher:EnableMouse(true)
-        catcher:Hide()
-        catcher:SetScript("OnMouseDown", function() p:Hide() end)
-        p:SetScript("OnShow", function()
-            catcher:Show()
-            if UIFrameFadeIn then UIFrameFadeIn(p, 0.15, 0, 1)
-            else p:SetAlpha(1) end
-        end)
-        p:SetScript("OnHide", function() catcher:Hide() end)
         charPickerPanel = p
         return p
     end

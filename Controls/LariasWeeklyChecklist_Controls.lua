@@ -13,11 +13,15 @@ if not Addon then return end
 --       Branded 20×20 ✕ button: dark backdrop, gold glyph, red hover/push,
 --       "Close" tooltip. onClick defaults to parent:Hide().
 --
---   Addon.Controls.NewSettingsButton(parent [, onClick [, tooltip]])
---       Branded 20×20 gear-icon button, dark backdrop, gold on hover.
---
 --   Addon.Controls.NewIconButton(parent, texturePath [, onClick [, tooltip]])
---       Branded 20×20 icon button (any texture), dark backdrop, gold on hover.
+--       Branded 20×20 icon button (any texture), dark backdrop, gold hover.
+--       Use this for all icon-based buttons (gear, ilvl ref, etc.).
+--
+--   Addon.Controls.NewPopupPanel([strata [, fadeTime]])
+--       Dark floating dropdown panel with outside-click catcher pre-wired.
+--
+--   Addon.Controls.NewDivider(parent [, y [, leftPad [, rightPad]]])
+--       1 px horizontal hairline rule in the border theme color.
 --
 --   Addon.Controls.NewCheckBox(parent [, onToggle])
 --       Themed CheckButton + right-hand label (_label) + full-width hit area (_hit).
@@ -148,58 +152,6 @@ function C.NewCloseButton(parent, onClick)
     return btn
 end
 
--- ── Settings / gear button ────────────────────────────────────────────────────
--- Creates and returns a 20×20 gear-icon button (UI-OptionsButton texture).
--- White at rest, gold on hover.  tooltip shown on mouse-over.
--- onClick defaults to a no-op; override with SetScript after creation if needed.
-function C.NewSettingsButton(parent, onClick, tooltip)
-    local btn = CreateFrame("Button", nil, parent)
-    btn:SetSize(20, 20)
-
-    -- Backdrop: same dark square as the close button.
-    Addon:ApplyTheme(btn)
-
-    local T  = Addon.THEME or {}
-    local tt = T.text   or { r = 1, g = 1, b = 1 }
-    local th = T.header or { r = 1, g = 0.82, b = 0 }
-
-    -- Inset the gear icon 2 px so the backdrop border shows around it.
-    local PAD = 2
-    local norm = btn:CreateTexture(nil, "BORDER")
-    norm:SetTexture("Interface\\Buttons\\UI-OptionsButton")
-    norm:SetPoint("TOPLEFT",     btn, "TOPLEFT",      PAD, -PAD)
-    norm:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -PAD,  PAD)
-    norm:SetVertexColor(tt.r, tt.g, tt.b, 0.65)
-    btn:SetNormalTexture(norm)
-
-    local pushed = btn:CreateTexture(nil, "OVERLAY")
-    pushed:SetTexture("Interface\\Buttons\\UI-OptionsButton")
-    pushed:SetPoint("TOPLEFT",     btn, "TOPLEFT",      PAD, -PAD)
-    pushed:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -PAD,  PAD)
-    pushed:SetVertexColor(th.r * 0.75, th.g * 0.75, th.b * 0.75, 1)
-    btn:SetPushedTexture(pushed)
-
-    local hl = btn:CreateTexture(nil, "HIGHLIGHT")
-    hl:SetAllPoints(btn)
-    hl:SetColorTexture(1, 1, 1, 0.10)
-    btn:SetHighlightTexture(hl)
-
-    btn:SetScript("OnClick", onClick or function() end)
-
-    local tipText = tooltip or (Addon.L and Addon.L.TAB_OPTIONS) or "Options"
-    btn:SetScript("OnEnter", function(self_)
-        norm:SetVertexColor(th.r, th.g, th.b, 1)  -- gold tint on hover
-        GameTooltip:SetOwner(self_, "ANCHOR_BOTTOMLEFT")
-        GameTooltip:SetText(tipText, 1, 1, 1, 1, true)
-        GameTooltip:Show()
-    end)
-    btn:SetScript("OnLeave", function()
-        norm:SetVertexColor(tt.r, tt.g, tt.b, 0.65)  -- back to white/dim
-        GameTooltip:Hide()
-    end)
-    return btn
-end
-
 -- ── Generic icon button ─────────────────────────────────────────────────────────────
 -- Creates a 20×20 branded icon button with any texture (2 px inset so the dark
 -- backdrop border shows around it). White at rest, gold on hover. Tooltip shown
@@ -249,6 +201,59 @@ function C.NewIconButton(parent, texturePath, onClick, tooltip)
 
     btn:SetScript("OnClick", onClick or function() end)
     return btn
+end
+
+-- ── Popup panel ─────────────────────────────────────────────────────────────
+-- Dark-themed floating dropdown with an outside-click catcher pre-wired.
+-- Caller sets size and populates content; all boilerplate is handled here.
+--   strata   — frame strata string (default "HIGH")
+--   fadeTime — UIFrameFadeIn duration in seconds (default 0.15)
+function C.NewPopupPanel(strata, fadeTime)
+    local st = strata   or "HIGH"
+    local ft = fadeTime or 0.15
+    local p = Addon:NewThemedFrame(nil, UIParent)
+    if p.SetBackdropColor then
+        p:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, 1.0)
+    end
+    p:SetFrameStrata(st)
+    p:SetClampedToScreen(true)
+    p:SetSize(200, 40)
+    p:Hide()
+    if p.SetToplevel   then p:SetToplevel(true)  end
+    if p.SetFrameLevel then p:SetFrameLevel(200) end
+    local catcher = CreateFrame("Button", nil, UIParent)
+    catcher:SetAllPoints(UIParent)
+    catcher:SetFrameStrata(st)
+    catcher:SetFrameLevel((p.GetFrameLevel and p:GetFrameLevel() or 200) - 1)
+    catcher:EnableMouse(true)
+    catcher:Hide()
+    catcher:SetScript("OnMouseDown", function() p:Hide() end)
+    p:SetScript("OnHide", function() catcher:Hide() end)
+    p:SetScript("OnShow", function()
+        catcher:Show()
+        if UIFrameFadeIn then UIFrameFadeIn(p, ft, 0, 1)
+        else p:SetAlpha(1) end
+    end)
+    return p
+end
+
+-- ── Divider ─────────────────────────────────────────────────────────────
+-- Creates a 1 px horizontal rule textured in the border theme color.
+-- y (negative) sets TOPLEFT Y offset from parent; omit to position manually.
+function C.NewDivider(parent, y, leftPad, rightPad)
+    local lp = leftPad  or 0
+    local rp = rightPad or 0
+    local div = parent:CreateTexture(nil, "OVERLAY")
+    div:SetHeight(1)
+    if Addon.THEME then
+        local bdr = Addon.THEME.border
+        div:SetColorTexture(bdr.r, bdr.g, bdr.b, 0.5)
+    end
+    if y then
+        div:SetPoint("TOPLEFT",  parent, "TOPLEFT",  lp,  y)
+        div:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -rp, y)
+    end
+    return div
 end
 
 -- ── Checkbox ──────────────────────────────────────────────────────────────────

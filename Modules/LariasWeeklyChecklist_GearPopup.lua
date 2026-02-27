@@ -160,34 +160,9 @@ function Addon:ToggleGearPopup(anchor)
 
     -- Create lazily.
     if not p then
-        p = Addon:NewThemedFrame(nil, UIParent)
-        -- Override colors to fully opaque for the popup.
-        if p.SetBackdropColor    then p:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, 1) end
+        p = Addon.Controls.NewPopupPanel("DIALOG", 0.12)
         if p.SetBackdropBorderColor then p:SetBackdropBorderColor(Addon.THEME.border.r, Addon.THEME.border.g, Addon.THEME.border.b, 1) end
-        p:SetFrameStrata("DIALOG")
-        p:SetClampedToScreen(true)
         p:SetSize(230, 10)   -- height set after rows are placed
-        p:Hide()
-        if p.SetToplevel   then p:SetToplevel(true)   end
-        if p.SetFrameLevel then p:SetFrameLevel(200)  end
-
-        -- Outside-click catcher.
-        local catcher = CreateFrame("Button", nil, UIParent)
-        catcher:SetAllPoints(UIParent)
-        catcher:SetFrameStrata("DIALOG")
-        catcher:SetFrameLevel(p:GetFrameLevel() - 1)
-        catcher:EnableMouse(true)
-        catcher:Hide()
-        -- Use OnMouseDown so the catcher hides before the click resolves,
-        -- letting the MouseUp event pass through to whatever is underneath.
-        -- OnClick would consume the full click, blocking the next action.
-        catcher:SetScript("OnMouseDown", function() p:Hide() end)
-        p:SetScript("OnHide", function() catcher:Hide() end)
-        p:SetScript("OnShow", function()
-            catcher:Show()
-            if UIFrameFadeIn then UIFrameFadeIn(p, 0.12, 0, 1)
-            else p:SetAlpha(1) end
-        end)
 
         -- Layout constants.
         local PAD    = 10
@@ -243,14 +218,7 @@ function Addon:ToggleGearPopup(anchor)
 
         -- ── Divider after Reset ────────────────────────────────────────────
         local div1StartY = rstStartY + 22 + 6
-        local div1 = p:CreateTexture(nil, "OVERLAY")
-        div1:SetHeight(1)
-        div1:SetPoint("TOPLEFT",  p, "TOPLEFT",  PAD,  -div1StartY)
-        div1:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PAD, -div1StartY)
-        if Addon.THEME then
-            local bdr = Addon.THEME.border
-            div1:SetColorTexture(bdr.r, bdr.g, bdr.b, 0.5)
-        end
+        local div1 = Addon.Controls.NewDivider(p, -div1StartY, PAD, PAD)
 
         -- ── 6 Checkboxes ──────────────────────────────────────────────────
         local checks = {
@@ -349,14 +317,7 @@ function Addon:ToggleGearPopup(anchor)
 
         -- ── Divider before Hidden Characters ──────────────────────────────
         local div2StartY = cbsY + N * TILE_H + 6
-        local div2 = p:CreateTexture(nil, "OVERLAY")
-        div2:SetHeight(1)
-        div2:SetPoint("TOPLEFT",  p, "TOPLEFT",  PAD,  -div2StartY)
-        div2:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PAD, -div2StartY)
-        if Addon.THEME then
-            local bdr = Addon.THEME.border
-            div2:SetColorTexture(bdr.r, bdr.g, bdr.b, 0.5)
-        end
+        local div2 = Addon.Controls.NewDivider(p, -div2StartY, PAD, PAD)
         p._gearHiddenCharsDiv = div2
 
         -- ── Hidden Characters trigger ──────────────────────────────────────

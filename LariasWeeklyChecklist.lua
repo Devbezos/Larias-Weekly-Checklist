@@ -1780,7 +1780,7 @@ function Addon:CreateFrame()
     closeBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -Addon.UI.closeInset, -Addon.UI.closeInset)
 
     -- Gear / settings button: branded square matching the close button.
-    local gearBtn = C.NewSettingsButton(frame, nil, L.TAB_OPTIONS or "Options")
+    local gearBtn = C.NewIconButton(frame, "Interface\\Buttons\\UI-OptionsButton", nil, L.TAB_OPTIONS or "Options")
     gearBtn:SetPoint("RIGHT", closeBtn, "LEFT", -2, 0)
     gearBtn:SetScript("OnClick", function()
         if Addon.ToggleGearPopup then Addon:ToggleGearPopup(gearBtn) end
@@ -1893,44 +1893,9 @@ function Addon:CreateFrame()
             return frame._lariasHeaderPicker
         end
 
-        local picker = Addon:NewThemedFrame(nil, UIParent)
-        -- Override bg alpha to fully opaque for the week-picker dropdown.
-        if picker.SetBackdropColor then
-            picker:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, 1.0)
-        end
-
-        -- HIGH strata keeps picker above the main frame (MEDIUM) while allowing
-        -- other addons at DIALOG/TOOLTIP strata to correctly appear in front.
-        -- TOOLTIP was too aggressive and caused the picker to float above unrelated windows.
-        picker:SetFrameStrata("HIGH")
-        picker:SetClampedToScreen(true)
-        picker:SetSize(200, 40)
-        picker:Hide()
-        if picker.SetToplevel then picker:SetToplevel(true) end
-        if picker.SetFrameLevel then picker:SetFrameLevel(200) end
-
+        local picker = Addon.Controls.NewPopupPanel("HIGH", 0.15)
         picker._buttons    = {}
         picker._buttonPool = {}
-
-        -- Fullscreen invisible button sitting just below the picker in z-order.
-        -- Catches any click outside the picker and closes it, matching the
-        -- standard WoW dropdown close-on-outside-click pattern.
-        local catcher = CreateFrame("Button", nil, UIParent)
-        catcher:SetAllPoints(UIParent)
-        catcher:SetFrameStrata("HIGH")
-        catcher:SetFrameLevel(199)  -- directly below picker (200) and its buttons (201)
-        catcher:EnableMouse(true)
-        catcher:Hide()
-        catcher:SetScript("OnMouseDown", function() picker:Hide() end)
-
-        -- Tie catcher lifetime to the picker so nothing else needs to manage it.
-        picker:SetScript("OnShow", function()
-            catcher:Show()
-            if UIFrameFadeIn then UIFrameFadeIn(picker, 0.15, 0, 1)
-            else picker:SetAlpha(1) end
-        end)
-        picker:SetScript("OnHide", function() catcher:Hide() end)
-
         frame._lariasHeaderPicker = picker
         return picker
     end
