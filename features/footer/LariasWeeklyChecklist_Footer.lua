@@ -86,7 +86,7 @@ function Addon:UpdateStatusBanner()
 
     -- Default: attribution credit (right-aligned).
     banner._label:SetJustifyH("RIGHT")
-    banner._label:SetText("Built by Dev \xE2\x80\xA2 Approved by Larias")
+    banner._label:SetText("Built by Dev \226\128\162 Approved by Larias")
     banner._label:SetTextColor(0.45, 0.45, 0.45, 0.8)
 end
 
