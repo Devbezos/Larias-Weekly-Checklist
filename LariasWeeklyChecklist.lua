@@ -1869,12 +1869,11 @@ function Addon:CreateFrame()
 
     local function EnsureIlvlRefBtn_()
         if ilvlRefBtn then return ilvlRefBtn end
-        local C   = Addon.Controls
-        local tip = L.ILVLREF_BUTTON or "View Item Levels"
-        local btn = C.NewIconButton(frame,
-            "Interface\\Buttons\\UI-MicroButton-Character-Up",
-            function() Addon:ToggleIlvlRefWindow() end,
-            tip)
+        local btn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+        btn:SetSize(140, 22)
+        StyleMainTabButton(btn)
+        btn:SetText(L.ILVLREF_BUTTON or "View Item Levels")
+        btn:SetScript("OnClick", function() Addon:ToggleIlvlRefWindow() end)
         ilvlRefBtn              = btn
         frame._lariasIlvlRefBtn = btn
         return btn
@@ -2239,7 +2238,7 @@ function Addon:CreateFrame()
         local _insetX = (Addon.UI.padOuterX or 14) + (Addon.UI.sectionInsetX or 14)
         local _leftW  = _insetX + (showCW and (108 + 6) or 0)
         local _rightW = (Addon.UI.closeInset or 4) + 32 + 2 + 20  -- close + gear
-        if showIR then _rightW = _rightW + 4 + 20 end
+        if showIR then _rightW = _rightW + 4 + 140 end
         local _minW = _leftW + 20 + _rightW  -- 20px breathing room between sides
         -- Never go below the 80/120% design bounds, regardless of button layout.
         local _absMinW = math.floor(Addon.UI.frameW * 0.8)
