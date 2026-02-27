@@ -1764,6 +1764,8 @@ function Addon:CreateFrame()
 
     frame:SetSize(Addon.UI.frameW, Addon.UI.frameH)
     frame:SetClampedToScreen(true)
+    frame:SetFrameStrata("MEDIUM")
+    frame:SetFrameLevel(100)
     -- Position and drag: LibWindow-1.1 saves/restores x/y/point/scale automatically.
     -- RegisterConfig binds a db storage table; MakeDraggable wires OnDragStart/Stop
     -- (which call SavePosition on drop); RestorePosition re-anchors to the saved spot.
@@ -1819,7 +1821,9 @@ function Addon:CreateFrame()
     -- Replace the backdrop fill with a dedicated texture so opacity changes only
     -- affect the background, not child widgets. The backdrop edge/border is kept.
     do
-        local bg = frame:CreateTexture(nil, "BACKGROUND", nil, -8)
+        -- Use BORDER layer (above BACKGROUND) so external UI elements don't bleed
+        -- between the bg texture and the frame content when dragging.
+        local bg = frame:CreateTexture(nil, "BORDER", nil, -8)
         bg:SetAllPoints(frame)
         bg:SetColorTexture(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, 1)
         frame._lariaBgTex = bg
