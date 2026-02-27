@@ -1,3 +1,7 @@
 ﻿scripts/deploy_to_wow.ps1
-Libs/*
-!Libs/LibWindow-1.1
+
+# In Libs, only track .lua files (ignore xml, toc, txt, md, etc.)
+Libs/**
+!Libs/**/
+!Libs/**/*.lua
+!Libs/*.lua

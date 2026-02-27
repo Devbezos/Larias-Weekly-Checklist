@@ -102,7 +102,7 @@ do
 
         self.CONSTANTS.ui = self.CONSTANTS.ui or self.UI or {
             frameW = 520,
-            frameH = 650,
+            frameH = 737,
             padOuterX = 14,
             padOuterTop = 10,
             closeInset = 4,
@@ -123,6 +123,7 @@ do
             trackH = 250,
             trackTopPad = 10,
             sliderH = 20,
+            sliderLabelH = 14,
             sliderBottomPad = 4,
             sliderTopPad = 4,
         }
@@ -225,9 +226,6 @@ function Addon:IsLocalizationCompanionLoaded()
     if type(C_AddOns) == "table" and type(C_AddOns.IsAddOnLoaded) == "function" then
         return C_AddOns.IsAddOnLoaded(LOCALIZATION_ADDON_NAME)
     end
-    if type(IsAddOnLoaded) == "function" then
-        return IsAddOnLoaded(LOCALIZATION_ADDON_NAME)
-    end
     return false
 end
 
@@ -277,6 +275,8 @@ local CHAR_DEFAULTS = {
     showIlvlRefBtn        = true,
     showCharPickerBtn     = true,
     showScaleSlider       = true,
+    showOpacitySlider     = true,
+    hideUpdateNotice      = false,
     debug                 = false,
     startAtSectionId      = "",
 }
@@ -298,6 +298,7 @@ local function SetupAddonDB()
             ilvlRefPos    = false,
             ilvlRefSize   = false,
             uiScalePct    = 100,
+            uiOpacityPct  = 65,
             minimap       = {},  -- LibDBIcon position/hide state (account-wide)
             charClasses   = {},  -- [profileKey] = classToken (e.g. "WARRIOR")
             hiddenChars   = {},  -- [profileKey] = true (hidden from char picker dropdown)
@@ -547,10 +548,13 @@ function Addon:EnsureDB()
     local chars = self.db.global.chars
     if not chars[key] then chars[key] = {} end
     local cdb = chars[key]
-    -- Apply defaults on first access (avoids relying on AceDB metatable defaults
-    -- for nested tables inside global).
-    for k, v in pairs(CHAR_DEFAULTS) do
-        if cdb[k] == nil then cdb[k] = v end
+    -- Apply defaults on first access only; guard with a flag so the pairs loop
+    -- does not run on every EnsureDB() call (it is called per-section on refresh).
+    if not cdb._lariasDefaultsApplied then
+        for k, v in pairs(CHAR_DEFAULTS) do
+            if cdb[k] == nil then cdb[k] = v end
+        end
+        cdb._lariasDefaultsApplied = true
     end
     if cdb.checked           == nil then cdb.checked           = {} end
     if cdb.collapsedSections == nil then cdb.collapsedSections = {} end
@@ -720,7 +724,6 @@ function Addon:SetLocaleOverride(value)
 end
 
 -- Opens the Blizzard Interface Options panel to the addon's category.
--- Right-click on the minimap icon calls this.
 function Addon:OpenOptions()
     if self.CreateBlizzOptionsPanel then
         self:CreateBlizzOptionsPanel()
@@ -728,15 +731,11 @@ function Addon:OpenOptions()
     if self._blizzOptCategory and Settings and Settings.OpenToCategory then
         local catId = self._blizzOptCategory.GetID and self._blizzOptCategory:GetID() or self._blizzOptCategory
         Settings.OpenToCategory(catId)
-    elseif InterfaceOptionsFrame_OpenToCategory and self._blizzOptPanel then
-        InterfaceOptionsFrame_OpenToCategory(self._blizzOptPanel)
-    elseif InterfaceOptionsFrame then
-        InterfaceOptionsFrame:Show()
     end
 end
 
--- Options tab removed; SelectMainTab is kept as a no-op stub for call-site safety.
-function Addon:SelectMainTab(tabId)
+-- Forces the main list panel to re-render; kept for call-site compatibility.
+function Addon:SelectMainTab()
     self:CreateFrame()
     if not frame then return end
     if scrollFrame and scrollFrame.SetShown then
@@ -798,8 +797,9 @@ function Addon:UpdateLocalizedUI()
     end
 
     local changeWeekBtn = frame._lariasChangeWeekBtn
-    if changeWeekBtn and changeWeekBtn.SetText then
-        changeWeekBtn:SetText(L.CHANGE_WEEK_BUTTON or "Change Week")
+    if changeWeekBtn then
+        -- Change week button shows the current week label; re-run layout to refresh it.
+        if self.LayoutHeaderButtons then self:LayoutHeaderButtons() end
     end
 
     local ilvlRefBtn = frame._lariasIlvlRefBtn
@@ -815,12 +815,35 @@ function Addon:UpdateLocalizedUI()
         if trackingFrame._lariasRightTitle and trackingFrame._lariasRightTitle.SetText then
             trackingFrame._lariasRightTitle:SetText(L.TRACKING_CURRENCY_TITLE or "Currency")
         end
+        -- Update the three GV section row headers (Raid / Dungeons / World).
+        local gvKeysByIndex = { "TRACKING_GV_RAID", "TRACKING_GV_DUNGEONS", "TRACKING_GV_WORLD" }
+        local gvFallbacks   = { "Raid", "Dungeons", "World" }
+        local grids = trackingFrame._lariasGvGrids
+        if type(grids) == "table" then
+            for bi = 1, 3 do
+                local grid = grids[bi]
+                if grid and grid.header and grid.header.SetText then
+                    grid.header:SetText(L[gvKeysByIndex[bi]] or gvFallbacks[bi])
+                end
+            end
+        end
+        -- Re-render currency rows (labels are written during the tracking update).
+        if self.RequestTrackingUpdate then self:RequestTrackingUpdate() end
     end
+
+    -- Refresh the status banner text (locale strings may have changed).
+    if self.UpdateStatusBanner then self:UpdateStatusBanner() end
 end
 
 -- Apply the shared theme backdrop to a frame.
+-- Also mixes in BackdropTemplateMixin when the frame lacks SetBackdrop, so
+-- callers don't need a separate Mixin guard before calling this.
 function Addon:ApplyTheme(frameObj)
-    if not frameObj or not frameObj.SetBackdrop then return end
+    if not frameObj then return end
+    if not frameObj.SetBackdrop and BackdropTemplateMixin and Mixin then
+        Mixin(frameObj, BackdropTemplateMixin)
+    end
+    if not frameObj.SetBackdrop then return end
     frameObj:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
         edgeFile = "Interface\\Buttons\\WHITE8x8",
@@ -830,6 +853,19 @@ function Addon:ApplyTheme(frameObj)
     })
     frameObj:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, Addon.THEME.bg.a)
     frameObj:SetBackdropBorderColor(Addon.THEME.border.r, Addon.THEME.border.g, Addon.THEME.border.b, Addon.THEME.border.a)
+end
+
+-- Create a new Frame, apply BackdropTemplate if available, and theme it.
+-- name is optional (nil = anonymous). parent defaults to UIParent.
+function Addon:NewThemedFrame(name, parent)
+    local f
+    if BackdropTemplateMixin then
+        f = CreateFrame("Frame", name, parent or UIParent, "BackdropTemplate")
+    else
+        f = CreateFrame("Frame", name, parent or UIParent)
+    end
+    self:ApplyTheme(f)
+    return f
 end
 
 -- Recompute the scroll frame anchors.
@@ -847,8 +883,14 @@ function Addon:ApplyScrollLayout()
         trackingHeight = tonumber(trackingHeight) or Addon.UI.trackH
         local sf           = self._inFrameScaleSlider
         local sliderShown  = sf and sf.IsShown and sf:IsShown()
-        local sliderH      = sliderShown and (Addon.UI.sliderH         or 0) or 0
-        local sliderBotPad = sliderShown and (Addon.UI.sliderBottomPad or 0) or 0
+        local sliderRowH   = (Addon.UI.sliderH or 0) + (Addon.UI.sliderLabelH or 0) + 2
+        local sliderH      = sliderShown and sliderRowH                     or 0
+        -- Banner row always occupies space (frame is permanently visible).
+        local bannerExtra  = self._statusBanner
+            and ((self._statusBannerH or 14) + (self._statusBannerPad or 3))
+            or 0
+        -- Banner always occupies space; include its height even when sliders are hidden.
+        local sliderBotPad = (sliderShown and (Addon.UI.sliderBottomPad or 0) or 0) + bannerExtra
         local sliderTopPad = sliderShown and (Addon.UI.sliderTopPad    or 0) or 0
         extra = trackingHeight + Addon.UI.trackTopPad
               + sliderH + sliderBotPad + sliderTopPad - Addon.UI.scrollBottom
@@ -961,28 +1003,154 @@ function Addon:ApplyUIScale()
     if sf and sf.Sync then sf.Sync() end
 end
 
+-- ── Status banner ─────────────────────────────────────────────────────────────
+-- A one-line informational bar that lives in the empty space below the
+-- scale/opacity slider row.  Three possible states (highest priority first):
+--   1. Red    – a newer addon version is available (and update notices are on).
+--   2. Amber  – the WoW client locale has no translation in the registry.
+--   3. Gray   – the WoW client locale has a translation (consider contributing).
+-- Hidden when none of the above apply (e.g. enUS client, current version).
+
+local BANNER_H   = 14   -- banner height in frame-local pixels
+local BANNER_PAD = 3    -- space between frame bottom edge and banner bottom
+
+function Addon:CreateStatusBanner(parentFrame)
+    if self._statusBanner then return end
+    local inset = Addon.UI.sectionInsetX or 14
+    local bannerFrame = CreateFrame("Frame", nil, parentFrame)
+    bannerFrame:SetHeight(BANNER_H)
+    bannerFrame:SetPoint("BOTTOMLEFT",  parentFrame, "BOTTOMLEFT",   inset,  BANNER_PAD)
+    bannerFrame:SetPoint("BOTTOMRIGHT", parentFrame, "BOTTOMRIGHT", -inset,  BANNER_PAD)
+    -- Always shown so it permanently reserves its space; text changes instead of show/hide.
+    bannerFrame:Show()
+    local lbl = bannerFrame:CreateFontString(nil, "OVERLAY")
+    lbl:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
+    lbl:SetAllPoints(bannerFrame)
+    lbl:SetJustifyH("CENTER")
+    lbl:SetJustifyV("MIDDLE")
+    lbl:SetWordWrap(false)
+    bannerFrame._label   = lbl
+    self._statusBanner   = bannerFrame
+    self._statusBannerH  = BANNER_H
+    self._statusBannerPad = BANNER_PAD
+end
+
+function Addon:UpdateStatusBanner()
+    local banner = self._statusBanner
+    if not banner then return end
+    local db = self:EnsureDB()
+    local L  = self.L or {}
+
+    -- Priority 1: update available (only if the user hasn't hidden these).
+    if db.hideUpdateNotice ~= true and self.ShouldShowUpdateNotice and self:ShouldShowUpdateNotice() then
+        local myVer  = (self.GetMyVersion and self:GetMyVersion()) or ""
+        local newVer = tostring(db._newestSeenRemoteVersion or "")
+        local fmt    = L.STATUS_UPDATE_AVAILABLE_FMT or "Update available! You have %s, newest is %s."
+        banner._label:SetText(string.format(fmt, myVer, newVer))
+        banner._label:SetTextColor(1, 0.2, 0.2, 1)
+        return
+    end
+
+    -- Priority 2/3: locale status notice for non-English clients.
+    -- On pre-release builds (version contains "-") also honour the /larias locale
+    -- slash-command override so locale banners can be tested without changing the
+    -- WoW client language.
+    local myVer2     = (self.GetMyVersion and self:GetMyVersion()) or ""
+    local isDevBuild = myVer2:find("%-") ~= nil
+    local wowLocale
+    if isDevBuild and self.GetEffectiveLocaleCode then
+        wowLocale = self:GetEffectiveLocaleCode()
+    else
+        wowLocale = (GetLocale and GetLocale()) or "enUS"
+    end
+    if wowLocale ~= "enUS" then
+        local reg = _G[LOCALE_REGISTRY_KEY]
+        local hasLocale = reg
+            and type(reg.strings) == "table"
+            and type(reg.strings[wowLocale]) == "table"
+        if not hasLocale then
+            -- No translation at all for this locale.
+            local fmt = L.STATUS_NO_TRANSLATION_FMT or "No translation available for %s. Consider contributing!"
+            banner._label:SetText(string.format(fmt, wowLocale))
+            banner._label:SetTextColor(0.9, 0.7, 0.3, 1)
+        else
+            -- Translation exists; mention contribution anyway (dim, non-intrusive).
+            local txt = L.STATUS_TRANSLATION_NOTICE or "This is a translation of the English guide. Notice any issues? Consider contributing!"
+            banner._label:SetText(txt)
+            banner._label:SetTextColor(0.65, 0.65, 0.65, 0.8)
+        end
+        return
+    end
+
+    -- Default: attribution credit.
+    banner._label:SetText("Created by Devbezos, based on data provided by Larias")
+    banner._label:SetTextColor(0.45, 0.45, 0.45, 0.8)
+end
+
 function Addon:ApplyScaleSliderVisibility()
     local sf = self._inFrameScaleSlider
     if not sf then return end
-    local db   = self:EnsureDB()
-    local show = db.showScaleSlider ~= false
-    sf:SetShown(show)
-    -- Re-anchor the tracking panel bottom so it fills the freed space when
-    -- the slider is hidden, and retreats above the slider when visible.
+    local db           = self:EnsureDB()
+    local scaleShown   = db.showScaleSlider   ~= false
+    local opacityShown = db.showOpacitySlider ~= false
+    local anySlider    = scaleShown or opacityShown
+
+    -- Show / hide individual slider panes then reflow the shared container.
+    if sf._scalePane   then sf._scalePane:SetShown(scaleShown)     end
+    if sf._opacityPane then sf._opacityPane:SetShown(opacityShown) end
+    if sf._layout      then sf._layout() end
+    sf:SetShown(anySlider)
+
+    -- The banner row always occupies space (it is always shown, text just changes).
+    local bannerExtra = self._statusBanner
+        and ((self._statusBannerH or BANNER_H) + (self._statusBannerPad or BANNER_PAD))
+        or 0
+    sf._bannerBotExtra = bannerExtra
+
+    -- Re-adjust slider right boundary so it doesn't overlap the Swap Profile button.
+    if sf.AdjustForCpBtn then
+        local cpBtn = Addon._cpEnsureBtn and Addon._cpEnsureBtn()
+        sf.AdjustForCpBtn(cpBtn)
+    end
+
+    -- Determine whether the char-picker button is also in the bottom row.
+    local featureOn = (self.FEATURE_FLAGS and self.FEATURE_FLAGS.ENABLE_CHAR_SELECTOR) ~= false
+    local hasChars  = featureOn and (self.HasPickableChars and self:HasPickableChars())
+    local cpVisible = featureOn and hasChars and (db.showCharPickerBtn ~= false)
+
+    -- Re-anchor the tracking panel so it clears the entire bottom row.
     local tf = self._trackingFrame
     if tf then
-        local inset = Addon.UI.sectionInsetX or 14
-        local botY  = show
-            and ((Addon.UI.sliderBottomPad or 4) + (Addon.UI.sliderH or 20) + (Addon.UI.sliderTopPad or 4))
-            or  (Addon.UI.sliderBottomPad or 4)
+        local inset        = Addon.UI.sectionInsetX  or 14
+        local botPad       = (Addon.UI.sliderBottomPad or 4) + bannerExtra
+        local topPad       = Addon.UI.sliderTopPad    or 4
+        local sliderTot    = (Addon.UI.sliderH or 20) + (Addon.UI.sliderLabelH or 14) + 2
+        local botY
+        if anySlider then
+            botY = botPad + sliderTot + topPad  -- label row + track row
+        elseif cpVisible then
+            botY = botPad + 22 + topPad         -- only the char-picker button (22px)
+        else
+            botY = botPad                        -- nothing in the bottom row
+        end
         tf:ClearAllPoints()
         tf:SetPoint("BOTTOMLEFT",  tf:GetParent(), "BOTTOMLEFT",  inset,  botY)
         tf:SetPoint("BOTTOMRIGHT", tf:GetParent(), "BOTTOMRIGHT", -inset, botY)
-        -- Do NOT force SetHeight here — ResizeTrackingPanelToContent already sized
-        -- the frame to fit its content.  Resetting to trackH would create empty
-        -- space at the bottom whenever the content is shorter than the default.
+        -- Do NOT force SetHeight — ResizeTrackingPanelToContent owns the height.
     end
     if self.ApplyScrollLayout then self:ApplyScrollLayout() end
+end
+
+function Addon:ApplyOpacity()
+    local pct   = (self.db and self.db.global and tonumber(self.db.global.uiOpacityPct)) or 65
+    local alpha = math.max(0, math.min(1.0, pct / 100))
+    -- Drive only the dedicated background texture; child widgets are unaffected.
+    if frame and frame._lariaBgTex then
+        frame._lariaBgTex:SetAlpha(alpha)
+    end
+    -- Keep the opacity slider thumb in sync.
+    local sf = self._inFrameScaleSlider
+    if sf and sf.SyncOpacity then sf.SyncOpacity() end
 end
 
 local function Key(sectionId, itemId)
@@ -1020,8 +1188,10 @@ local function IsSectionCompleteById(sectionId, db)
     db = db or Addon:EnsureDB()
     local checked = db.checked
     local items = section.items or {}
+    -- Pre-build the constant prefix once instead of Key(sectionId, id) per item.
+    local prefix = tostring(sectionId) .. ":"
     for i = 1, #items do
-        if not checked[Key(sectionId, items[i].id)] then
+        if not checked[prefix .. tostring(items[i].id)] then
             return false
         end
     end
@@ -1050,19 +1220,11 @@ local function AcquireSectionFrame()
     sectionFrame._header = header
 
     local title = header:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    title:SetPoint("LEFT", header, "LEFT", 6, 0)  -- 6px left indent: 3px accent bar + 3px gap
+    title:SetPoint("LEFT", header, "LEFT", 3, 0)
     title:SetTextColor(Addon.THEME.header.r, Addon.THEME.header.g, Addon.THEME.header.b, Addon.THEME.header.a)
     title:SetJustifyH("LEFT")
     if title.SetWordWrap then title:SetWordWrap(true) end
     sectionFrame._title = title
-
-    -- Colored left-edge accent bar that spans the full header height.
-    local accentBar = header:CreateTexture(nil, "BORDER")
-    accentBar:SetWidth(3)
-    accentBar:SetPoint("TOPLEFT",    header, "TOPLEFT",    0, 0)
-    accentBar:SetPoint("BOTTOMLEFT", header, "BOTTOMLEFT", 0, 0)
-    accentBar:SetColorTexture(Addon.THEME.header.r, Addon.THEME.header.g, Addon.THEME.header.b, 0.80)
-    sectionFrame._accentBar = accentBar
 
     return sectionFrame
 end
@@ -1094,25 +1256,13 @@ local function ReleaseSectionFrame(sectionFrame)
 end
 
 local function AcquireCheckbox(parentSectionFrame)
-    -- Acquire (or create) a checkbox row for an item.
+    -- Acquire (or create) a fully addon-themed checkbox row for an item.
     local checkbox = tremove(Addon._checkboxPool)
     if checkbox then
         checkbox:SetParent(parentSectionFrame)
         checkbox:Show()
     else
-        checkbox = CreateFrame("CheckButton", nil, parentSectionFrame, "UICheckButtonTemplate")
-        local boxSize = 32
-        local function PinTexture(tex)
-            if not tex then return end
-            tex:ClearAllPoints()
-            tex:SetSize(boxSize, boxSize)
-            tex:SetPoint("LEFT", checkbox, "LEFT", 0, 0)
-        end
-        PinTexture(checkbox.GetNormalTexture and checkbox:GetNormalTexture())
-        PinTexture(checkbox.GetPushedTexture and checkbox:GetPushedTexture())
-        PinTexture(checkbox.GetHighlightTexture and checkbox:GetHighlightTexture())
-        PinTexture(checkbox.GetCheckedTexture and checkbox:GetCheckedTexture())
-        PinTexture(checkbox.GetDisabledTexture and checkbox:GetDisabledTexture())
+        checkbox = Addon.Controls.NewCheckBox(parentSectionFrame, nil, 32)
     end
 
     local textLabel = checkbox.text or checkbox.Text
@@ -1170,17 +1320,20 @@ local function LayoutFrom(startIndex)
     -- Re-anchor sections starting at startIndex to avoid O(n) layout on every click.
     local posY = -Addon.UI.sectionTopPad
     local paddingX = Addon.UI.sectionInsetX
+    -- Hoist sectionGap: avoids two table lookups (Addon → UI → sectionGap) per visible section.
+    local sectionGap = Addon.UI.sectionGap
+    local activeSections = Addon._activeSections
 
-    for i = 1, #Addon._activeSections do
-        local sectionFrame = Addon._activeSections[i]
+    for i = 1, #activeSections do
+        local sectionFrame = activeSections[i]
         if sectionFrame:IsShown() then
             if i < startIndex then
-                posY = posY - sectionFrame:GetHeight() - Addon.UI.sectionGap
+                posY = posY - sectionFrame:GetHeight() - sectionGap
             else
                 sectionFrame:ClearAllPoints()
                 sectionFrame:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", paddingX, posY)
                 sectionFrame:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", -paddingX, posY)
-                posY = posY - sectionFrame:GetHeight() - Addon.UI.sectionGap
+                posY = posY - sectionFrame:GetHeight() - sectionGap
             end
         end
     end
@@ -1329,13 +1482,18 @@ local function RefreshItemTextColor(checkbox)
     if checkbox:GetChecked() then
         lbl:SetTextColor(0.45, 0.45, 0.45, 0.85)
     else
-        local t = (Addon.THEME and Addon.THEME.text) or { r = 1, g = 1, b = 1, a = 1 }
-        lbl:SetTextColor(t.r, t.g, t.b, t.a or 1)
+        -- THEME is always populated before any checkbox exists; avoid the
+        -- guarded lookup and the potential table allocation on every call.
+        local t = Addon.THEME.text
+        lbl:SetTextColor(t.r, t.g, t.b, t.a)
     end
 end
 
 local function OnCheckboxClick(selfBtn)
     -- Item click handler: update saved state, collapse/hide completed sections, relayout.
+    -- Custom Button (not CheckButton) doesn't auto-toggle; flip state manually first so
+    -- GetChecked() returns the new value for the rest of this handler.
+    selfBtn:SetChecked(not selfBtn:GetChecked())
     local database = Addon:EnsureDB()
     local checked = selfBtn:GetChecked() and true or nil
     database.checked[selfBtn._dbKey or Key(selfBtn._sectionId, selfBtn._itemId)] = checked
@@ -1441,30 +1599,38 @@ local function SyncCheckboxesForSection(sectionFrame, sectionId, db)
         end
     end
 
+    -- Hoist loop-invariant UI constants so they are not re-looked-up per item.
+    local itemTextWidth  = Addon.UI.itemTextWidth
+    local itemTextPad    = Addon.UI.itemTextPad or 0
+    local minRowHeight   = max(32, Addon.UI.itemMinH or 0)
+    local checkedMap     = db.checked
+
     for i = 1, want do
         local item = items[i]
         local checkbox = sectionFrame._checkboxes[i]
 
         checkbox._sectionId = sectionId
         checkbox._itemId = item.id
-        checkbox._dbKey = Key(sectionId, item.id)
+        -- Compute once; reuse below instead of calling IsItemChecked (which
+        -- would call Key() a second time for the same sectionId/itemId pair).
+        local dbKey = Key(sectionId, item.id)
+        checkbox._dbKey = dbKey
 
         local textLabel = checkbox.text or checkbox.Text
-        local minRowHeight = max(32, Addon.UI.itemMinH or 0)
         if textLabel then
-            textLabel:SetWidth(Addon.UI.itemTextWidth)
+            textLabel:SetWidth(itemTextWidth)
             textLabel:SetText(tostring(item.text or item.id))
 
             local textHeight = 0
             if textLabel.GetStringHeight then
                 textHeight = textLabel:GetStringHeight() or 0
             end
-            checkbox:SetHeight(max(minRowHeight, textHeight + (Addon.UI.itemTextPad or 0)))
+            checkbox:SetHeight(max(minRowHeight, textHeight + itemTextPad))
         else
             checkbox:SetHeight(minRowHeight)
         end
 
-        checkbox:SetChecked(IsItemChecked(sectionId, item.id, db))
+        checkbox:SetChecked(checkedMap[dbKey] and true or false)
         RefreshItemTextColor(checkbox)
 
         checkbox:SetScript("OnClick", OnCheckboxClick)
@@ -1504,10 +1670,12 @@ UpdateSectionVisuals = function(sectionFrame, sectionId)
     local collapsed = IsSectionCollapsed(sectionId, database) or false
     if complete then collapsed = true end
 
+    local checkedMap = database.checked
     for i = 1, #sectionFrame._checkboxes do
         local checkbox = sectionFrame._checkboxes[i]
-        if checkbox and checkbox._itemId ~= nil then
-            checkbox:SetChecked(IsItemChecked(sectionId, checkbox._itemId, database))
+        -- Use the pre-built _dbKey instead of re-calling Key() inside IsItemChecked.
+        if checkbox and checkbox._dbKey ~= nil then
+            checkbox:SetChecked(checkedMap[checkbox._dbKey] and true or false)
             RefreshItemTextColor(checkbox)
         end
     end
@@ -1666,6 +1834,9 @@ function Addon:Refresh()
 
     SyncAllDataAndFrames()
 
+    -- Size the change-week button to fit the widest week label in the dataset.
+    if self._calcChangeWeekBtnWidth then self._calcChangeWeekBtnWidth() end
+
     -- Re-run after SyncAllDataAndFrames so _sectionsById is fully populated and
     -- the change-week button shows the real current week from the very first load.
     if self.LayoutHeaderButtons then self:LayoutHeaderButtons() end
@@ -1694,6 +1865,14 @@ function Addon:Refresh()
     if self.UpdateTracking then
         self:UpdateTracking()
     end
+
+    -- Sync the change-week button label to whatever section is at the top of
+    -- the viewport after the list has been (re)built and laid out.
+    if self._refreshChangeWeekLabel and C_Timer and C_Timer.After then
+        C_Timer.After(0, self._refreshChangeWeekLabel)
+    elseif self._refreshChangeWeekLabel then
+        self._refreshChangeWeekLabel()
+    end
 end
 
 function Addon:CreateFrame()
@@ -1702,12 +1881,11 @@ function Addon:CreateFrame()
 
     frame = CreateFrame("Frame", "LariasWeeklyChecklistFrame", UIParent)
     self._mainFrame = frame
-    if not frame.SetBackdrop and BackdropTemplateMixin and Mixin then
-        Mixin(frame, BackdropTemplateMixin)
-    end
 
     frame:SetSize(Addon.UI.frameW, Addon.UI.frameH)
     frame:SetClampedToScreen(true)
+    frame:SetFrameStrata("MEDIUM")
+    frame:SetFrameLevel(100)
     -- Position and drag: LibWindow-1.1 saves/restores x/y/point/scale automatically.
     -- RegisterConfig binds a db storage table; MakeDraggable wires OnDragStart/Stop
     -- (which call SavePosition on drop); RestorePosition re-anchors to the saved spot.
@@ -1722,6 +1900,7 @@ function Addon:CreateFrame()
     -- Toggle(), ESC, or any other dismiss path). The picker is parented to
     -- UIParent so it won't hide automatically when the main frame does.
     frame:SetScript("OnHide", function()
+        -- Close all floating panels attached to the addon.
         local picker = frame._lariasHeaderPicker
         if picker and picker.IsShown and picker:IsShown() then
             picker:Hide()
@@ -1729,6 +1908,13 @@ function Addon:CreateFrame()
         if Addon._ilvlRefWindow and Addon._ilvlRefWindow.IsShown and Addon._ilvlRefWindow:IsShown() then
             Addon._ilvlRefWindow:Hide()
         end
+        if Addon._gearPopup and Addon._gearPopup.IsShown and Addon._gearPopup:IsShown() then
+            Addon._gearPopup:Hide()
+        end
+        if Addon._hiddenCharsPicker and Addon._hiddenCharsPicker.IsShown and Addon._hiddenCharsPicker:IsShown() then
+            Addon._hiddenCharsPicker:Hide()
+        end
+        if Addon._cpClose then Addon._cpClose() end
     end)
     -- Record this character's class the first time the list is opened so the
     -- character picker can colour-code entries. Intentionally deferred from
@@ -1755,76 +1941,35 @@ function Addon:CreateFrame()
 
     frame:Hide()
 
-    -- Handle ESC via keyboard input. When the ilvl ref window is open it consumes
-    -- ESC itself (SetPropagateKeyboardInput(false)), so only this frame sees ESC
-    -- when ilvl ref is already closed.
-    frame:EnableKeyboard(true)
-    frame:SetScript("OnKeyDown", function(self, key)
-        if key == "ESCAPE" then
-            self:SetPropagateKeyboardInput(false)
-            self:Hide()
-        else
-            self:SetPropagateKeyboardInput(true)
-        end
-    end)
+    -- Register with UISpecialFrames so ESC closes this frame without needing
+    -- the protected SetPropagateKeyboardInput (which triggers ADDON_ACTION_BLOCKED).
+    tinsert(UISpecialFrames, "LariasWeeklyChecklistFrame")
 
     self:ApplyTheme(frame)
-
-    -- Close button: FontString "✕" tinted gold to match the theme.
-    local closeBtn = CreateFrame("Button", nil, frame)
-    closeBtn:SetSize(20, 20)
+    -- Replace the backdrop fill with a dedicated texture so opacity changes only
+    -- affect the background, not child widgets. The backdrop edge/border is kept.
+    do
+        -- Use BORDER layer (above BACKGROUND) so external UI elements don't bleed
+        -- between the bg texture and the frame content when dragging.
+        local bg = frame:CreateTexture(nil, "BORDER", nil, -8)
+        bg:SetAllPoints(frame)
+        bg:SetColorTexture(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, 1)
+        frame._lariaBgTex = bg
+        -- Suppress the backdrop bgFile fill; use our texture instead.
+        if frame.SetBackdropColor then
+            frame:SetBackdropColor(0, 0, 0, 0)
+        end
+    end
+    local C = Addon.Controls
+    local closeBtn = C.NewCloseButton(frame, function() frame:Hide() end)
     closeBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -Addon.UI.closeInset, -Addon.UI.closeInset)
-    do
-        local th = Addon.THEME
-        local norm = closeBtn:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-        norm:SetAllPoints(closeBtn)
-        norm:SetJustifyH("CENTER")
-        norm:SetJustifyV("MIDDLE")
-        norm:SetTextColor(th.header.r, th.header.g, th.header.b, 0.85)
-        norm:SetText("X")
-        closeBtn:SetFontString(norm)
-        local hl = closeBtn:CreateTexture(nil, "HIGHLIGHT")
-        hl:SetAllPoints(closeBtn)
-        hl:SetColorTexture(1, 1, 1, 0.10)
-        closeBtn:SetHighlightTexture(hl)
-        local pushed = closeBtn:CreateTexture(nil, "OVERLAY")
-        pushed:SetAllPoints(closeBtn)
-        pushed:SetColorTexture(th.header.r, th.header.g, th.header.b, 0.15)
-        closeBtn:SetPushedTexture(pushed)
-    end
-    closeBtn:SetScript("OnClick", function() frame:Hide() end)
 
-    -- Gear / settings button: white at rest, gold on hover.
-    local gearBtn = CreateFrame("Button", nil, frame)
-    gearBtn:SetSize(20, 20)
+    -- Gear / settings button: branded square matching the close button.
+    local gearBtn = C.NewIconButton(frame, "Interface\\Buttons\\UI-OptionsButton", nil, L.TAB_OPTIONS or "Options")
     gearBtn:SetPoint("RIGHT", closeBtn, "LEFT", -2, 0)
-    do
-        local th = Addon.THEME
-        local norm = gearBtn:CreateTexture(nil, "BORDER")
-        norm:SetTexture("Interface\\Buttons\\UI-OptionsButton")
-        norm:SetAllPoints(gearBtn)
-        norm:SetVertexColor(th.text.r, th.text.g, th.text.b, 0.65)
-        gearBtn:SetNormalTexture(norm)
-        local pushed = gearBtn:CreateTexture(nil, "OVERLAY")
-        pushed:SetTexture("Interface\\Buttons\\UI-OptionsButton")
-        pushed:SetAllPoints(gearBtn)
-        pushed:SetVertexColor(th.header.r * 0.75, th.header.g * 0.75, th.header.b * 0.75, 1)
-        gearBtn:SetPushedTexture(pushed)
-        local hl = gearBtn:CreateTexture(nil, "HIGHLIGHT")
-        hl:SetTexture("Interface\\Buttons\\UI-OptionsButton")
-        hl:SetAllPoints(gearBtn)
-        hl:SetVertexColor(th.header.r, th.header.g, th.header.b, 1)
-        gearBtn:SetHighlightTexture(hl)
-    end
     gearBtn:SetScript("OnClick", function()
-        if Addon.ToggleGearPopup then Addon:ToggleGearPopup(gearBtn) end
+        if Addon.ToggleGearPopup then Addon:ToggleGearPopup(gearBtn, true) end
     end)
-    gearBtn:SetScript("OnEnter", function(self_)
-        GameTooltip:SetOwner(self_, "ANCHOR_BOTTOMLEFT")
-        GameTooltip:SetText(L.TAB_OPTIONS or "Options", 1, 1, 1, 1, true)
-        GameTooltip:Show()
-    end)
-    gearBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
     frame._lariasGearBtn = gearBtn
 
     local frameName = frame.GetName and frame:GetName() or nil
@@ -1834,19 +1979,9 @@ function Addon:CreateFrame()
         -- Some client builds error if SetNormalTexture(nil) is used, so we hide textures instead.
         if not tabButton then return end
 
-        if not tabButton.SetBackdrop and BackdropTemplateMixin and Mixin then
-            Mixin(tabButton, BackdropTemplateMixin)
-        end
-
-        if tabButton.SetBackdrop then
-            tabButton:SetBackdrop({
-                bgFile = "Interface\\Buttons\\WHITE8x8",
-                edgeFile = "Interface\\Buttons\\WHITE8x8",
-                tile = false,
-                edgeSize = 1,
-                insets = { left = 3, right = 3, top = 3, bottom = 3 },
-            })
-            tabButton:SetBackdropBorderColor(Addon.THEME.border.r, Addon.THEME.border.g, Addon.THEME.border.b, Addon.THEME.border.a)
+        Addon:ApplyTheme(tabButton)
+        -- Tab buttons use a slightly lower bg alpha so section text shows through.
+        if tabButton.SetBackdropColor then
             tabButton:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, max(0, (tonumber(Addon.THEME.bg.a) or 1) - 0.28))
         end
 
@@ -1912,6 +2047,18 @@ function Addon:CreateFrame()
         local btn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
         btn:SetSize(108, 22)
         StyleMainTabButton(btn)
+        -- Center-justify so shorter week labels sit in the middle of the fixed-width button.
+        local _fs = btn.GetFontString and btn:GetFontString()
+        if _fs and _fs.SetJustifyH then _fs:SetJustifyH("CENTER") end
+        -- Reserve space on the right for the pinned arrow icon (14px icon + 4px gap + 4px margin).
+        if btn.SetTextInsets then btn:SetTextInsets(12, 22, 4, 4) end
+        -- Arrow texture pinned to the right edge, always visible regardless of label length.
+        local arrowTex = btn:CreateTexture(nil, "ARTWORK")
+        arrowTex:SetTexture("Interface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up")
+        arrowTex:SetSize(14, 14)
+        arrowTex:SetPoint("RIGHT", btn, "RIGHT", -5, 0)
+        arrowTex:SetVertexColor(1, 1, 1, 0.85)
+        btn._lariasArrowTex        = arrowTex
         changeWeekBtn              = btn
         frame._lariasChangeWeekBtn = btn
         return btn
@@ -1923,10 +2070,8 @@ function Addon:CreateFrame()
         btn:SetSize(140, 22)
         StyleMainTabButton(btn)
         btn:SetText(L.ILVLREF_BUTTON or "View Item Levels")
-        btn:SetScript("OnClick", function()
-            Addon:ToggleIlvlRefWindow()
-        end)
-        ilvlRefBtn             = btn
+        btn:SetScript("OnClick", function() Addon:ToggleIlvlRefWindow() end)
+        ilvlRefBtn              = btn
         frame._lariasIlvlRefBtn = btn
         return btn
     end
@@ -1944,53 +2089,9 @@ function Addon:CreateFrame()
             return frame._lariasHeaderPicker
         end
 
-        local picker
-        if BackdropTemplateMixin then
-            picker = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
-        else
-            picker = CreateFrame("Frame", nil, UIParent)
-        end
-        if not picker.SetBackdrop and BackdropTemplateMixin and Mixin then
-            Mixin(picker, BackdropTemplateMixin)
-        end
-
-        -- HIGH strata keeps picker above the main frame (MEDIUM) while allowing
-        -- other addons at DIALOG/TOOLTIP strata to correctly appear in front.
-        -- TOOLTIP was too aggressive and caused the picker to float above unrelated windows.
-        picker:SetFrameStrata("HIGH")
-        picker:SetClampedToScreen(true)
-        picker:SetSize(200, 40)
-        picker:Hide()
-        if picker.SetToplevel then picker:SetToplevel(true) end
-        if picker.SetFrameLevel then picker:SetFrameLevel(200) end
-
-        Addon:ApplyTheme(picker)
-        if picker.SetBackdropColor then
-            picker:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, 1.0)
-        end
-
+        local picker = Addon.Controls.NewPopupPanel("HIGH", 0.15)
         picker._buttons    = {}
         picker._buttonPool = {}
-
-        -- Fullscreen invisible button sitting just below the picker in z-order.
-        -- Catches any click outside the picker and closes it, matching the
-        -- standard WoW dropdown close-on-outside-click pattern.
-        local catcher = CreateFrame("Button", nil, UIParent)
-        catcher:SetAllPoints(UIParent)
-        catcher:SetFrameStrata("HIGH")
-        catcher:SetFrameLevel(199)  -- directly below picker (200) and its buttons (201)
-        catcher:EnableMouse(true)
-        catcher:Hide()
-        catcher:SetScript("OnMouseDown", function() picker:Hide() end)
-
-        -- Tie catcher lifetime to the picker so nothing else needs to manage it.
-        picker:SetScript("OnShow", function()
-            catcher:Show()
-            if UIFrameFadeIn then UIFrameFadeIn(picker, 0.15, 0, 1)
-            else picker:SetAlpha(1) end
-        end)
-        picker:SetScript("OnHide", function() catcher:Hide() end)
-
         frame._lariasHeaderPicker = picker
         return picker
     end
@@ -2247,12 +2348,25 @@ function Addon:CreateFrame()
                     if Addon._cpOnClick then Addon._cpOnClick() end
                 end)
                 cpBtn:ClearAllPoints()
-                -- Sit at the bottom-right of the frame, vertically aligned with the
-                -- scale slider on the opposite (left) side.
+                -- Sit at the bottom-right of the frame, above the status banner,
+                -- vertically aligned with the scale slider on the opposite (left) side.
+                local _cpBannerExtra = Addon._statusBanner
+                    and ((Addon._statusBannerH or BANNER_H) + (Addon._statusBannerPad or BANNER_PAD))
+                    or 0
                 cpBtn:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT",
-                    -(Addon.UI.sectionInsetX or 14), Addon.UI.sliderBottomPad or 4)
+                    -(Addon.UI.sectionInsetX or 14), (Addon.UI.sliderBottomPad or 4) + _cpBannerExtra)
                 if Addon._cpUpdateLabel then Addon._cpUpdateLabel() end
                 cpBtn:Show()
+                -- Shrink the slider container's right edge to stop before the button.
+                local sf = Addon._inFrameScaleSlider
+                if sf and sf.AdjustForCpBtn then
+                    -- Defer one frame so cpBtn:GetWidth() returns its actual post-layout size.
+                    if C_Timer and C_Timer.After then
+                        C_Timer.After(0, function() sf.AdjustForCpBtn(cpBtn) end)
+                    else
+                        sf.AdjustForCpBtn(cpBtn)
+                    end
+                end
             else
                 -- Return to own character before hiding the picker.
                 -- Inline reset instead of SetViewingChar() to avoid re-entering
@@ -2263,36 +2377,57 @@ function Addon:CreateFrame()
                     if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
                 end
                 cpBtn:Hide()
-            end
-        end
+                -- Restore slider to full width (defer one frame to match the show-path
+                -- timer, so this always fires last and wins over any stale show timer).
+                local sf = Addon._inFrameScaleSlider
+                if sf and sf.AdjustForCpBtn then
+                    if C_Timer and C_Timer.After then
+                        C_Timer.After(0, function() sf.AdjustForCpBtn(nil) end)
+                    else
+                        sf.AdjustForCpBtn(nil)
+                    end
+                end
+            end  -- else (not showCP)
+        end  -- if cpBtn
 
-        -- changeWeekBtn sits below cpBtn when both are visible, otherwise in the top row.
         if showCW then
             local btn = EnsureChangeWeekBtn_()
-            local cwLabel = L.CHANGE_WEEK_BUTTON or "Change Week"
-            btn:SetText(cwLabel .. " |TInterface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up:10:10|t")
-            -- Auto-size button width to fit the label text.
-            -- Deferred one frame so WoW has performed its layout pass
-            -- and GetStringWidth returns real pixel widths.
-            if C_Timer and C_Timer.After then
-                C_Timer.After(0, function()
-                    if not (btn and btn.IsShown and btn:IsShown()) then return end
-                    local fs = btn.GetFontString and btn:GetFontString()
-                    local w  = 0
-                    if fs then
-                        if fs.GetUnboundedStringWidth then
-                            w = tonumber(fs:GetUnboundedStringWidth()) or 0
-                        end
-                        if w <= 0 and fs.GetStringWidth then
-                            w = tonumber(fs:GetStringWidth()) or 0
+            -- Show the current week's short label (e.g. "Mar 17") so the button
+            -- acts as a status indicator. The action name goes in the tooltip.
+            local cwWeekLabel
+            do
+                local db0 = Addon:EnsureDB()
+                local storedStart = tostring(db0.startAtSectionId or "")
+                local currentId
+                if storedStart ~= "" then
+                    currentId = storedStart
+                else
+                    local order = Addon._order or {}
+                    for i = 1, #order do
+                        if not IsSectionCompleteById(order[i], db0) then
+                            currentId = tostring(order[i])
+                            break
                         end
                     end
-                    if w <= 0 and btn.GetTextWidth then
-                        w = tonumber(btn:GetTextWidth()) or 0
+                    if not currentId and Addon._order and Addon._order[1] then
+                        currentId = tostring(Addon._order[1])
                     end
-                    btn:SetWidth(max(108, math.ceil(w) + 24))
-                end)
+                end
+                local section  = currentId and Addon._sectionsById and Addon._sectionsById[currentId]
+                local extracted = ExtractMonthRangeLabel((section and section.title) or currentId or "")
+                cwWeekLabel = (extracted ~= "") and extracted or (L.CHANGE_WEEK_BUTTON or "Change Week")
             end
+            btn._lariasSelectedLabel = cwWeekLabel
+            btn:SetText(cwWeekLabel)
+            local cwTip = L.CHANGE_WEEK_BUTTON or "Change Week"
+            btn:SetScript("OnEnter", function(self_)
+                GameTooltip:SetOwner(self_, "ANCHOR_BOTTOMLEFT")
+                GameTooltip:SetText(cwTip, 1, 1, 1, 1, true)
+                GameTooltip:Show()
+            end)
+            btn:SetScript("OnLeave", function()
+                GameTooltip:Hide()
+            end)
             btn:SetScript("OnClick", function()
                 local p = EnsureHeaderPicker()
                 if p and p.IsShown and p:IsShown() then
@@ -2321,27 +2456,8 @@ function Addon:CreateFrame()
         if showIR then
             local btn = EnsureIlvlRefBtn_()
             btn:ClearAllPoints()
-            btn:SetPoint("TOPRIGHT", gearBtn, "TOPLEFT", -6, -2)
+            btn:SetPoint("TOPRIGHT", gearBtn, "TOPLEFT", -4, 0)
             btn:Show()
-            if C_Timer and C_Timer.After then
-                C_Timer.After(0, function()
-                    if not (btn and btn.IsShown and btn:IsShown()) then return end
-                    local fs = btn.GetFontString and btn:GetFontString()
-                    local w  = 0
-                    if fs then
-                        if fs.GetUnboundedStringWidth then
-                            w = tonumber(fs:GetUnboundedStringWidth()) or 0
-                        end
-                        if w <= 0 and fs.GetStringWidth then
-                            w = tonumber(fs:GetStringWidth()) or 0
-                        end
-                    end
-                    if w <= 0 and btn.GetTextWidth then
-                        w = tonumber(btn:GetTextWidth()) or 0
-                    end
-                    btn:SetWidth(max(108, math.ceil(w) + 24))
-                end)
-            end
         elseif ilvlRefBtn then
             ilvlRefBtn:Hide()
             if Addon._ilvlRefWindow and Addon._ilvlRefWindow.IsShown and Addon._ilvlRefWindow:IsShown() then
@@ -2353,7 +2469,7 @@ function Addon:CreateFrame()
         local _insetX = (Addon.UI.padOuterX or 14) + (Addon.UI.sectionInsetX or 14)
         local _leftW  = _insetX + (showCW and (108 + 6) or 0)
         local _rightW = (Addon.UI.closeInset or 4) + 32 + 2 + 20  -- close + gear
-        if showIR then _rightW = _rightW + 6 + 140 end
+        if showIR then _rightW = _rightW + 4 + 140 end
         local _minW = _leftW + 20 + _rightW  -- 20px breathing room between sides
         -- Never go below the 80/120% design bounds, regardless of button layout.
         local _absMinW = math.floor(Addon.UI.frameW * 0.8)
@@ -2380,20 +2496,155 @@ function Addon:CreateFrame()
     scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", Addon.UI.padOuterX, -Addon.UI.scrollTop)
 
     do
-        local pig = scrollFrame:CreateTexture(nil, "ARTWORK")
-        pig:SetPoint("CENTER", scrollFrame, "CENTER", 0, 0)
-        pig:SetTexture("Interface\\Icons\\INV_Pig")
-        if pig.SetTexCoord then
-            pig:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        -- Easter egg: "touch grass" trio — hand + plus + grass icons.
+        local egg = CreateFrame("Frame", nil, scrollFrame)
+        egg:SetPoint("CENTER", scrollFrame, "CENTER", 0, 0)
+        egg:SetSize(1, 1)
+        egg:Hide()
+
+        local handTex = egg:CreateTexture(nil, "ARTWORK")
+        handTex:SetTexture("Interface\\Icons\\Spell_Holy_LayOnHands")
+        if handTex.SetTexCoord then handTex:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+        handTex:SetAlpha(0.95)
+
+        local plusFS = egg:CreateFontString(nil, "OVERLAY")
+        plusFS:SetFont("Fonts\\FRIZQT__.TTF", 32, "OUTLINE")
+        plusFS:SetText("+")
+        plusFS:SetTextColor(1, 1, 1, 0.95)
+        plusFS:SetJustifyH("CENTER")
+        plusFS:SetJustifyV("MIDDLE")
+
+        local grassTex = egg:CreateTexture(nil, "ARTWORK")
+        grassTex:SetTexture("Interface\\Icons\\Ability_Druid_Flourish")
+        if grassTex.SetTexCoord then grassTex:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+        grassTex:SetAlpha(0.95)
+
+        -- Override SetSize so the three elements reflow whenever the caller
+        -- resizes the container (icons scale with available scroll area).
+        local _rawSetSize = egg.SetSize
+        function egg:SetSize(w, h)
+            local iconSize = math.max(32, math.min(160, math.floor(h * 0.43)))
+            local gap      = math.max(4,  math.floor(iconSize * 0.10))
+            local plusW    = math.max(16, math.floor(iconSize * 0.45))
+            local totalW   = iconSize + gap + plusW + gap + iconSize
+            _rawSetSize(self, totalW, iconSize)
+
+            handTex:SetSize(iconSize, iconSize)
+            handTex:ClearAllPoints()
+            handTex:SetPoint("LEFT", self, "LEFT", 0, 0)
+
+            plusFS:SetSize(plusW, iconSize)
+            plusFS:ClearAllPoints()
+            plusFS:SetPoint("LEFT", handTex, "RIGHT", gap, 0)
+            plusFS:SetFont("Fonts\\FRIZQT__.TTF",
+                math.max(14, math.floor(iconSize * 0.55)), "OUTLINE")
+
+            grassTex:SetSize(iconSize, iconSize)
+            grassTex:ClearAllPoints()
+            grassTex:SetPoint("LEFT", plusFS, "RIGHT", gap, 0)
         end
-        pig:SetAlpha(0.95)
-        pig:Hide()
-        frame._lariasPigTexture = pig
+
+        frame._lariasPigTexture = egg
     end
 
     scrollChild = CreateFrame("Frame", nil, scrollFrame)
     scrollChild:SetSize(1, 1)
     scrollFrame:SetScrollChild(scrollChild)
+
+    -- Refreshes the change-week button text.
+    -- Normally the button shows the selected week (set by LayoutHeaderButtons_).
+    -- The only exception is when the scroll bar is at the very bottom of the list,
+    -- in which case the button shows the final/last week's label.
+    local function RefreshChangeWeekLabel_()
+        local btn = changeWeekBtn
+        if not (btn and btn.IsShown and btn:IsShown()) then return end
+        if scrollFrame and scrollFrame.GetVerticalScroll and scrollFrame.GetVerticalScrollRange then
+            local scrollOffset = scrollFrame:GetVerticalScroll() or 0
+            local scrollRange  = (scrollFrame.GetVerticalScrollRange and scrollFrame:GetVerticalScrollRange()) or 0
+            if scrollRange > 0 and scrollOffset >= scrollRange - 1 then
+                -- Scrolled to the very bottom: find the last visible section.
+                local lastVisible = nil
+                local sections = Addon._activeSections or {}
+                for i = 1, #sections do
+                    local sf = sections[i]
+                    if sf and sf.IsShown and sf:IsShown() and sf._sectionId then
+                        lastVisible = sf._sectionId
+                    end
+                end
+                if lastVisible then
+                    local section   = Addon._sectionsById and Addon._sectionsById[tostring(lastVisible)]
+                    local extracted = ExtractMonthRangeLabel((section and section.title) or tostring(lastVisible))
+                    local label     = (extracted ~= "") and extracted or (L.CHANGE_WEEK_BUTTON or "Change Week")
+                    btn:SetText(label)
+                    return
+                end
+            end
+        end
+        -- Not at the bottom: restore the selected-week label.
+        if btn._lariasSelectedLabel then
+            btn:SetText(btn._lariasSelectedLabel)
+        end
+    end
+
+    -- Calculates and sets the change-week button to the width of its widest possible
+    -- label across all sections. Called once after data loads so the button never
+    -- resizes while scrolling. Uses a hidden scratch FontString for measurement.
+    local function CalcChangeWeekBtnWidth_()
+        local btn = changeWeekBtn
+        if not (btn and frame) then return end
+        local order = Addon._order or {}
+        if #order == 0 then return end
+
+        if not btn._lariasMeasureFS then
+            local scratch = frame:CreateFontString(nil, "ARTWORK")
+            scratch:Hide()
+            local bfs = btn.GetFontString and btn:GetFontString()
+            if bfs then
+                local fontPath, fontH, fontFlags = bfs:GetFont()
+                if fontPath then
+                    scratch:SetFont(fontPath, fontH or 12, fontFlags or "")
+                else
+                    scratch:SetFontObject(GameFontNormal)
+                end
+            else
+                scratch:SetFontObject(GameFontNormal)
+            end
+            btn._lariasMeasureFS = scratch
+        end
+        local scratch      = btn._lariasMeasureFS
+        local sectionsById = Addon._sectionsById or {}
+        local maxW         = 108
+        -- Padding = 12 (left inset) + 22 (right inset reserved for arrow icon) = 34.
+        local PAD          = 34
+        for i = 1, #order do
+            local sec       = sectionsById[tostring(order[i])]
+            local extracted = ExtractMonthRangeLabel((sec and sec.title) or tostring(order[i] or ""))
+            local label     = (extracted ~= "") and extracted or (L.CHANGE_WEEK_BUTTON or "Change Week")
+            scratch:SetText(label)
+            local w = 0
+            if scratch.GetUnboundedStringWidth then
+                w = tonumber(scratch:GetUnboundedStringWidth()) or 0
+            end
+            if w <= 0 and scratch.GetStringWidth then
+                w = tonumber(scratch:GetStringWidth()) or 0
+            end
+            maxW = max(maxW, math.ceil(w) + PAD)
+        end
+        btn:SetWidth(maxW)
+    end
+
+    -- Expose so Refresh/RebuildList can call them after sections repopulate.
+    Addon._refreshChangeWeekLabel  = RefreshChangeWeekLabel_
+    Addon._calcChangeWeekBtnWidth  = CalcChangeWeekBtnWidth_
+
+    -- Hook scrollbar value changes and scroll-range changes.
+    local _sb = scrollFrame.ScrollBar
+    if _sb and _sb.HookScript then
+        _sb:HookScript("OnValueChanged", function() RefreshChangeWeekLabel_() end)
+    end
+    if scrollFrame.HookScript then
+        scrollFrame:HookScript("OnScrollRangeChanged", function() RefreshChangeWeekLabel_() end)
+    end
 
     local db = self:EnsureDB()
     if (db.showGreatVault or db.showCurrency) and self.CreateTrackingPanel and not self._trackingFrame then
@@ -2406,7 +2657,8 @@ function Addon:CreateFrame()
 
     -- Restore persisted scale immediately so the frame never shows at 100%
     -- on first open after a reload before the slider is touched.
-    if self.ApplyUIScale then self:ApplyUIScale() end
+    if self.ApplyUIScale  then self:ApplyUIScale()  end
+    if self.ApplyOpacity  then self:ApplyOpacity()  end
 
     if scrollFrame then scrollFrame:Show() end
 end

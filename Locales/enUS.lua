@@ -31,13 +31,21 @@ local STRINGS = {
 	OPTIONS_HIDDEN_CHARS_TITLE = "Hidden characters:",
 	OPTIONS_HIDDEN_CHARS_NONE = "None",
 	RESET_BUTTON = "Reset List",
-	UI_SCALE_LABEL = "Scale",
-	UI_SCALE_MIN_LABEL = "50%",
-	UI_SCALE_MAX_LABEL = "150%",
-	OPTIONS_HIDE_SCALE_SLIDER = "Hide scale slider",
+	UI_SCALE_LABEL       = "Scale",
+	UI_SCALE_MIN_LABEL   = "50%",
+	UI_SCALE_MAX_LABEL   = "150%",
+	OPTIONS_HIDE_SCALE_SLIDER   = "Hide scale slider",
+	OPTIONS_HIDE_SLIDERS        = "Hide sliders",
+	OPTIONS_HIDE_OPACITY_SLIDER = "Hide opacity slider",
+	OPTIONS_HIDE_UPDATE_NOTICE  = "Hide update notices",
 
-	-- List tab
-	DONE_PREFIX = "[Done] ",
+	-- Status banner (shown below the slider row)
+	STATUS_UPDATE_AVAILABLE_FMT  = "Update available! You have %s, newest is %s.",
+	STATUS_NO_TRANSLATION_FMT    = "No translation available for %s. Consider contributing!",
+	STATUS_TRANSLATION_NOTICE    = "This is a translation of the English guide. Notice any issues? Consider contributing!",
+	UI_OPACITY_LABEL     = "Opacity",
+	UI_OPACITY_MIN_LABEL = "10%",
+	UI_OPACITY_MAX_LABEL = "100%",
 
 	-- Tracking panel
 	TRACKING_GREAT_VAULT_TITLE = "Great Vault",
@@ -80,6 +88,8 @@ local STRINGS = {
 	-- Main window
 	TAB_OPTIONS = "Options",
 	CHANGE_WEEK_BUTTON = "Change Week",
+	CHAR_PICKER_BUTTON = "Swap Profile",
+	CHAR_PICKER_TOOLTIP_REMOVE = "To remove a character, use the Options menu.",
 	ILVLREF_BUTTON = "View Item Levels",
 
 	-- Item level reference popup

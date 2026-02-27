@@ -340,15 +340,7 @@ local function BuildIlvlRefWindow()
     }, DELVES)
     local function tblW(cols) return cols[#cols].x + cols[#cols].w end
 
-    local win
-    if BackdropTemplateMixin then
-        win = CreateFrame("Frame", "LariasIlvlRefFrame", UIParent, "BackdropTemplate")
-    else
-        win = CreateFrame("Frame", "LariasIlvlRefFrame", UIParent)
-        if BackdropTemplateMixin and Mixin and not win.SetBackdrop then
-            Mixin(win, BackdropTemplateMixin)
-        end
-    end
+    local win = Addon:NewThemedFrame("LariasIlvlRefFrame", UIParent)
 
     -- Default width = 2-col layout (Tracks | everything else).  Set after
     -- BuildSection calls (wTracks/wRight2 not yet available here).
@@ -381,33 +373,35 @@ local function BuildIlvlRefWindow()
     win:SetFrameLevel(100)
     win:Hide()
 
-    Addon:ApplyTheme(win)
-    -- Override bg to fully opaque (the shared theme uses 0.65 alpha).
+    -- Override bg to fully opaque (NewThemedFrame sets theme defaults; bg.a is 0.65).
     local bg = Addon.THEME.bg
     win:SetBackdropColor(bg.r, bg.g, bg.b, 1.0)
 
-    -- Title
+    -- Title (centered, leaves room for close button on the right)
     local titleFS = win:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    titleFS:SetPoint("TOPLEFT", win, "TOPLEFT", PAD, -10)
+    titleFS:SetPoint("TOPLEFT",  win, "TOPLEFT",  PAD,  -10)
+    -- Leave room for two (SCROLLTOP-4)=28px buttons + 2px gaps + 2px right margin = 64px.
+    titleFS:SetPoint("TOPRIGHT", win, "TOPRIGHT", -64,  -10)
+    titleFS:SetJustifyH("CENTER")
     local titleHeaderColor = Addon.THEME.header
     titleFS:SetTextColor(titleHeaderColor.r, titleHeaderColor.g, titleHeaderColor.b, titleHeaderColor.a)
     titleFS:SetText(Locale.ILVLREF_WINDOW_TITLE)
 
-    -- Close button
-    local closeBtn = CreateFrame("Button", nil, win, "UIPanelCloseButton")
-    closeBtn:SetPoint("TOPRIGHT", win, "TOPRIGHT", -4, -4)
-    closeBtn:SetScript("OnClick", function() win:Hide() end)
+    -- Close button: branded ✕ matching the addon theme.
+    local closeBtn = Addon.Controls.NewCloseButton(win, function() win:Hide() end)
+    closeBtn:SetPoint("TOPRIGHT", win, "TOPRIGHT", -2, -2)
+    closeBtn:SetSize(SCROLLTOP - 4, SCROLLTOP - 4)
+    closeBtn:SetBackdropBorderColor(0, 0, 0, 0)
 
-    -- Handle ESC via keyboard input so only this window closes (not the main frame).
-    win:EnableKeyboard(true)
-    win:SetScript("OnKeyDown", function(self, key)
-        if key == "ESCAPE" then
-            self:SetPropagateKeyboardInput(false)
-            self:Hide()
-        else
-            self:SetPropagateKeyboardInput(true)
-        end
-    end)
+    -- Register with UISpecialFrames so ESC closes this window via Blizzard's
+    -- secure ESC chain rather than the protected SetPropagateKeyboardInput.
+    tinsert(UISpecialFrames, "LariasIlvlRefFrame")
+
+    -- Credit: guide author
+    local creditFS = win:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    creditFS:SetPoint("BOTTOM", win, "BOTTOM", 0, 4)
+    creditFS:SetTextColor(0.45, 0.45, 0.45, 0.9)
+    creditFS:SetText("Based on dburnnzz's guide")
 
     -- Scroll frame (auto-adapts to win size; content reflows instead of scaling)
     local sf = CreateFrame("ScrollFrame", nil, win, "UIPanelScrollFrameTemplate")
@@ -517,16 +511,20 @@ local function BuildIlvlRefWindow()
 
     win._ilvlReflow = ReflowIlvlSections
 
-    -- Toggle button: text button showing "Expand" / "Shrink".
-    local toggleBtn = CreateFrame("Button", nil, win, "UIPanelButtonTemplate")
-    toggleBtn:SetPoint("TOPRIGHT", closeBtn, "TOPLEFT", 4, 0)
-    toggleBtn:SetSize(60, 20)
-    if Addon._styleActionButton then Addon._styleActionButton(toggleBtn) end
+    -- Toggle button: branded expand/shrink icon matching the header button row.
+    local toggleBtn = Addon.Controls.NewExpandButton(win,
+        nil,  -- OnClick wired below
+        not _isMaximized,  -- shrunk = expanded=true shows the ▼ ("click to shrink") glyph
+        Locale.ILVLREF_TOGGLE_EXPAND or "Expand",
+        Locale.ILVLREF_TOGGLE_SHRINK or "Shrink")
+    -- Sit immediately left of the close button, vertically aligned.
+    toggleBtn:SetPoint("TOPRIGHT", closeBtn, "TOPLEFT", -2, 0)
+    toggleBtn:SetSize(SCROLLTOP - 4, SCROLLTOP - 4)
+    toggleBtn:SetBackdropBorderColor(0, 0, 0, 0)
 
     local function UpdateToggleTexture()
-        toggleBtn:SetText(_isMaximized
-            and (Locale.ILVLREF_TOGGLE_SHRINK or "Shrink")
-            or  (Locale.ILVLREF_TOGGLE_EXPAND or "Expand"))
+        -- expanded=true means the window IS maximized (down arrow, click to shrink).
+        toggleBtn:SetExpanded(_isMaximized)
     end
     UpdateToggleTexture()
 

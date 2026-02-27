@@ -1,4 +1,4 @@
--- Gear popup: small floating panel with the 6 display toggles.
+-- Gear popup: small floating panel with the 8 display toggles.
 -- Appears when the gear icon in the main window header is clicked.
 local addonName = ...
 local Addon = _G[addonName]
@@ -15,21 +15,6 @@ local function SetCheckText(checkButton, text)
             lbl:SetTextColor(t.r, t.g, t.b, t.a or 1)
         end
     end
-end
-
--- Tints the standard UICheckButtonTemplate textures to match the dark theme.
--- Normal (unchecked box) → grey;  Checked mark → gold accent;  Hover → subtle white.
-local function StyleCheckButton(cb)
-    if not cb then return end
-    local norm = cb.GetNormalTexture and cb:GetNormalTexture()
-    if norm then norm:SetVertexColor(0.55, 0.55, 0.55, 1) end
-    local chk = cb.GetCheckedTexture and cb:GetCheckedTexture()
-    if chk then
-        local th = Addon.THEME and Addon.THEME.header
-        if th then chk:SetVertexColor(th.r, th.g, th.b, 1) end
-    end
-    local hi = cb.GetHighlightTexture and cb:GetHighlightTexture()
-    if hi then hi:SetVertexColor(1, 1, 1, 0.12) end
 end
 
 function Addon:SyncGearPopup()
@@ -55,8 +40,10 @@ function Addon:SyncGearPopup()
          L.OPTIONS_HIDE_ILVL_REF_BTN or "Hide ilvl references")
     Sync(p._cbHideCharPicker,   db.showCharPickerBtn == false,
          L.OPTIONS_HIDE_CHAR_SELECT  or "Hide character selector")
-    Sync(p._cbHideScaleSlider,  db.showScaleSlider == false,
-         L.OPTIONS_HIDE_SCALE_SLIDER or "Hide scale slider")
+    Sync(p._cbHideSliders, db.showScaleSlider == false,
+         L.OPTIONS_HIDE_SLIDERS or "Hide sliders")
+    Sync(p._cbHideUpdateNotice, db.hideUpdateNotice and true or false,
+         L.OPTIONS_HIDE_UPDATE_NOTICE or "Hide update notices")
 
     -- Reset button label.
     if p._gearResetBtn then
@@ -90,50 +77,54 @@ function Addon:SyncGearPopup()
     -- Recalculate popup height based on visible content, and reposition any rows
     -- below the (possibly-hidden) char picker slot so no gap is left behind.
     do
-        local PAD_   = 10
-        local ROW_H_ = 26
-        local TILE_H_= ROW_H_ + 8   -- 34
-        local N_TOTAL = 7
-        local rstStartY_  = PAD_
-        local div1StartY_ = rstStartY_ + 22 + 6
-        local cbsY_       = div1StartY_ + 1 + 8
-        -- Char picker is always slot index 6; scale slider is always slot index 7.
-        -- When char picker is hidden, slide the scale slider up into slot 6.
-        local SLIDER_IDX  = 7
-        local sliderVisIdx = showCharRow and SLIDER_IDX or (SLIDER_IDX - 1)
-        local cbSlider = p._cbHideScaleSlider
-        if cbSlider then
-            local tileTopY = -(cbsY_ + (sliderVisIdx - 1) * TILE_H_)
-            local cbOffY   = tileTopY - math.floor((TILE_H_ - ROW_H_) / 2)
-            cbSlider:ClearAllPoints()
-            cbSlider:SetPoint("TOPLEFT", p, "TOPLEFT", PAD_, cbOffY)
-            if cbSlider._hit then
-                cbSlider._hit:ClearAllPoints()
-                cbSlider._hit:SetPoint("TOPLEFT",  p, "TOPLEFT",  0, tileTopY)
-                cbSlider._hit:SetPoint("TOPRIGHT", p, "TOPRIGHT", 0, tileTopY)
+        local PAD      = 10
+        local TILE_H   = 34   -- tile height
+        local N_TOTAL  = 8
+        local rstStartY  = PAD
+        local div1StartY = rstStartY + 22 + 6
+        local cbsY       = div1StartY + 1 + 8
+        -- Slots 1-5 always present; slot 6 = char picker (conditional);
+        -- slot 7 = sliders (combined); slot 8 = update notice.
+        -- When char picker is hidden, slots 7 and 8 each shift up by one.
+        local SLIDERS_IDX       = 7
+        local UPDATE_NOTICE_IDX = 8
+        local slidersVisIdx     = showCharRow and SLIDERS_IDX      or (SLIDERS_IDX      - 1)
+        local updateNoticeVisIdx = showCharRow and UPDATE_NOTICE_IDX or (UPDATE_NOTICE_IDX - 1)
+        local function ReflowCb(cb, visIdx)
+            if not cb then return end
+            local tileTopY = -(cbsY + (visIdx - 1) * TILE_H)
+            cb:ClearAllPoints()
+            cb:SetPoint("TOPLEFT", p, "TOPLEFT", PAD, tileTopY)
+            cb:SetHeight(TILE_H)
+            if cb._hit then
+                cb._hit:ClearAllPoints()
+                cb._hit:SetPoint("TOPLEFT",  p, "TOPLEFT",  0, tileTopY)
+                cb._hit:SetPoint("TOPRIGHT", p, "TOPRIGHT", 0, tileTopY)
             end
         end
+        ReflowCb(p._cbHideSliders,       slidersVisIdx)
+        ReflowCb(p._cbHideUpdateNotice,  updateNoticeVisIdx)
 
-        local nVisible    = showCharRow and N_TOTAL or (N_TOTAL - 1)
+        local nVisible = showCharRow and N_TOTAL or (N_TOTAL - 1)
         -- Reposition the hidden-chars divider and trigger to follow the last checkbox.
-        local div2StartY_ = cbsY_ + nVisible * TILE_H_ + 6
-        local hidStartY_  = div2StartY_ + 1 + 8
+        local div2StartY = cbsY + nVisible * TILE_H + 6
+        local hidStartY  = div2StartY + 1 + 8
         if p._gearHiddenCharsDiv then
             p._gearHiddenCharsDiv:ClearAllPoints()
-            p._gearHiddenCharsDiv:SetPoint("TOPLEFT",  p, "TOPLEFT",  PAD_,  -div2StartY_)
-            p._gearHiddenCharsDiv:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PAD_, -div2StartY_)
+            p._gearHiddenCharsDiv:SetPoint("TOPLEFT",  p, "TOPLEFT",  PAD,  -div2StartY)
+            p._gearHiddenCharsDiv:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PAD, -div2StartY)
         end
         if p._gearHiddenCharsTrigger then
             p._gearHiddenCharsTrigger:ClearAllPoints()
-            p._gearHiddenCharsTrigger:SetPoint("TOPLEFT",  p, "TOPLEFT",  PAD_,  -hidStartY_)
-            p._gearHiddenCharsTrigger:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PAD_, -hidStartY_)
+            p._gearHiddenCharsTrigger:SetPoint("TOPLEFT",  p, "TOPLEFT",  PAD,  -hidStartY)
+            p._gearHiddenCharsTrigger:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PAD, -hidStartY)
         end
 
         local totalH
         if showHiddenSect then
-            totalH = hidStartY_ + 22 + PAD_
+            totalH = hidStartY + 22 + PAD
         else
-            totalH = cbsY_ + nVisible * TILE_H_ + PAD_
+            totalH = cbsY + nVisible * TILE_H + PAD
         end
         p:SetHeight(totalH)
     end
@@ -151,7 +142,7 @@ function Addon:SyncGearPopup()
     end
 end
 
-function Addon:ToggleGearPopup(anchor)
+function Addon:ToggleGearPopup(anchor, growRight)
     local p = self._gearPopup
     if p and p.IsShown and p:IsShown() then
         p:Hide()
@@ -160,54 +151,12 @@ function Addon:ToggleGearPopup(anchor)
 
     -- Create lazily.
     if not p then
-        if BackdropTemplateMixin then
-            p = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
-        else
-            p = CreateFrame("Frame", nil, UIParent)
-            if BackdropTemplateMixin and Mixin then Mixin(p, BackdropTemplateMixin) end
-        end
-        p:SetFrameStrata("DIALOG")
-        p:SetClampedToScreen(true)
+        p = Addon.Controls.NewPopupPanel("DIALOG", 0.12)
+        if p.SetBackdropBorderColor then p:SetBackdropBorderColor(Addon.THEME.border.r, Addon.THEME.border.g, Addon.THEME.border.b, 1) end
         p:SetSize(230, 10)   -- height set after rows are placed
-        p:Hide()
-        if p.SetToplevel   then p:SetToplevel(true)   end
-        if p.SetFrameLevel then p:SetFrameLevel(200)  end
-
-        -- Backdrop
-        if p.SetBackdrop then
-            p:SetBackdrop({
-                bgFile   = "Interface\\Buttons\\WHITE8x8",
-                edgeFile = "Interface\\Buttons\\WHITE8x8",
-                tile = false, edgeSize = 1,
-                insets = { left=1, right=1, top=1, bottom=1 },
-            })
-            if Addon.THEME then
-                p:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, 1)
-                p:SetBackdropBorderColor(Addon.THEME.border.r, Addon.THEME.border.g, Addon.THEME.border.b, 1)
-            end
-        end
-
-        -- Outside-click catcher.
-        local catcher = CreateFrame("Button", nil, UIParent)
-        catcher:SetAllPoints(UIParent)
-        catcher:SetFrameStrata("DIALOG")
-        catcher:SetFrameLevel(p:GetFrameLevel() - 1)
-        catcher:EnableMouse(true)
-        catcher:Hide()
-        -- Use OnMouseDown so the catcher hides before the click resolves,
-        -- letting the MouseUp event pass through to whatever is underneath.
-        -- OnClick would consume the full click, blocking the next action.
-        catcher:SetScript("OnMouseDown", function() p:Hide() end)
-        p:SetScript("OnHide", function() catcher:Hide() end)
-        p:SetScript("OnShow", function()
-            catcher:Show()
-            if UIFrameFadeIn then UIFrameFadeIn(p, 0.12, 0, 1)
-            else p:SetAlpha(1) end
-        end)
 
         -- Layout constants.
         local PAD    = 10
-        local ROW_H  = 26   -- UICheckButtonTemplate actual height
 
         -- ── Reset List button (top of popup) ───────────────────────────────
         local rstStartY = PAD          -- px from popup top
@@ -242,8 +191,10 @@ function Addon:ToggleGearPopup(anchor)
                 gdb.mainFramePos  = nil
                 gdb.mainFrameSize = nil
                 gdb.uiScalePct    = 100
+                gdb.uiOpacityPct  = 65
             end
-            if Addon.ApplyUIScale then Addon:ApplyUIScale() end
+            if Addon.ApplyUIScale  then Addon:ApplyUIScale()  end
+            if Addon.ApplyOpacity  then Addon:ApplyOpacity()  end
             local mf = Addon._mainFrame
             if mf then
                 mf:ClearAllPoints()
@@ -259,16 +210,9 @@ function Addon:ToggleGearPopup(anchor)
 
         -- ── Divider after Reset ────────────────────────────────────────────
         local div1StartY = rstStartY + 22 + 6
-        local div1 = p:CreateTexture(nil, "OVERLAY")
-        div1:SetHeight(1)
-        div1:SetPoint("TOPLEFT",  p, "TOPLEFT",  PAD,  -div1StartY)
-        div1:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PAD, -div1StartY)
-        if Addon.THEME then
-            local bdr = Addon.THEME.border
-            div1:SetColorTexture(bdr.r, bdr.g, bdr.b, 0.5)
-        end
+        Addon.Controls.NewDivider(p, -div1StartY, PAD, PAD)
 
-        -- ── 6 Checkboxes ──────────────────────────────────────────────────
+        -- ── 8 Checkboxes ──────────────────────────────────────────────────
         local checks = {
             { key = "_cbHideCompleted",   },
             { key = "_cbHideGreatVault",  },
@@ -276,7 +220,8 @@ function Addon:ToggleGearPopup(anchor)
             { key = "_cbHideChangeWeek",  },
             { key = "_cbHideIlvlRef",     },
             { key = "_cbHideCharPicker",  },
-            { key = "_cbHideScaleSlider", },
+            { key = "_cbHideSliders", },
+            { key = "_cbHideUpdateNotice", },
         }
         local callbacks = {
             _cbHideCompleted  = function(checked)
@@ -307,72 +252,51 @@ function Addon:ToggleGearPopup(anchor)
             _cbHideCharPicker = function(checked)
                 local db = Addon:EnsureDB()
                 db.showCharPickerBtn = not checked
-                if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
-            end,
-            _cbHideScaleSlider = function(checked)
-                local db = Addon:EnsureDB()
-                db.showScaleSlider = not checked
+                if Addon.LayoutHeaderButtons        then Addon:LayoutHeaderButtons()        end
                 if Addon.ApplyScaleSliderVisibility then Addon:ApplyScaleSliderVisibility() end
+            end,
+            _cbHideSliders = function(checked)
+                local db = Addon:EnsureDB()
+                db.showScaleSlider  = not checked
+                db.showOpacitySlider = not checked
+                if Addon.ApplyScaleSliderVisibility then Addon:ApplyScaleSliderVisibility() end
+            end,
+            _cbHideUpdateNotice = function(checked)
+                local db = Addon:EnsureDB()
+                db.hideUpdateNotice = checked
+                if Addon.UpdateStatusBanner then Addon:UpdateStatusBanner() end
             end,
         }
 
         local N          = #checks
-        local TILE_H     = ROW_H + 8
+        local TILE_H     = 34    -- total tile height (box + padding)
         local cbsY       = div1StartY + 1 + 8   -- checkboxes section top (px from popup top)
 
         for i, info in ipairs(checks) do
             local tileTopY = -(cbsY + (i - 1) * TILE_H)
-            local cbOffY   = tileTopY - math.floor((TILE_H - ROW_H) / 2)
 
-            local cb = CreateFrame("CheckButton", nil, p, "UICheckButtonTemplate")
-            cb:SetPoint("TOPLEFT", p, "TOPLEFT", PAD, cbOffY)
-            StyleCheckButton(cb)
-            -- Explicit label (anonymous frames can't access $parenttext)
-            local lbl = p:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-            lbl:SetPoint("LEFT", cb, "RIGHT", 2, 0)
-            lbl:SetPoint("RIGHT", p, "RIGHT", -PAD, 0)
-            lbl:SetJustifyH("LEFT")
-            if Addon.THEME and Addon.THEME.text then
-                local t = Addon.THEME.text
-                lbl:SetTextColor(t.r, t.g, t.b, t.a or 1)
-            end
-            cb._label = lbl
             local _key = info.key
-            local function FireToggle(newState)
+            local cb = Addon.Controls.NewCheckBox(p, function(newState)
                 callbacks[_key](newState)
                 if Addon.SyncGearPopup then Addon:SyncGearPopup() end
-            end
-            cb:SetScript("OnClick", function(self_)
-                FireToggle(self_:GetChecked() and true or false)
             end)
+            -- Span the full tile height so the box centers vertically even
+            -- when the label wraps to multiple lines.
+            cb:SetPoint("TOPLEFT",  p, "TOPLEFT",  PAD, tileTopY)
+            cb:SetHeight(TILE_H)
+            cb._label:SetPoint("RIGHT", p, "RIGHT", -PAD, 0)
             p[info.key] = cb
 
-            local hit = CreateFrame("Button", nil, p)
+            -- Wire the pre-created _hit to span the full tile width.
+            local hit = cb._hit
             hit:SetPoint("TOPLEFT",  p, "TOPLEFT",  0, tileTopY)
             hit:SetPoint("TOPRIGHT", p, "TOPRIGHT", 0, tileTopY)
             hit:SetHeight(TILE_H)
-            hit:SetFrameLevel(p:GetFrameLevel())
-            local hl = hit:CreateTexture(nil, "HIGHLIGHT")
-            hl:SetAllPoints(hit)
-            hl:SetColorTexture(1, 1, 1, 0.06)
-            hit:SetScript("OnClick", function()
-                local newVal = not (cb:GetChecked() and true or false)
-                cb:SetChecked(newVal)
-                FireToggle(newVal)
-            end)
-            cb._hit = hit  -- stored so SyncGearPopup can show/hide the row
         end
 
         -- ── Divider before Hidden Characters ──────────────────────────────
         local div2StartY = cbsY + N * TILE_H + 6
-        local div2 = p:CreateTexture(nil, "OVERLAY")
-        div2:SetHeight(1)
-        div2:SetPoint("TOPLEFT",  p, "TOPLEFT",  PAD,  -div2StartY)
-        div2:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PAD, -div2StartY)
-        if Addon.THEME then
-            local bdr = Addon.THEME.border
-            div2:SetColorTexture(bdr.r, bdr.g, bdr.b, 0.5)
-        end
+        local div2 = Addon.Controls.NewDivider(p, -div2StartY, PAD, PAD)
         p._gearHiddenCharsDiv = div2
 
         -- ── Hidden Characters trigger ──────────────────────────────────────
@@ -394,10 +318,16 @@ function Addon:ToggleGearPopup(anchor)
     -- Sync current values and labels (includes hidden chars trigger label).
     self:SyncGearPopup()
 
-    -- Position below the anchor (gear button) or center if no anchor.
+    -- Position below the anchor or center if no anchor.
+    -- growRight=true  → popup grows rightward (TOPLEFT anchored to anchor BOTTOMLEFT)
+    -- growRight=false → popup grows leftward  (TOPRIGHT anchored to anchor BOTTOMRIGHT)
     p:ClearAllPoints()
     if anchor then
-        p:SetPoint("TOPRIGHT", anchor, "BOTTOMRIGHT", 0, -4)
+        if growRight then
+            p:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -4)
+        else
+            p:SetPoint("TOPRIGHT", anchor, "BOTTOMRIGHT", 0, -4)
+        end
     else
         p:SetPoint("CENTER", UIParent, "CENTER")
     end

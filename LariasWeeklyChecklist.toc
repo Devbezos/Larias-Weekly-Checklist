@@ -9,25 +9,69 @@
 ## X-Wago-ID: mKOD5RGx
 ## X-Curse-Project-ID: 1448023
 
-# Libraries
+# Foundation
+# LibStub: minimal versioned library registry used by all Ace3 libs
 Libs\\LibStub\\LibStub.lua
+
+# CallbackHandler: event/callback backbone required by AceEvent, AceBucket, etc.
 Libs\\CallbackHandler-1.0\\CallbackHandler-1.0.lua
+
+# Ace3 core
+# AceAddon: addon lifecycle (OnInitialize / OnEnable / OnDisable)
 Libs\\Ace3\\AceAddon-3.0\\AceAddon-3.0.lua
+
+# AceEvent: WoW event registration / unregistration helpers
 Libs\\Ace3\\AceEvent-3.0\\AceEvent-3.0.lua
+
+# AceDB: saved-variables management with profile support
 Libs\\Ace3\\AceDB-3.0\\AceDB-3.0.lua
+
+# AceConsole: slash-command registration and print helpers
 Libs\\Ace3\\AceConsole-3.0\\AceConsole-3.0.lua
+
+# AceTimer: reliable once/repeating timer scheduling
 Libs\\Ace3\\AceTimer-3.0\\AceTimer-3.0.lua
+
+# Cross-realm communication
+# AceSerializer: table → string serialization for addon messages
 Libs\\Ace3\\AceSerializer-3.0\\AceSerializer-3.0.lua
+
+# ChatThrottleLib: rate-limits outgoing addon channel traffic (AceComm dep)
 Libs\\Ace3\\AceComm-3.0\\ChatThrottleLib.lua
+
+# AceComm: send/receive structured addon messages over addon channels
 Libs\\Ace3\\AceComm-3.0\\AceComm-3.0.lua
+
+# AceBucket: batches rapid-fire events into a single throttled callback
 Libs\\Ace3\\AceBucket-3.0\\AceBucket-3.0.lua
+
+# Minimap icon
+# LibDataBroker: data-object standard (feeds minimap / broker displays)
 Libs\\LibDataBroker-1.1\\LibDataBroker-1.1.lua
+# LibDBIcon: renders and manages the minimap button
 Libs\\LibDBIcon-1.0\\LibDBIcon-1.0.lua
+
+# Window management
+# LibWindow: saves/restores frame position and scale across sessions
 Libs\\LibWindow-1.1\\LibWindow-1.1\\LibWindow-1.1.lua
+
+# Localization
+# enUS.lua: locale string keys; enUS_Data.lua: weekly/tracking data strings
 Locales\\enUS.lua
 Locales\\enUS_Data.lua
+
+# Addon source
+# Constants must load before the main file so TRACKING/THEME tables exist
 Modules\\LariasWeeklyChecklist_Constants.lua
+
+# Core: addon object, DB setup, main frame, event wiring
 LariasWeeklyChecklist.lua
+
+# Controls: shared UI widget factories (buttons, checkboxes, sliders, etc.)
+Controls\\LariasWeeklyChecklist_Controls.lua
+Controls\\LariasWeeklyChecklist_ScaleSlider.lua
+
+# Modules: feature panels loaded after the main frame is ready
 Modules\\LariasWeeklyChecklist_CharPicker.lua
 Modules\\LariasWeeklyChecklist_Options.lua
 Modules\\LariasWeeklyChecklist_GearPopup.lua
