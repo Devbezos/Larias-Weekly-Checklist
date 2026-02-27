@@ -11,6 +11,10 @@ function Addon:ToggleHiddenCharsDropdown()
     if not anyHidden then return end
 
     local picker = self._hiddenCharsPicker
+    if picker and picker._lariasLastCloseTime and (GetTime() - picker._lariasLastCloseTime) < 0.05 then
+        picker._lariasLastCloseTime = nil
+        return
+    end
     if picker and picker.IsShown and picker:IsShown() then
         picker:Hide()
         return
@@ -43,7 +47,10 @@ function Addon:ToggleHiddenCharsDropdown()
             catcher:Hide()
         end)
         picker._catcher = catcher
-        picker:SetScript("OnHide", function() catcher:Hide() end)
+        picker:SetScript("OnHide", function(self_)
+            catcher:Hide()
+            self_._lariasLastCloseTime = GetTime()
+        end)
         picker:SetScript("OnShow", function()
             catcher:Show()
             if UIFrameFadeIn then UIFrameFadeIn(picker, 0.15, 0, 1)

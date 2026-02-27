@@ -138,6 +138,9 @@ function Addon:InitCharPickerUI(frame, styleFunc)
         p:SetSize(160, 40)
         p._buttons    = {}
         p._buttonPool = {}
+        p:HookScript("OnHide", function(self_)
+            self_._lariasLastCloseTime = GetTime()
+        end)
         charPickerPanel = p
         return p
     end
@@ -344,6 +347,10 @@ function Addon:InitCharPickerUI(frame, styleFunc)
     -- ── OnClick for the header button ─────────────────────────────────────────
     local function OnPickerBtnClick()
         local p = EnsurePanel()
+        if p and p._lariasLastCloseTime and (GetTime() - p._lariasLastCloseTime) < 0.05 then
+            p._lariasLastCloseTime = nil
+            return
+        end
         if p and p.IsShown and p:IsShown() then
             p:Hide()
             return
