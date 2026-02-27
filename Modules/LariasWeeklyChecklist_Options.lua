@@ -94,7 +94,7 @@ function Addon:RefreshHiddenCharsList()
             trigBtn:SetEnabled(false)
         else
             trigBtn:SetEnabled(true)
-            local label = string.format("%s (%d) |TInterface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up:10:10|t",
+            local label = string.format("%s (%d) |TInterface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up:0|t",
                 L.OPTIONS_HIDDEN_CHARS_TITLE or "Hidden characters:", #hidden)
             trigBtn:SetText(label)
         end

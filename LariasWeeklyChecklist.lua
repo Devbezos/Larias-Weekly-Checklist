@@ -1922,12 +1922,12 @@ function Addon:CreateFrame()
         -- Center-justify so shorter week labels sit in the middle of the fixed-width button.
         local _fs = btn.GetFontString and btn:GetFontString()
         if _fs and _fs.SetJustifyH then _fs:SetJustifyH("CENTER") end
-        -- Reserve space on the right for the pinned arrow icon (10px icon + 4px gap + 4px margin).
-        if btn.SetTextInsets then btn:SetTextInsets(12, 18, 4, 4) end
+        -- Reserve space on the right for the pinned arrow icon (14px icon + 4px gap + 4px margin).
+        if btn.SetTextInsets then btn:SetTextInsets(12, 22, 4, 4) end
         -- Arrow texture pinned to the right edge, always visible regardless of label length.
         local arrowTex = btn:CreateTexture(nil, "ARTWORK")
         arrowTex:SetTexture("Interface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up")
-        arrowTex:SetSize(10, 10)
+        arrowTex:SetSize(14, 14)
         arrowTex:SetPoint("RIGHT", btn, "RIGHT", -5, 0)
         arrowTex:SetVertexColor(1, 1, 1, 0.85)
         btn._lariasArrowTex        = arrowTex
@@ -2445,8 +2445,8 @@ function Addon:CreateFrame()
         local scratch      = btn._lariasMeasureFS
         local sectionsById = Addon._sectionsById or {}
         local maxW         = 108
-        -- Padding = 12 (left inset) + 18 (right inset reserved for arrow icon) = 30.
-        local PAD          = 30
+        -- Padding = 12 (left inset) + 22 (right inset reserved for arrow icon) = 34.
+        local PAD          = 34
         for i = 1, #order do
             local sec       = sectionsById[tostring(order[i])]
             local extracted = ExtractMonthRangeLabel((sec and sec.title) or tostring(order[i] or ""))
