@@ -6,13 +6,12 @@ if not Addon then return end
 
 local function SetCheckText(checkButton, text)
     if not checkButton then return end
-    -- Use the explicit _label FontString created alongside each checkbox.
     local lbl = checkButton._label
     if lbl then
         lbl:SetText(text or "")
-        if lbl.SetTextColor and Addon.THEME and Addon.THEME.text then
-            local t = Addon.THEME.text
-            lbl:SetTextColor(t.r, t.g, t.b, t.a or 1)
+        local txt = Addon.THEME and Addon.THEME.text
+        if lbl.SetTextColor and txt then
+            lbl:SetTextColor(txt.r, txt.g, txt.b, txt.a or 1)
         end
     end
 end
@@ -36,10 +35,27 @@ local function MakePopupSwatch(parent)
 end
 
 -- Shared color-key / default table used by both creation and sync.
+-- Each entry carries get() → r,g,b and save(r,g,b) closures so callers
+-- don't need to reproduce the db-access boilerplate inline.
+local function makeGearColorDef(label, rk, gk, bk, dr, dg, db_)
+    local def = { label = label, rk = rk, gk = gk, bk = bk, dr = dr, dg = dg, db = db_ }
+    function def.get()
+        local tc = (Addon.db and Addon.db.global and Addon.db.global.themeColors) or {}
+        return tc[rk] or dr, tc[gk] or dg, tc[bk] or db_
+    end
+    function def.save(r, g, b)
+        local gdb = Addon.db and Addon.db.global
+        if not gdb then return end
+        gdb.themeColors = gdb.themeColors or {}
+        gdb.themeColors[rk] = r; gdb.themeColors[gk] = g; gdb.themeColors[bk] = b
+        if Addon.ApplyThemeColors then Addon:ApplyThemeColors() end
+    end
+    return def
+end
 local GEAR_COLOR_DEFS = {
-    { label = "Bg",   rk = "bgR",     gk = "bgG",     bk = "bgB",     dr = 0.10, dg = 0.10, db = 0.10 },
-    { label = "Text", rk = "textR",   gk = "textG",   bk = "textB",   dr = 1.00, dg = 1.00, db = 1.00 },
-    { label = "Hdr",  rk = "headerR", gk = "headerG", bk = "headerB", dr = 1.00, dg = 0.82, db = 0.00 },
+    makeGearColorDef("Bg",   "bgR",     "bgG",     "bgB",     0.10, 0.10, 0.10),
+    makeGearColorDef("Text", "textR",   "textG",   "textB",   1.00, 1.00, 1.00),
+    makeGearColorDef("Hdr",  "headerR", "headerG", "headerB", 1.00, 0.82, 0.00),
 }
 
 function Addon:SyncGearPopup()
@@ -69,8 +85,8 @@ function Addon:SyncGearPopup()
          L.OPTIONS_HIDE_SLIDERS or "Hide Sliders")
     Sync(p._cbHideUpdateNotice, db.hideUpdateNotice and true or false,
          L.OPTIONS_HIDE_UPDATE_NOTICE or "Hide Update Notices")
-    local _gdb = Addon.db and Addon.db.global
-    Sync(p._cbHideMinimapBtn, _gdb and _gdb.minimap and _gdb.minimap.hide and true or false,
+    local _minimap = Addon.db and Addon.db.global and Addon.db.global.minimap
+    Sync(p._cbHideMinimapBtn, _minimap and _minimap.hide and true or false,
          L.OPTIONS_HIDE_MINIMAP_BTN or "Hide Minimap Button")
 
     -- Reset button label.
@@ -175,13 +191,9 @@ function Addon:SyncGearPopup()
 
     -- Sync the compact color swatch colors to current saved values.
     if p._gearColorSwatches then
-        local gdb = Addon.db and Addon.db.global
-        local tc  = (gdb and gdb.themeColors) or {}
         for i, def in ipairs(GEAR_COLOR_DEFS) do
             local sw = p._gearColorSwatches[i]
-            if sw then
-                sw:SetColor(tc[def.rk] or def.dr, tc[def.gk] or def.dg, tc[def.bk] or def.db)
-            end
+            if sw then sw:SetColor(def.get()) end
         end
     end
 end
@@ -383,15 +395,11 @@ function Addon:ToggleGearPopup(anchor, growRight)
         p._gearHiddenCharsTrigger  = hiddenTrigger
         Addon._gearHiddenCharsTrigger = hiddenTrigger
 
-        -- ── Version + credit — three stacked left-aligned lines ───────────
-        local _getMeta = (C_AddOns and C_AddOns.GetAddOnMetadata)
-                      or GetAddOnMetadata
-                      or function() return "" end
-
-        local _ver = _getMeta(addonName, "Version") or ""
+        -- ── Version + credit ───────────────────────────────────────────────
+        local _getMeta = C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata
+        local _ver     = (_getMeta and _getMeta(addonName, "Version")) or ""
         local _locReg  = _G["LARIASWEEKLYCHECKLIST_LOCALE_REGISTRY"]
-        local _dataVer = (_locReg and type(_locReg.sheet_version) == "string")
-                         and _locReg.sheet_version or ""
+        local _dataVer = (_locReg and type(_locReg.sheet_version) == "string" and _locReg.sheet_version) or ""
 
         -- ── Compact color swatches – 3 in a row above the version block ──────
         -- Layout: swatch row sits at COLOR_BOT_Y px from popup bottom.
@@ -409,41 +417,22 @@ function Addon:ToggleGearPopup(anchor, growRight)
 
         p._gearColorSwatches = {}
         for si, sd in ipairs(GEAR_COLOR_DEFS) do
-            local _sd    = sd
-            local slotX  = PAD + (si - 1) * SW_SLOT_W
+            local slotX = PAD + (si - 1) * SW_SLOT_W
 
             local lbl = p:CreateFontString(nil, "OVERLAY")
             lbl:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
-            lbl:SetText(_sd.label)
+            lbl:SetText(sd.label)
             lbl:SetTextColor(0.70, 0.70, 0.70, 1)
-            -- Vertically center the 9pt label against the 16px swatch.
             lbl:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", slotX, COLOR_BOT_Y + 3)
 
             local sw = MakePopupSwatch(p)
             sw:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", slotX + 28, COLOR_BOT_Y)
-
-            local function getCurrentColor()
-                local gdb3 = Addon.db and Addon.db.global
-                local tc3  = (gdb3 and gdb3.themeColors) or {}
-                return tc3[_sd.rk] or _sd.dr, tc3[_sd.gk] or _sd.dg, tc3[_sd.bk] or _sd.db
-            end
-            local function saveColorToDb(r, g, b)
-                local gdb3 = Addon.db and Addon.db.global
-                if not gdb3 then return end
-                gdb3.themeColors          = gdb3.themeColors or {}
-                gdb3.themeColors[_sd.rk]  = r
-                gdb3.themeColors[_sd.gk]  = g
-                gdb3.themeColors[_sd.bk]  = b
-                if Addon.ApplyThemeColors then Addon:ApplyThemeColors() end
-            end
-
-            local ir, ig, ib = getCurrentColor()
-            sw:SetColor(ir, ig, ib)
+            sw:SetColor(sd.get())
             sw:SetScript("OnClick", function()
-                local cr, cg, cb = getCurrentColor()
+                local cr, cg, cb = sd.get()
                 OpenPopupColorPicker(cr, cg, cb,
-                    function(nr, ng, nb) saveColorToDb(nr, ng, nb); sw:SetColor(nr, ng, nb) end,
-                    function(pr, pg, pb) saveColorToDb(pr, pg, pb); sw:SetColor(pr, pg, pb) end
+                    function(nr, ng, nb) sd.save(nr, ng, nb); sw:SetColor(nr, ng, nb) end,
+                    function(pr, pg, pb) sd.save(pr, pg, pb); sw:SetColor(pr, pg, pb) end
                 )
             end)
             p._gearColorSwatches[si] = sw
@@ -460,12 +449,11 @@ function Addon:ToggleGearPopup(anchor, growRight)
         verLabel:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
         verLabel:SetPoint("BOTTOMLEFT", creditLabel, "TOPLEFT", 0, 2)
         verLabel:SetJustifyH("LEFT")
-        local _verText = _ver ~= "" and ("v" .. _ver) or ""
-        local _dataText = _dataVer ~= "" and ("Data: " .. _dataVer) or ""
-        if _verText ~= "" and _dataText ~= "" then
-            verLabel:SetText(_verText .. "  \226\128\162  " .. _dataText)
-        else
-            verLabel:SetText(_verText .. _dataText)
+        do
+            local parts = {}
+            if _ver     ~= "" then parts[#parts + 1] = "v" .. _ver          end
+            if _dataVer ~= "" then parts[#parts + 1] = "Data: " .. _dataVer end
+            verLabel:SetText(table.concat(parts, "  \226\128\162  "))
         end
         verLabel:SetTextColor(0.45, 0.45, 0.45, 0.6)
 
