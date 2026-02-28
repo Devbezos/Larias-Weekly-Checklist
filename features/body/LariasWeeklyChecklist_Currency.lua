@@ -1671,11 +1671,17 @@ function Addon:CreateTrackingPanel(parentFrame)
             end
         end)
 
-    -- Currency title button: toggles the currency panel.
+    -- Currency title button: toggles the Weekly Rewards (weekly overview) frame.
     MakeTitleButton(rightCol,
-        L.TOOLTIP_OPEN_CURRENCIES or "Click to open the Currency panel",
+        L.TOOLTIP_OPEN_WEEKLY or "Click to open the Weekly Rewards",
         function()
-            ToggleCharacter("TokenFrame")
+            if not WeeklyRewardsFrame then
+                C_AddOns.LoadAddOn("Blizzard_WeeklyRewards")
+            end
+            if WeeklyRewardsFrame then
+                if WeeklyRewardsFrame:IsShown() then WeeklyRewardsFrame:Hide()
+                else WeeklyRewardsFrame:Show() end
+            end
         end)
 
     local rightTitle = trackingFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")

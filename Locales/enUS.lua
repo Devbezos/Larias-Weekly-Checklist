@@ -53,6 +53,7 @@ local STRINGS = {
 	-- Tracking panel header tooltips
 	TOOLTIP_OPEN_GREAT_VAULT  = "Click to open the Great Vault",
 	TOOLTIP_OPEN_CURRENCIES   = "Click to open the Currency panel",
+	TOOLTIP_OPEN_WEEKLY       = "Click to open the Weekly Rewards",
 
 	-- Tracking panel
 	TRACKING_GREAT_VAULT_TITLE = "Great Vault",
