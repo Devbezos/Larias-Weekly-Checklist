@@ -595,9 +595,8 @@ function Addon:CreateHeader(frame)
     -- scroll events keep the change-week button label in sync.
     Addon._wireScrollHeaderHooks = function(sf)
         local _sb = sf.ScrollBar
-        if _sb and _sb.HookScript then
-            _sb:HookScript("OnValueChanged", function() RefreshChangeWeekLabel_() end)
-        end
+        -- OnVerticalScroll covers every scroll step; OnValueChanged on the scrollbar
+        -- fires the same event, so we skip it to avoid double-calling the label refresh.
         if sf.HookScript then
             sf:HookScript("OnScrollRangeChanged", function() RefreshChangeWeekLabel_() end)
             sf:HookScript("OnVerticalScroll",     function() RefreshChangeWeekLabel_() end)
