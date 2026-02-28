@@ -82,7 +82,7 @@ function Addon:SyncGearPopup()
         end
     end
     Sync(p._cbHideCompleted,    db.hideCompletedSections and true or false,
-         L.HIDE_COMPLETED_WEEKS      or "Hide Completed Weeks")
+         L.HIDE_COMPLETED           or "Hide Completed")
     Sync(p._cbHideGreatVault,   not db.showGreatVault,
          L.OPTIONS_HIDE_GREAT_VAULT  or "Hide Great Vault")
     Sync(p._cbHideCurrency,     not db.showCurrency,
@@ -326,6 +326,9 @@ function Addon:ToggleGearPopup(anchor, growRight)
                 local db = Addon:EnsurePrefs()
                 db.hideCompletedSections = checked
                 if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
+                if Addon._sidePanel and Addon._sidePanel.RefreshAll then
+                    Addon._sidePanel.RefreshAll()
+                end
             end,
             _cbHideGreatVault = function(checked)
                 local db = Addon:EnsurePrefs()
