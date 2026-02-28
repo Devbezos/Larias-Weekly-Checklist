@@ -84,7 +84,11 @@ function Addon:CreateHeader(frame)
                 textRegion:ClearAllPoints()
                 textRegion:SetPoint("CENTER", tabButton, "CENTER", 0, 0)
             end
-            if textRegion.SetTextColor then textRegion:SetTextColor(1, 1, 1, 1) end
+            if textRegion.SetTextColor then
+                local _t = Addon.THEME and Addon.THEME.text
+                if _t then textRegion:SetTextColor(_t.r, _t.g, _t.b, _t.a or 1)
+                else        textRegion:SetTextColor(1, 1, 1, 1) end
+            end
         end
         if tabButton.CreateTexture and not tabButton._lariasCustomHighlight then
             local highlight = tabButton:CreateTexture(nil, "HIGHLIGHT")

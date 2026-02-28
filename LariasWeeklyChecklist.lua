@@ -964,18 +964,27 @@ function Addon:ApplyThemeColors()
     -- Refresh Settings panel color swatches if the panel is open.
     if self.RefreshSettingsSwatches then self:RefreshSettingsSwatches() end
 
+    -- Re-style the header buttons (Select Week / View Item Levels) so their labels
+    -- pick up the new text color immediately.
+    local _mf = self._mainFrame
+    if _mf and self._styleActionButton then
+        if _mf._lariasChangeWeekBtn then self._styleActionButton(_mf._lariasChangeWeekBtn) end
+        if _mf._lariasIlvlRefBtn    then self._styleActionButton(_mf._lariasIlvlRefBtn)    end
+    end
+
+    -- Refresh gear popup checkbox labels immediately (works whether the popup is shown or not).
+    if self.SyncGearPopup then self:SyncGearPopup() end
+
     -- Rebuild the item-level reference window so its data rows reflect the new text color.
     -- The window is statically built, so a rebuild is the cleanest way to re-color it.
     if self._ilvlRefWindow and self.RebuildIlvlRefWindow then
         self:RebuildIlvlRefWindow()
     end
 
-    -- Re-populate the week picker if it is currently open so its button labels
-    -- immediately reflect the new text color.
-    local _pickerFrame = self._mainFrame and self._mainFrame._lariasHeaderPicker
-    if _pickerFrame and _pickerFrame.IsShown and _pickerFrame:IsShown() then
-        if self._PopulateHeaderPicker then self._PopulateHeaderPicker() end
-    end
+    -- Re-populate the week picker if it already exists so its button labels reflect the new text color.
+    -- Guard with _lariasHeaderPicker to avoid eagerly building the picker frame during color drags.
+    local _pickerFrame = _mf and _mf._lariasHeaderPicker
+    if _pickerFrame and self._PopulateHeaderPicker then self._PopulateHeaderPicker() end
 
     -- Repaint list item labels with the new text color.
     if self.RequestRefresh then self:RequestRefresh() end
