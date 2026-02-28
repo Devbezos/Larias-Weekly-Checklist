@@ -1289,10 +1289,11 @@ local function ResizeTrackingPanelToContent(addon)
         elseif wMode == "side-right" or wMode == "side-left" or wMode == "full" then
             weeklyColBottom = 8 + wsH + bottomPad
         elseif wMode == "top-left" then
-            -- GV sits below weeklies: adjust topOffset so it measures from GV's origin.
-            -- ws starts at y=-8; GV_GAP=30 leaves room for the GV section title.
-            topOffset = 8 + wsH + 30
-            contentH  = bottomLeft  -- GV drives total height; currency fits in top row
+            -- GV sits below the taller of weeklies or currency.
+            -- rightCol starts at y=-32 and extends bottomRight px; GV_GAP=30 for the GV title.
+            local GV_GAP = 30
+            topOffset = 32 + bottomRight + GV_GAP  -- where GV data starts
+            contentH  = bottomLeft  -- GV content drives remaining height
         end
     end
 
@@ -2497,14 +2498,22 @@ function Addon:ResizeTrackingCols()
                 rightCol:SetWidth(newColW)
                 rightCol:SetPoint("TOPLEFT", tf, "TOPLEFT", padL + newColW + colGap, -32)
             end
-            -- leftCol (GV) below weeklies, spanning full width.
+            -- leftCol (GV) full-width below whichever top column is taller.
+            -- Anchor off rightCol BOTTOMLEFT back-shifted to the left edge so GV always
+            -- clears the currency rows even when they are taller than weeklies.
             if leftShown and leftCol then
-                local wsH   = tonumber(ws:GetHeight()) or 0
-                local GV_GAP = 30  -- 24px for GV title + 6px breathing room
+                local GV_GAP = 30  -- space for the GV section title (24px) + 6px gap
                 local fullW  = math.max(10, math.floor(frameW - padL - padR))
                 leftCol:ClearAllPoints()
                 leftCol:SetWidth(fullW)
-                leftCol:SetPoint("TOPLEFT", tf, "TOPLEFT", padL, -(8 + wsH + GV_GAP))
+                if rightShown and rightCol then
+                    -- Offset: leftCol TOPLEFT = rightCol BOTTOMLEFT shifted left by (colW+gap).
+                    leftCol:SetPoint("TOPLEFT", rightCol, "BOTTOMLEFT", -(newColW + colGap), -GV_GAP)
+                else
+                    -- Currency hidden: anchor below weeklies.
+                    local wsH = tonumber(ws:GetHeight()) or 0
+                    leftCol:SetPoint("TOPLEFT", tf, "TOPLEFT", padL, -(8 + wsH + GV_GAP))
+                end
             end
         elseif wMode == "full" then
             local fullW = math.max(10, math.floor(frameW - 2 * WSEC_PAD_LR))
