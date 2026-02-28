@@ -17,7 +17,8 @@ local function SetCheckText(checkButton, text)
     end
 end
 
--- ── Color-picker helpers (local copies; mirrors Settings.lua) ─────────────────
+local OpenPopupColorPicker = Addon.Controls.OpenColorPicker
+
 -- Creates a small 16×16 colored swatch button.  Call swatch:SetColor(r,g,b).
 local function MakePopupSwatch(parent)
     local btn = CreateFrame("Button", nil, parent)
@@ -32,33 +33,6 @@ local function MakePopupSwatch(parent)
     btn._fill = fill
     function btn:SetColor(r, g, b) self._fill:SetColorTexture(r, g, b, 1) end
     return btn
-end
-
--- Opens the WoW color picker (supports retail 10.x+ and legacy/Classic).
-local function OpenPopupColorPicker(r, g, b, onUpdate, onCancel)
-    if ColorPickerFrame.SetupColorPickerAndShow then
-        ColorPickerFrame:SetupColorPickerAndShow({
-            r = r, g = g, b = b, hasOpacity = false,
-            swatchFunc = function()
-                local nr, ng, nb = ColorPickerFrame:GetColorRGB()
-                onUpdate(nr, ng, nb)
-            end,
-            cancelFunc = function(prev) onCancel(prev.r, prev.g, prev.b) end,
-        })
-    else
-        ColorPickerFrame.hasOpacity     = false
-        ColorPickerFrame.r, ColorPickerFrame.g, ColorPickerFrame.b = r, g, b
-        ColorPickerFrame.previousValues = { r = r, g = g, b = b }
-        ColorPickerFrame.func = function()
-            local nr, ng, nb = ColorPickerFrame:GetColorRGB()
-            onUpdate(nr, ng, nb)
-        end
-        ColorPickerFrame.cancelFunc = function()
-            local pv = ColorPickerFrame.previousValues
-            onCancel(pv.r, pv.g, pv.b)
-        end
-        ShowUIPanel(ColorPickerFrame)
-    end
 end
 
 -- Shared color-key / default table used by both creation and sync.

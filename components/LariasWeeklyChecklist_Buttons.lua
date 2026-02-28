@@ -83,15 +83,9 @@ end
 -- Addon._styleActionButton(btn) continues to work without any changes.
 Addon._styleActionButton = C.StyleButton
 
--- ── Close button ──────────────────────────────────────────────────────────────
--- Creates and returns a branded 20×20 close button as a child of `parent`.
--- Design: dark backdrop matching the frame theme, gold "✕" glyph at rest,
--- white glyph + red bg tint on hover, deeper red on push, "Close" tooltip.
--- onClick defaults to hiding parent.  Caller is responsible for positioning.
-function C.NewCloseButton(parent, onClick)
-    local btn = CreateFrame("Button", nil, parent)
-    btn:SetSize(20, 20)
-
+-- Applies a fixed dark backdrop (not theme-driven) to header icon buttons so
+-- they never change color when the user adjusts the background theme.
+local function ApplyFixedBackdrop(btn)
     if not btn.SetBackdrop and BackdropTemplateMixin and Mixin then
         Mixin(btn, BackdropTemplateMixin)
     end
@@ -106,6 +100,17 @@ function C.NewCloseButton(parent, onClick)
         local bd = Addon.THEME and Addon.THEME.border or { r=0.3, g=0.3, b=0.3, a=0.8 }
         btn:SetBackdropBorderColor(bd.r, bd.g, bd.b, bd.a)
     end
+end
+
+-- ── Close button ──────────────────────────────────────────────────────────────
+-- Creates and returns a branded 20×20 close button as a child of `parent`.
+-- Design: fixed dark backdrop, gold "✕" glyph at rest, white glyph + red bg
+-- tint on hover, deeper red on push, "Close" tooltip.
+-- onClick defaults to hiding parent.  Caller is responsible for positioning.
+function C.NewCloseButton(parent, onClick)
+    local btn = CreateFrame("Button", nil, parent)
+    btn:SetSize(20, 20)
+    ApplyFixedBackdrop(btn)
 
     local T  = Addon.THEME or {}
     local th = T.header or { r = 1.00, g = 0.82, b = 0.00 }  -- gold accent
@@ -152,21 +157,7 @@ end
 function C.NewIconButton(parent, texturePath, onClick, tooltip)
     local btn = CreateFrame("Button", nil, parent)
     btn:SetSize(20, 20)
-
-    if not btn.SetBackdrop and BackdropTemplateMixin and Mixin then
-        Mixin(btn, BackdropTemplateMixin)
-    end
-    if btn.SetBackdrop then
-        btn:SetBackdrop({
-            bgFile   = "Interface\\Buttons\\WHITE8x8",
-            edgeFile = "Interface\\Buttons\\WHITE8x8",
-            tile = false, edgeSize = 1,
-            insets = { left = 3, right = 3, top = 3, bottom = 3 },
-        })
-        btn:SetBackdropColor(0.08, 0.08, 0.08, 0.85)
-        local bd = Addon.THEME and Addon.THEME.border or { r=0.3, g=0.3, b=0.3, a=0.8 }
-        btn:SetBackdropBorderColor(bd.r, bd.g, bd.b, bd.a)
-    end
+    ApplyFixedBackdrop(btn)
 
     local T  = Addon.THEME or {}
     local tt = T.text   or { r = 1, g = 1, b = 1 }

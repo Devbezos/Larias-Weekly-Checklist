@@ -62,6 +62,36 @@ function C.NewPopupPanel(strata, fadeTime)
     return p
 end
 
+-- ── Color picker ─────────────────────────────────────────────────────────────
+-- Thin wrapper around WoW's color picker that supports both the retail 10.x+
+-- API (ColorPickerFrame:SetupColorPickerAndShow) and the legacy Classic API.
+-- onUpdate(r,g,b) fires live while dragging; onCancel(r,g,b) fires on cancel.
+function C.OpenColorPicker(r, g, b, onUpdate, onCancel)
+    if ColorPickerFrame.SetupColorPickerAndShow then
+        ColorPickerFrame:SetupColorPickerAndShow({
+            r = r, g = g, b = b, hasOpacity = false,
+            swatchFunc = function()
+                local nr, ng, nb = ColorPickerFrame:GetColorRGB()
+                onUpdate(nr, ng, nb)
+            end,
+            cancelFunc = function(prev) onCancel(prev.r, prev.g, prev.b) end,
+        })
+    else
+        ColorPickerFrame.hasOpacity     = false
+        ColorPickerFrame.r, ColorPickerFrame.g, ColorPickerFrame.b = r, g, b
+        ColorPickerFrame.previousValues = { r = r, g = g, b = b }
+        ColorPickerFrame.func = function()
+            local nr, ng, nb = ColorPickerFrame:GetColorRGB()
+            onUpdate(nr, ng, nb)
+        end
+        ColorPickerFrame.cancelFunc = function()
+            local pv = ColorPickerFrame.previousValues
+            onCancel(pv.r, pv.g, pv.b)
+        end
+        ShowUIPanel(ColorPickerFrame)
+    end
+end
+
 -- ── Divider ───────────────────────────────────────────────────────────────────
 -- Creates a 1 px horizontal rule textured in the border theme color.
 -- y (negative) sets TOPLEFT Y offset from parent; omit to position manually.

@@ -18,44 +18,7 @@ local panelFrame         -- outer canvas WoW hosts
 local _checkboxes = {}   -- { cb, row }
 local _colorSwatches = {} -- { swatch, def }
 
--- ── Color-picker helpers ──────────────────────────────────────────────────────
-
--- Opens the WoW color picker.  Supports the retail 10.x+ API and the
--- legacy API used by Classic/pre-10.0 retail.
--- onUpdate(r,g,b) is called live while the user drags the picker.
--- onCancel(r,g,b) is called when the user presses Cancel/X.
-local function OpenColorPicker(r, g, b, onUpdate, onCancel)
-    if ColorPickerFrame.SetupColorPickerAndShow then
-        -- Retail 10.x+
-        ColorPickerFrame:SetupColorPickerAndShow({
-            r          = r,   g        = g,   b      = b,
-            hasOpacity = false,
-            swatchFunc = function()
-                local nr, ng, nb = ColorPickerFrame:GetColorRGB()
-                onUpdate(nr, ng, nb)
-            end,
-            cancelFunc = function(prev)
-                onCancel(prev.r, prev.g, prev.b)
-            end,
-        })
-    else
-        -- Legacy fallback (Classic / pre-10.0)
-        ColorPickerFrame.hasOpacity     = false
-        ColorPickerFrame.r              = r
-        ColorPickerFrame.g              = g
-        ColorPickerFrame.b              = b
-        ColorPickerFrame.previousValues = { r = r, g = g, b = b }
-        ColorPickerFrame.func = function()
-            local nr, ng, nb = ColorPickerFrame:GetColorRGB()
-            onUpdate(nr, ng, nb)
-        end
-        ColorPickerFrame.cancelFunc = function()
-            local pv = ColorPickerFrame.previousValues
-            onCancel(pv.r, pv.g, pv.b)
-        end
-        ShowUIPanel(ColorPickerFrame)
-    end
-end
+local OpenColorPicker = Addon.Controls.OpenColorPicker
 
 -- Creates a small colored swatch button on `parent`.
 -- Call swatch:SetColor(r,g,b) to update the display color.
@@ -303,98 +266,44 @@ local function BuildPanel()
     secColors:SetText("Colors")
     curY = curY - 20 - 4
 
-    -- Color row definitions:
-    --   getColor()         → r, g, b   (returns current saved value or compiled default)
-    --   saveColor(r, g, b) → persists to db.global.themeColors and re-applies theme
-    --   resetColor()       → clears the saved value and re-applies theme
+    -- Factory: builds a color-row definition from key names and hard defaults.
+    -- getColor() → r, g, b (saved value or default)
+    -- saveColor(r,g,b) → writes to db.global.themeColors and re-applies theme
+    -- resetColor()     → clears saved value and re-applies theme
+    local function makeColorDef(label, rk, gk, bk, dr, dg, db_)
+        return {
+            label = label,
+            getColor = function()
+                local gdb = Addon.db and Addon.db.global
+                local tc  = gdb and gdb.themeColors
+                if tc and tc[rk] ~= nil then return tc[rk], tc[gk], tc[bk] end
+                return dr, dg, db_
+            end,
+            saveColor = function(r, g, b)
+                local gdb = Addon.db and Addon.db.global
+                if not gdb then return end
+                gdb.themeColors = gdb.themeColors or {}
+                gdb.themeColors[rk] = r
+                gdb.themeColors[gk] = g
+                gdb.themeColors[bk] = b
+                if Addon.ApplyThemeColors then Addon:ApplyThemeColors() end
+            end,
+            resetColor = function()
+                local gdb = Addon.db and Addon.db.global
+                if gdb and gdb.themeColors then
+                    gdb.themeColors[rk] = nil
+                    gdb.themeColors[gk] = nil
+                    gdb.themeColors[bk] = nil
+                end
+                if Addon.ApplyThemeColors then Addon:ApplyThemeColors() end
+            end,
+        }
+    end
+
     local colorDefs = {
-        {
-            label = "Background",
-            getColor = function()
-                local gdb = Addon.db and Addon.db.global
-                local tc  = gdb and gdb.themeColors
-                if tc and tc.bgR ~= nil then
-                    return tc.bgR, tc.bgG, tc.bgB
-                end
-                return 0.10, 0.10, 0.10   -- compiled default
-            end,
-            saveColor = function(r, g, b)
-                local gdb = Addon.db and Addon.db.global
-                if not gdb then return end
-                gdb.themeColors     = gdb.themeColors or {}
-                gdb.themeColors.bgR = r
-                gdb.themeColors.bgG = g
-                gdb.themeColors.bgB = b
-                if Addon.ApplyThemeColors then Addon:ApplyThemeColors() end
-            end,
-            resetColor = function()
-                local gdb = Addon.db and Addon.db.global
-                if gdb and gdb.themeColors then
-                    gdb.themeColors.bgR = nil
-                    gdb.themeColors.bgG = nil
-                    gdb.themeColors.bgB = nil
-                end
-                if Addon.ApplyThemeColors then Addon:ApplyThemeColors() end
-            end,
-        },
-        {
-            label = "List Text",
-            getColor = function()
-                local gdb = Addon.db and Addon.db.global
-                local tc  = gdb and gdb.themeColors
-                if tc and tc.textR ~= nil then
-                    return tc.textR, tc.textG, tc.textB
-                end
-                return 1.00, 1.00, 1.00   -- compiled default
-            end,
-            saveColor = function(r, g, b)
-                local gdb = Addon.db and Addon.db.global
-                if not gdb then return end
-                gdb.themeColors       = gdb.themeColors or {}
-                gdb.themeColors.textR = r
-                gdb.themeColors.textG = g
-                gdb.themeColors.textB = b
-                if Addon.ApplyThemeColors then Addon:ApplyThemeColors() end
-            end,
-            resetColor = function()
-                local gdb = Addon.db and Addon.db.global
-                if gdb and gdb.themeColors then
-                    gdb.themeColors.textR = nil
-                    gdb.themeColors.textG = nil
-                    gdb.themeColors.textB = nil
-                end
-                if Addon.ApplyThemeColors then Addon:ApplyThemeColors() end
-            end,
-        },
-        {
-            label = "Header Text",
-            getColor = function()
-                local gdb = Addon.db and Addon.db.global
-                local tc  = gdb and gdb.themeColors
-                if tc and tc.headerR ~= nil then
-                    return tc.headerR, tc.headerG, tc.headerB
-                end
-                return 1.00, 0.82, 0.00   -- compiled default (gold)
-            end,
-            saveColor = function(r, g, b)
-                local gdb = Addon.db and Addon.db.global
-                if not gdb then return end
-                gdb.themeColors         = gdb.themeColors or {}
-                gdb.themeColors.headerR = r
-                gdb.themeColors.headerG = g
-                gdb.themeColors.headerB = b
-                if Addon.ApplyThemeColors then Addon:ApplyThemeColors() end
-            end,
-            resetColor = function()
-                local gdb = Addon.db and Addon.db.global
-                if gdb and gdb.themeColors then
-                    gdb.themeColors.headerR = nil
-                    gdb.themeColors.headerG = nil
-                    gdb.themeColors.headerB = nil
-                end
-                if Addon.ApplyThemeColors then Addon:ApplyThemeColors() end
-            end,
-        },
+        makeColorDef("Background", "bgR",     "bgG",     "bgB",     0.10, 0.10, 0.10),
+        makeColorDef("List Text",  "textR",   "textG",   "textB",   1.00, 1.00, 1.00),
+        makeColorDef("Header Text","headerR", "headerG", "headerB", 1.00, 0.82, 0.00),
     }
 
     _colorSwatches = {}
