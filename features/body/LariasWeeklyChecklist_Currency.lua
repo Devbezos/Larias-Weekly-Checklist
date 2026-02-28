@@ -1366,6 +1366,7 @@ local function BuildWeekliesSection(trackingFrame)
     hdrFS:SetJustifyV("MIDDLE")
     hdrFS:SetTextColor(THEME.header.r, THEME.header.g, THEME.header.b, THEME.header.a)
     hdrFS:SetText(L.TRACKING_WEEKLIES_TITLE or "Weeklies")
+    sec._hdrFS = hdrFS
 
     -- Two column sub-frames: left = rows 1-3, right = rows 4-6.
     -- We need to split at the horizontal midpoint while keeping Y at the top of
@@ -1414,6 +1415,7 @@ local function BuildWeekliesSection(trackingFrame)
         lblFS:SetJustifyH("LEFT")
         lblFS:SetJustifyV("MIDDLE")
         if lblFS.SetWordWrap then lblFS:SetWordWrap(false) end
+        do local t = THEME.text; lblFS:SetTextColor(t.r, t.g, t.b, 1) end
 
         -- All rows use a right-aligned value FontString ("x/4", "0/1", "1/1").
         local valFS = colFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -1428,6 +1430,7 @@ local function BuildWeekliesSection(trackingFrame)
         lblFS:SetText(d.label)
         tinsert(rows, row)
     end
+    sec._rows = rows
 
     local function Refresh()
         local hideCompleted = Addon:EnsurePrefs().hideCompletedSections

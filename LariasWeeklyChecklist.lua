@@ -913,6 +913,21 @@ function Addon:ApplyThemeColors()
         local h = self.THEME.header
         if tf._lariasLeftTitle  then tf._lariasLeftTitle:SetTextColor(h.r, h.g, h.b, h.a)  end
         if tf._lariasRightTitle then tf._lariasRightTitle:SetTextColor(h.r, h.g, h.b, h.a) end
+        -- Refresh weeklies section header and row label colors.
+        local ws = tf._lariasWeekliesSection
+        if ws then
+            if ws._hdrFS then ws._hdrFS:SetTextColor(h.r, h.g, h.b, h.a) end
+            local t = self.THEME.text
+            if ws._rows then
+                for _, row in ipairs(ws._rows) do
+                    if row.lblFS then row.lblFS:SetTextColor(t.r, t.g, t.b, 1) end
+                end
+            end
+            if ws._bg then
+                local bg = self.THEME.bg
+                ws._bg:SetColorTexture(bg.r, bg.g, bg.b, bg.a)
+            end
+        end
         -- Refresh Great Vault row labels (Raid / Dungeons / World) with the current header color.
         local grids = tf._lariasGvGrids
         if type(grids) == "table" then
