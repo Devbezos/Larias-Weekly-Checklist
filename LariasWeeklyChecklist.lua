@@ -317,6 +317,7 @@ local function SetupAddonDB()
             showCurrency          = true,
             showChangeWeekBtn     = true,
             showIlvlRefBtn        = true,
+            showWeekliesBtn       = true,
             showCharPickerBtn     = true,
             showScaleSlider       = true,
             showOpacitySlider     = true,
@@ -378,7 +379,7 @@ local function MigrateProfileDataToGlobalChars()
     end
     -- Preferences
     for _, k in ipairs({ "hideCompletedSections", "showGreatVault", "showCurrency",
-                         "showChangeWeekBtn", "showIlvlRefBtn", "showCharPickerBtn", "debug" }) do
+                         "showChangeWeekBtn", "showIlvlRefBtn", "showWeekliesBtn", "showCharPickerBtn", "debug" }) do
         if oldProf[k] ~= nil then cdb[k] = oldProf[k] end
     end
 
@@ -393,6 +394,7 @@ local function MigrateProfileDataToGlobalChars()
     oldProf.showCurrency      = nil
     oldProf.showChangeWeekBtn = nil
     oldProf.showIlvlRefBtn    = nil
+    oldProf.showWeekliesBtn   = nil
     oldProf.showCharPickerBtn = nil
     oldProf.debug             = nil
 end
@@ -602,7 +604,7 @@ end
 -- player's customised settings are preserved.
 local _PREF_KEYS = {
     "hideCompletedSections", "showGreatVault", "showCurrency",
-    "showChangeWeekBtn", "showIlvlRefBtn", "showCharPickerBtn",
+    "showChangeWeekBtn", "showIlvlRefBtn", "showWeekliesBtn", "showCharPickerBtn",
     "showScaleSlider", "showOpacitySlider", "hideUpdateNotice",
 }
 function Addon:EnsurePrefs()

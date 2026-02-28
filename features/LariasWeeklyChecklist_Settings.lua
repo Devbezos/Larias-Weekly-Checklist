@@ -177,6 +177,14 @@ local function BuildPanel()
             end,
         },
         {
+            label    = L.OPTIONS_HIDE_WEEKLIES_BTN or "Hide Weeklies Button",
+            getVal   = function(d) return d.showWeekliesBtn == false end,
+            onChange = function(v)
+                Addon:EnsurePrefs().showWeekliesBtn = not v
+                if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
+            end,
+        },
+        {
             label    = L.OPTIONS_HIDE_CHAR_SELECT or "Hide Character Selector",
             getVal   = function(d) return d.showCharPickerBtn == false end,
             onChange = function(v)

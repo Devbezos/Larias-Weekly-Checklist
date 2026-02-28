@@ -286,7 +286,7 @@ local function IsAchievementCompleteSafe(achievementID)
     return false
 end
 
-local RIGHT_LINE_COUNT = 20
+local RIGHT_LINE_COUNT = 10
 local RIGHT_ROW_KEYS = {}
 for _i = 1, RIGHT_LINE_COUNT do RIGHT_ROW_KEYS[_i] = "line" .. _i end
 
@@ -759,76 +759,6 @@ local function GetWeeklyPreyParts()
     return GetQuestDoneParts(L.TRACKING_QUEST_WEEKLY_PREY or "", "weeklyPrey", { as01 = true })
 end
 
--- Quest completion check that handles both a single quest ID and a table of
--- variant IDs (e.g. Fortify the Runestones has 4 player-assigned variants).
--- Returns true/false/nil (nil = all IDs disabled or API unavailable).
-local function GetQuestDoneAnyRaw(questKey)
-    local q = Addon.TRACKING and Addon.TRACKING.questIDs and Addon.TRACKING.questIDs[questKey]
-    if not q then return nil end
-    if type(q) == "table" then
-        -- Multiple variant IDs: true if any one is flagged completed.
-        local hasValid = false
-        for _, id in ipairs(q) do
-            id = tonumber(id) or 0
-            if id > 0 then
-                hasValid = true
-                if C_QuestLog and C_QuestLog.IsQuestFlaggedCompleted then
-                    local ok, done = pcall(C_QuestLog.IsQuestFlaggedCompleted, id)
-                    if ok and done then return true end
-                end
-            end
-        end
-        return hasValid and false or nil
-    else
-        -- Single quest ID: delegate to the existing single-ID helper.
-        return GetQuestDoneRaw(questKey)
-    end
-end
-
--- Count how many of the 30 prey targets have been completed this week.
--- Returns { done = N, goal = G } or nil when IDs are not configured.
-local function GetPreyCountRaw()
-    local tracking = Addon.TRACKING
-    if not (tracking and tracking.preyQuestIDs and tracking.preyQuestGoal) then return nil end
-    if not (C_QuestLog and C_QuestLog.IsQuestFlaggedCompleted) then return nil end
-    local goal  = tonumber(tracking.preyQuestGoal) or 4
-    local count = 0
-    for _, id in ipairs(tracking.preyQuestIDs) do
-        id = tonumber(id) or 0
-        if id > 0 then
-            local ok, done = pcall(C_QuestLog.IsQuestFlaggedCompleted, id)
-            if ok and done then count = count + 1 end
-        end
-    end
-    return { done = count, goal = goal }
-end
-
-local function GetPreyCountParts()
-    local prey = GetPreyCountRaw()
-    if not prey then return "", "" end
-    local lbl = ColorWrap(COLORS.dim, L.TRACKING_QUEST_PREY or "Prey Hunted")
-    local done, goal = prey.done, prey.goal
-    local val
-    if done >= goal then
-        val = ColorWrap(COLORS.green, FormatXY(done, goal))
-    else
-        val = ColorWrap(COLORS.red, FormatXY(done, goal))
-    end
-    return lbl, val
-end
-
--- Generic weekly-quest display wrapper using the any-variant completion check.
-local function GetWeeklyQuestParts(labelText, questKey)
-    local done = GetQuestDoneAnyRaw(questKey)
-    if done == nil then return "", "" end
-    local lbl = ColorWrap(COLORS.dim, labelText)
-    if done then
-        return lbl, ColorWrap(COLORS.green, "1/1")
-    else
-        return lbl, ColorWrap(COLORS.red, "0/1")
-    end
-end
-
 -- Crest trade-up math depends on the configured batch sizes.
 local function GetCrestTradeBatches(profile)
     local p = profile or Addon.TRACKING or {}
@@ -1271,42 +1201,6 @@ local function ApplyRightColumnAsPairs()
     pLbl = pLbl or ""; pVal = pVal or ""
     if idx <= RIGHT_LINE_COUNT and (IsNonEmptyText(pLbl) or IsNonEmptyText(pVal)) then
         SetRightRowPair(idx, pLbl, pVal); idx = idx + 1
-    end
-
-    -- ── Weeklies section ─────────────────────────────────────────────────────
-    -- Prey count + 5 season weekly quests, separated by a section header row.
-    local preyLbl, preyVal = GetPreyCountParts()
-    preyLbl = preyLbl or ""; preyVal = preyVal or ""
-    local wAbLbl, wAbVal   = GetWeeklyQuestParts(L.TRACKING_QUEST_ABUNDANCE          or "Abundance",              "abundance")
-    local wLlLbl, wLlVal   = GetWeeklyQuestParts(L.TRACKING_QUEST_LOST_LEGENDS       or "Lost Legends",           "lostLegends")
-    local wHeLbl, wHeVal   = GetWeeklyQuestParts(L.TRACKING_QUEST_HIGH_ESTEEM        or "High Esteem",            "highEsteem")
-    local wFrLbl, wFrVal   = GetWeeklyQuestParts(L.TRACKING_QUEST_FORTIFY_RUNESTONES or "Fortify the Runestones", "fortifyRunestones")
-    local wSgLbl, wSgVal   = GetWeeklyQuestParts(L.TRACKING_QUEST_STAND_YOUR_GROUND  or "Stand Your Ground",      "standYourGround")
-    local hasWeeklyContent = IsNonEmptyText(preyLbl) or IsNonEmptyText(wAbLbl)
-        or IsNonEmptyText(wLlLbl) or IsNonEmptyText(wHeLbl)
-        or IsNonEmptyText(wFrLbl) or IsNonEmptyText(wSgLbl)
-    if hasWeeklyContent and idx <= RIGHT_LINE_COUNT then
-        -- Section header row
-        local hdr = ColorWrap(COLORS.yellow, L.TRACKING_WEEKLIES_TITLE or "Weeklies")
-        SetRightRowPair(idx, hdr, ""); idx = idx + 1
-    end
-    if IsNonEmptyText(preyLbl) and idx <= RIGHT_LINE_COUNT then
-        SetRightRowPair(idx, preyLbl, preyVal); idx = idx + 1
-    end
-    if IsNonEmptyText(wAbLbl) and idx <= RIGHT_LINE_COUNT then
-        SetRightRowPair(idx, wAbLbl, wAbVal); idx = idx + 1
-    end
-    if IsNonEmptyText(wLlLbl) and idx <= RIGHT_LINE_COUNT then
-        SetRightRowPair(idx, wLlLbl, wLlVal); idx = idx + 1
-    end
-    if IsNonEmptyText(wHeLbl) and idx <= RIGHT_LINE_COUNT then
-        SetRightRowPair(idx, wHeLbl, wHeVal); idx = idx + 1
-    end
-    if IsNonEmptyText(wFrLbl) and idx <= RIGHT_LINE_COUNT then
-        SetRightRowPair(idx, wFrLbl, wFrVal); idx = idx + 1
-    end
-    if IsNonEmptyText(wSgLbl) and idx <= RIGHT_LINE_COUNT then
-        SetRightRowPair(idx, wSgLbl, wSgVal); idx = idx + 1
     end
 
     for i = idx, RIGHT_LINE_COUNT do
@@ -1927,38 +1821,6 @@ ComputeSnapshotData = function(snap)
         snap.rightRows[#snap.rightRows + 1] = { type = "quest", key = "weeklyPrey", done = pDone }
     end
 
-    -- ── Weeklies section ─────────────────────────────────────────────────────
-    -- Prey kill count (need 4 of 30) + 5 season weekly quests.
-    local preyCount = GetPreyCountRaw()
-    local wDoneAbundance         = GetQuestDoneAnyRaw("abundance")
-    local wDoneLostLegends       = GetQuestDoneAnyRaw("lostLegends")
-    local wDoneHighEsteem        = GetQuestDoneAnyRaw("highEsteem")
-    local wDoneFortifyRunestones = GetQuestDoneAnyRaw("fortifyRunestones")
-    local wDoneStandYourGround   = GetQuestDoneAnyRaw("standYourGround")
-    local hasWeeklies = preyCount ~= nil
-        or wDoneAbundance ~= nil or wDoneLostLegends ~= nil or wDoneHighEsteem ~= nil
-        or wDoneFortifyRunestones ~= nil or wDoneStandYourGround ~= nil
-    if hasWeeklies then
-        snap.rightRows[#snap.rightRows + 1] = { type = "section_header", text = L.TRACKING_WEEKLIES_TITLE or "Weeklies" }
-        if preyCount then
-            snap.rightRows[#snap.rightRows + 1] = { type = "prey_count", done = preyCount.done, goal = preyCount.goal }
-        end
-        if wDoneAbundance ~= nil then
-            snap.rightRows[#snap.rightRows + 1] = { type = "quest", key = "abundance", done = wDoneAbundance }
-        end
-        if wDoneLostLegends ~= nil then
-            snap.rightRows[#snap.rightRows + 1] = { type = "quest", key = "lostLegends", done = wDoneLostLegends }
-        end
-        if wDoneHighEsteem ~= nil then
-            snap.rightRows[#snap.rightRows + 1] = { type = "quest", key = "highEsteem", done = wDoneHighEsteem }
-        end
-        if wDoneFortifyRunestones ~= nil then
-            snap.rightRows[#snap.rightRows + 1] = { type = "quest", key = "fortifyRunestones", done = wDoneFortifyRunestones }
-        end
-        if wDoneStandYourGround ~= nil then
-            snap.rightRows[#snap.rightRows + 1] = { type = "quest", key = "standYourGround", done = wDoneStandYourGround }
-        end
-    end
 end
 
 local function SaveTrackingSnapshot(db)
@@ -2068,25 +1930,6 @@ local function RenderSnapshotRow(row)
         end
         return lbl, ColorWrap(color, xy)
 
-    elseif t == "section_header" then
-        -- Visual divider row — full-width label, no value.
-        -- text is the already-localized section title stored at compute time.
-        local text = row.text or ""
-        if not IsNonEmptyText(text) then return "", "" end
-        return ColorWrap(COLORS.yellow, text), ""
-
-    elseif t == "prey_count" then
-        local done = tonumber(row.done) or 0
-        local goal = tonumber(row.goal) or 4
-        local lbl  = ColorWrap(COLORS.dim, L.TRACKING_QUEST_PREY or "Prey Hunted")
-        local val
-        if done >= goal then
-            val = ColorWrap(COLORS.green, FormatXY(done, goal))
-        else
-            val = ColorWrap(COLORS.red, FormatXY(done, goal))
-        end
-        return lbl, val
-
     elseif t == "quest" then
         local key  = row.key
         local done = row.done
@@ -2095,16 +1938,6 @@ local function RenderSnapshotRow(row)
             labelText = L.TRACKING_QUEST_DELVERS_BOUNTY or ""
         elseif key == "weeklyPrey" then
             labelText = L.TRACKING_QUEST_WEEKLY_PREY or ""
-        elseif key == "abundance" then
-            labelText = L.TRACKING_QUEST_ABUNDANCE or ""
-        elseif key == "lostLegends" then
-            labelText = L.TRACKING_QUEST_LOST_LEGENDS or ""
-        elseif key == "highEsteem" then
-            labelText = L.TRACKING_QUEST_HIGH_ESTEEM or ""
-        elseif key == "fortifyRunestones" then
-            labelText = L.TRACKING_QUEST_FORTIFY_RUNESTONES or ""
-        elseif key == "standYourGround" then
-            labelText = L.TRACKING_QUEST_STAND_YOUR_GROUND or ""
         end
         if not IsNonEmptyText(labelText) then return "", "" end
         local lbl = ColorWrap(COLORS.dim, labelText)
