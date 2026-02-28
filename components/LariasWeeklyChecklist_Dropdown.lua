@@ -40,10 +40,7 @@ function C.NewPopupPanel(strata, fadeTime)
     catcher:SetAllPoints(UIParent)
     catcher:SetFrameStrata(st)
     catcher:SetFrameLevel((p.GetFrameLevel and p:GetFrameLevel() or 200) - 1)
-    catcher:EnableMouse(true)
-    -- Note: SetPropagateMouseClicks is a protected function and cannot be called
-    -- by addon code. The catcher will consume the first outside click to close
-    -- the popup, which is standard behaviour for this pattern.
+    catcher:EnableMouse(true)  -- consumes outside clicks to close the popup
     catcher:Hide()
     catcher:SetScript("OnMouseDown", function()
         p:Hide()

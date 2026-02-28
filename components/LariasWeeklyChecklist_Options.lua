@@ -35,15 +35,13 @@ function Addon:ToggleHiddenCharsDropdown()
         catcher:SetAllPoints(UIParent)
         catcher:SetFrameStrata("FULLSCREEN_DIALOG")
         catcher:SetFrameLevel(picker:GetFrameLevel() - 1)
-        -- Propagate so the click still reaches whatever frame is underneath.
-        if catcher.SetPropagateMouseClicks then catcher:SetPropagateMouseClicks(true) end
         catcher:Hide()
         catcher:SetScript("OnMouseDown", function()
             picker:Hide()
             catcher:Hide()
         end)
         picker._catcher = catcher
-        picker:SetScript("OnHide", function(self_)
+        picker:SetScript("OnHide", function()
             catcher:Hide()
         end)
         picker:SetScript("OnShow", function()
