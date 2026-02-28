@@ -142,9 +142,6 @@ local function BuildPanel()
             onChange = function(v)
                 Addon:EnsurePrefs().hideCompletedSections = v
                 if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
-                if Addon._sidePanel and Addon._sidePanel.RefreshAll then
-                    Addon._sidePanel.RefreshAll()
-                end
                 if Addon._inlineWeeklies and Addon._inlineWeeklies.Refresh then
                     Addon._inlineWeeklies.Refresh()
                 end
@@ -180,14 +177,6 @@ local function BuildPanel()
             onChange = function(v)
                 Addon:EnsurePrefs().showIlvlRefBtn = not v
                 if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
-            end,
-        },
-        {
-            label    = L.OPTIONS_HIDE_SIDE_WEEKLIES or "Side: Hide Weeklies",
-            getVal   = function(d) return d.showSidePanelWeeklies == false end,
-            onChange = function(v)
-                Addon:EnsurePrefs().showSidePanelWeeklies = not v
-                if Addon.RebuildSidePanel then Addon:RebuildSidePanel() end
             end,
         },
         {

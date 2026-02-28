@@ -26,7 +26,6 @@ local STRINGS = {
 	HIDE_COMPLETED       = "Hide Completed",
 	OPTIONS_HIDE_CHANGE_WEEK_BTN = 'Hide Week Selector',
 	OPTIONS_HIDE_ILVL_REF_BTN = 'Hide Item Level Popup',
-	OPTIONS_HIDE_SIDE_WEEKLIES  = "Side: Hide Weeklies",
 
 	OPTIONS_HIDE_CHAR_SELECT = "Hide character selector",
 	OPTIONS_HIDDEN_CHARS_TITLE = "Hidden characters:",
@@ -94,7 +93,6 @@ local STRINGS = {
 	CHAR_PICKER_BUTTON = "Swap Profile",
 	CHAR_PICKER_TOOLTIP_REMOVE = "To remove a character, use the Options menu.",
 	ILVLREF_BUTTON = "View Item Levels",
-	SIDE_PANEL_WEEKLIES  = "Weeklies",
 
 
 	-- Item level reference popup

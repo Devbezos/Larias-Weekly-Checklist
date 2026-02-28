@@ -1350,7 +1350,6 @@ local function BuildWeekliesSection(trackingFrame)
         local QIDs2  = Addon.TRACKING and Addon.TRACKING.questIDs or {}
         local PQIDs2 = Addon.TRACKING and Addon.TRACKING.preyQuestIDs
         local pGoal2 = (Addon.TRACKING and Addon.TRACKING.preyQuestGoal) or 4
-        local QDA    = Addon.QuestDoneAny  -- set by SidePanel.lua
         local visibleCount = 0
 
         for _, r in ipairs(rows) do
@@ -1371,7 +1370,7 @@ local function BuildWeekliesSection(trackingFrame)
                 r.valFS:SetText(col .. count .. "/" .. pGoal2 .. CLOSE)
             elseif r.questKey then
                 local entry = QIDs2[r.questKey]
-                local done  = QDA and entry and QDA(entry) or nil
+                local done  = entry and QuestDoneAny(entry) or nil
                 rowDone = (done == true)
                 if done == nil then
                     r.valFS:SetText(DIM .. (L.TRACKING_NA or "N/A") .. CLOSE)
