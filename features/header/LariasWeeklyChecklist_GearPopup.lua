@@ -81,8 +81,15 @@ function Addon:SyncGearPopup()
             SetCheckText(cb, label)
         end
     end
-    Sync(p._cbHideCompleted,    db.hideCompletedSections and true or false,
-         L.HIDE_COMPLETED           or "Hide Completed")
+    local hideTasksOn = db.hideCompletedItems and true or false
+    Sync(p._cbHideCompletedTasks,   hideTasksOn,
+         L.HIDE_COMPLETED_TASKS          or "Hide Completed Tasks")
+    -- Weeks checkbox is locked checked (and visually dimmed) when tasks-hiding is on.
+    Sync(p._cbHideCompleted,    hideTasksOn or (db.hideCompletedSections and true or false),
+         L.HIDE_COMPLETED_WEEKS           or "Hide Completed Weeks")
+    if p._cbHideCompleted then
+        p._cbHideCompleted:SetAlpha(hideTasksOn and 0.40 or 1.0)
+    end
     Sync(p._cbHideGreatVault,   not db.showGreatVault,
          L.OPTIONS_HIDE_GREAT_VAULT  or "Hide Great Vault")
     Sync(p._cbHideCurrency,     not db.showCurrency,
@@ -164,16 +171,17 @@ function Addon:SyncGearPopup()
     do
         local PAD      = 10
         local TILE_H   = 34   -- tile height
-        local N_TOTAL  = 10
+        local N_TOTAL  = 11
         local rstStartY  = PAD
         local div1StartY = rstStartY + 22 + 6
         local cbsY       = div1StartY + 1 + 8
-        -- Slots 1-6 always present; slot 7 = char picker (conditional);
-        -- slot 8 = sliders (combined); slot 9 = update notice; slot 10 = minimap btn.
-        -- When char picker is hidden, slots 8-10 each shift up by one.
-        local SLIDERS_IDX        = 8
-        local UPDATE_NOTICE_IDX  = 9
-        local MINIMAP_BTN_IDX    = 10
+        -- Slots 1-7 always present (tasks, weeks, great vault, currency, weeklies,
+        -- change week, ilvl ref); slot 8 = char picker (conditional);
+        -- slot 9 = sliders; slot 10 = update notice; slot 11 = minimap btn.
+        -- When char picker is hidden, slots 9-11 each shift up by one.
+        local SLIDERS_IDX        = 9
+        local UPDATE_NOTICE_IDX  = 10
+        local MINIMAP_BTN_IDX    = 11
         local slidersVisIdx      = showCharRow and SLIDERS_IDX       or (SLIDERS_IDX       - 1)
         local updateNoticeVisIdx = showCharRow and UPDATE_NOTICE_IDX  or (UPDATE_NOTICE_IDX  - 1)
         local minimapBtnVisIdx   = showCharRow and MINIMAP_BTN_IDX    or (MINIMAP_BTN_IDX    - 1)
@@ -313,6 +321,7 @@ function Addon:ToggleGearPopup(anchor, growRight)
 
         -- ── 8 Checkboxes ──────────────────────────────────────────────────
         local checks = {
+            { key = "_cbHideCompletedTasks", },
             { key = "_cbHideCompleted",   },
             { key = "_cbHideGreatVault",  },
             { key = "_cbHideCurrency",    },
@@ -325,8 +334,23 @@ function Addon:ToggleGearPopup(anchor, growRight)
             { key = "_cbHideMinimapBtn",  },
         }
         local callbacks = {
+            _cbHideCompletedTasks = function(checked)
+                local db = Addon:EnsurePrefs()
+                db.hideCompletedItems = checked
+                if checked then
+                    -- Enabling task-hiding forces section-hiding on as well.
+                    db.hideCompletedSections = true
+                end
+                if Addon.SyncGearPopup    then Addon:SyncGearPopup()    end
+                if Addon.RequestRefresh   then Addon:RequestRefresh()   else Addon:Refresh() end
+            end,
             _cbHideCompleted  = function(checked)
                 local db = Addon:EnsurePrefs()
+                -- If task-hiding is on, weeks-hiding is locked; ignore the click.
+                if db.hideCompletedItems then
+                    if Addon.SyncGearPopup then Addon:SyncGearPopup() end
+                    return
+                end
                 db.hideCompletedSections = checked
                 if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
                 if Addon._inlineWeeklies and Addon._inlineWeeklies.Refresh then

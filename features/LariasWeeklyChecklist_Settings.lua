@@ -137,7 +137,21 @@ local function BuildPanel()
     -- Row definitions: { label, getVal(db) → bool, onChange(v) }
     local rows = {
         {
-            label    = L.HIDE_COMPLETED or "Hide Completed",
+            label    = L.HIDE_COMPLETED_TASKS or "Hide Completed Tasks",
+            getVal   = function(d) return d.hideCompletedItems and true or false end,
+            onChange = function(v)
+                local prefs = Addon:EnsurePrefs()
+                prefs.hideCompletedItems = v
+                if v then
+                    -- Enabling task-hiding forces section-hiding on as well.
+                    prefs.hideCompletedSections = true
+                end
+                if Addon.SyncGearPopup  then Addon:SyncGearPopup()  end
+                if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
+            end,
+        },
+        {
+            label    = L.HIDE_COMPLETED_WEEKS or "Hide Completed Weeks",
             getVal   = function(d) return d.hideCompletedSections and true or false end,
             onChange = function(v)
                 Addon:EnsurePrefs().hideCompletedSections = v

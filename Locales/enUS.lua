@@ -24,6 +24,7 @@ local STRINGS = {
 	OPTIONS_HIDE_CURRENCY = "Hide Currency",
 	OPTIONS_HIDE_WEEKLIES = "Hide Weeklies",
 	HIDE_COMPLETED_WEEKS = "Hide Completed Weeks",
+	HIDE_COMPLETED_TASKS = "Hide Completed Tasks",
 	HIDE_COMPLETED       = "Hide Completed",
 	OPTIONS_HIDE_CHANGE_WEEK_BTN = 'Hide Week Selector',
 	OPTIONS_HIDE_ILVL_REF_BTN = 'Hide Item Level Popup',

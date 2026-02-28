@@ -313,6 +313,7 @@ local function SetupAddonDB()
             hiddenChars   = {},  -- [profileKey] = true (hidden from char picker dropdown)
             -- Account-wide display preferences (shared across all characters).
             hideCompletedSections = true,
+            hideCompletedItems    = false,
             showGreatVault        = true,
             showCurrency          = true,
             showInlineWeeklies    = true,
@@ -610,7 +611,7 @@ end
 -- scheme, copies the current character's display prefs into db.global so the
 -- player's customised settings are preserved.
 local _PREF_KEYS = {
-    "hideCompletedSections", "showGreatVault", "showCurrency",
+    "hideCompletedSections", "hideCompletedItems", "showGreatVault", "showCurrency",
     "showChangeWeekBtn", "showIlvlRefBtn", "showCharPickerBtn",
     "showScaleSlider", "showOpacitySlider", "hideUpdateNotice",
     "showInlineWeeklies",
@@ -1298,18 +1299,23 @@ local function ComputeHeaderHeight(sectionFrame, headerTextWidth)
 end
 
 local function LayoutItems(sectionFrame, collapsed)
-    -- Stack item rows under the header; hide when collapsed.
+    -- Stack item rows under the header; hide when collapsed or individually checked
+    -- (when the "hide completed items" preference is on).
+    local hideChecked = Addon:EnsurePrefs().hideCompletedItems and true or false
     local posY = -(sectionFrame._headerBlockHeight or (Addon.UI.headerMinH + Addon.UI.headerBottomPad))
     local totalHeight = 0
     local checkboxes = sectionFrame._checkboxes
     for i = 1, #checkboxes do
         local checkbox = checkboxes[i]
-        checkbox:ClearAllPoints()
-        checkbox:SetPoint("TOPLEFT", sectionFrame, "TOPLEFT", 0, posY)
-        local rowHeight = checkbox:GetHeight() or Addon.UI.itemMinH
-        posY = posY - rowHeight
-        totalHeight = totalHeight + rowHeight
-        checkbox:SetShown(not collapsed)
+        local visible = not collapsed and not (hideChecked and checkbox:GetChecked())
+        if visible then
+            checkbox:ClearAllPoints()
+            checkbox:SetPoint("TOPLEFT", sectionFrame, "TOPLEFT", 0, posY)
+            local rowHeight = checkbox:GetHeight() or Addon.UI.itemMinH
+            posY = posY - rowHeight
+            totalHeight = totalHeight + rowHeight
+        end
+        checkbox:SetShown(visible)
     end
     sectionFrame._itemsHeight = totalHeight
 end
