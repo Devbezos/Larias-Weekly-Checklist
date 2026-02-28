@@ -73,9 +73,9 @@ local ComputeSnapshotData
 local GV_LABEL_W     = 60   -- px reserved for the section label to the left of each grid
 local GV_LABEL_GAP   =  5   -- gap between label right edge and grid left border (px)
 local GV_GRID_X      = GV_LABEL_W + GV_LABEL_GAP  -- x offset of grid left border = 65
-local GV_ROW_H       = 24   -- height of the single ilvl row (px)
-local GV_GRID_H      = 1 + GV_ROW_H + 1  -- top border + row + bot border = 26px
-local GV_BLOCK_STEP  = GV_GRID_H + 6                      -- 32px between sections
+local GV_ROW_H       = 16   -- height of the single ilvl row (px)
+local GV_GRID_H      = 1 + GV_ROW_H + 1  -- top border + row + bot border = 18px
+local GV_BLOCK_STEP  = GV_GRID_H + 4                      -- 22px between sections
 local GV_BLOCK_Y     = { 0, -GV_BLOCK_STEP, -GV_BLOCK_STEP * 2 } -- {0, -32, -64}
 local GV_CELL_W      = 40   -- wider single cell (no threshold row sharing width)
 local GV_GRID_W      = GV_CELL_W * 3                                -- total grid width = 120px
@@ -1796,7 +1796,7 @@ function Addon:CreateTrackingPanel(parentFrame)
     local function ReflowGVGrid(targetH)
         local grds = TrackingUI.left.gvGrids
         if not grds then return end
-        local GAP    = 6
+        local GAP    = 4
         local BORDER = 1
         local CINSET = 4
         -- Cache the last valid targetH so width-only callers (ResizeTrackingCols)
