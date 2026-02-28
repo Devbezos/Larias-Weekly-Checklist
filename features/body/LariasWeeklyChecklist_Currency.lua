@@ -1599,14 +1599,16 @@ function Addon:CreateTrackingPanel(parentFrame)
     trackingFrame._lariasPadL, trackingFrame._lariasPadR, trackingFrame._lariasColGap, trackingFrame._lariasColW = padL, padR, colGap, colW
 
     local leftCol = CreateFrame("Frame", nil, trackingFrame)
-    leftCol:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", padL, -32)
     leftCol:SetSize(colW, UI.trackH - 40)
     trackingFrame._lariasLeftCol = leftCol
 
     local rightCol = CreateFrame("Frame", nil, trackingFrame)
-    rightCol:SetPoint("TOPLEFT", leftCol, "TOPRIGHT", colGap, 0)
+    rightCol:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", padL, -32)
     rightCol:SetSize(colW, UI.trackH - 40)
     trackingFrame._lariasRightCol = rightCol
+
+    -- GV (leftCol) sits to the right of Currency (rightCol).
+    leftCol:SetPoint("TOPLEFT", rightCol, "TOPRIGHT", colGap, 0)
 
     -- ── Decorative box border around each column (title + content) ────────
     local BOX_PAD = 6
@@ -2012,9 +2014,9 @@ function Addon:ApplyTrackingPanelOptions()
         if showGreatVault and showCurrency then
             weekliesMode = "below"
         elseif showGreatVault then
-            weekliesMode = "side-right"
-        elseif showCurrency then
             weekliesMode = "side-left"
+        elseif showCurrency then
+            weekliesMode = "side-right"
         else
             weekliesMode = "full"
         end
@@ -2040,17 +2042,18 @@ function Addon:ApplyTrackingPanelOptions()
 
     trackingFrame._lariasShowBoth = showGreatVault and showCurrency
 
-    if showGreatVault then
-        if leftCol then leftCol:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", padL, -32) end
-    end
     if showCurrency then
-        if showGreatVault and leftCol then
-            -- Both cols: rightCol starts right of leftCol (ResizeTrackingCols refines this).
-            if rightCol then rightCol:SetPoint("TOPLEFT", leftCol, "TOPRIGHT", colGap, 0) end
+        -- Currency (rightCol) is always the leftmost column.
+        if rightCol then rightCol:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", padL, -32) end
+    end
+    if showGreatVault then
+        if showCurrency and rightCol then
+            -- Both cols: leftCol (GV) starts right of rightCol (Currency).
+            if leftCol then leftCol:SetPoint("TOPLEFT", rightCol, "TOPRIGHT", colGap, 0) end
         else
-            -- Currency-only or currency+weeklies-left: initial left anchor.
+            -- GV-only or GV+weeklies-right: GV takes the left anchor.
             -- ResizeTrackingCols will re-anchor when side-left mode applies.
-            if rightCol then rightCol:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", padL, -32) end
+            if leftCol then leftCol:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", padL, -32) end
         end
     end
 
@@ -2447,10 +2450,10 @@ function Addon:ResizeTrackingCols()
     if leftShown  and leftCol.SetWidth  then leftCol:SetWidth(newColW)  end
     if rightShown and rightCol.SetWidth then rightCol:SetWidth(newColW) end
 
-    -- Re-anchor rightCol in normal both-visible mode.
+    -- Re-anchor leftCol (GV) right of rightCol (Currency) in both-visible mode.
     if leftShown and rightShown then
-        rightCol:ClearAllPoints()
-        rightCol:SetPoint("TOPLEFT", leftCol, "TOPRIGHT", colGap, 0)
+        leftCol:ClearAllPoints()
+        leftCol:SetPoint("TOPLEFT", rightCol, "TOPRIGHT", colGap, 0)
     end
 
     -- Position + size weeklies for side / full modes.
@@ -2458,18 +2461,18 @@ function Addon:ResizeTrackingCols()
     if wShown and wMode ~= "below" then
         ws:ClearAllPoints()
         if wMode == "side-right" then
-            -- GV on the left; weeklies on the right at the same slot.
+            -- Currency on the left; weeklies on the right at the same slot.
             ws:SetWidth(newColW)
             ws:SetPoint("TOPLEFT", tf, "TOPLEFT", padL + newColW + colGap, -8)
         elseif wMode == "side-left" then
-            -- Weeklies on the left; Currency on the right.
+            -- Weeklies on the left; GV (leftCol) on the right.
             ws:SetWidth(newColW)
             ws:SetPoint("TOPLEFT", tf, "TOPLEFT", padL, -8)
-            -- Re-position rightCol to sit right of weeklies.
-            if rightShown and rightCol then
-                rightCol:ClearAllPoints()
-                rightCol:SetWidth(newColW)
-                rightCol:SetPoint("TOPLEFT", tf, "TOPLEFT", padL + newColW + colGap, -32)
+            -- Re-position leftCol (GV) to sit right of weeklies.
+            if leftShown and leftCol then
+                leftCol:ClearAllPoints()
+                leftCol:SetWidth(newColW)
+                leftCol:SetPoint("TOPLEFT", tf, "TOPLEFT", padL + newColW + colGap, -32)
             end
         elseif wMode == "full" then
             local fullW = math.max(10, math.floor(frameW - 2 * WSEC_PAD_LR))
