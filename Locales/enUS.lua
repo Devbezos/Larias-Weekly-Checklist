@@ -26,6 +26,9 @@ local STRINGS = {
 	OPTIONS_HIDE_CHANGE_WEEK_BTN = 'Hide Week Selector',
 	OPTIONS_HIDE_ILVL_REF_BTN = 'Hide Item Level Popup',
 	OPTIONS_HIDE_WEEKLIES_BTN = 'Hide Weeklies Button',
+	OPTIONS_HIDE_SIDE_WEEKLIES  = "Side: Hide Weeklies",
+	OPTIONS_HIDE_SIDE_RARES     = "Side: Hide Rares",
+	OPTIONS_HIDE_SIDE_TREASURES = "Side: Hide Treasures",
 	OPTIONS_HIDE_CHAR_SELECT = "Hide character selector",
 	OPTIONS_HIDDEN_CHARS_TITLE = "Hidden characters:",
 	OPTIONS_HIDDEN_CHARS_NONE = "None",
@@ -93,6 +96,9 @@ local STRINGS = {
 	CHAR_PICKER_TOOLTIP_REMOVE = "To remove a character, use the Options menu.",
 	ILVLREF_BUTTON = "View Item Levels",
 	WEEKLIES_BUTTON = "Weeklies",
+	SIDE_PANEL_WEEKLIES  = "Weeklies",
+	SIDE_PANEL_RARES     = "Rares",
+	SIDE_PANEL_TREASURES = "Treasures",
 
 	-- Item level reference popup
 	ILVLREF_WINDOW_TITLE  = "Midnight Season 1 Item Level Reference",

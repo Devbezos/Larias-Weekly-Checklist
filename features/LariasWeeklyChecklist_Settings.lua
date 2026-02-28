@@ -185,6 +185,30 @@ local function BuildPanel()
             end,
         },
         {
+            label    = L.OPTIONS_HIDE_SIDE_WEEKLIES or "Side: Hide Weeklies",
+            getVal   = function(d) return d.showSidePanelWeeklies == false end,
+            onChange = function(v)
+                Addon:EnsurePrefs().showSidePanelWeeklies = not v
+                if Addon.RebuildSidePanel then Addon:RebuildSidePanel() end
+            end,
+        },
+        {
+            label    = L.OPTIONS_HIDE_SIDE_RARES or "Side: Hide Rares",
+            getVal   = function(d) return d.showSidePanelRares == false end,
+            onChange = function(v)
+                Addon:EnsurePrefs().showSidePanelRares = not v
+                if Addon.RebuildSidePanel then Addon:RebuildSidePanel() end
+            end,
+        },
+        {
+            label    = L.OPTIONS_HIDE_SIDE_TREASURES or "Side: Hide Treasures",
+            getVal   = function(d) return d.showSidePanelTreasures == false end,
+            onChange = function(v)
+                Addon:EnsurePrefs().showSidePanelTreasures = not v
+                if Addon.RebuildSidePanel then Addon:RebuildSidePanel() end
+            end,
+        },
+        {
             label    = L.OPTIONS_HIDE_CHAR_SELECT or "Hide Character Selector",
             getVal   = function(d) return d.showCharPickerBtn == false end,
             onChange = function(v)

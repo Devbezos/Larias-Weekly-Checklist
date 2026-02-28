@@ -319,6 +319,9 @@ local function SetupAddonDB()
             showIlvlRefBtn        = true,
             showWeekliesBtn       = true,
             showCharPickerBtn     = true,
+            showSidePanelWeeklies  = true,
+            showSidePanelRares     = true,
+            showSidePanelTreasures = true,
             showScaleSlider       = true,
             showOpacitySlider     = true,
             hideUpdateNotice      = false,
@@ -379,7 +382,8 @@ local function MigrateProfileDataToGlobalChars()
     end
     -- Preferences
     for _, k in ipairs({ "hideCompletedSections", "showGreatVault", "showCurrency",
-                         "showChangeWeekBtn", "showIlvlRefBtn", "showWeekliesBtn", "showCharPickerBtn", "debug" }) do
+                         "showChangeWeekBtn", "showIlvlRefBtn", "showWeekliesBtn", "showCharPickerBtn", "debug",
+                         "showSidePanelWeeklies", "showSidePanelRares", "showSidePanelTreasures" }) do
         if oldProf[k] ~= nil then cdb[k] = oldProf[k] end
     end
 
@@ -397,6 +401,9 @@ local function MigrateProfileDataToGlobalChars()
     oldProf.showWeekliesBtn   = nil
     oldProf.showCharPickerBtn = nil
     oldProf.debug             = nil
+    oldProf.showSidePanelWeeklies  = nil
+    oldProf.showSidePanelRares     = nil
+    oldProf.showSidePanelTreasures = nil
 end
 
 -- Set up LibDataBroker and LibDBIcon for minimap icon
@@ -606,6 +613,7 @@ local _PREF_KEYS = {
     "hideCompletedSections", "showGreatVault", "showCurrency",
     "showChangeWeekBtn", "showIlvlRefBtn", "showWeekliesBtn", "showCharPickerBtn",
     "showScaleSlider", "showOpacitySlider", "hideUpdateNotice",
+    "showSidePanelWeeklies", "showSidePanelRares", "showSidePanelTreasures",
 }
 function Addon:EnsurePrefs()
     if not self.db then SetupAddonDB() end
@@ -1976,6 +1984,10 @@ function Addon:CreateFrame()
     local db = self:EnsurePrefs()
     if (db.showGreatVault or db.showCurrency) and self.CreateTrackingPanel and not self._trackingFrame then
         self:CreateTrackingPanel(frame)
+    end
+
+    if self.CreateSidePanel and not self._sidePanel then
+        self:CreateSidePanel(frame)
     end
 
     if self.UpdateLocalizedUI then
