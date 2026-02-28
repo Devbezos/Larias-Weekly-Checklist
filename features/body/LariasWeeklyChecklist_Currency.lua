@@ -96,7 +96,6 @@ function Addon:ConfigureTrackingEvents(parentFrame, showGreatVault, showCurrency
 
     if showGreatVault then
         trackingEventFrame:RegisterEvent("WEEKLY_REWARDS_UPDATE")
-        trackingEventFrame:RegisterEvent("ITEM_DATA_LOAD_RESULT")
     end
 
     if showCurrency then
@@ -106,8 +105,11 @@ function Addon:ConfigureTrackingEvents(parentFrame, showGreatVault, showCurrency
         SafeRegisterEvent(trackingEventFrame, "CATALYST_CHARGES_UPDATED")
         SafeRegisterEvent(trackingEventFrame, "CATALYST_UPDATE")
         SafeRegisterEvent(trackingEventFrame, "ITEM_INTERACTION_ITEM_SELECTION_UPDATED")
-        trackingEventFrame:RegisterEvent("ITEM_DATA_LOAD_RESULT")
     end
+
+    -- Needed by both Great Vault (item data for vault slot icons) and Currency
+    -- (item data for tracked items); register once regardless of which is shown.
+    trackingEventFrame:RegisterEvent("ITEM_DATA_LOAD_RESULT")
 
     -- Always overwrite the handler so the parentFrame upvalue stays current;
     -- OnEnable may call this with nil before the frame is created.
