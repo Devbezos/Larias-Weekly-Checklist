@@ -475,6 +475,11 @@ function Addon:OnEnable()
     -- Register console commands
     self:RegisterConsoleCommands()
 
+    -- Register SidePanel event listeners now that we are in a safe (non-protected) context.
+    if self.RegisterSidePanelEventListeners then
+        self:RegisterSidePanelEventListeners()
+    end
+
     -- If the localization companion addon loads after us for any reason,
     -- re-apply locale as soon as it becomes available.
     if self.RegisterEvent and not self._listeningForAddonLoaded then

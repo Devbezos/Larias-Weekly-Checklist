@@ -187,14 +187,14 @@ local function NpcIDFromGUID(guid)
 end
 
 -- ── Module-level event frames ───────────────────────────────────────────────
--- Registered once at file-load time so RegisterEvent is never called inside a
--- protected (slash-command) call stack.  BuildSidePanel wires the dispatch
--- pointers; RebuildSidePanel nils them before destroying the old panel.
+-- Frames are created at file-load time but RegisterEvent is deferred until
+-- Addon:OnEnable via RegisterSidePanelEventListeners() below.  This avoids
+-- ADDON_ACTION_FORBIDDEN for Frame:RegisterEvent() on Classic game flavours
+-- where RegisterEvent is a protected function.
 local _onRareDied    = nil   -- function() called after a tracked rare dies
 local _onQuestUpdate = nil   -- function() called on quest log events
 
 local _clfFrame = CreateFrame("Frame")
-_clfFrame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
 _clfFrame:SetScript("OnEvent", function()
     if not _onRareDied then return end
     local _, subevent, _, _, _, _, _, destGUID = CombatLogGetCurrentEventInfo()
@@ -207,11 +207,20 @@ _clfFrame:SetScript("OnEvent", function()
 end)
 
 local _questFrame = CreateFrame("Frame")
-_questFrame:RegisterEvent("QUEST_TURNED_IN")
-_questFrame:RegisterEvent("QUEST_LOG_UPDATE")
 _questFrame:SetScript("OnEvent", function()
     if _onQuestUpdate then _onQuestUpdate() end
 end)
+
+-- Called once from Addon:OnEnable (Ace3 guarantees a safe, non-protected
+-- context).  Guard against double-registration.
+local _sidePanelEventsRegistered = false
+function Addon:RegisterSidePanelEventListeners()
+    if _sidePanelEventsRegistered then return end
+    _sidePanelEventsRegistered = true
+    _clfFrame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+    _questFrame:RegisterEvent("QUEST_TURNED_IN")
+    _questFrame:RegisterEvent("QUEST_LOG_UPDATE")
+end
 
 -- ── Section gap ──────────────────────────────────────────────────────────────
 local SEC_GAP = 6   -- vertical gap between sections
