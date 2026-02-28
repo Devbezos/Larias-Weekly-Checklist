@@ -345,7 +345,7 @@ function Addon:InitCharPickerUI(frame, styleFunc)
     local function OnPickerBtnClick()
         local p = EnsurePanel()
         if p and p._lariasJustClosedAt then
-            if (GetTime and GetTime() or 0) - p._lariasJustClosedAt < 0.05 then
+            if (GetTime and GetTime() or 0) - p._lariasJustClosedAt < 0.5 then
                 return
             end
             p._lariasJustClosedAt = nil
