@@ -1809,12 +1809,12 @@ function Addon:CreateTrackingPanel(parentFrame)
             targetH = TrackingUI.left._lastGvH
             if not (targetH and targetH > 0) then return end
         end
-        -- Height-first layout: divide targetH evenly over 3 sections.
+        -- Height-first layout: divide targetH evenly over 3 sections, capped at 16px per row.
         local availGridW = math.max(60, (leftCol:GetWidth() or 0) - GV_GRID_X)
         local cellW = math.max(30, math.floor(availGridW / 3))
         local gridW = cellW * 3
-        local gridH = math.max(14, math.floor((math.max(0, targetH or 0) - GAP * 2) / 3))
-        local rowH  = math.max(10, gridH - BORDER * 2)
+        local gridH = math.max(14, math.min(18, math.floor((math.max(0, targetH or 0) - GAP * 2) / 3)))
+        local rowH  = math.max(10, math.min(16, gridH - BORDER * 2))
         gridH = BORDER + rowH + BORDER  -- normalise to exact px
 
         for bi = 1, 3 do
