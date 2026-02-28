@@ -33,8 +33,24 @@ local tracking = {
     crestTradeBatch = { 45, 15 },
     questIDs = {
         delversBounty = 0,
-        weeklyPrey = 0,
+        weeklyPrey    = 0,
+        -- Season 1 weekly quests (Midnight).
+        abundance           = 89507,
+        lostLegends         = 89268,
+        highEsteem          = 91629,
+        -- Fortify the Runestones has 4 player-assigned variants; any one counts.
+        fortifyRunestones   = { 90575, 90576, 90574, 90573 },
+        standYourGround     = 94581,
     },
+    -- Individual Prey target quest IDs (30 total, need 4 for the weekly cache).
+    preyQuestIDs = {
+        91095, 91096, 91097, 91098, 91099, 91100,
+        91101, 91102, 91103, 91104, 91105, 91106,
+        91107, 91108, 91109, 91110, 91111, 91112,
+        91113, 91114, 91115, 91116, 91117, 91118,
+        91119, 91120, 91121, 91122, 91123, 91124,
+    },
+    preyQuestGoal = 4,
     -- Item level reference data (index-matched to crestCurrencyIDs tier order).
     -- ilvlBases: the rank-1 ilvl for each crest tier (Adv, Vet, Champ, Hero, Myth).
     -- ilvlRankOffsets: added to ilvlBases to get the final ilvl at ranks 1-6.

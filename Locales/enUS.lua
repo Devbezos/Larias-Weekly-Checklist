@@ -66,6 +66,15 @@ local STRINGS = {
 	TRACKING_QUEST_DELVERS_BOUNTY = "Delver's Bounty",
 	TRACKING_QUEST_WEEKLY_PREY = "Weekly Prey",
 
+	-- Weeklies section
+	TRACKING_WEEKLIES_TITLE              = "Weeklies",
+	TRACKING_QUEST_PREY                  = "Prey Hunted",
+	TRACKING_QUEST_ABUNDANCE             = "Abundance",
+	TRACKING_QUEST_LOST_LEGENDS          = "Lost Legends",
+	TRACKING_QUEST_HIGH_ESTEEM           = "High Esteem",
+	TRACKING_QUEST_FORTIFY_RUNESTONES    = "Fortify the Runestones",
+	TRACKING_QUEST_STAND_YOUR_GROUND     = "Stand Your Ground",
+
 	TRACKING_NO_ID = "No ID",
 	TRACKING_TRADE_UP_SUFFIX = " Trade Up)",
 
