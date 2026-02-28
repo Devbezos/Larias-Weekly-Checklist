@@ -60,15 +60,13 @@ function Addon:RegisterInlineWeekliesEvents()
     _inlineQuestFrame:RegisterEvent("QUEST_LOG_UPDATE")
 end
 local TrackingUI = { left = {}, right = {} }
+local trackingEventFrame  -- frame created lazily in ConfigureTrackingEvents
 
 local tonumber, tostring, type = tonumber, tostring, type
 local floor, max, abs = math.floor, math.max, math.abs
 local tinsert, tremove, tconcat = table.insert, table.remove, table.concat
 -- Forward declaration: defined later (after all data-gathering helpers).
 local ComputeSnapshotData
-
--- Module-level constant: avoids a new table allocation on every ResizeTrackingCols call.
-local LEFT_LINE_KEYS = { "line1", "line2", "line3", "line4", "line5", "line6", "line7", "line8", "line9" }
 
 -- Great Vault 3-column grid layout constants (one grid per section).
 -- Single-row layout: section label left, then 3 ilvl cells; no threshold row.
@@ -822,12 +820,6 @@ local function GetCrestTradeBatches(profile)
     return lower, higher
 end
 
-local function EnsureCrestIDsDetected(tracking)
-    if tracking._crestIDsDetected then return end
-    -- crestCurrencyIDs are always supplied by constants; mark as resolved.
-    tracking._crestIDsDetected = true
-end
-
 local function GetCrestIDsAndCount(tracking)
     -- Crest currency IDs are expected to be an ordered list.
     local ids = tracking.crestCurrencyIDs or {}
@@ -935,7 +927,6 @@ local function GetCrestLines()
     local tracking = Addon.TRACKING
     if not tracking then return { "", "", "", "" } end
 
-    EnsureCrestIDsDetected(tracking)
     local ids, crestCount = GetCrestIDsAndCount(tracking)
     local cache = EnsureCrestCache(tracking, crestCount)
     local out, labelOut, valueOut = ResetCrestOutput(cache, crestCount)
@@ -2130,7 +2121,6 @@ ComputeSnapshotData = function(snap)
 
     -- Crests: only persist entries where the player holds a non-zero quantity.
     if tracking then
-        EnsureCrestIDsDetected(tracking)
         local ids, crestCount = GetCrestIDsAndCount(tracking)
         local cache = EnsureCrestCache(tracking, crestCount)
         PopulateCrestCurCap(cache, ids, crestCount)
@@ -2332,7 +2322,6 @@ local function RenderSnapshotIntoPanel(snap)
         -- Render ALL configured crest IDs in order, defaulting missing ones to 0.
         local tracking = Addon.TRACKING
         if tracking then
-            EnsureCrestIDsDetected(tracking)
             local ids, crestCount = GetCrestIDsAndCount(tracking)
             for i = 1, crestCount do
                 if idx > RIGHT_LINE_COUNT then break end
@@ -2477,12 +2466,6 @@ function Addon:ResizeTrackingCols()
             ws:SetWidth(fullW)
             ws:SetPoint("TOPLEFT", tf, "TOPLEFT", WSEC_PAD_LR, -8)
         end
-    end
-
-    -- Keep left-column font strings constrained to the new column width.
-    for _, k in ipairs(LEFT_LINE_KEYS) do
-        local fs = TrackingUI.left[k]
-        if fs and fs.SetWidth then fs:SetWidth(newColW) end
     end
 
     -- Update title widths and anchors.
