@@ -1281,15 +1281,25 @@ local function ResizeTrackingPanelToContent(addon)
     local bottomPad = 10
     local minH = 90
 
-    -- Include the inline weeklies section height so the tracking frame grows
-    -- to fit the weeklies block anchored at its bottom.
-    local weeklyExtra = 0
-    local ws = trackingFrame._lariasWeekliesSection
+    -- Weeklies height contribution depends on its layout mode.
+    -- "below"     → strip below both columns; adds to targetH.
+    -- "side-*"    → weeklies is a column starting at y=-8; compare against contentH.
+    -- "full"      → only content; starts at y=-8.
+    -- "hidden"    → ignored.
+    local weeklyExtra    = 0
+    local weeklyColBottom = 0  -- minimum targetH when weeklies is a column
+    local ws    = trackingFrame._lariasWeekliesSection
+    local wMode = trackingFrame._weekliesMode or "hidden"
     if ws and ws.IsShown and ws:IsShown() then
-        weeklyExtra = (tonumber(ws:GetHeight()) or 0) + 8  -- 8px gap between cols and section
+        local wsH = tonumber(ws:GetHeight()) or 0
+        if wMode == "below" then
+            weeklyExtra = wsH + 8
+        elseif wMode == "side-right" or wMode == "side-left" or wMode == "full" then
+            weeklyColBottom = 8 + wsH + bottomPad
+        end
     end
 
-    local targetH = max(minH, topOffset + contentH + bottomPad + weeklyExtra)
+    local targetH = max(minH, topOffset + contentH + bottomPad + weeklyExtra, weeklyColBottom)
 
     local curH = tonumber(trackingFrame:GetHeight()) or 0
     if math.abs(curH - targetH) <= 1 then return end
@@ -1551,17 +1561,15 @@ local function BuildWeekliesSection(trackingFrame)
 end
 
 function Addon:ApplyInlineWeekliesVisibility()
-    local ws = self._inlineWeeklies
-    if not ws then return end
-    local show = self:EnsurePrefs().showInlineWeeklies ~= false
-    if show then
-        ws:Show()
-        if ws.Refresh then ws:Refresh() end
-    else
-        ws:Hide()
-        ws:SetHeight(0)
+    -- Delegate: ApplyTrackingPanelOptions re-evaluates the full layout mode
+    -- (below / side / full / hidden) and repositions everything correctly.
+    if not self._trackingFrame then return end
+    if self.ApplyTrackingPanelOptions then
+        self:ApplyTrackingPanelOptions()
     end
-    ResizeTrackingPanelToContent(self)
+    if self.RequestTrackingUpdate then
+        self:RequestTrackingUpdate()
+    end
 end
 
 function Addon:CreateTrackingPanel(parentFrame)
@@ -1949,97 +1957,123 @@ end
 
 function Addon:ApplyTrackingPanelOptions()
     -- Re-layout / show/hide columns when options change.
+    -- Layout modes for the weeklies section:
+    --   "below"      GV + Currency both on  → weeklies is a full-width strip below them
+    --   "side-right" GV on, Currency off    → weeklies takes the right column slot
+    --   "side-left"  Currency on, GV off   → weeklies takes the left column slot
+    --   "full"       neither GV nor Currency → weeklies spans full width as only content
+    --   "hidden"     weeklies disabled
     local trackingFrame = self._trackingFrame
     if not trackingFrame then return end
 
-    local db    = self:EnsureDB()    -- per-character data (snapshot, etc.)
-    local prefs = self:EnsurePrefs() -- account-wide display preferences
+    local db    = self:EnsureDB()
+    local prefs = self:EnsurePrefs()
     local showGreatVault = prefs.showGreatVault and true or false
-    local showCurrency = prefs.showCurrency and true or false
+    local showCurrency   = prefs.showCurrency   and true or false
+    local showWeeklies   = prefs.showInlineWeeklies ~= false
 
     local wantPanel
     if Addon._viewingChar then
-        -- For another character, derive visibility from their stored snapshot.
         local snap = db.trackingSnapshot
         wantPanel = snap and (snap.leftLines ~= nil or (snap.rightRows ~= nil and #snap.rightRows > 0)) and IsMainFrameOnListTab() and true or false
         if wantPanel and snap then
             showGreatVault = snap.leftLines ~= nil
             showCurrency   = snap.rightRows ~= nil and #snap.rightRows > 0
         end
+        showWeeklies = false  -- weeklies always shows live data; hide for other-char view
     else
-        wantPanel = (showGreatVault or showCurrency or prefs.showInlineWeeklies ~= false) and IsMainFrameOnListTab()
+        wantPanel = (showGreatVault or showCurrency or showWeeklies) and IsMainFrameOnListTab()
     end
 
     trackingFrame:SetShown(wantPanel)
     if not wantPanel then
-        if trackingEventFrame then
-            trackingEventFrame:UnregisterAllEvents()
-        end
+        if trackingEventFrame then trackingEventFrame:UnregisterAllEvents() end
         if self.ApplyScrollLayout then self:ApplyScrollLayout() end
         return
     end
 
-    -- Only wire live events when showing the current player's data.
     if not Addon._viewingChar then
         self:ConfigureTrackingEvents(_G["LariasWeeklyChecklistFrame"], showGreatVault, showCurrency)
     end
 
-    local leftCol = trackingFrame._lariasLeftCol
-    local rightCol = trackingFrame._lariasRightCol
-    local leftTitle = trackingFrame._lariasLeftTitle
+    local leftCol    = trackingFrame._lariasLeftCol
+    local rightCol   = trackingFrame._lariasRightCol
+    local leftTitle  = trackingFrame._lariasLeftTitle
     local rightTitle = trackingFrame._lariasRightTitle
-    local padL = tonumber(trackingFrame._lariasPadL) or 10
-    local colGap = tonumber(trackingFrame._lariasColGap) or 12
+    local ws         = trackingFrame._lariasWeekliesSection
+    local padL       = tonumber(trackingFrame._lariasPadL)  or 10
+    local padR2      = tonumber(trackingFrame._lariasPadR)  or 10
+    local colGap     = tonumber(trackingFrame._lariasColGap) or 12
 
-    SetShownIfChanged(leftCol, showGreatVault)
-    SetShownIfChanged(rightCol, showCurrency)
+    -- ── Determine weeklies layout mode ───────────────────────────────────
+    local weekliesMode = "hidden"
+    if showWeeklies and not Addon._viewingChar then
+        if showGreatVault and showCurrency then
+            weekliesMode = "below"
+        elseif showGreatVault then
+            weekliesMode = "side-right"
+        elseif showCurrency then
+            weekliesMode = "side-left"
+        else
+            weekliesMode = "full"
+        end
+    end
+    trackingFrame._weekliesMode = weekliesMode
+
+    -- ── Column and box visibility ─────────────────────────────────────────
+    SetShownIfChanged(leftCol,   showGreatVault)
+    SetShownIfChanged(rightCol,  showCurrency)
     SetShownIfChanged(leftTitle, showGreatVault)
     SetShownIfChanged(rightTitle, showCurrency)
     local leftBox  = trackingFrame._lariasLeftBox
     local rightBox = trackingFrame._lariasRightBox
-    -- Decorative borders are only drawn when both columns are visible;
-    -- a single full-width column looks cleaner without the box chrome.
     local showBothBoxes = showGreatVault and showCurrency
     if leftBox  then SetShownIfChanged(leftBox,  showBothBoxes) end
     if rightBox then SetShownIfChanged(rightBox, showBothBoxes) end
 
-    if leftCol and leftCol.ClearAllPoints and leftCol.SetPoint then
-        leftCol:ClearAllPoints()
-    end
-    if rightCol and rightCol.ClearAllPoints and rightCol.SetPoint then
-        rightCol:ClearAllPoints()
-    end
+    -- ── Column anchoring ──────────────────────────────────────────────────
+    -- ResizeTrackingCols (via ApplyScrollLayout) sets explicit widths.
+    -- Here we only set the initial TOPLEFT anchor for each column.
+    if leftCol  then leftCol:ClearAllPoints()  end
+    if rightCol then rightCol:ClearAllPoints() end
 
-    local padR2 = tonumber(trackingFrame._lariasPadR) or 10
+    trackingFrame._lariasShowBoth = showGreatVault and showCurrency
 
-    if showGreatVault and showCurrency then
-        -- Both columns visible: just anchor them.  ResizeTrackingCols (called via
-        -- ApplyScrollLayout below) owns the widths to avoid early-GetWidth() issues.
-        trackingFrame._lariasShowBoth = true
-        if leftCol  then leftCol:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", padL, -32) end
-        if rightCol and leftCol then rightCol:SetPoint("TOPLEFT", leftCol, "TOPRIGHT", colGap, 0) end
-    else
-        -- Single column: stretch to fill the full usable tracking-frame width.
-        -- Use the design constant if the live width isn't available yet.
-        local tfW = tonumber(trackingFrame:GetWidth())
-        if not tfW or tfW < 10 then
-            tfW = math.max(10, (Addon.UI.frameW or 520) - 2 * (Addon.UI.sectionInsetX or 14))
-        end
-        local fullW = math.max(10, math.floor(tfW - padL - padR2))
-        trackingFrame._lariasShowBoth = false
-        if showGreatVault then
-            if leftCol then
-                leftCol:SetWidth(fullW)
-                leftCol:SetPoint("TOP", trackingFrame, "TOP", 0, -32)
-            end
+    if showGreatVault then
+        if leftCol then leftCol:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", padL, -32) end
+    end
+    if showCurrency then
+        if showGreatVault and leftCol then
+            -- Both cols: rightCol starts right of leftCol (ResizeTrackingCols refines this).
+            if rightCol then rightCol:SetPoint("TOPLEFT", leftCol, "TOPRIGHT", colGap, 0) end
         else
-            if rightCol then
-                rightCol:SetWidth(fullW)
-                rightCol:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", padL, -32)
-            end
+            -- Currency-only or currency+weeklies-left: initial left anchor.
+            -- ResizeTrackingCols will re-anchor when side-left mode applies.
+            if rightCol then rightCol:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", padL, -32) end
         end
     end
 
+    -- ── Weeklies position ─────────────────────────────────────────────────
+    -- "below": use BOTTOMLEFT/BOTTOMRIGHT anchors (width is auto).
+    -- All other modes: position and width are handled by ResizeTrackingCols.
+    if ws then
+        ws:ClearAllPoints()
+        if weekliesMode == "below" then
+            ws:SetPoint("BOTTOMLEFT",  trackingFrame, "BOTTOMLEFT",  WSEC_PAD_LR,  WSEC_BOT_OFF)
+            ws:SetPoint("BOTTOMRIGHT", trackingFrame, "BOTTOMRIGHT", -WSEC_PAD_LR, WSEC_BOT_OFF)
+            ws:Show()
+            if ws.Refresh then ws.Refresh() end
+        elseif weekliesMode == "side-right" or weekliesMode == "side-left" or weekliesMode == "full" then
+            -- Position / width set by ResizeTrackingCols; just make sure it is shown.
+            ws:Show()
+            if ws.Refresh then ws.Refresh() end
+        else
+            ws:Hide()
+            ws:SetHeight(0)
+        end
+    end
+
+    -- ── Column title positions ────────────────────────────────────────────
     if showGreatVault and leftTitle and leftCol then
         leftTitle:ClearAllPoints()
         leftTitle:SetPoint("TOP", leftCol, "TOP", 0, 24)
@@ -2049,7 +2083,6 @@ function Addon:ApplyTrackingPanelOptions()
         rightTitle:SetPoint("TOP", rightCol, "TOP", 0, 24)
     end
 
-    -- Scroll frame must be re-anchored whenever the panel is shown/resized.
     if self.ApplyScrollLayout then self:ApplyScrollLayout() end
 end
 
@@ -2384,7 +2417,7 @@ function Addon:UpdateTracking()
 end
 
 function Addon:ResizeTrackingCols()
-    -- Reflow column widths so they always fill the tracking frame's current width.
+    -- Reflow column widths and, when weeklies occupies a column slot, position it too.
     local tf = self._trackingFrame
     if not tf then return end
 
@@ -2394,13 +2427,19 @@ function Addon:ResizeTrackingCols()
     local colGap  = tonumber(tf._lariasColGap) or 12
     local leftCol  = tf._lariasLeftCol
     local rightCol = tf._lariasRightCol
+    local ws       = tf._lariasWeekliesSection
+    local wMode    = tf._weekliesMode or "hidden"
+
     local leftShown  = leftCol  and leftCol.IsShown  and leftCol:IsShown()  or false
     local rightShown = rightCol and rightCol.IsShown and rightCol:IsShown() or false
-    local bothShown = leftShown and rightShown
+    local wShown     = ws and ws.IsShown and ws:IsShown() or false
 
-    -- When only one column is visible give it the full usable width (no gap needed).
+    -- "Two-slot" layout: GV+Currency, GV+Weeklies, or Currency+Weeklies side by side.
+    local sideMode   = (wMode == "side-right" or wMode == "side-left")
+    local hasTwoSlots = (leftShown and rightShown) or sideMode
+
     local newColW
-    if bothShown then
+    if hasTwoSlots then
         newColW = math.max(10, math.floor((frameW - padL - padR - colGap) / 2))
     else
         newColW = math.max(10, math.floor(frameW - padL - padR))
@@ -2408,10 +2447,36 @@ function Addon:ResizeTrackingCols()
 
     if leftShown  and leftCol.SetWidth  then leftCol:SetWidth(newColW)  end
     if rightShown and rightCol.SetWidth then rightCol:SetWidth(newColW) end
-    -- Re-anchor rightCol relative to leftCol only when both are visible.
-    if bothShown and leftCol and rightCol then
+
+    -- Re-anchor rightCol in normal both-visible mode.
+    if leftShown and rightShown then
         rightCol:ClearAllPoints()
         rightCol:SetPoint("TOPLEFT", leftCol, "TOPRIGHT", colGap, 0)
+    end
+
+    -- Position + size weeklies for side / full modes.
+    -- ("below" mode anchors are set by ApplyTrackingPanelOptions; skip here.)
+    if wShown and wMode ~= "below" then
+        ws:ClearAllPoints()
+        if wMode == "side-right" then
+            -- GV on the left; weeklies on the right at the same slot.
+            ws:SetWidth(newColW)
+            ws:SetPoint("TOPLEFT", tf, "TOPLEFT", padL + newColW + colGap, -8)
+        elseif wMode == "side-left" then
+            -- Weeklies on the left; Currency on the right.
+            ws:SetWidth(newColW)
+            ws:SetPoint("TOPLEFT", tf, "TOPLEFT", padL, -8)
+            -- Re-position rightCol to sit right of weeklies.
+            if rightShown and rightCol then
+                rightCol:ClearAllPoints()
+                rightCol:SetWidth(newColW)
+                rightCol:SetPoint("TOPLEFT", tf, "TOPLEFT", padL + newColW + colGap, -32)
+            end
+        elseif wMode == "full" then
+            local fullW = math.max(10, math.floor(frameW - 2 * WSEC_PAD_LR))
+            ws:SetWidth(fullW)
+            ws:SetPoint("TOPLEFT", tf, "TOPLEFT", WSEC_PAD_LR, -8)
+        end
     end
 
     -- Keep left-column font strings constrained to the new column width.
