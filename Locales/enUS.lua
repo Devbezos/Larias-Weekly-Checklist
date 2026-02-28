@@ -39,6 +39,19 @@ local STRINGS = {
 	OPTIONS_HIDE_SLIDERS        = "Hide Sliders",
 	OPTIONS_HIDE_UPDATE_NOTICE  = "Hide Update Warnings",
 	OPTIONS_HIDE_MINIMAP_BTN    = "Hide Minimap Button",
+	-- Options tooltips (shown on hover in gear popup and settings tab)
+	TOOLTIP_OPT_HIDE_COMPLETED_TASKS  = "Hides individual checklist items as you check them off.",
+	TOOLTIP_OPT_HIDE_COMPLETED_WEEKS  = "Hides an entire week section once all its tasks are completed.",
+	TOOLTIP_OPT_HIDE_GREAT_VAULT      = "Removes the Great Vault reward tracker from the panel.",
+	TOOLTIP_OPT_HIDE_CURRENCY         = "Removes the currency tracker rows from the panel.",
+	TOOLTIP_OPT_HIDE_WEEKLIES         = "Removes the inline weekly rewards section.",
+	TOOLTIP_OPT_HIDE_CHANGE_WEEK      = "Hides the arrow buttons used to jump between weeks.",
+	TOOLTIP_OPT_HIDE_ILVL_REF         = "Hides the item level reference popup button in the header.",
+	TOOLTIP_OPT_HIDE_CHAR_SELECT      = "Hides the character picker dropdown in the footer.",
+	TOOLTIP_OPT_HIDE_SLIDERS          = "Hides the scale and opacity sliders at the bottom of the window.",
+	TOOLTIP_OPT_HIDE_UPDATE_NOTICE    = "Suppresses the banner shown when a newer version or data update is available.",
+	TOOLTIP_OPT_HIDE_MINIMAP_BTN      = "Removes the addon icon from the minimap.",
+
 	-- Color picker swatch labels (gear popup)
 	COLOR_PICKER_BG             = "Background",
 	COLOR_PICKER_TEXT           = "Text",

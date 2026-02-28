@@ -137,7 +137,8 @@ local function BuildPanel()
     -- Row definitions: { label, getVal(db) → bool, onChange(v) }
     local rows = {
         {
-            label    = L.HIDE_COMPLETED_TASKS or "Hide Completed Tasks",
+            label      = L.HIDE_COMPLETED_TASKS or "Hide Completed Tasks",
+            tooltipKey = "TOOLTIP_OPT_HIDE_COMPLETED_TASKS",
             getVal   = function(d) return d.hideCompletedItems and true or false end,
             onChange = function(v)
                 local prefs = Addon:EnsurePrefs()
@@ -151,7 +152,8 @@ local function BuildPanel()
             end,
         },
         {
-            label    = L.HIDE_COMPLETED_WEEKS or "Hide Completed Weeks",
+            label      = L.HIDE_COMPLETED_WEEKS or "Hide Completed Weeks",
+            tooltipKey = "TOOLTIP_OPT_HIDE_COMPLETED_WEEKS",
             getVal   = function(d) return d.hideCompletedSections and true or false end,
             onChange = function(v)
                 Addon:EnsurePrefs().hideCompletedSections = v
@@ -162,7 +164,8 @@ local function BuildPanel()
             end,
         },
         {
-            label    = L.OPTIONS_HIDE_GREAT_VAULT or "Hide Great Vault",
+            label      = L.OPTIONS_HIDE_GREAT_VAULT or "Hide Great Vault",
+            tooltipKey = "TOOLTIP_OPT_HIDE_GREAT_VAULT",
             getVal   = function(d) return not d.showGreatVault end,
             onChange = function(v)
                 Addon:EnsurePrefs().showGreatVault = not v
@@ -170,7 +173,8 @@ local function BuildPanel()
             end,
         },
         {
-            label    = L.OPTIONS_HIDE_CURRENCY or "Hide Currency",
+            label      = L.OPTIONS_HIDE_CURRENCY or "Hide Currency",
+            tooltipKey = "TOOLTIP_OPT_HIDE_CURRENCY",
             getVal   = function(d) return not d.showCurrency end,
             onChange = function(v)
                 Addon:EnsurePrefs().showCurrency = not v
@@ -178,7 +182,8 @@ local function BuildPanel()
             end,
         },
         {
-            label    = L.OPTIONS_HIDE_WEEKLIES or "Hide Weeklies",
+            label      = L.OPTIONS_HIDE_WEEKLIES or "Hide Weeklies",
+            tooltipKey = "TOOLTIP_OPT_HIDE_WEEKLIES",
             getVal   = function(d) return d.showInlineWeeklies == false end,
             onChange = function(v)
                 Addon:EnsurePrefs().showInlineWeeklies = not v
@@ -188,7 +193,8 @@ local function BuildPanel()
             end,
         },
         {
-            label    = L.OPTIONS_HIDE_CHANGE_WEEK_BTN or "Hide Week Selector",
+            label      = L.OPTIONS_HIDE_CHANGE_WEEK_BTN or "Hide Week Selector",
+            tooltipKey = "TOOLTIP_OPT_HIDE_CHANGE_WEEK",
             getVal   = function(d) return d.showChangeWeekBtn == false end,
             onChange = function(v)
                 Addon:EnsurePrefs().showChangeWeekBtn = not v
@@ -196,7 +202,8 @@ local function BuildPanel()
             end,
         },
         {
-            label    = L.OPTIONS_HIDE_ILVL_REF_BTN or "Hide Ilvl Reference",
+            label      = L.OPTIONS_HIDE_ILVL_REF_BTN or "Hide Ilvl Reference",
+            tooltipKey = "TOOLTIP_OPT_HIDE_ILVL_REF",
             getVal   = function(d) return d.showIlvlRefBtn == false end,
             onChange = function(v)
                 Addon:EnsurePrefs().showIlvlRefBtn = not v
@@ -204,7 +211,8 @@ local function BuildPanel()
             end,
         },
         {
-            label    = L.OPTIONS_HIDE_CHAR_SELECT or "Hide Character Selector",
+            label      = L.OPTIONS_HIDE_CHAR_SELECT or "Hide Character Selector",
+            tooltipKey = "TOOLTIP_OPT_HIDE_CHAR_SELECT",
             getVal   = function(d) return d.showCharPickerBtn == false end,
             onChange = function(v)
                 Addon:EnsurePrefs().showCharPickerBtn = not v
@@ -213,7 +221,8 @@ local function BuildPanel()
             end,
         },
         {
-            label    = L.OPTIONS_HIDE_SLIDERS or "Hide Sliders",
+            label      = L.OPTIONS_HIDE_SLIDERS or "Hide Sliders",
+            tooltipKey = "TOOLTIP_OPT_HIDE_SLIDERS",
             getVal   = function(d) return d.showScaleSlider == false end,
             onChange = function(v)
                 local d = Addon:EnsurePrefs()
@@ -223,7 +232,8 @@ local function BuildPanel()
             end,
         },
         {
-            label    = L.OPTIONS_HIDE_UPDATE_NOTICE or "Hide Update Notices",
+            label      = L.OPTIONS_HIDE_UPDATE_NOTICE or "Hide Update Notices",
+            tooltipKey = "TOOLTIP_OPT_HIDE_UPDATE_NOTICE",
             getVal   = function(d) return d.hideUpdateNotice and true or false end,
             onChange = function(v)
                 Addon:EnsurePrefs().hideUpdateNotice = v
@@ -235,7 +245,8 @@ local function BuildPanel()
             end,
         },
         {
-            label    = L.OPTIONS_HIDE_MINIMAP_BTN or "Hide Minimap Button",
+            label      = L.OPTIONS_HIDE_MINIMAP_BTN or "Hide Minimap Button",
+            tooltipKey = "TOOLTIP_OPT_HIDE_MINIMAP_BTN",
             getVal   = function(_d)
                 local g = Addon.db and Addon.db.global
                 return g and g.minimap and g.minimap.hide and true or false
@@ -277,6 +288,19 @@ local function BuildPanel()
             cb._hit:SetPoint("TOPLEFT",  canvas, "TOPLEFT",  0, curY)
             cb._hit:SetPoint("TOPRIGHT", canvas, "TOPRIGHT", 0, curY)
             cb._hit:SetHeight(ROW_H)
+            -- Hover tooltip.
+            if _row.tooltipKey then
+                local _tipKey = _row.tooltipKey
+                cb._hit:SetScript("OnEnter", function(self)
+                    local tip = (Addon.L and Addon.L[_tipKey]) or ""
+                    if tip ~= "" then
+                        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                        GameTooltip:SetText(tip, nil, nil, nil, nil, true)
+                        GameTooltip:Show()
+                    end
+                end)
+                cb._hit:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            end
         end
 
         _checkboxes[#_checkboxes + 1] = { cb = cb, row = _row }

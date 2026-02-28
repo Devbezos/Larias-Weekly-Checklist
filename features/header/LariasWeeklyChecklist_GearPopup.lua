@@ -321,17 +321,17 @@ function Addon:ToggleGearPopup(anchor, growRight)
 
         -- ── 8 Checkboxes ──────────────────────────────────────────────────
         local checks = {
-            { key = "_cbHideCompletedTasks", },
-            { key = "_cbHideCompleted",   },
-            { key = "_cbHideGreatVault",  },
-            { key = "_cbHideCurrency",    },
-            { key = "_cbHideWeeklies",    },
-            { key = "_cbHideChangeWeek",  },
-            { key = "_cbHideIlvlRef",     },
-            { key = "_cbHideCharPicker",  },
-            { key = "_cbHideSliders",     },
-            { key = "_cbHideUpdateNotice", },
-            { key = "_cbHideMinimapBtn",  },
+            { key = "_cbHideCompletedTasks",  tipKey = "TOOLTIP_OPT_HIDE_COMPLETED_TASKS" },
+            { key = "_cbHideCompleted",        tipKey = "TOOLTIP_OPT_HIDE_COMPLETED_WEEKS" },
+            { key = "_cbHideGreatVault",       tipKey = "TOOLTIP_OPT_HIDE_GREAT_VAULT"     },
+            { key = "_cbHideCurrency",         tipKey = "TOOLTIP_OPT_HIDE_CURRENCY"        },
+            { key = "_cbHideWeeklies",         tipKey = "TOOLTIP_OPT_HIDE_WEEKLIES"        },
+            { key = "_cbHideChangeWeek",       tipKey = "TOOLTIP_OPT_HIDE_CHANGE_WEEK"     },
+            { key = "_cbHideIlvlRef",          tipKey = "TOOLTIP_OPT_HIDE_ILVL_REF"        },
+            { key = "_cbHideCharPicker",       tipKey = "TOOLTIP_OPT_HIDE_CHAR_SELECT"     },
+            { key = "_cbHideSliders",          tipKey = "TOOLTIP_OPT_HIDE_SLIDERS"         },
+            { key = "_cbHideUpdateNotice",     tipKey = "TOOLTIP_OPT_HIDE_UPDATE_NOTICE"   },
+            { key = "_cbHideMinimapBtn",       tipKey = "TOOLTIP_OPT_HIDE_MINIMAP_BTN"     },
         }
         local callbacks = {
             _cbHideCompletedTasks = function(checked)
@@ -446,6 +446,20 @@ function Addon:ToggleGearPopup(anchor, growRight)
             hit:SetPoint("TOPLEFT",  p, "TOPLEFT",  0, tileTopY)
             hit:SetPoint("TOPRIGHT", p, "TOPRIGHT", 0, tileTopY)
             hit:SetHeight(TILE_H)
+
+            -- Hover tooltip.
+            if info.tipKey then
+                local _tipKey = info.tipKey
+                hit:SetScript("OnEnter", function(self)
+                    local tip = (Addon.L and Addon.L[_tipKey]) or ""
+                    if tip ~= "" then
+                        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                        GameTooltip:SetText(tip, nil, nil, nil, nil, true)
+                        GameTooltip:Show()
+                    end
+                end)
+                hit:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            end
         end
 
         -- ── Divider before Hidden Characters ──────────────────────────────
