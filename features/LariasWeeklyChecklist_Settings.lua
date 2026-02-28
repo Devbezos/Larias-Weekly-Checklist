@@ -200,7 +200,11 @@ local function BuildPanel()
             getVal   = function(d) return d.hideUpdateNotice and true or false end,
             onChange = function(v)
                 Addon:EnsurePrefs().hideUpdateNotice = v
-                if Addon.UpdateStatusBanner then Addon:UpdateStatusBanner() end
+                if not v then
+                    -- Re-query peers so the banner can repopulate if version data was cleared.
+                    if Addon.RequestVersions then Addon:RequestVersions(false) end
+                end
+                if Addon.UpdateStatusBanner then Addon:UpdateStatusBanner() else Addon:Refresh() end
             end,
         },
         {

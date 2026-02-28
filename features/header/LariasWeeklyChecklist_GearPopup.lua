@@ -332,6 +332,10 @@ function Addon:ToggleGearPopup(anchor, growRight)
             _cbHideUpdateNotice = function(checked)
                 local db = Addon:EnsurePrefs()
                 db.hideUpdateNotice = checked
+                if not checked then
+                    -- Re-query peers so the banner can repopulate if version data was cleared.
+                    if Addon.RequestVersions then Addon:RequestVersions(false) end
+                end
                 if Addon.UpdateStatusBanner then Addon:UpdateStatusBanner() end
             end,
             _cbHideMinimapBtn = function(checked)
