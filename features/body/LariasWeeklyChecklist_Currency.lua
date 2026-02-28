@@ -1294,22 +1294,39 @@ local function ResizeTrackingPanelToContent(addon)
             local GV_GAP = 30
             topOffset = 32 + bottomRight + GV_GAP  -- where GV data starts
             contentH  = bottomLeft  -- GV content drives remaining height
+            -- Store currency height so ResizeTrackingCols can position GV correctly.
+            trackingFrame._lariasCurrencyH = bottomRight
         end
     end
 
     local targetH = max(minH, topOffset + contentH + bottomPad + weeklyExtra, weeklyColBottom)
 
     local curH = tonumber(trackingFrame:GetHeight()) or 0
-    if math.abs(curH - targetH) <= 1 then return end
+    if math.abs(curH - targetH) <= 1 then
+        -- Even if overall height is unchanged, GV col position may need updating.
+        if wMode == "top-left" and addon.ResizeTrackingCols then
+            addon:ResizeTrackingCols()
+        end
+        return
+    end
 
     trackingFrame:SetHeight(targetH)
-    -- Column height is based on the column content only (not the extended weeklies area).
-    local colH = max(1, contentH + 2)
-    if trackingFrame._lariasLeftCol and trackingFrame._lariasLeftCol.SetHeight then
-        trackingFrame._lariasLeftCol:SetHeight(colH)
-    end
-    if trackingFrame._lariasRightCol and trackingFrame._lariasRightCol.SetHeight then
-        trackingFrame._lariasRightCol:SetHeight(colH)
+    -- Column heights: in top-left mode rightCol (currency) and leftCol (GV) have different heights.
+    if wMode == "top-left" then
+        if trackingFrame._lariasRightCol and trackingFrame._lariasRightCol.SetHeight then
+            trackingFrame._lariasRightCol:SetHeight(max(1, bottomRight + 2))
+        end
+        if trackingFrame._lariasLeftCol and trackingFrame._lariasLeftCol.SetHeight then
+            trackingFrame._lariasLeftCol:SetHeight(max(1, bottomLeft + 2))
+        end
+    else
+        local colH = max(1, contentH + 2)
+        if trackingFrame._lariasLeftCol and trackingFrame._lariasLeftCol.SetHeight then
+            trackingFrame._lariasLeftCol:SetHeight(colH)
+        end
+        if trackingFrame._lariasRightCol and trackingFrame._lariasRightCol.SetHeight then
+            trackingFrame._lariasRightCol:SetHeight(colH)
+        end
     end
     if addon.ApplyScrollLayout then
         addon:ApplyScrollLayout()
@@ -2498,22 +2515,20 @@ function Addon:ResizeTrackingCols()
                 rightCol:SetWidth(newColW)
                 rightCol:SetPoint("TOPLEFT", tf, "TOPLEFT", padL + newColW + colGap, -32)
             end
-            -- leftCol (GV) full-width below whichever top column is taller.
-            -- Anchor off rightCol BOTTOMLEFT back-shifted to the left edge so GV always
-            -- clears the currency rows even when they are taller than weeklies.
+            -- leftCol (GV) full-width, positioned below the taller of weeklies/currency.
+            -- Use the stored measured currency height (set by ResizeTrackingPanelToContent)
+            -- rather than rightCol's frame height which may not be set yet.
             if leftShown and leftCol then
-                local GV_GAP = 30  -- space for the GV section title (24px) + 6px gap
-                local fullW  = math.max(10, math.floor(frameW - padL - padR))
+                local GV_GAP   = 30  -- space for the GV section title (24px) + 6px gap
+                local fullW    = math.max(10, math.floor(frameW - padL - padR))
+                local currencyH = tonumber(tf._lariasCurrencyH) or 0
+                local wsH       = tonumber(ws and ws:GetHeight()) or 0
+                -- GV starts below the bottom of the taller top column.
+                -- rightCol starts at -32 from tracking frame top.
+                local gvTopY = -(32 + currencyH + GV_GAP)
                 leftCol:ClearAllPoints()
                 leftCol:SetWidth(fullW)
-                if rightShown and rightCol then
-                    -- Offset: leftCol TOPLEFT = rightCol BOTTOMLEFT shifted left by (colW+gap).
-                    leftCol:SetPoint("TOPLEFT", rightCol, "BOTTOMLEFT", -(newColW + colGap), -GV_GAP)
-                else
-                    -- Currency hidden: anchor below weeklies.
-                    local wsH = tonumber(ws:GetHeight()) or 0
-                    leftCol:SetPoint("TOPLEFT", tf, "TOPLEFT", padL, -(8 + wsH + GV_GAP))
-                end
+                leftCol:SetPoint("TOPLEFT", tf, "TOPLEFT", padL, gvTopY)
             end
         elseif wMode == "full" then
             local fullW = math.max(10, math.floor(frameW - 2 * WSEC_PAD_LR))
