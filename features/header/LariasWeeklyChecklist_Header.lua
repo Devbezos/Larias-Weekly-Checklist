@@ -63,7 +63,6 @@ function Addon:CreateHeader(frame)
     -- ── Lazy header button locals ─────────────────────────────────────────────
     local changeWeekBtn
     local ilvlRefBtn
-    local weekliesBtn
     -- ── Char-picker init ──────────────────────────────────────────────────────
     if Addon.InitCharPickerUI then
         Addon:InitCharPickerUI(frame, StyleMainTabButton)
@@ -103,18 +102,6 @@ function Addon:CreateHeader(frame)
         btn:SetScript("OnClick", function() Addon:ToggleIlvlRefWindow() end)
         ilvlRefBtn              = btn
         frame._lariasIlvlRefBtn = btn
-        return btn
-    end
-    -- ── EnsureWeekliesBtn_ ────────────────────────────────────────────────────────
-    local function EnsureWeekliesBtn_()
-        if weekliesBtn then return weekliesBtn end
-        local btn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        btn:SetSize(90, 22)
-        StyleMainTabButton(btn)
-        btn:SetText(L.WEEKLIES_BUTTON or "Weeklies")
-        btn:SetScript("OnClick", function() Addon:ToggleWeekliesWindow() end)
-        weekliesBtn              = btn
-        frame._lariasWeekliesBtn = btn
         return btn
     end
     -- ── Header picker (week selector popup) ──────────────────────────────────
@@ -339,7 +326,6 @@ function Addon:CreateHeader(frame)
         local dbLocal = Addon:EnsurePrefs()
         local showCW  = dbLocal.showChangeWeekBtn ~= false
         local showIR  = dbLocal.showIlvlRefBtn    ~= false
-        local showWL  = dbLocal.showWeekliesBtn   ~= false
         local showCP  = dbLocal.showCharPickerBtn ~= false
                     and (Addon.FEATURE_FLAGS and Addon.FEATURE_FLAGS.ENABLE_CHAR_SELECTOR) ~= false
 
@@ -466,28 +452,11 @@ function Addon:CreateHeader(frame)
             end
         end
 
-        -- weekliesBtn: sit left of ilvlRefBtn (or left of gearBtn when ilvlRef hidden).
-        local wlAnchor = (showIR and ilvlRefBtn) or gearBtn
-        local wlGap    = (showIR and ilvlRefBtn) and 4 or 4
-        if showWL then
-            local btn = EnsureWeekliesBtn_()
-            btn:ClearAllPoints()
-            btn:SetPoint("TOPRIGHT", wlAnchor, "TOPLEFT", -wlGap, 0)
-            btn:Show()
-        elseif weekliesBtn then
-            weekliesBtn:Hide()
-            if Addon._weekliesWindow and Addon._weekliesWindow.IsShown and
-               Addon._weekliesWindow:IsShown() then
-                Addon._weekliesWindow:Hide()
-            end
-        end
-
         -- Enforce minimum frame width based on visible button footprint.
         local _insetX = (Addon.UI.padOuterX or 14) + (Addon.UI.sectionInsetX or 14)
         local _leftW  = _insetX + (showCW and (108 + 6) or 0)
         local _rightW = (Addon.UI.closeInset or 4) + 32 + 2 + 20
         if showIR then _rightW = _rightW + 4 + 140 end
-        if showWL then _rightW = _rightW + 4 + 90  end
         local _minW   = _leftW + 20 + _rightW
         local _absMinW = math.floor(Addon.UI.frameW * 0.8)
         _minW = math.max(_minW, _absMinW)

@@ -317,7 +317,6 @@ local function SetupAddonDB()
             showCurrency          = true,
             showChangeWeekBtn     = true,
             showIlvlRefBtn        = true,
-            showWeekliesBtn       = true,
             showCharPickerBtn     = true,
             showSidePanelWeeklies  = true,
             showSidePanelRares     = true,
@@ -382,7 +381,7 @@ local function MigrateProfileDataToGlobalChars()
     end
     -- Preferences
     for _, k in ipairs({ "hideCompletedSections", "showGreatVault", "showCurrency",
-                         "showChangeWeekBtn", "showIlvlRefBtn", "showWeekliesBtn", "showCharPickerBtn", "debug",
+                         "showChangeWeekBtn", "showIlvlRefBtn", "showCharPickerBtn", "debug",
                          "showSidePanelWeeklies", "showSidePanelRares", "showSidePanelTreasures" }) do
         if oldProf[k] ~= nil then cdb[k] = oldProf[k] end
     end
@@ -398,7 +397,6 @@ local function MigrateProfileDataToGlobalChars()
     oldProf.showCurrency      = nil
     oldProf.showChangeWeekBtn = nil
     oldProf.showIlvlRefBtn    = nil
-    oldProf.showWeekliesBtn   = nil
     oldProf.showCharPickerBtn = nil
     oldProf.debug             = nil
     oldProf.showSidePanelWeeklies  = nil
@@ -611,7 +609,7 @@ end
 -- player's customised settings are preserved.
 local _PREF_KEYS = {
     "hideCompletedSections", "showGreatVault", "showCurrency",
-    "showChangeWeekBtn", "showIlvlRefBtn", "showWeekliesBtn", "showCharPickerBtn",
+    "showChangeWeekBtn", "showIlvlRefBtn", "showCharPickerBtn",
     "showScaleSlider", "showOpacitySlider", "hideUpdateNotice",
     "showSidePanelWeeklies", "showSidePanelRares", "showSidePanelTreasures",
 }

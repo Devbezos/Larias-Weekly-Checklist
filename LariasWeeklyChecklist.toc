@@ -47,7 +47,6 @@ features\LariasWeeklyChecklist_Comms.lua
 features\LariasWeeklyChecklist_Settings.lua
 features\header\LariasWeeklyChecklist_GearPopup.lua
 features\header\LariasWeeklyChecklist_IlvlRef.lua
-features\header\LariasWeeklyChecklist_Weeklies.lua
 features\header\LariasWeeklyChecklist_Header.lua
 features\LariasWeeklyChecklist_SidePanel.lua
 features\body\LariasWeeklyChecklist_ListData.lua
