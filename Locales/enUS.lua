@@ -79,7 +79,7 @@ local STRINGS = {
 	TRACKING_QUEST_STAND_YOUR_GROUND     = "Stand Your Ground",
 
 	TRACKING_NO_ID = "No ID",
-	TRACKING_TRADE_UP_SUFFIX = " Trade Up)",
+	TRACKING_TRADE_UP_SUFFIX = " Convert)",
 
 	TRACKING_CATALYST_LABEL = "Catalyst",
 
