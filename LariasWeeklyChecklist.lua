@@ -108,8 +108,13 @@ do
             header  = { r = 1.00, g = 0.82, b = 0.00, a = 1.00 },
             text    = { r = 1.00, g = 1.00, b = 1.00, a = 1.00 },
             textDim = { r = 1.00, g = 1.00, b = 1.00, a = 0.85 },
+            check   = { r = 0.19, g = 0.83, b = 0.19, a = 1.00 },  -- checkmark tick
         }
         self.THEME = self.THEME or self.CONSTANTS.theme
+        -- Ensure check color exists for sessions that loaded before it was added.
+        if not self.THEME.check then
+            self.THEME.check = { r = 0.19, g = 0.83, b = 0.19, a = 1.00 }
+        end
 
         self.CONSTANTS.ui = self.CONSTANTS.ui or self.UI or {
             frameW = 520,
@@ -932,12 +937,13 @@ function Addon:ApplyThemeColors()
 
     -- Refresh active section header title colors and checkbox ticks immediately.
     local hdr = self.THEME.header
+    local chk = self.THEME.check or hdr
     for _, sec in ipairs(self._activeSections or {}) do
         if sec._title then
             sec._title:SetTextColor(hdr.r, hdr.g, hdr.b, hdr.a)
         end
         for _, cb in ipairs(sec._checkboxes or {}) do
-            if cb._tick then cb._tick:SetVertexColor(hdr.r, hdr.g, hdr.b, 1) end
+            if cb._tick then cb._tick:SetVertexColor(chk.r, chk.g, chk.b, 1) end
             if cb._box  then self:ApplyTheme(cb._box) end
         end
     end
@@ -1224,7 +1230,7 @@ local function AcquireCheckbox(parentSectionFrame)
         checkbox:SetParent(parentSectionFrame)
         checkbox:Show()
         -- Re-apply theme colors in case THEME changed since this checkbox was pooled.
-        local h = Addon.THEME.header
+        local h = Addon.THEME.check or Addon.THEME.header
         if checkbox._tick then checkbox._tick:SetVertexColor(h.r, h.g, h.b, 1) end
         if checkbox._box  then Addon:ApplyTheme(checkbox._box) end
     else

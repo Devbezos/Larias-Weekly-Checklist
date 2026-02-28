@@ -35,7 +35,7 @@ function C.NewCheckBox(parent, onToggle, boxSize)
     boxSize = boxSize or 16
 
     local T  = Addon.THEME or {}
-    local th = T.header or { r = 1.00, g = 0.82, b = 0.00, a = 1 }
+    local th = T.check  or T.header or { r = 0.19, g = 0.83, b = 0.19, a = 1 }
     local tc = T.text   or { r = 1,    g = 1,    b = 1,    a = 1 }
 
     -- Outer button: interaction container.
