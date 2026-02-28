@@ -319,8 +319,7 @@ local function SetupAddonDB()
             showIlvlRefBtn        = true,
             showCharPickerBtn     = true,
             showSidePanelWeeklies  = true,
-            showSidePanelRares     = true,
-            showSidePanelTreasures = true,
+
             showScaleSlider       = true,
             showOpacitySlider     = true,
             hideUpdateNotice      = false,
@@ -382,7 +381,7 @@ local function MigrateProfileDataToGlobalChars()
     -- Preferences
     for _, k in ipairs({ "hideCompletedSections", "showGreatVault", "showCurrency",
                          "showChangeWeekBtn", "showIlvlRefBtn", "showCharPickerBtn", "debug",
-                         "showSidePanelWeeklies", "showSidePanelRares", "showSidePanelTreasures" }) do
+                         "showSidePanelWeeklies" }) do
         if oldProf[k] ~= nil then cdb[k] = oldProf[k] end
     end
 
@@ -400,8 +399,7 @@ local function MigrateProfileDataToGlobalChars()
     oldProf.showCharPickerBtn = nil
     oldProf.debug             = nil
     oldProf.showSidePanelWeeklies  = nil
-    oldProf.showSidePanelRares     = nil
-    oldProf.showSidePanelTreasures = nil
+
 end
 
 -- Set up LibDataBroker and LibDBIcon for minimap icon
@@ -616,7 +614,7 @@ local _PREF_KEYS = {
     "hideCompletedSections", "showGreatVault", "showCurrency",
     "showChangeWeekBtn", "showIlvlRefBtn", "showCharPickerBtn",
     "showScaleSlider", "showOpacitySlider", "hideUpdateNotice",
-    "showSidePanelWeeklies", "showSidePanelRares", "showSidePanelTreasures",
+    "showSidePanelWeeklies",
 }
 function Addon:EnsurePrefs()
     if not self.db then SetupAddonDB() end
