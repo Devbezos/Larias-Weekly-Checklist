@@ -30,6 +30,7 @@ function C.NewPopupPanel(strata, fadeTime)
     p:SetClampedToScreen(true)
     p:SetSize(200, 40)
     p:Hide()
+    p:EnableMouse(true)   -- absorb clicks on empty background so they don't reach the catcher
     if p.SetToplevel   then p:SetToplevel(true)  end
     if p.SetFrameLevel then p:SetFrameLevel(200) end
 
