@@ -1114,7 +1114,7 @@ local function ComputeWantTrackingPanel(db, prefs)
         local hasData = snap and (snap.leftLines ~= nil or (snap.rightRows ~= nil and #snap.rightRows > 0))
         return hasData and IsMainFrameOnListTab() and true or false
     end
-    local wantPanel = (prefs.showGreatVault or prefs.showCurrency) and true or false
+    local wantPanel = (prefs.showGreatVault or prefs.showCurrency or prefs.showInlineWeeklies ~= false) and true or false
     if wantPanel and not IsMainFrameOnListTab() then
         wantPanel = false
     end
@@ -1274,7 +1274,10 @@ local function ResizeTrackingPanelToContent(addon)
     bottomLeft = max(bottomLeft, BottomFor(TrackingUI.left._gvSentinel))
 
     local contentH = max(bottomLeft, bottomRight)
-    local topOffset = 32
+    -- Only reserve space for the GV/currency title row when at least one column is shown.
+    local anyColShown = (trackingFrame._lariasLeftCol  and trackingFrame._lariasLeftCol.IsShown  and trackingFrame._lariasLeftCol:IsShown())
+                     or (trackingFrame._lariasRightCol and trackingFrame._lariasRightCol.IsShown and trackingFrame._lariasRightCol:IsShown())
+    local topOffset = anyColShown and 32 or 0
     local bottomPad = 10
     local minH = 90
 
@@ -1965,7 +1968,7 @@ function Addon:ApplyTrackingPanelOptions()
             showCurrency   = snap.rightRows ~= nil and #snap.rightRows > 0
         end
     else
-        wantPanel = (showGreatVault or showCurrency) and IsMainFrameOnListTab()
+        wantPanel = (showGreatVault or showCurrency or prefs.showInlineWeeklies ~= false) and IsMainFrameOnListTab()
     end
 
     trackingFrame:SetShown(wantPanel)
