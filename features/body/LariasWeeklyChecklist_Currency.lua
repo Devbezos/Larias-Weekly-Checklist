@@ -1275,6 +1275,7 @@ local function ResizeTrackingPanelToContent(addon)
     -- Weeklies height contribution depends on its layout mode.
     -- "below"     → strip below both columns; adds to targetH.
     -- "side-*"    → weeklies is a column starting at y=-8; compare against contentH.
+    -- "top-left"  → weeklies top-left, currency top-right, GV below; topOffset adjusted.
     -- "full"      → only content; starts at y=-8.
     -- "hidden"    → ignored.
     local weeklyExtra    = 0
@@ -1287,6 +1288,11 @@ local function ResizeTrackingPanelToContent(addon)
             weeklyExtra = wsH + 8
         elseif wMode == "side-right" or wMode == "side-left" or wMode == "full" then
             weeklyColBottom = 8 + wsH + bottomPad
+        elseif wMode == "top-left" then
+            -- GV sits below weeklies: adjust topOffset so it measures from GV's origin.
+            -- ws starts at y=-8; GV_GAP=30 leaves room for the GV section title.
+            topOffset = 8 + wsH + 30
+            contentH  = bottomLeft  -- GV drives total height; currency fits in top row
         end
     end
 
@@ -1444,7 +1450,7 @@ local function BuildWeekliesSection(trackingFrame)
         -- 1 column when sharing space side-by-side with GV or Currency.
         local tf        = Addon._trackingFrame
         local wMode     = tf and tf._weekliesMode or "below"
-        local singleCol = (wMode == "side-right" or wMode == "side-left")
+        local singleCol = (wMode == "side-right" or wMode == "side-left" or wMode == "top-left")
 
         -- Show separator + background only in "below" mode.
         local isBelow = (wMode == "below")
@@ -1671,17 +1677,11 @@ function Addon:CreateTrackingPanel(parentFrame)
             end
         end)
 
-    -- Currency title button: toggles the Weekly Rewards (weekly overview) frame.
+    -- Currency title button: toggles the currency panel.
     MakeTitleButton(rightCol,
-        L.TOOLTIP_OPEN_WEEKLY or "Click to open the Weekly Rewards",
+        L.TOOLTIP_OPEN_CURRENCIES or "Click to open the Currency panel",
         function()
-            if not WeeklyRewardsFrame then
-                C_AddOns.LoadAddOn("Blizzard_WeeklyRewards")
-            end
-            if WeeklyRewardsFrame then
-                if WeeklyRewardsFrame:IsShown() then WeeklyRewardsFrame:Hide()
-                else WeeklyRewardsFrame:Show() end
-            end
+            ToggleCharacter("TokenFrame")
         end)
 
     local rightTitle = trackingFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
@@ -2018,11 +2018,11 @@ function Addon:ApplyTrackingPanelOptions()
     local weekliesMode = "hidden"
     if showWeeklies and not Addon._viewingChar then
         if showGreatVault and showCurrency then
-            weekliesMode = "below"
+            weekliesMode = "top-left"  -- weeklies top-left, currency top-right, GV below
         elseif showGreatVault then
-            weekliesMode = "side-left"
+            weekliesMode = "side-left"  -- weeklies left, GV right
         elseif showCurrency then
-            weekliesMode = "side-right"
+            weekliesMode = "side-right" -- currency left, weeklies right
         else
             weekliesMode = "full"
         end
@@ -2048,18 +2048,24 @@ function Addon:ApplyTrackingPanelOptions()
 
     trackingFrame._lariasShowBoth = showGreatVault and showCurrency
 
-    if showCurrency then
-        -- Currency (rightCol) is always the leftmost column.
+    if weekliesMode == "top-left" then
+        -- "top-left": weeklies top-left, currency top-right, GV full-width below.
+        -- ResizeTrackingCols provides exact positions; set placeholder anchors here.
         if rightCol then rightCol:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", padL, -32) end
-    end
-    if showGreatVault then
-        if showCurrency and rightCol then
-            -- Both cols: leftCol (GV) starts right of rightCol (Currency).
-            if leftCol then leftCol:SetPoint("TOPLEFT", rightCol, "TOPRIGHT", colGap, 0) end
-        else
-            -- GV-only or GV+weeklies-right: GV takes the left anchor.
-            -- ResizeTrackingCols will re-anchor when side-left mode applies.
-            if leftCol then leftCol:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", padL, -32) end
+        if leftCol  then leftCol:SetPoint("TOPLEFT",  trackingFrame, "TOPLEFT", padL, -32) end
+    else
+        if showCurrency then
+            -- Currency (rightCol) is always the leftmost column.
+            if rightCol then rightCol:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", padL, -32) end
+        end
+        if showGreatVault then
+            if showCurrency and rightCol then
+                -- Both cols: leftCol (GV) starts right of rightCol (Currency).
+                if leftCol then leftCol:SetPoint("TOPLEFT", rightCol, "TOPRIGHT", colGap, 0) end
+            else
+                -- GV-only or GV+weeklies-right: GV takes the left anchor.
+                if leftCol then leftCol:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", padL, -32) end
+            end
         end
     end
 
@@ -2073,7 +2079,7 @@ function Addon:ApplyTrackingPanelOptions()
             ws:SetPoint("BOTTOMRIGHT", trackingFrame, "BOTTOMRIGHT", -WSEC_PAD_LR, WSEC_BOT_OFF)
             ws:Show()
             if ws.Refresh then ws.Refresh() end
-        elseif weekliesMode == "side-right" or weekliesMode == "side-left" or weekliesMode == "full" then
+        elseif weekliesMode == "side-right" or weekliesMode == "side-left" or weekliesMode == "full" or weekliesMode == "top-left" then
             -- Position / width set by ResizeTrackingCols; just make sure it is shown.
             ws:Show()
             if ws.Refresh then ws.Refresh() end
@@ -2457,7 +2463,8 @@ function Addon:ResizeTrackingCols()
     if rightShown and rightCol.SetWidth then rightCol:SetWidth(newColW) end
 
     -- Re-anchor leftCol (GV) right of rightCol (Currency) in both-visible mode.
-    if leftShown and rightShown then
+    -- Skipped for "top-left" mode where the block below places GV beneath weeklies.
+    if leftShown and rightShown and wMode ~= "top-left" then
         leftCol:ClearAllPoints()
         leftCol:SetPoint("TOPLEFT", rightCol, "TOPRIGHT", colGap, 0)
     end
@@ -2480,6 +2487,25 @@ function Addon:ResizeTrackingCols()
                 leftCol:SetWidth(newColW)
                 leftCol:SetPoint("TOPLEFT", tf, "TOPLEFT", padL + newColW + colGap, -32)
             end
+        elseif wMode == "top-left" then
+            -- Weeklies top-left, Currency top-right, GV full-width below.
+            ws:SetWidth(newColW)
+            ws:SetPoint("TOPLEFT", tf, "TOPLEFT", padL, -8)
+            -- rightCol (Currency) at top-right.
+            if rightShown and rightCol then
+                rightCol:ClearAllPoints()
+                rightCol:SetWidth(newColW)
+                rightCol:SetPoint("TOPLEFT", tf, "TOPLEFT", padL + newColW + colGap, -32)
+            end
+            -- leftCol (GV) below weeklies, spanning full width.
+            if leftShown and leftCol then
+                local wsH   = tonumber(ws:GetHeight()) or 0
+                local GV_GAP = 30  -- 24px for GV title + 6px breathing room
+                local fullW  = math.max(10, math.floor(frameW - padL - padR))
+                leftCol:ClearAllPoints()
+                leftCol:SetWidth(fullW)
+                leftCol:SetPoint("TOPLEFT", tf, "TOPLEFT", padL, -(8 + wsH + GV_GAP))
+            end
         elseif wMode == "full" then
             local fullW = math.max(10, math.floor(frameW - 2 * WSEC_PAD_LR))
             ws:SetWidth(fullW)
@@ -2490,7 +2516,15 @@ function Addon:ResizeTrackingCols()
     -- Update title widths and anchors.
     local leftTitle  = tf._lariasLeftTitle
     local rightTitle = tf._lariasRightTitle
-    if leftTitle  and leftTitle.SetWidth  then leftTitle:SetWidth(newColW)  end
+    if leftTitle  and leftTitle.SetWidth  then
+        -- In top-left mode GV spans full width, so its title does too.
+        if wMode == "top-left" then
+            local fullW = math.max(10, math.floor(frameW - padL - padR))
+            leftTitle:SetWidth(fullW)
+        else
+            leftTitle:SetWidth(newColW)
+        end
+    end
     if rightTitle and rightTitle.SetWidth then
         rightTitle:SetWidth(newColW)
         if rightCol then
