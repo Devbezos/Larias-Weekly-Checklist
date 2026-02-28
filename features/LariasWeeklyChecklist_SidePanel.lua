@@ -605,10 +605,10 @@ local function BuildSidePanel(mainFrame)
             if npcID then
                 if IsRareKilled(npcID) then
                     zoneDone[r.zoneKey] = (zoneDone[r.zoneKey] or 0) + 1
-                    r.val:SetText(GREEN .. "Done" .. CLOSE)
+                    r.val:SetText(GREEN .. "✓" .. CLOSE)
                     r.lbl:SetTextColor(0.50, 0.90, 0.50, 0.80)
                 else
-                    r.val:SetText(RED .. "---" .. CLOSE)
+                    r.val:SetText(RED .. "✗" .. CLOSE)
                     r.lbl:SetTextColor(1, 1, 1, 1)
                 end
             end
