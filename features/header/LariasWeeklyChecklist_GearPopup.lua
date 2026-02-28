@@ -485,15 +485,14 @@ function Addon:ToggleGearPopup(anchor, growRight)
         verLabel:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
         verLabel:SetPoint("BOTTOMLEFT", creditLabel, "TOPLEFT", 0, 2)
         verLabel:SetJustifyH("LEFT")
-        verLabel:SetText(_ver ~= "" and ("v" .. _ver) or "")
+        local _verText = _ver ~= "" and ("v" .. _ver) or ""
+        local _dataText = _dataVer ~= "" and ("Data: " .. _dataVer) or ""
+        if _verText ~= "" and _dataText ~= "" then
+            verLabel:SetText(_verText .. "  \226\128\162  " .. _dataText)
+        else
+            verLabel:SetText(_verText .. _dataText)
+        end
         verLabel:SetTextColor(0.45, 0.45, 0.45, 0.6)
-
-        local dataVerLabel = p:CreateFontString(nil, "OVERLAY")
-        dataVerLabel:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
-        dataVerLabel:SetPoint("BOTTOMLEFT", verLabel, "TOPLEFT", 0, 2)
-        dataVerLabel:SetJustifyH("LEFT")
-        dataVerLabel:SetText(_dataVer ~= "" and ("Data: " .. _dataVer) or "")
-        dataVerLabel:SetTextColor(0.45, 0.45, 0.45, 0.6)
 
         self._gearPopup = p
     end
