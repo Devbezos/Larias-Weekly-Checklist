@@ -1427,7 +1427,7 @@ function Addon:CreateTrackingPanel(parentFrame)
         hdr:SetJustifyH("LEFT")
         hdr:SetJustifyV("MIDDLE")
         if hdr.SetWordWrap then hdr:SetWordWrap(false) end
-        hdr:SetTextColor(THEME.text.r, THEME.text.g, THEME.text.b, THEME.text.a)
+        hdr:SetTextColor(THEME.header.r, THEME.header.g, THEME.header.b, THEME.header.a)
         hdr:SetText(L[GV_SECTION_KEYS[bi]] or GV_SECTION_LABELS[bi])
 
         -- Vertical borders and column dividers.
