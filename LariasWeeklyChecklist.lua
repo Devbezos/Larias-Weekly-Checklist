@@ -901,6 +901,10 @@ function Addon:ApplyThemeColors()
         end
     end
     if self._trackingFrame then self:ApplyTheme(self._trackingFrame) end
+    -- Refresh the gear popup backdrop immediately if it is open.
+    if self._gearPopup and self._gearPopup.IsShown and self._gearPopup:IsShown() then
+        self:ApplyTheme(self._gearPopup)
+    end
 
     -- Header text color
     local defHdrR, defHdrG, defHdrB = 1.00, 0.82, 0.00
@@ -926,16 +930,23 @@ function Addon:ApplyThemeColors()
     local sf = self._inFrameScaleSlider
     if sf and sf.RefreshColors then sf.RefreshColors() end
 
-    -- Refresh active section header title colors immediately.
+    -- Refresh active section header title colors and checkbox ticks immediately.
+    local hdr = self.THEME.header
     for _, sec in ipairs(self._activeSections or {}) do
         if sec._title then
-            local h = self.THEME.header
-            sec._title:SetTextColor(h.r, h.g, h.b, h.a)
+            sec._title:SetTextColor(hdr.r, hdr.g, hdr.b, hdr.a)
+        end
+        for _, cb in ipairs(sec._checkboxes or {}) do
+            if cb._tick then cb._tick:SetVertexColor(hdr.r, hdr.g, hdr.b, 1) end
+            if cb._box  then self:ApplyTheme(cb._box) end
         end
     end
 
     -- Refresh char picker button label color if it exists.
     if self._cpUpdateLabel then self._cpUpdateLabel() end
+
+    -- Refresh Settings panel color swatches if the panel is open.
+    if self.RefreshSettingsSwatches then self:RefreshSettingsSwatches() end
 
     -- Repaint list item labels with the new text color.
     if self.RequestRefresh then self:RequestRefresh() end
@@ -1212,6 +1223,10 @@ local function AcquireCheckbox(parentSectionFrame)
     if checkbox then
         checkbox:SetParent(parentSectionFrame)
         checkbox:Show()
+        -- Re-apply theme colors in case THEME changed since this checkbox was pooled.
+        local h = Addon.THEME.header
+        if checkbox._tick then checkbox._tick:SetVertexColor(h.r, h.g, h.b, 1) end
+        if checkbox._box  then Addon:ApplyTheme(checkbox._box) end
     else
         checkbox = Addon.Controls.NewCheckBox(parentSectionFrame, nil, 32)
     end

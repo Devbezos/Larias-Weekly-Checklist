@@ -462,6 +462,16 @@ end
 
 -- ── Public API ────────────────────────────────────────────────────────────────
 
+--- Refreshes all color swatch buttons in the Settings panel to match the
+--- current saved (or default) theme colors.  Safe to call at any time;
+--- no-op if the panel hasn't been built yet.
+function Addon:RefreshSettingsSwatches()
+    for _, entry in ipairs(_colorSwatches) do
+        local r, g, b = entry.def.getColor()
+        entry.swatch:SetColor(r, g, b)
+    end
+end
+
 --- Called from OnEnable to register the panel with the WoW UI.
 function Addon:RegisterSettingsPanel()
     local frame = BuildPanel()
