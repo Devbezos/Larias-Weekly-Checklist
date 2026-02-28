@@ -1365,7 +1365,7 @@ local function BuildWeekliesSection(trackingFrame)
     hdrFS:SetJustifyH("CENTER")
     hdrFS:SetJustifyV("MIDDLE")
     hdrFS:SetTextColor(THEME.header.r, THEME.header.g, THEME.header.b, THEME.header.a)
-    hdrFS:SetText(L.TRACKING_WEEKLIES_TITLE or "Weeklies")
+    hdrFS:SetText(L.TRACKING_WEEKLIES_TITLE)
     sec._hdrFS = hdrFS
 
     -- Two column sub-frames: left = rows 1-3, right = rows 4-6.
@@ -1390,12 +1390,12 @@ local function BuildWeekliesSection(trackingFrame)
     rightCol:SetHeight(WSEC_ROWS_PER_COL * WSEC_ROW_H)
 
     local rowDefs = {
-        { isPrey = true,  label = L.TRACKING_QUEST_PREY            or "Prey Hunted"            },
-        { questKey = "abundance",         label = L.TRACKING_QUEST_ABUNDANCE          or "Abundance"              },
-        { questKey = "lostLegends",       label = L.TRACKING_QUEST_LOST_LEGENDS       or "Lost Legends"           },
-        { questKey = "highEsteem",        label = L.TRACKING_QUEST_HIGH_ESTEEM        or "High Esteem"            },
-        { questKey = "fortifyRunestones", label = L.TRACKING_QUEST_FORTIFY_RUNESTONES or "Fortify the Runestones"  },
-        { questKey = "standYourGround",   label = L.TRACKING_QUEST_STAND_YOUR_GROUND  or "Stand Your Ground"      },
+        { isPrey = true,  label = L.TRACKING_QUEST_PREY            },
+        { questKey = "abundance",         label = L.TRACKING_QUEST_ABUNDANCE          },
+        { questKey = "lostLegends",       label = L.TRACKING_QUEST_LOST_LEGENDS       },
+        { questKey = "highEsteem",        label = L.TRACKING_QUEST_HIGH_ESTEEM        },
+        { questKey = "fortifyRunestones", label = L.TRACKING_QUEST_FORTIFY_RUNESTONES },
+        { questKey = "standYourGround",   label = L.TRACKING_QUEST_STAND_YOUR_GROUND  },
     }
 
     local GREEN = "|cff40ff40"
@@ -1404,6 +1404,7 @@ local function BuildWeekliesSection(trackingFrame)
 
     local rows = {}
     for i, d in ipairs(rowDefs) do
+        if not d.label then goto continue end  -- skip rows with no locale string
         local colFrame = (i <= WSEC_ROWS_PER_COL) and leftCol or rightCol
         local colIdx   = (i <= WSEC_ROWS_PER_COL) and 1 or 2
         local rowInCol = (i - 1) % WSEC_ROWS_PER_COL
@@ -1429,6 +1430,7 @@ local function BuildWeekliesSection(trackingFrame)
         for k, v in pairs(d) do row[k] = v end
         lblFS:SetText(d.label)
         tinsert(rows, row)
+        ::continue::
     end
     sec._rows = rows
 
