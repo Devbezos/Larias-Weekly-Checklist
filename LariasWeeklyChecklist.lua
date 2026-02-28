@@ -964,6 +964,19 @@ function Addon:ApplyThemeColors()
     -- Refresh Settings panel color swatches if the panel is open.
     if self.RefreshSettingsSwatches then self:RefreshSettingsSwatches() end
 
+    -- Rebuild the item-level reference window so its data rows reflect the new text color.
+    -- The window is statically built, so a rebuild is the cleanest way to re-color it.
+    if self._ilvlRefWindow and self.RebuildIlvlRefWindow then
+        self:RebuildIlvlRefWindow()
+    end
+
+    -- Re-populate the week picker if it is currently open so its button labels
+    -- immediately reflect the new text color.
+    local _pickerFrame = self._mainFrame and self._mainFrame._lariasHeaderPicker
+    if _pickerFrame and _pickerFrame.IsShown and _pickerFrame:IsShown() then
+        if self._PopulateHeaderPicker then self._PopulateHeaderPicker() end
+    end
+
     -- Repaint list item labels with the new text color.
     if self.RequestRefresh then self:RequestRefresh() end
 end

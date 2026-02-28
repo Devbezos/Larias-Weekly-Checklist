@@ -155,10 +155,11 @@ local function GridTable(parent, posY, cols, rows)
     hline(posY, GBOR)  -- strong line under header
 
     -- data rows
+    local txt = Addon.THEME.text
     for ri, row in ipairs(rows) do
         for ci, col in ipairs(cols) do
             FS(parent, (col.x or 0) + 4, posY - 2, row[ci] or "",
-               nil, nil, nil, nil, nil, (col.w or 60) - 6, col.align)
+               nil, txt.r, txt.g, txt.b, txt.a, (col.w or 60) - 6, col.align)
         end
         posY = posY - ROW_H
         hline(posY, ri == nRows and GBOR or GLIN)
