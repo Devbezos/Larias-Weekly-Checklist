@@ -409,6 +409,8 @@ local function SetupMinimapIcon()
                 end
                 Addon:Toggle()
             elseif button == "RightButton" then
+                -- Dismiss any visible tooltip so it doesn't overlap the popup.
+                if GameTooltip then GameTooltip:Hide() end
                 -- Open the gear popup anchored to the minimap button.
                 if Addon.ToggleGearPopup then
                     Addon:ToggleGearPopup(self_)

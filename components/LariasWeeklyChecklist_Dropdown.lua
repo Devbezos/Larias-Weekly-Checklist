@@ -43,7 +43,10 @@ function C.NewPopupPanel(strata, fadeTime)
     if catcher.SetPropagateMouseClicks then catcher:SetPropagateMouseClicks(true) end
     catcher:Hide()
     catcher:SetScript("OnMouseDown", function()
-        p._lariasJustClosed = true
+        -- Record the close time rather than a bare boolean.  Toggle functions
+        -- ignore re-open requests that arrive within 50 ms (same mouse event
+        -- still propagating), but allow later clicks to open normally.
+        p._lariasJustClosedAt = GetTime and GetTime() or 0
         p:Hide()
     end)
 
