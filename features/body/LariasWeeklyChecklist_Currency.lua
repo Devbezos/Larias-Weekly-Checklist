@@ -1493,9 +1493,32 @@ local function BuildWeekliesSection(trackingFrame)
         local QIDs2  = Addon.TRACKING and Addon.TRACKING.questIDs or {}
         local PQIDs2 = Addon.TRACKING and Addon.TRACKING.preyQuestIDs
         local pGoal2 = (Addon.TRACKING and Addon.TRACKING.preyQuestGoal) or 4
+
+        -- "below" mode has full panel width and gets 2 columns (3 rows each).
+        -- Any side/solo mode is narrow, so all rows stack in a single column.
+        local tf        = Addon._trackingFrame
+        local wMode     = tf and tf._weekliesMode or "below"
+        local singleCol = (wMode ~= "below")
+
+        -- Reflow the two column sub-frames to match the current mode.
+        if singleCol then
+            leftCol:ClearAllPoints()
+            leftCol:SetPoint("TOPLEFT",  sec, "TOPLEFT",  0, colOffY)
+            leftCol:SetPoint("TOPRIGHT", sec, "TOPRIGHT", 0, colOffY)
+            rightCol:Hide()
+        else
+            leftCol:ClearAllPoints()
+            leftCol:SetPoint("TOPLEFT",  sec,   "TOPLEFT",  0, colOffY)
+            leftCol:SetPoint("TOPRIGHT", spine, "TOPLEFT",  0, 0)
+            rightCol:Show()
+            rightCol:ClearAllPoints()
+            rightCol:SetPoint("TOPLEFT",  spine, "TOPRIGHT", 0, 0)
+            rightCol:SetPoint("TOPRIGHT", sec,   "TOPRIGHT", 0, colOffY)
+        end
+
         local leftVis, rightVis = 0, 0
 
-        for _, r in ipairs(rows) do
+        for i, r in ipairs(rows) do
             local rowDone = false
             if r.isPrey then
                 local count = 0
@@ -1518,27 +1541,52 @@ local function BuildWeekliesSection(trackingFrame)
                 rowDone = (done == true)
                 r.chk:SetState(done)
             end
+
             local visible = not (hideCompleted and rowDone)
             r.lblFS:SetShown(visible)
             if r.chk   then r.chk:SetShown(visible)   end
-            if r.valFS then r.valFS:SetShown(visible) end
+            if r.valFS then r.valFS:SetShown(visible)  end
             if visible then
-                if r.colIdx == 1 then leftVis = leftVis + 1
-                else                  rightVis = rightVis + 1 end
+                if singleCol or r.colIdx == 1 then leftVis = leftVis + 1
+                else                               rightVis = rightVis + 1 end
+            end
+
+            -- Re-anchor row elements to the correct column frame + Y position.
+            local refFrame = singleCol and leftCol
+                             or (r.colIdx == 1 and leftCol or rightCol)
+            local rowY = singleCol
+                and ((i - 1) * WSEC_ROW_H)
+                or  (((i - 1) % WSEC_ROWS_PER_COL) * WSEC_ROW_H)
+
+            if r.isPrey then
+                r.valFS:ClearAllPoints()
+                r.valFS:SetPoint("TOPRIGHT", refFrame, "TOPRIGHT", -4, -rowY)
+                r.lblFS:ClearAllPoints()
+                r.lblFS:SetPoint("TOPLEFT",  refFrame, "TOPLEFT",  4, -rowY)
+                r.lblFS:SetPoint("TOPRIGHT", r.valFS, "TOPLEFT", -2, 0)
+            else
+                local chkYOff = -rowY - (WSEC_ROW_H - CHK_SZ) / 2
+                r.chk:ClearAllPoints()
+                r.chk:SetPoint("TOPRIGHT", refFrame, "TOPRIGHT", -4, chkYOff)
+                r.lblFS:ClearAllPoints()
+                r.lblFS:SetPoint("TOPLEFT",  refFrame, "TOPLEFT",  4, -rowY)
+                r.lblFS:SetPoint("TOPRIGHT", r.chk, "TOPLEFT", -4, (WSEC_ROW_H - CHK_SZ) / 2)
             end
         end
 
-        -- Height based on tallest column.
-        local rowsH = max(leftVis, rightVis) * WSEC_ROW_H
-        local newH  = WSEC_PAD_TOP + WSEC_HEADER_H + rowsH + WSEC_PAD_BOT
+        -- Height: single-col tallies all rows; two-col uses the tallest column.
+        local rowsH = singleCol
+            and (leftVis * WSEC_ROW_H)
+            or  (max(leftVis, rightVis) * WSEC_ROW_H)
+        local newH = WSEC_PAD_TOP + WSEC_HEADER_H + rowsH + WSEC_PAD_BOT
         leftCol:SetHeight(max(1, rowsH))
         rightCol:SetHeight(max(1, rowsH))
         local curSecH = tonumber(sec:GetHeight()) or 0
         if math.abs(curSecH - newH) > 1 then
             sec:SetHeight(newH)
-            local tf  = Addon._trackingFrame
-            local tfH = tf and (tonumber(tf:GetHeight()) or 0) or 0
-            if tf and tfH > 90 then
+            local tf2  = Addon._trackingFrame
+            local tfH = tf2 and (tonumber(tf2:GetHeight()) or 0) or 0
+            if tf2 and tfH > 90 then
                 ResizeTrackingPanelToContent(Addon)
             end
         end
