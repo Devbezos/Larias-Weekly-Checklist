@@ -246,7 +246,6 @@ function Addon:ToggleGearPopup(anchor, growRight)
         resetBtn:SetHeight(22)
         if Addon._styleActionButton then Addon._styleActionButton(resetBtn) end
         resetBtn:SetScript("OnClick", function()
-            p:Hide()
             -- Reset only the current character's list data (checked items,
             -- collapsed sections, week pointer). Display preferences (hide
             -- great vault, currency, etc.) and UI scale are intentionally kept.
