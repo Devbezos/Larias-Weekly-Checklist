@@ -1334,9 +1334,12 @@ local function BuildWeekliesSection(trackingFrame)
     trackingFrame._lariasWeekliesSection = sec
 
     -- Solid background so checklist items never bleed through the section.
+    -- Only shown in "below" mode; in side/full modes the section blends into
+    -- the tracking frame background.
     local bg = sec:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints(sec)
     bg:SetColorTexture(THEME.bg.r, THEME.bg.g, THEME.bg.b, THEME.bg.a)
+    sec._bg = bg
 
     -- Hide immediately when pref is off; return stub so resize skips it.
     if prefs.showInlineWeeklies == false then
@@ -1345,12 +1348,14 @@ local function BuildWeekliesSection(trackingFrame)
         return sec
     end
 
-    -- Thin separator line at the very top of the section
+    -- Thin separator line at the very top of the section.
+    -- Only shown in "below" mode where it divides GV/Currency from Weeklies.
     local sep = sec:CreateTexture(nil, "ARTWORK")
     sep:SetHeight(1)
     sep:SetColorTexture(THEME.border.r, THEME.border.g, THEME.border.b, 0.5)
     sep:SetPoint("TOPLEFT",  sec, "TOPLEFT",  0, 0)
     sep:SetPoint("TOPRIGHT", sec, "TOPRIGHT", 0, 0)
+    sec._sep = sep
 
     -- "Weeklies" header
     local hdrFS = sec:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -1435,6 +1440,11 @@ local function BuildWeekliesSection(trackingFrame)
         local tf        = Addon._trackingFrame
         local wMode     = tf and tf._weekliesMode or "below"
         local singleCol = (wMode == "side-right" or wMode == "side-left")
+
+        -- Show separator + background only in "below" mode.
+        local isBelow = (wMode == "below")
+        if sec._sep then sec._sep:SetShown(isBelow) end
+        if sec._bg  then sec._bg:SetShown(isBelow)  end
 
         -- Reflow the two column sub-frames to match the current mode.
         if singleCol then
