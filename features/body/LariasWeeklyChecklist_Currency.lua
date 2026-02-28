@@ -68,6 +68,9 @@ local tinsert, tremove, tconcat = table.insert, table.remove, table.concat
 -- Forward declaration: defined later (after all data-gathering helpers).
 local ComputeSnapshotData
 
+-- Feature flag: set to true to show the Great Vault section.
+local FEATURE_GREAT_VAULT = false
+
 -- Great Vault 3-column grid layout constants (one grid per section).
 -- Single-row layout: section label left, then 3 ilvl cells; no threshold row.
 local GV_LABEL_W     = 60   -- px reserved for the section label to the left of each grid
@@ -1287,7 +1290,7 @@ local function ResizeTrackingPanelToContent(addon)
         if wMode == "below" then
             weeklyExtra = wsH + 8
         elseif wMode == "side-right" or wMode == "side-left" or wMode == "full" then
-            weeklyColBottom = 8 + wsH + bottomPad
+            weeklyColBottom = 32 + wsH + bottomPad
         elseif wMode == "top-left" then
             -- GV sits below the taller of weeklies or currency.
             -- rightCol starts at y=-32 and extends bottomRight px; GV_GAP=30 for the GV title.
@@ -1382,22 +1385,20 @@ local function BuildWeekliesSection(trackingFrame)
     sec._sep = sep
 
     -- "Weeklies" header
+    -- Header positioned ABOVE sec (matching the currency column title style).
+    -- Width is updated by ResizeTrackingCols for side/full modes.
     local hdrFS = sec:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    hdrFS:SetPoint("TOPLEFT",  sec, "TOPLEFT",  4, -WSEC_PAD_TOP)
-    hdrFS:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -4, -WSEC_PAD_TOP)
+    hdrFS:SetPoint("TOP", sec, "TOP", 0, 24)
     hdrFS:SetHeight(WSEC_HEADER_H)
+    hdrFS:SetWidth(200)  -- initial width; overridden by ResizeTrackingCols
     hdrFS:SetJustifyH("CENTER")
     hdrFS:SetJustifyV("MIDDLE")
     hdrFS:SetTextColor(THEME.header.r, THEME.header.g, THEME.header.b, THEME.header.a)
     hdrFS:SetText(L.TRACKING_WEEKLIES_TITLE)
     sec._hdrFS = hdrFS
 
-    -- Two column sub-frames: left = rows 1-3, right = rows 4-6.
-    -- We need to split at the horizontal midpoint while keeping Y at the top of
-    -- the content area.  WoW's CENTER anchor uses Y = frame_mid_height, not
-    -- frame top — so we use a zero-height "spine" frame anchored to sec TOP
-    -- (X = horizontal centre, Y = top edge) to get a reliable vertical baseline.
-    local colOffY = -(WSEC_PAD_TOP + WSEC_HEADER_H)
+    -- Two column sub-frames: content starts at the top of sec (title is above sec).
+    local colOffY = 0
     local spine = CreateFrame("Frame", nil, sec)
     spine:SetPoint("TOPLEFT",  sec, "TOP", -WSEC_COL_GAP/2, colOffY)
     spine:SetPoint("TOPRIGHT", sec, "TOP",  WSEC_COL_GAP/2, colOffY)
@@ -1564,7 +1565,7 @@ local function BuildWeekliesSection(trackingFrame)
         local rowsH = singleCol
             and (leftVis * WSEC_ROW_H)
             or  (max(leftVis, rightVis) * WSEC_ROW_H)
-        local newH = WSEC_PAD_TOP + WSEC_HEADER_H + rowsH + WSEC_PAD_BOT
+        local newH = rowsH + WSEC_PAD_BOT
         leftCol:SetHeight(max(1, rowsH))
         rightCol:SetHeight(max(1, rowsH))
         local curSecH = tonumber(sec:GetHeight()) or 0
@@ -1995,7 +1996,7 @@ function Addon:ApplyTrackingPanelOptions()
 
     local db    = self:EnsureDB()
     local prefs = self:EnsurePrefs()
-    local showGreatVault = prefs.showGreatVault and true or false
+    local showGreatVault = (prefs.showGreatVault and FEATURE_GREAT_VAULT) and true or false
     local showCurrency   = prefs.showCurrency   and true or false
     local showWeeklies   = prefs.showInlineWeeklies ~= false
 
@@ -2040,7 +2041,7 @@ function Addon:ApplyTrackingPanelOptions()
         elseif showGreatVault then
             weekliesMode = "side-left"  -- weeklies left, GV right
         elseif showCurrency then
-            weekliesMode = "side-right" -- currency left, weeklies right
+            weekliesMode = "side-left"  -- weeklies left, currency right
         else
             weekliesMode = "full"
         end
@@ -2494,12 +2495,18 @@ function Addon:ResizeTrackingCols()
         if wMode == "side-right" then
             -- Currency on the left; weeklies on the right at the same slot.
             ws:SetWidth(newColW)
-            ws:SetPoint("TOPLEFT", tf, "TOPLEFT", padL + newColW + colGap, -8)
+            ws:SetPoint("TOPLEFT", tf, "TOPLEFT", padL + newColW + colGap, -32)
         elseif wMode == "side-left" then
-            -- Weeklies on the left; GV (leftCol) on the right.
+            -- Weeklies on the left; Currency (rightCol) on the right.
             ws:SetWidth(newColW)
-            ws:SetPoint("TOPLEFT", tf, "TOPLEFT", padL, -8)
-            -- Re-position leftCol (GV) to sit right of weeklies.
+            ws:SetPoint("TOPLEFT", tf, "TOPLEFT", padL, -32)
+            -- Place rightCol (Currency) in the right slot.
+            if rightShown and rightCol then
+                rightCol:ClearAllPoints()
+                rightCol:SetWidth(newColW)
+                rightCol:SetPoint("TOPLEFT", tf, "TOPLEFT", padL + newColW + colGap, -32)
+            end
+            -- GV (leftCol) placed right if it is somehow shown.
             if leftShown and leftCol then
                 leftCol:ClearAllPoints()
                 leftCol:SetWidth(newColW)
@@ -2508,7 +2515,7 @@ function Addon:ResizeTrackingCols()
         elseif wMode == "top-left" then
             -- Weeklies top-left, Currency top-right, GV full-width below.
             ws:SetWidth(newColW)
-            ws:SetPoint("TOPLEFT", tf, "TOPLEFT", padL, -8)
+            ws:SetPoint("TOPLEFT", tf, "TOPLEFT", padL, -32)
             -- rightCol (Currency) at top-right.
             if rightShown and rightCol then
                 rightCol:ClearAllPoints()
@@ -2533,7 +2540,7 @@ function Addon:ResizeTrackingCols()
         elseif wMode == "full" then
             local fullW = math.max(10, math.floor(frameW - 2 * WSEC_PAD_LR))
             ws:SetWidth(fullW)
-            ws:SetPoint("TOPLEFT", tf, "TOPLEFT", WSEC_PAD_LR, -8)
+            ws:SetPoint("TOPLEFT", tf, "TOPLEFT", WSEC_PAD_LR, -32)
         end
     end
 
@@ -2555,6 +2562,10 @@ function Addon:ResizeTrackingCols()
             rightTitle:ClearAllPoints()
             rightTitle:SetPoint("TOP", rightCol, "TOP", 0, 24)
         end
+    end
+    -- Weeklies title width matches its column slot.
+    if ws and ws._hdrFS and ws._hdrFS.SetWidth then
+        ws._hdrFS:SetWidth(newColW)
     end
 
     -- GV grid cells fill the left column: reflow so cells expand/contract to
