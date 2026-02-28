@@ -18,7 +18,47 @@ local UI = Addon.UI
 
 local L = Addon.L or {}
 
-local trackingEventFrame
+-- ── QuestDoneAny ──────────────────────────────────────────────────────────────
+-- Returns true/false for completed/not, nil if the quest ID is unknown/invalid.
+local function QuestDoneAny(entry)
+    if not (C_QuestLog and C_QuestLog.IsQuestFlaggedCompleted) then return nil end
+    if type(entry) == "table" then
+        local hasValid = false
+        for _, id in ipairs(entry) do
+            id = tonumber(id) or 0
+            if id > 0 then
+                hasValid = true
+                local ok, done = pcall(C_QuestLog.IsQuestFlaggedCompleted, id)
+                if ok and done then return true end
+            end
+        end
+        return hasValid and false or nil
+    else
+        local q = tonumber(entry) or 0
+        if q == 0 then return nil end
+        local ok, done = pcall(C_QuestLog.IsQuestFlaggedCompleted, q)
+        if not ok then return nil end
+        return done and true or false
+    end
+end
+
+-- ── Quest event frame for inline weeklies ─────────────────────────────────────
+-- Frame is created at file-load; RegisterEvent is deferred to OnEnable to avoid
+-- ADDON_ACTION_FORBIDDEN on protected Classic game flavours.
+local _inlineQuestFrame = CreateFrame("Frame")
+_inlineQuestFrame:SetScript("OnEvent", function()
+    if Addon._inlineWeeklies and Addon._inlineWeeklies.Refresh then
+        Addon._inlineWeeklies.Refresh()
+    end
+end)
+
+local _inlineWeekliesEventsRegistered = false
+function Addon:RegisterInlineWeekliesEvents()
+    if _inlineWeekliesEventsRegistered then return end
+    _inlineWeekliesEventsRegistered = true
+    _inlineQuestFrame:RegisterEvent("QUEST_TURNED_IN")
+    _inlineQuestFrame:RegisterEvent("QUEST_LOG_UPDATE")
+end
 local TrackingUI = { left = {}, right = {} }
 
 local tonumber, tostring, type = tonumber, tostring, type
@@ -1393,7 +1433,8 @@ local function BuildWeekliesSection(trackingFrame)
                 r.valFS:SetText(col .. count .. "/" .. pGoal2 .. CLOSE)
             elseif r.questKey then
                 local entry = QIDs2[r.questKey]
-                local done  = entry and QuestDoneAny(entry) or nil
+                local done
+                if entry then done = QuestDoneAny(entry) end
                 rowDone = (done == true)
                 if done == nil then
                     r.valFS:SetText(DIM .. (L.TRACKING_NA or "N/A") .. CLOSE)
