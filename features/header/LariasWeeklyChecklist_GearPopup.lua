@@ -265,14 +265,16 @@ function Addon:ToggleGearPopup(anchor, growRight)
                     cdb.startAtSectionId = ""
                 end
             end
-            -- Reset main frame position, size, and UI scale back to defaults.
+            -- Reset main frame position, size, UI scale, and theme colors back to defaults.
             local gdb = Addon.db and Addon.db.global
             if gdb then
                 gdb.mainFramePos  = nil
                 gdb.mainFrameSize = nil
                 gdb.uiScalePct    = 100
                 gdb.uiOpacityPct  = 65
+                if gdb.themeColors then wipe(gdb.themeColors) end
             end
+            if Addon.ApplyThemeColors then Addon:ApplyThemeColors() end
             if Addon.ApplyUIScale  then Addon:ApplyUIScale()  end
             if Addon.ApplyOpacity  then Addon:ApplyOpacity()  end
             local mf = Addon._mainFrame
