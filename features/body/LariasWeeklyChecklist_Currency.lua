@@ -1061,8 +1061,10 @@ local function GetCofferKeysParts()
     return label, ColorWrap(color, xy)
 end
 
-local function ComputeWantTrackingPanel(db)
+local function ComputeWantTrackingPanel(db, prefs)
     -- Decide whether the tracking panel should be shown at all.
+    -- db    = per-character data (EnsureDB)  → trackingSnapshot
+    -- prefs = account-wide prefs (EnsurePrefs) → showGreatVault, showCurrency
     if Addon._viewingChar then
         -- When viewing another character, only show the panel if we have a
         -- stored snapshot for them (they've opened the addon at least once).
@@ -1070,7 +1072,7 @@ local function ComputeWantTrackingPanel(db)
         local hasData = snap and (snap.leftLines ~= nil or (snap.rightRows ~= nil and #snap.rightRows > 0))
         return hasData and IsMainFrameOnListTab() and true or false
     end
-    local wantPanel = (db.showGreatVault or db.showCurrency) and true or false
+    local wantPanel = (prefs.showGreatVault or prefs.showCurrency) and true or false
     if wantPanel and not IsMainFrameOnListTab() then
         wantPanel = false
     end
@@ -1253,7 +1255,7 @@ end
 function Addon:CreateTrackingPanel(parentFrame)
     -- Build the tracking panel UI (left: Great Vault, right: currency rows).
     if self._trackingFrame then return end
-    local db = self:EnsureDB()
+    local db = self:EnsurePrefs()
 
     local trackingFrame = CreateFrame("Frame", nil, parentFrame)
     -- Lift tracking panel above the in-frame scale slider that sits below it.
@@ -1595,7 +1597,7 @@ function Addon:CreateTrackingPanel(parentFrame)
 
     if trackingFrame.SetScript then
         trackingFrame:SetScript("OnShow", function()
-            local database = Addon:EnsureDB()
+            local database = Addon:EnsurePrefs()
             Addon:ConfigureTrackingEvents(parentFrame, database.showGreatVault and true or false, database.showCurrency and true or false)
             Addon:RequestTrackingUpdate()
         end)
@@ -1631,9 +1633,10 @@ function Addon:ApplyTrackingPanelOptions()
     local trackingFrame = self._trackingFrame
     if not trackingFrame then return end
 
-    local db = self:EnsureDB()
-    local showGreatVault = db.showGreatVault and true or false
-    local showCurrency = db.showCurrency and true or false
+    local db    = self:EnsureDB()    -- per-character data (snapshot, etc.)
+    local prefs = self:EnsurePrefs() -- account-wide display preferences
+    local showGreatVault = prefs.showGreatVault and true or false
+    local showCurrency = prefs.showCurrency and true or false
 
     local wantPanel
     if Addon._viewingChar then
@@ -2024,9 +2027,10 @@ end
 
 function Addon:UpdateTracking()
     -- Main throttled entry point: reconcile desired visibility, then render content.
-    local db = self:EnsureDB()
+    local db    = self:EnsureDB()
+    local prefs = self:EnsurePrefs()
 
-    local wantPanel = ComputeWantTrackingPanel(db)
+    local wantPanel = ComputeWantTrackingPanel(db, prefs)
     EnsureTrackingPanelCreatedIfNeeded(wantPanel)
 
     if self.ApplyTrackingPanelOptions then

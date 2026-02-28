@@ -20,7 +20,7 @@ end
 function Addon:SyncGearPopup()
     local p = self._gearPopup
     if not p then return end
-    local db = self:EnsureDB()
+    local db = self:EnsurePrefs()
     local L  = self.L or {}
     local function Sync(cb, checked, label)
         if cb then
@@ -241,44 +241,44 @@ function Addon:ToggleGearPopup(anchor, growRight)
         }
         local callbacks = {
             _cbHideCompleted  = function(checked)
-                local db = Addon:EnsureDB()
+                local db = Addon:EnsurePrefs()
                 db.hideCompletedSections = checked
                 if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
             end,
             _cbHideGreatVault = function(checked)
-                local db = Addon:EnsureDB()
+                local db = Addon:EnsurePrefs()
                 db.showGreatVault = not checked
                 if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
             end,
             _cbHideCurrency   = function(checked)
-                local db = Addon:EnsureDB()
+                local db = Addon:EnsurePrefs()
                 db.showCurrency = not checked
                 if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
             end,
             _cbHideChangeWeek = function(checked)
-                local db = Addon:EnsureDB()
+                local db = Addon:EnsurePrefs()
                 db.showChangeWeekBtn = not checked
                 if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
             end,
             _cbHideIlvlRef    = function(checked)
-                local db = Addon:EnsureDB()
+                local db = Addon:EnsurePrefs()
                 db.showIlvlRefBtn = not checked
                 if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
             end,
             _cbHideCharPicker = function(checked)
-                local db = Addon:EnsureDB()
+                local db = Addon:EnsurePrefs()
                 db.showCharPickerBtn = not checked
                 if Addon.LayoutHeaderButtons        then Addon:LayoutHeaderButtons()        end
                 if Addon.ApplyScaleSliderVisibility then Addon:ApplyScaleSliderVisibility() end
             end,
             _cbHideSliders = function(checked)
-                local db = Addon:EnsureDB()
+                local db = Addon:EnsurePrefs()
                 db.showScaleSlider  = not checked
                 db.showOpacitySlider = not checked
                 if Addon.ApplyScaleSliderVisibility then Addon:ApplyScaleSliderVisibility() end
             end,
             _cbHideUpdateNotice = function(checked)
-                local db = Addon:EnsureDB()
+                local db = Addon:EnsurePrefs()
                 db.hideUpdateNotice = checked
                 if Addon.UpdateStatusBanner then Addon:UpdateStatusBanner() end
             end,

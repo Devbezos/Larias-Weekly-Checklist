@@ -361,7 +361,7 @@ function Addon:CreateHeader(frame)
     local function LayoutHeaderButtons_()
         if Addon._inLayoutHeaderButtons then return end
         Addon._inLayoutHeaderButtons = true
-        local dbLocal = Addon:EnsureDB()
+        local dbLocal = Addon:EnsurePrefs()
         local showCW  = dbLocal.showChangeWeekBtn ~= false
         local showIR  = dbLocal.showIlvlRefBtn    ~= false
         local showCP  = dbLocal.showCharPickerBtn ~= false

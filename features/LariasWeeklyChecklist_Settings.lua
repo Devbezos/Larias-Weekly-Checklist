@@ -177,7 +177,7 @@ local function BuildPanel()
             label    = L.HIDE_COMPLETED_WEEKS or "Hide Completed Weeks",
             getVal   = function(d) return d.hideCompletedSections and true or false end,
             onChange = function(v)
-                Addon:EnsureDB().hideCompletedSections = v
+                Addon:EnsurePrefs().hideCompletedSections = v
                 if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
             end,
         },
@@ -185,7 +185,7 @@ local function BuildPanel()
             label    = L.OPTIONS_HIDE_GREAT_VAULT or "Hide Great Vault",
             getVal   = function(d) return not d.showGreatVault end,
             onChange = function(v)
-                Addon:EnsureDB().showGreatVault = not v
+                Addon:EnsurePrefs().showGreatVault = not v
                 if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
             end,
         },
@@ -193,7 +193,7 @@ local function BuildPanel()
             label    = L.OPTIONS_HIDE_CURRENCY or "Hide Currency",
             getVal   = function(d) return not d.showCurrency end,
             onChange = function(v)
-                Addon:EnsureDB().showCurrency = not v
+                Addon:EnsurePrefs().showCurrency = not v
                 if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
             end,
         },
@@ -201,7 +201,7 @@ local function BuildPanel()
             label    = L.OPTIONS_HIDE_CHANGE_WEEK_BTN or "Hide Week Selector",
             getVal   = function(d) return d.showChangeWeekBtn == false end,
             onChange = function(v)
-                Addon:EnsureDB().showChangeWeekBtn = not v
+                Addon:EnsurePrefs().showChangeWeekBtn = not v
                 if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
             end,
         },
@@ -209,7 +209,7 @@ local function BuildPanel()
             label    = L.OPTIONS_HIDE_ILVL_REF_BTN or "Hide Ilvl Reference",
             getVal   = function(d) return d.showIlvlRefBtn == false end,
             onChange = function(v)
-                Addon:EnsureDB().showIlvlRefBtn = not v
+                Addon:EnsurePrefs().showIlvlRefBtn = not v
                 if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
             end,
         },
@@ -217,7 +217,7 @@ local function BuildPanel()
             label    = L.OPTIONS_HIDE_CHAR_SELECT or "Hide Character Selector",
             getVal   = function(d) return d.showCharPickerBtn == false end,
             onChange = function(v)
-                Addon:EnsureDB().showCharPickerBtn = not v
+                Addon:EnsurePrefs().showCharPickerBtn = not v
                 if Addon.LayoutHeaderButtons        then Addon:LayoutHeaderButtons()        end
                 if Addon.ApplyScaleSliderVisibility then Addon:ApplyScaleSliderVisibility() end
             end,
@@ -226,7 +226,7 @@ local function BuildPanel()
             label    = L.OPTIONS_HIDE_SLIDERS or "Hide Sliders",
             getVal   = function(d) return d.showScaleSlider == false end,
             onChange = function(v)
-                local d = Addon:EnsureDB()
+                local d = Addon:EnsurePrefs()
                 d.showScaleSlider   = not v
                 d.showOpacitySlider = not v
                 if Addon.ApplyScaleSliderVisibility then Addon:ApplyScaleSliderVisibility() end
@@ -236,7 +236,7 @@ local function BuildPanel()
             label    = L.OPTIONS_HIDE_UPDATE_NOTICE or "Hide Update Notices",
             getVal   = function(d) return d.hideUpdateNotice and true or false end,
             onChange = function(v)
-                Addon:EnsureDB().hideUpdateNotice = v
+                Addon:EnsurePrefs().hideUpdateNotice = v
                 if Addon.UpdateStatusBanner then Addon:UpdateStatusBanner() end
             end,
         },
@@ -447,7 +447,7 @@ local function BuildPanel()
 
     -- Sync checkbox states and swatch colors every time the panel is shown.
     panelFrame:SetScript("OnShow", function()
-        local d = Addon:EnsureDB()
+        local d = Addon:EnsurePrefs()
         for _, entry in ipairs(_checkboxes) do
             entry.cb:SetChecked(entry.row.getVal(d))
         end

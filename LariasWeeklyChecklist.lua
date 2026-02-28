@@ -276,20 +276,13 @@ end
 -- Addon._sessionLocaleOverride is set by the /larias locale command.
 
 -- Default values applied to each character's data block on first access.
+-- Display-preference defaults (hideCompletedSections, showGreatVault, etc.) live
+-- in db.global so they are shared across all characters; see SetupAddonDB below.
 -- Keys with false/nil defaults are omitted here; the inline logic in EnsureDB
 -- uses "if == nil" checks to stay concise.
 local CHAR_DEFAULTS = {
-    hideCompletedSections = true,
-    showGreatVault        = true,
-    showCurrency          = true,
-    showChangeWeekBtn     = true,
-    showIlvlRefBtn        = true,
-    showCharPickerBtn     = true,
-    showScaleSlider       = true,
-    showOpacitySlider     = true,
-    hideUpdateNotice      = false,
-    debug                 = false,
-    startAtSectionId      = "",
+    debug            = false,
+    startAtSectionId = "",
 }
 
 -- Set up database with AceDB
@@ -314,6 +307,16 @@ local function SetupAddonDB()
             minimap       = {},  -- LibDBIcon position/hide state (account-wide)
             charClasses   = {},  -- [profileKey] = classToken (e.g. "WARRIOR")
             hiddenChars   = {},  -- [profileKey] = true (hidden from char picker dropdown)
+            -- Account-wide display preferences (shared across all characters).
+            hideCompletedSections = true,
+            showGreatVault        = true,
+            showCurrency          = true,
+            showChangeWeekBtn     = true,
+            showIlvlRefBtn        = true,
+            showCharPickerBtn     = true,
+            showScaleSlider       = true,
+            showOpacitySlider     = true,
+            hideUpdateNotice      = false,
             -- Per-character data, each keyed by "CharName - Realm".
             -- Holds checked items, collapsed sections, preferences, snapshot, etc.
             chars = {},
@@ -585,6 +588,37 @@ function Addon:EnsureDB()
     return cdb
 end
 
+-- Returns the account-wide display-preference table (db.global).
+-- Display preferences (hideCompletedSections, showGreatVault, etc.) live here so
+-- they are shared across all characters on the account.
+-- One-time migration: on the first call after upgrading from the per-character
+-- scheme, copies the current character's display prefs into db.global so the
+-- player's customised settings are preserved.
+local _PREF_KEYS = {
+    "hideCompletedSections", "showGreatVault", "showCurrency",
+    "showChangeWeekBtn", "showIlvlRefBtn", "showCharPickerBtn",
+    "showScaleSlider", "showOpacitySlider", "hideUpdateNotice",
+}
+function Addon:EnsurePrefs()
+    if not self.db then SetupAddonDB() end
+    local g = self.db.global
+    -- One-time migration: promote first character's stored display prefs to global.
+    if not g._prefsMigrated then
+        g._prefsMigrated = true
+        local key = self:GetCurrentProfileKey()
+        local chars = g.chars
+        local cdb   = (key ~= "" and chars) and chars[key] or nil
+        if cdb then
+            for _, k in ipairs(_PREF_KEYS) do
+                -- Only migrate if the global has not been explicitly set yet
+                -- (the AceDB default fills it, so we treat default-equal as "not set").
+                if cdb[k] ~= nil then g[k] = cdb[k] end
+            end
+        end
+    end
+    return g
+end
+
 -- Remove stale saved-state entries (checked items / collapsed sections) that no longer
 -- correspond to any known section/item IDs in the current dataset.
 -- This keeps SavedVariables from accumulating garbage across data/ID refactors.
@@ -853,7 +887,17 @@ function Addon:ApplyThemeColors()
     end
 
     -- Re-apply backdrop to any already-open themed frames.
-    if self._mainFrame     then self:ApplyTheme(self._mainFrame)     end
+    if self._mainFrame then
+        self:ApplyTheme(self._mainFrame)
+        -- _lariaBgTex is the actual visible background texture (backdrop bgFile is
+        -- suppressed to alpha=0 to avoid WoW's backdrop blending artefacts).
+        -- ApplyTheme only updates the backdrop color, so we must also push the new
+        -- color into the texture here so the color picker change is visible immediately.
+        if self._mainFrame._lariaBgTex then
+            local bg = self.THEME.bg
+            self._mainFrame._lariaBgTex:SetColorTexture(bg.r, bg.g, bg.b, 1)
+        end
+    end
     if self._trackingFrame then self:ApplyTheme(self._trackingFrame) end
 
     -- Header text color
@@ -899,7 +943,7 @@ end
 -- The list needs to shift upward when the tracking panel is visible.
 function Addon:ApplyScrollLayout()
     if not (frame and scrollFrame) then return end
-    local db = self:EnsureDB()
+    local db = self:EnsurePrefs()
 
     scrollFrame:ClearAllPoints()
     scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", Addon.UI.padOuterX, -Addon.UI.scrollTop)
@@ -1402,6 +1446,7 @@ local function OnCheckboxClick(selfBtn)
     -- GetChecked() returns the new value for the rest of this handler.
     selfBtn:SetChecked(not selfBtn:GetChecked())
     local database = Addon:EnsureDB()
+    local prefs    = Addon:EnsurePrefs()
     local checked = selfBtn:GetChecked() and true or nil
     database.checked[selfBtn._dbKey or Key(selfBtn._sectionId, selfBtn._itemId)] = checked
     RefreshItemTextColor(selfBtn)
@@ -1425,7 +1470,7 @@ local function OnCheckboxClick(selfBtn)
     local sectionFrame = Addon._activeSections[Addon._sectionsIndexById[sectionId]]
     if not sectionFrame then return end
 
-    local hideDone = database.hideCompletedSections and true or false
+    local hideDone = prefs.hideCompletedSections and true or false
 
     SetHeaderText(sectionFrame, sectionId, secCompleteNow)
     ComputeHeaderHeight(sectionFrame, Addon.UI.itemTextWidth + Addon.UI.headerTextExtraW)
@@ -1527,8 +1572,10 @@ end
 
 UpdateSectionVisuals = function(sectionFrame, sectionId)
     local database = Addon:EnsureDB()
+    local prefs    = Addon:EnsurePrefs()
 
     -- Optional filter: hide everything before a selected header.
+    -- startAtSectionId is still per-character (stored in per-char db).
     local startId = tostring(database.startAtSectionId or "")
     if startId ~= "" then
         local startIndex = Addon._sectionsIndexById and Addon._sectionsIndexById[startId]
@@ -1540,7 +1587,7 @@ UpdateSectionVisuals = function(sectionFrame, sectionId)
 
     local complete = IsSectionCompleteById(sectionId, database)
 
-    local hideDone = database.hideCompletedSections and true or false
+    local hideDone = prefs.hideCompletedSections and true or false
     if hideDone and complete then
         sectionFrame:Hide()
         return
@@ -1891,7 +1938,7 @@ function Addon:CreateFrame()
         Addon._wireScrollHeaderHooks(scrollFrame)
     end
 
-    local db = self:EnsureDB()
+    local db = self:EnsurePrefs()
     if (db.showGreatVault or db.showCurrency) and self.CreateTrackingPanel and not self._trackingFrame then
         self:CreateTrackingPanel(frame)
     end

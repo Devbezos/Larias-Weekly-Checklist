@@ -56,14 +56,15 @@ end
 function Addon:UpdateStatusBanner()
     local banner = self._statusBanner
     if not banner then return end
-    local db = self:EnsureDB()
+    local db     = self:EnsurePrefs()
+    local charDb = self:EnsureDB()   -- for per-character version tracking data
     local L  = self.L or {}
 
     -- Priority 1a: spreadsheet data is newer than ours.
     if db.hideUpdateNotice ~= true and self.ShouldShowSheetUpdateNotice and self:ShouldShowSheetUpdateNotice() then
         local reg    = _G[LOCALE_REGISTRY_KEY]
         local mySV   = (reg and type(reg.sheet_version) == "string" and reg.sheet_version) or ""
-        local newSV  = tostring(db._newestSeenRemoteSheetVersion or "")
+        local newSV  = tostring(charDb._newestSeenRemoteSheetVersion or "")
         local behind = SheetVersionsBehind(mySV, newSV)
         local fmt    = L.STATUS_SHEET_UPDATE_FMT
                     or "Spreadsheet Update Detected - You are %d version(s) behind the spreadsheet"
@@ -118,7 +119,7 @@ end
 function Addon:ApplyScaleSliderVisibility()
     local sf = self._inFrameScaleSlider
     if not sf then return end
-    local db           = self:EnsureDB()
+    local db           = self:EnsurePrefs()
     local scaleShown   = db.showScaleSlider   ~= false
     local opacityShown = db.showOpacitySlider ~= false
     local anySlider    = scaleShown or opacityShown
