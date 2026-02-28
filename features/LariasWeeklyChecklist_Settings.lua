@@ -137,11 +137,14 @@ local function BuildPanel()
     -- Row definitions: { label, getVal(db) → bool, onChange(v) }
     local rows = {
         {
-            label    = L.HIDE_COMPLETED_WEEKS or "Hide Completed Weeks",
+            label    = L.HIDE_COMPLETED or "Hide Completed",
             getVal   = function(d) return d.hideCompletedSections and true or false end,
             onChange = function(v)
                 Addon:EnsurePrefs().hideCompletedSections = v
                 if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
+                if Addon._sidePanel and Addon._sidePanel.RefreshAll then
+                    Addon._sidePanel.RefreshAll()
+                end
             end,
         },
         {

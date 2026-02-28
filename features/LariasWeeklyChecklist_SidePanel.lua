@@ -253,11 +253,11 @@ local function MakeZoneHdr(parent, text, posY, showCount)
     return posY + ZONE_H, countFS
 end
 
--- Returns (row, newPosY).  row exposes .lbl and .val for refresh.
-local function MakeRareRow(parent, npcID, posY)
+-- Returns (row, newPosY).  row exposes .lbl and .val (FontString) for refresh.
+local function MakeWeeklyRow(parent, posY)
     local lbl = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    lbl:SetPoint("TOPLEFT",  parent, "TOPLEFT",   PAD * 2,  -posY)
-    lbl:SetPoint("TOPRIGHT", parent, "TOPRIGHT",  -36,      -posY)
+    lbl:SetPoint("TOPLEFT",  parent, "TOPLEFT",   PAD * 2, -posY)
+    lbl:SetPoint("TOPRIGHT", parent, "TOPRIGHT",  -42,     -posY)
     lbl:SetHeight(ROW_H)
     lbl:SetJustifyH("LEFT")
     lbl:SetJustifyV("MIDDLE")
@@ -265,11 +265,31 @@ local function MakeRareRow(parent, npcID, posY)
 
     local val = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     val:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -SBAR_W - 2, -posY)
-    val:SetSize(30, ROW_H)
+    val:SetSize(36, ROW_H)
     val:SetJustifyH("RIGHT")
     val:SetJustifyV("MIDDLE")
 
-    return { lbl = lbl, val = val, npcID = npcID }, posY + ROW_H
+    return { lbl = lbl, val = val }, posY + ROW_H
+end
+
+-- Returns (row, newPosY).  row exposes .lbl and .box (colored rect) for refresh.
+local BOX_W, BOX_H = 10, 10
+local function MakeRareRow(parent, npcID, posY)
+    local lbl = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    lbl:SetPoint("TOPLEFT",  parent, "TOPLEFT",   PAD * 2,  -posY)
+    lbl:SetPoint("TOPRIGHT", parent, "TOPRIGHT",  -(SBAR_W + BOX_W + 6), -posY)
+    lbl:SetHeight(ROW_H)
+    lbl:SetJustifyH("LEFT")
+    lbl:SetJustifyV("MIDDLE")
+    if lbl.SetWordWrap then lbl:SetWordWrap(false) end
+
+    -- Colored rectangle status indicator
+    local box = parent:CreateTexture(nil, "ARTWORK")
+    box:SetSize(BOX_W, BOX_H)
+    box:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -(SBAR_W + 2), -(posY + (ROW_H - BOX_H) / 2))
+    box:SetColorTexture(1, 0.25, 0.25, 0.7)  -- default: red (not killed)
+
+    return { lbl = lbl, box = box, npcID = npcID }, posY + ROW_H
 end
 
 -- Returns (row, newPosY).  Clicking toggles treasure found state.
@@ -295,12 +315,14 @@ local function MakeTreasureRow(parent, objectID, posY)
 
     local function Refresh()
         local found = IsTreasureFound(objectID)
+        local hideCompleted = Addon:EnsurePrefs().hideCompletedSections
         box:SetVertexColor(1, 1, 1, found and 1 or 0.15)
         if found then
             lbl:SetTextColor(0.40, 1, 0.40, 0.80)
         else
             lbl:SetTextColor(1, 1, 1, 1)
         end
+        btn:SetShown(not (hideCompleted and found))
     end
 
     btn:SetScript("OnClick", function()
@@ -473,7 +495,7 @@ local function BuildSidePanel(mainFrame)
         local pGoal   = (Addon.TRACKING and Addon.TRACKING.preyQuestGoal) or 4
 
         local preyRow
-        preyRow, posY = MakeRareRow(content, nil, posY)
+        preyRow, posY = MakeWeeklyRow(content, posY)
         preyRow.isPrey    = true
         preyRow.pGoal     = pGoal
         preyRow.pQuestIDs = PQIDs
@@ -489,7 +511,7 @@ local function BuildSidePanel(mainFrame)
         }
         for _, d in ipairs(defs) do
             local r
-            r, posY = MakeRareRow(content, nil, posY)
+            r, posY = MakeWeeklyRow(content, posY)
             r.questKey   = d.key
             r.questEntry = QIDs[d.key]
             r.lbl:SetText(d.label)
@@ -567,10 +589,12 @@ local function BuildSidePanel(mainFrame)
     local CLOSE = "|r"
 
     local function RefreshWeeklyRows()
+        local hideCompleted = Addon:EnsurePrefs().hideCompletedSections
         local QIDs  = Addon.TRACKING and Addon.TRACKING.questIDs or {}
         local PQIDs = Addon.TRACKING and Addon.TRACKING.preyQuestIDs
         local pGoal = (Addon.TRACKING and Addon.TRACKING.preyQuestGoal) or 4
         for _, r in ipairs(weeklyRows) do
+            local rowDone = false
             if r.isPrey then
                 local count = 0
                 if PQIDs and C_QuestLog and C_QuestLog.IsQuestFlaggedCompleted then
@@ -582,11 +606,13 @@ local function BuildSidePanel(mainFrame)
                         end
                     end
                 end
-                local col = count >= pGoal and GREEN or RED
+                rowDone = count >= pGoal
+                local col = rowDone and GREEN or RED
                 r.val:SetText(col .. count .. "/" .. pGoal .. CLOSE)
             elseif r.questKey then
                 local entry = QIDs[r.questKey]
                 local done  = entry and QuestDoneAny(entry)
+                rowDone = (done == true)
                 if done == nil then
                     r.val:SetText(DIM .. (L.TRACKING_NA or "N/A") .. CLOSE)
                 elseif done then
@@ -595,22 +621,30 @@ local function BuildSidePanel(mainFrame)
                     r.val:SetText(RED .. "0/1" .. CLOSE)
                 end
             end
+            local visible = not (hideCompleted and rowDone)
+            r.lbl:SetShown(visible)
+            r.val:SetShown(visible)
         end
     end
 
     local function RefreshRareRows()
+        local hideCompleted = Addon:EnsurePrefs().hideCompletedSections
         local zoneDone = {}
         for _, r in ipairs(rareRows) do
             local npcID = r.npcID
             if npcID then
-                if IsRareKilled(npcID) then
+                local killed = IsRareKilled(npcID)
+                if killed then
                     zoneDone[r.zoneKey] = (zoneDone[r.zoneKey] or 0) + 1
-                    r.val:SetText(GREEN .. "✓" .. CLOSE)
+                    r.box:SetColorTexture(0.25, 1.0, 0.25, 1.0)
                     r.lbl:SetTextColor(0.50, 0.90, 0.50, 0.80)
                 else
-                    r.val:SetText(RED .. "✗" .. CLOSE)
+                    r.box:SetColorTexture(1.0, 0.25, 0.25, 0.7)
                     r.lbl:SetTextColor(1, 1, 1, 1)
                 end
+                local visible = not (hideCompleted and killed)
+                r.lbl:SetShown(visible)
+                r.box:SetShown(visible)
             end
         end
         -- update per-zone x/y header counts
