@@ -92,7 +92,20 @@ function C.NewCloseButton(parent, onClick)
     local btn = CreateFrame("Button", nil, parent)
     btn:SetSize(20, 20)
 
-    Addon:ApplyTheme(btn)
+    if not btn.SetBackdrop and BackdropTemplateMixin and Mixin then
+        Mixin(btn, BackdropTemplateMixin)
+    end
+    if btn.SetBackdrop then
+        btn:SetBackdrop({
+            bgFile   = "Interface\\Buttons\\WHITE8x8",
+            edgeFile = "Interface\\Buttons\\WHITE8x8",
+            tile = false, edgeSize = 1,
+            insets = { left = 3, right = 3, top = 3, bottom = 3 },
+        })
+        btn:SetBackdropColor(0.08, 0.08, 0.08, 0.85)
+        local bd = Addon.THEME and Addon.THEME.border or { r=0.3, g=0.3, b=0.3, a=0.8 }
+        btn:SetBackdropBorderColor(bd.r, bd.g, bd.b, bd.a)
+    end
 
     local T  = Addon.THEME or {}
     local th = T.header or { r = 1.00, g = 0.82, b = 0.00 }  -- gold accent
@@ -140,7 +153,20 @@ function C.NewIconButton(parent, texturePath, onClick, tooltip)
     local btn = CreateFrame("Button", nil, parent)
     btn:SetSize(20, 20)
 
-    Addon:ApplyTheme(btn)
+    if not btn.SetBackdrop and BackdropTemplateMixin and Mixin then
+        Mixin(btn, BackdropTemplateMixin)
+    end
+    if btn.SetBackdrop then
+        btn:SetBackdrop({
+            bgFile   = "Interface\\Buttons\\WHITE8x8",
+            edgeFile = "Interface\\Buttons\\WHITE8x8",
+            tile = false, edgeSize = 1,
+            insets = { left = 3, right = 3, top = 3, bottom = 3 },
+        })
+        btn:SetBackdropColor(0.08, 0.08, 0.08, 0.85)
+        local bd = Addon.THEME and Addon.THEME.border or { r=0.3, g=0.3, b=0.3, a=0.8 }
+        btn:SetBackdropBorderColor(bd.r, bd.g, bd.b, bd.a)
+    end
 
     local T  = Addon.THEME or {}
     local tt = T.text   or { r = 1, g = 1, b = 1 }
