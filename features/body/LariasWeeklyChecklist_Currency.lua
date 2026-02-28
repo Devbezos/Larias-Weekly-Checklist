@@ -1332,11 +1332,11 @@ local function BuildWeekliesSection(trackingFrame)
     Addon._inlineWeeklies              = sec
     trackingFrame._lariasWeekliesSection = sec
 
-    -- Solid background so main-panel content (icons, text) never bleeds through
-    -- the transparent sec frame before the first resize fires.
+    -- Transparent background (no fill — relying on parent frame backdrop).
+    -- A zero-alpha texture is kept so draw-order stacking is stable.
     local bg = sec:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints(sec)
-    bg:SetColorTexture(THEME.bg.r, THEME.bg.g, THEME.bg.b, THEME.bg.a)
+    bg:SetColorTexture(0, 0, 0, 0)
 
     -- Hide immediately when pref is off; return stub so resize skips it.
     if prefs.showInlineWeeklies == false then
@@ -1357,7 +1357,7 @@ local function BuildWeekliesSection(trackingFrame)
     hdrFS:SetPoint("TOPLEFT",  sec, "TOPLEFT",  4, -WSEC_PAD_TOP)
     hdrFS:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -4, -WSEC_PAD_TOP)
     hdrFS:SetHeight(WSEC_HEADER_H)
-    hdrFS:SetJustifyH("LEFT")
+    hdrFS:SetJustifyH("CENTER")
     hdrFS:SetJustifyV("MIDDLE")
     hdrFS:SetTextColor(THEME.header.r, THEME.header.g, THEME.header.b, THEME.header.a)
     hdrFS:SetText(L.TRACKING_WEEKLIES_TITLE or "Weeklies")
