@@ -1442,6 +1442,14 @@ local function BuildWeekliesSection(trackingFrame)
             leftCol:SetPoint("TOPLEFT",  sec, "TOPLEFT",  0, colOffY)
             leftCol:SetPoint("TOPRIGHT", sec, "TOPRIGHT", 0, colOffY)
             rightCol:Hide()
+            -- Reparent right-column rows to leftCol so they are not hidden
+            -- along with their original parent frame.
+            for _, r in ipairs(rows) do
+                if r.colIdx == 2 then
+                    r.lblFS:SetParent(leftCol)
+                    r.valFS:SetParent(leftCol)
+                end
+            end
         else
             leftCol:ClearAllPoints()
             leftCol:SetPoint("TOPLEFT",  sec,   "TOPLEFT",  0, colOffY)
@@ -1450,6 +1458,13 @@ local function BuildWeekliesSection(trackingFrame)
             rightCol:ClearAllPoints()
             rightCol:SetPoint("TOPLEFT",  spine, "TOPRIGHT", 0, 0)
             rightCol:SetPoint("TOPRIGHT", sec,   "TOPRIGHT", 0, colOffY)
+            -- Restore right-column rows to their original parent.
+            for _, r in ipairs(rows) do
+                if r.colIdx == 2 then
+                    r.lblFS:SetParent(rightCol)
+                    r.valFS:SetParent(rightCol)
+                end
+            end
         end
 
         local leftVis, rightVis = 0, 0
