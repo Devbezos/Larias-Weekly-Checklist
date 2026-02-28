@@ -1332,11 +1332,10 @@ local function BuildWeekliesSection(trackingFrame)
     Addon._inlineWeeklies              = sec
     trackingFrame._lariasWeekliesSection = sec
 
-    -- Transparent background (no fill — relying on parent frame backdrop).
-    -- A zero-alpha texture is kept so draw-order stacking is stable.
+    -- Solid background so checklist items never bleed through the section.
     local bg = sec:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints(sec)
-    bg:SetColorTexture(0, 0, 0, 0)
+    bg:SetColorTexture(THEME.bg.r, THEME.bg.g, THEME.bg.b, THEME.bg.a)
 
     -- Hide immediately when pref is off; return stub so resize skips it.
     if prefs.showInlineWeeklies == false then
