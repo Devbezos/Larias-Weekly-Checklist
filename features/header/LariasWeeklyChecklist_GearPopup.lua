@@ -18,6 +18,18 @@ end
 
 local OpenPopupColorPicker = Addon.Controls.OpenColorPicker
 
+-- Native language names for the locale toggle button shown to non-English clients.
+local LOCALE_NATIVE_NAMES = {
+    deDE = "Deutsch",
+    esES = "Español",
+    esMX = "Español",
+    frFR = "Français",
+    itIT = "Italiano",
+    koKR = "한국어",
+    ptBR = "Português",
+    ruRU = "Русский",
+}
+
 -- Creates a small 16×16 colored swatch button.  Call swatch:SetColor(r,g,b).
 local function MakePopupSwatch(parent)
     local btn = CreateFrame("Button", nil, parent)
@@ -37,8 +49,8 @@ end
 -- Shared color-key / default table used by both creation and sync.
 -- Each entry carries get() → r,g,b and save(r,g,b) closures so callers
 -- don't need to reproduce the db-access boilerplate inline.
-local function makeGearColorDef(label, rk, gk, bk, dr, dg, db_)
-    local def = { label = label, rk = rk, gk = gk, bk = bk, dr = dr, dg = dg, db = db_ }
+local function makeGearColorDef(labelKey, labelFallback, rk, gk, bk, dr, dg, db_)
+    local def = { labelKey = labelKey, label = labelFallback, rk = rk, gk = gk, bk = bk, dr = dr, dg = dg, db = db_ }
     function def.get()
         local tc = (Addon.db and Addon.db.global and Addon.db.global.themeColors) or {}
         return tc[rk] or dr, tc[gk] or dg, tc[bk] or db_
@@ -53,9 +65,9 @@ local function makeGearColorDef(label, rk, gk, bk, dr, dg, db_)
     return def
 end
 local GEAR_COLOR_DEFS = {
-    makeGearColorDef("Bg",   "bgR",     "bgG",     "bgB",     0.10, 0.10, 0.10),
-    makeGearColorDef("Text", "textR",   "textG",   "textB",   1.00, 1.00, 1.00),
-    makeGearColorDef("Hdr",  "headerR", "headerG", "headerB", 1.00, 0.82, 0.00),
+    makeGearColorDef("COLOR_PICKER_BG",   "Background", "bgR",     "bgG",     "bgB",     0.10, 0.10, 0.10),
+    makeGearColorDef("COLOR_PICKER_TEXT", "Text",       "textR",   "textG",   "textB",   1.00, 1.00, 1.00),
+    makeGearColorDef("COLOR_PICKER_HDR",  "Header",     "headerR", "headerG", "headerB", 1.00, 0.82, 0.00),
 }
 
 function Addon:SyncGearPopup()
@@ -78,16 +90,24 @@ function Addon:SyncGearPopup()
     Sync(p._cbHideChangeWeek,   db.showChangeWeekBtn == false,
          L.OPTIONS_HIDE_CHANGE_WEEK_BTN or "Hide Week Selector")
     Sync(p._cbHideIlvlRef,      db.showIlvlRefBtn == false,
-         L.OPTIONS_HIDE_ILVL_REF_BTN or "Hide Ilvl Reference")
+         L.OPTIONS_HIDE_ILVL_REF_BTN or "Hide Item Level Popup")
     Sync(p._cbHideCharPicker,   db.showCharPickerBtn == false,
          L.OPTIONS_HIDE_CHAR_SELECT  or "Hide Character Selector")
     Sync(p._cbHideSliders, db.showScaleSlider == false,
          L.OPTIONS_HIDE_SLIDERS or "Hide Sliders")
     Sync(p._cbHideUpdateNotice, db.hideUpdateNotice and true or false,
-         L.OPTIONS_HIDE_UPDATE_NOTICE or "Hide Update Notices")
+         L.OPTIONS_HIDE_UPDATE_NOTICE or "Hide Update Warnings")
     local _minimap = Addon.db and Addon.db.global and Addon.db.global.minimap
     Sync(p._cbHideMinimapBtn, _minimap and _minimap.hide and true or false,
          L.OPTIONS_HIDE_MINIMAP_BTN or "Hide Minimap Button")
+
+    -- Refresh color swatch labels in case locale changed since popup was built.
+    if p._gearColorLabels then
+        for si, sd in ipairs(GEAR_COLOR_DEFS) do
+            local lbl = p._gearColorLabels[si]
+            if lbl then lbl:SetText(L[sd.labelKey] or sd.label) end
+        end
+    end
 
     -- Reset button label.
     if p._gearResetBtn then
@@ -116,6 +136,25 @@ function Addon:SyncGearPopup()
     if not showHiddenSect and self._hiddenCharsPicker then
         local pk = self._hiddenCharsPicker
         if pk.IsShown and pk:IsShown() then pk:Hide() end
+    end
+
+    -- Language toggle: show only for non-English WoW clients.
+    -- Button says "English" when they're in their native language, or their
+    -- native language name when they've previously switched to English.
+    local _wowLocale     = (GetLocale and GetLocale()) or "enUS"
+    local _effLocale     = (self.GetEffectiveLocaleCode and self:GetEffectiveLocaleCode()) or "enUS"
+    local showLangToggle = _wowLocale ~= "enUS"
+    if p._gearLangBtn and p._gearLangDiv then
+        p._gearLangBtn:SetShown(showLangToggle)
+        p._gearLangDiv:SetShown(showLangToggle)
+        if showLangToggle then
+            if _effLocale ~= "enUS" then
+                p._gearLangBtn:SetText("English")
+            else
+                p._gearLangBtn:SetText(LOCALE_NATIVE_NAMES[_wowLocale] or _wowLocale)
+            end
+            if Addon._styleActionButton then Addon._styleActionButton(p._gearLangBtn) end
+        end
     end
 
     -- Recalculate popup height based on visible content, and reposition any rows
@@ -167,7 +206,8 @@ function Addon:SyncGearPopup()
             p._gearHiddenCharsTrigger:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PAD, -hidStartY)
         end
 
-        local VER_PAD = 90  -- bottom room: version/credit block + compact color swatch row
+        -- When the language toggle button is visible, add 30 px for it + divider + padding.
+        local VER_PAD = showLangToggle and 134 or 104
         local totalH
         if showHiddenSect then
             totalH = hidStartY + 22 + PAD + VER_PAD
@@ -406,10 +446,10 @@ function Addon:ToggleGearPopup(anchor, growRight)
         local _dataVer = (_locReg and type(_locReg.sheet_version) == "string" and _locReg.sheet_version) or ""
 
         -- ── Compact color swatches – 3 in a row above the version block ──────
-        -- Layout: swatch row sits at COLOR_BOT_Y px from popup bottom.
-        -- Above it: a thin divider. Labels are short ("Bg", "Text", "Hdr").
+        -- Layout: label row sits above the swatch row, both anchored from popup bottom.
+        -- COLOR_BOT_Y = swatch bottom; labels sit 20 px above that.
         local COLOR_BOT_Y = 48   -- bottom of swatch row (px from popup BOTTOMLEFT)
-        local COLOR_DIV_Y = COLOR_BOT_Y + 22  -- divider px from popup bottom
+        local COLOR_DIV_Y = COLOR_BOT_Y + 36  -- divider sits above label+swatch stack
         local POPUP_INNER_W = 230 - 2 * PAD   -- 210 px
         local SW_SLOT_W     = math.floor(POPUP_INNER_W / 3)  -- ~70 px per slot
 
@@ -420,17 +460,22 @@ function Addon:ToggleGearPopup(anchor, growRight)
         colorSectionDiv:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -PAD, COLOR_DIV_Y)
 
         p._gearColorSwatches = {}
+        p._gearColorLabels   = {}
         for si, sd in ipairs(GEAR_COLOR_DEFS) do
             local slotX = PAD + (si - 1) * SW_SLOT_W
+            local _L = Addon.L or {}
 
             local lbl = p:CreateFontString(nil, "OVERLAY")
             lbl:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
-            lbl:SetText(sd.label)
+            lbl:SetText(_L[sd.labelKey] or sd.label)
             lbl:SetTextColor(0.70, 0.70, 0.70, 1)
-            lbl:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", slotX, COLOR_BOT_Y + 3)
+            lbl:SetWidth(SW_SLOT_W)
+            lbl:SetJustifyH("CENTER")
+            lbl:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", slotX, COLOR_BOT_Y + 20)
+            p._gearColorLabels[si] = lbl
 
             local sw = MakePopupSwatch(p)
-            sw:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", slotX + 28, COLOR_BOT_Y)
+            sw:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", slotX + math.floor((SW_SLOT_W - 16) / 2), COLOR_BOT_Y)
             sw:SetColor(sd.get())
             sw:SetScript("OnClick", function()
                 local cr, cg, cb = sd.get()
@@ -460,6 +505,37 @@ function Addon:ToggleGearPopup(anchor, growRight)
             verLabel:SetText(table.concat(parts, "  \226\128\162  "))
         end
         verLabel:SetTextColor(0.45, 0.45, 0.45, 0.6)
+
+        -- ── Language toggle button (non-English clients only) ────────────────────
+        -- Anchored from popup BOTTOM above the color section. Constants:
+        --   COLOR_DIV_Y=84  ->  lang btn bottom=89, lang divider bottom=115
+        --   VER_PAD grows from 104 to 134 when this button is visible.
+        local langDivider = p:CreateTexture(nil, "ARTWORK")
+        langDivider:SetColorTexture(0.3, 0.3, 0.3, 0.5)
+        langDivider:SetHeight(1)
+        langDivider:SetPoint("BOTTOMLEFT",  p, "BOTTOMLEFT",  PAD,  115)
+        langDivider:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -PAD, 115)
+        langDivider:Hide()
+        p._gearLangDiv = langDivider
+
+        local langBtn = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
+        langBtn:SetPoint("BOTTOMLEFT",  p, "BOTTOMLEFT",  PAD,  89)
+        langBtn:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -PAD, 89)
+        langBtn:SetHeight(22)
+        langBtn:Hide()
+        if Addon._styleActionButton then Addon._styleActionButton(langBtn) end
+        langBtn:SetScript("OnClick", function()
+            if not Addon.SetLocaleOverride then return end
+            local eff = (Addon.GetEffectiveLocaleCode and Addon:GetEffectiveLocaleCode()) or "enUS"
+            if eff ~= "enUS" then
+                Addon:SetLocaleOverride("enUS")
+            else
+                Addon:SetLocaleOverride("auto")
+            end
+            if Addon.SyncGearPopup then Addon:SyncGearPopup() end
+            if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
+        end)
+        p._gearLangBtn = langBtn
 
         self._gearPopup = p
         -- Apply saved opacity to the new popup (it was created with alpha=1.0).

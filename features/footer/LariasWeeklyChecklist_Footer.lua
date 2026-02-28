@@ -68,8 +68,13 @@ function Addon:UpdateStatusBanner()
     local charDb = self:EnsureDB()   -- for per-character version tracking data
     local L  = self.L or {}
 
-    -- Priority 1a: spreadsheet data is newer than ours.
-    if db.hideUpdateNotice ~= true and self.ShouldShowSheetUpdateNotice and self:ShouldShowSheetUpdateNotice() then
+    -- Priority 1a: spreadsheet data is newer than ours (English only – other
+    -- locales use translated data bundles that may lag behind the sheet).
+    local _effectiveLocale = (self.GetEffectiveLocaleCode and self:GetEffectiveLocaleCode())
+                          or (GetLocale and GetLocale())
+                          or "enUS"
+    if db.hideUpdateNotice ~= true and _effectiveLocale == "enUS"
+    and self.ShouldShowSheetUpdateNotice and self:ShouldShowSheetUpdateNotice() then
         local reg    = _G[LOCALE_REGISTRY_KEY]
         local mySV   = (reg and type(reg.sheet_version) == "string" and reg.sheet_version) or ""
         local newSV  = tostring(charDb._newestSeenRemoteSheetVersion or "")
@@ -89,10 +94,9 @@ function Addon:UpdateStatusBanner()
 
     -- Priority 2/3: locale status notice for non-English clients.
     -- GetEffectiveLocaleCode() falls back to GetLocale() when no override is set.
-    local wowLocale = (self.GetEffectiveLocaleCode and self:GetEffectiveLocaleCode())
-                   or (GetLocale and GetLocale())
-                   or "enUS"
-    if wowLocale ~= "enUS" then
+    -- Suppressed by the same hideUpdateNotice flag as the version warnings.
+    local wowLocale = _effectiveLocale
+    if db.hideUpdateNotice ~= true and wowLocale ~= "enUS" then
         local reg = _G[LOCALE_REGISTRY_KEY]
         local hasLocale = reg
             and type(reg.strings) == "table"

@@ -880,6 +880,14 @@ function Addon:ApplyThemeColors()
     loadColor(self.THEME.text,   "textR",   "textG",   "textB",   1.00, 1.00, 1.00)
     loadColor(self.THEME.header, "headerR", "headerG", "headerB", 1.00, 0.82, 0.00)
 
+    -- Refresh the close-button × glyph on the main frame; it is painted at
+    -- creation time from the then-current header color and needs a nudge here.
+    local _closeBtn = self._mainFrame and self._mainFrame._lariasCloseBtn
+    if _closeBtn and _closeBtn._lariasCloseGlyph then
+        local h = self.THEME.header
+        _closeBtn._lariasCloseGlyph:SetTextColor(h.r, h.g, h.b, 1)
+    end
+
     -- Re-apply backdrop to any already-open themed frames.
     if self._mainFrame then
         self:ApplyTheme(self._mainFrame)

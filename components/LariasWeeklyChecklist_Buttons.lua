@@ -124,6 +124,7 @@ function C.NewCloseButton(parent, onClick)
     norm:SetTextColor(th.r, th.g, th.b, 1)
     norm:SetText("\195\151")  -- × (U+00D7)
     btn:SetFontString(norm)
+    btn._lariasCloseGlyph = norm  -- stored so ApplyThemeColors can refresh the tint
 
     local hl = btn:CreateTexture(nil, "HIGHLIGHT")
     hl:SetAllPoints(btn)
