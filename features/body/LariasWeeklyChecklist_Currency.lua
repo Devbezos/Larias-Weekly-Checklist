@@ -1404,7 +1404,7 @@ local function BuildWeekliesSection(trackingFrame)
 
     local rows = {}
     for i, d in ipairs(rowDefs) do
-        if not d.label then goto continue end  -- skip rows with no locale string
+        if d.label then
         local colFrame = (i <= WSEC_ROWS_PER_COL) and leftCol or rightCol
         local colIdx   = (i <= WSEC_ROWS_PER_COL) and 1 or 2
         local rowInCol = (i - 1) % WSEC_ROWS_PER_COL
@@ -1430,7 +1430,7 @@ local function BuildWeekliesSection(trackingFrame)
         for k, v in pairs(d) do row[k] = v end
         lblFS:SetText(d.label)
         tinsert(rows, row)
-        ::continue::
+        end
     end
     sec._rows = rows
 
