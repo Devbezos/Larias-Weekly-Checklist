@@ -299,7 +299,6 @@ local function SetupAddonDB()
         global = {
             _newestSeenRemoteVersion = "",
             _newestSeenRemoteSender  = "",
-            _dismissedRemoteVersion  = "",
             -- Account-wide UI state (shared across all characters on this account).
             mainFramePos  = false,
             mainFrameWin  = false,  -- LibWindow-1.1 position+scale storage
@@ -1995,7 +1994,6 @@ function Addon:Toggle()
     if frame:IsShown() then
         frame:Hide()
     else
-        self._updatePopupShownThisOpen = nil
         self:BroadcastVersion(false)
         self:RequestVersions(false)
         if self.SelectMainTab then
@@ -2006,7 +2004,6 @@ function Addon:Toggle()
         else
             self:Refresh()
         end
-        self:ShowUpdatePopupIfNeeded()
         frame:Show()
     end
 end

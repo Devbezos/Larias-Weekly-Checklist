@@ -187,63 +187,7 @@ function Addon:ShouldShowUpdateNotice()
     local newestSeenVersion = tostring(database._newestSeenRemoteVersion or "")
     if newestSeenVersion == "" or myVersion == "" then return false end
     if not IsVersionNewer(newestSeenVersion, myVersion) then return false end
-    if tostring(database._dismissedRemoteVersion or "") == newestSeenVersion then return false end
     return true
-end
-
-function Addon:DismissUpdateNotice()
-    -- Remember the newest seen version as dismissed (until a newer one is seen).
-    local database = self:EnsureDB()
-    database._dismissedRemoteVersion = tostring(database._newestSeenRemoteVersion or "")
-end
-
-function Addon:EnsureUpdatePopup()
-    -- Register the StaticPopup dialog once.
-    if self._updatePopupRegistered then return end
-    self._updatePopupRegistered = true
-
-    if not StaticPopupDialogs then return end
-
-    local L = self.L or {}
-
-    StaticPopupDialogs["LARIASWEEKLYCHECKLIST_UPDATE"] = {
-        text = "%s",
-        button1 = (OKAY or (L.BUTTON_OK or "")),
-        button2 = (CANCEL or (L.BUTTON_CANCEL or "")),
-        OnAccept = function()
-            Addon:DismissUpdateNotice()
-        end,
-        OnCancel = function()
-            -- Dismiss on cancel too — user has seen the notice.
-            Addon:DismissUpdateNotice()
-        end,
-        timeout = 0,
-        whileDead = true,
-        hideOnEscape = true,
-        preferredIndex = 3,
-    }
-end
-
-function Addon:ShowUpdatePopupIfNeeded()
-    -- Show at most once per window-open to avoid spam.
-    if not self:ShouldShowUpdateNotice() then return end
-    if self._updatePopupShownThisOpen then return end
-
-    self:EnsureUpdatePopup()
-    if not (StaticPopup_Show and StaticPopupDialogs) then return end
-
-    local L = self.L or {}
-
-    local displayName = (self.DISPLAY_NAME or (L and L.DISPLAY_NAME) or addonName)
-    local popupText
-    if type(L.UPDATE_AVAILABLE_FMT) == "string" and L.UPDATE_AVAILABLE_FMT ~= "" then
-        popupText = string.format(L.UPDATE_AVAILABLE_FMT, tostring(displayName))
-    else
-        popupText = (L.UPDATE_AVAILABLE_TEXT or "")
-    end
-
-    StaticPopup_Show("LARIASWEEKLYCHECKLIST_UPDATE", popupText)
-    self._updatePopupShownThisOpen = true
 end
 
 function Addon:BroadcastVersion(force)
@@ -400,7 +344,6 @@ function Addon:CommsOnEnable()
         if stored ~= "" and not IsVersionNewer(stored, myVer) then
             database._newestSeenRemoteVersion = ""
             database._newestSeenRemoteSender  = ""
-            database._dismissedRemoteVersion  = ""
         end
     end
 
