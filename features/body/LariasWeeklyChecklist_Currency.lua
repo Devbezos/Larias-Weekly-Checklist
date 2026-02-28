@@ -1354,16 +1354,24 @@ local function BuildWeekliesSection(trackingFrame)
     hdrFS:SetText(L.TRACKING_WEEKLIES_TITLE or "Weeklies")
 
     -- Two column sub-frames: left = rows 1-3, right = rows 4-6.
-    -- Anchored using sec CENTER so no width query is needed at build time.
-    local colTopY = -(WSEC_PAD_TOP + WSEC_HEADER_H)
+    -- We need to split at the horizontal midpoint while keeping Y at the top of
+    -- the content area.  WoW's CENTER anchor uses Y = frame_mid_height, not
+    -- frame top — so we use a zero-height "spine" frame anchored to sec TOP
+    -- (X = horizontal centre, Y = top edge) to get a reliable vertical baseline.
+    local colOffY = -(WSEC_PAD_TOP + WSEC_HEADER_H)
+    local spine = CreateFrame("Frame", nil, sec)
+    spine:SetPoint("TOPLEFT",  sec, "TOP", -WSEC_COL_GAP/2, colOffY)
+    spine:SetPoint("TOPRIGHT", sec, "TOP",  WSEC_COL_GAP/2, colOffY)
+    spine:SetHeight(1)
+
     local leftCol = CreateFrame("Frame", nil, sec)
-    leftCol:SetPoint("TOPLEFT",  sec, "TOPLEFT",  0,               colTopY)
-    leftCol:SetPoint("TOPRIGHT", sec, "CENTER",   -WSEC_COL_GAP/2, colTopY)
+    leftCol:SetPoint("TOPLEFT",  sec,   "TOPLEFT",  0, colOffY)
+    leftCol:SetPoint("TOPRIGHT", spine, "TOPLEFT",  0, 0)
     leftCol:SetHeight(WSEC_ROWS_PER_COL * WSEC_ROW_H)
 
     local rightCol = CreateFrame("Frame", nil, sec)
-    rightCol:SetPoint("TOPLEFT",  sec, "CENTER",   WSEC_COL_GAP/2, colTopY)
-    rightCol:SetPoint("TOPRIGHT", sec, "TOPRIGHT", 0,              colTopY)
+    rightCol:SetPoint("TOPLEFT",  spine, "TOPRIGHT", 0, 0)
+    rightCol:SetPoint("TOPRIGHT", sec,   "TOPRIGHT", 0, colOffY)
     rightCol:SetHeight(WSEC_ROWS_PER_COL * WSEC_ROW_H)
 
     local rowDefs = {
