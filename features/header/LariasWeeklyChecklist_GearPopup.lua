@@ -17,6 +17,57 @@ local function SetCheckText(checkButton, text)
     end
 end
 
+-- ── Color-picker helpers (local copies; mirrors Settings.lua) ─────────────────
+-- Creates a small 16×16 colored swatch button.  Call swatch:SetColor(r,g,b).
+local function MakePopupSwatch(parent)
+    local btn = CreateFrame("Button", nil, parent)
+    btn:SetSize(16, 16)
+    local border = btn:CreateTexture(nil, "BACKGROUND", nil, 0)
+    border:SetPoint("TOPLEFT",     btn, "TOPLEFT",     -1,  1)
+    border:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT",  1, -1)
+    border:SetColorTexture(0.55, 0.55, 0.55, 1)
+    local fill = btn:CreateTexture(nil, "BACKGROUND", nil, 1)
+    fill:SetAllPoints(btn)
+    fill:SetColorTexture(1, 1, 1, 1)
+    btn._fill = fill
+    function btn:SetColor(r, g, b) self._fill:SetVertexColor(r, g, b, 1) end
+    return btn
+end
+
+-- Opens the WoW color picker (supports retail 10.x+ and legacy/Classic).
+local function OpenPopupColorPicker(r, g, b, onUpdate, onCancel)
+    if ColorPickerFrame.SetupColorPickerAndShow then
+        ColorPickerFrame:SetupColorPickerAndShow({
+            r = r, g = g, b = b, hasOpacity = false,
+            swatchFunc = function()
+                local nr, ng, nb = ColorPickerFrame:GetColorRGB()
+                onUpdate(nr, ng, nb)
+            end,
+            cancelFunc = function(prev) onCancel(prev.r, prev.g, prev.b) end,
+        })
+    else
+        ColorPickerFrame.hasOpacity     = false
+        ColorPickerFrame.r, ColorPickerFrame.g, ColorPickerFrame.b = r, g, b
+        ColorPickerFrame.previousValues = { r = r, g = g, b = b }
+        ColorPickerFrame.func = function()
+            local nr, ng, nb = ColorPickerFrame:GetColorRGB()
+            onUpdate(nr, ng, nb)
+        end
+        ColorPickerFrame.cancelFunc = function()
+            local pv = ColorPickerFrame.previousValues
+            onCancel(pv.r, pv.g, pv.b)
+        end
+        ShowUIPanel(ColorPickerFrame)
+    end
+end
+
+-- Shared color-key / default table used by both creation and sync.
+local GEAR_COLOR_DEFS = {
+    { label = "Bg",   rk = "bgR",     gk = "bgG",     bk = "bgB",     dr = 0.10, dg = 0.10, db = 0.10 },
+    { label = "Text", rk = "textR",   gk = "textG",   bk = "textB",   dr = 1.00, dg = 1.00, db = 1.00 },
+    { label = "Hdr",  rk = "headerR", gk = "headerG", bk = "headerB", dr = 1.00, dg = 0.82, db = 0.00 },
+}
+
 function Addon:SyncGearPopup()
     local p = self._gearPopup
     if not p then return end
@@ -126,7 +177,7 @@ function Addon:SyncGearPopup()
             p._gearHiddenCharsTrigger:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PAD, -hidStartY)
         end
 
-        local VER_PAD = 28  -- extra bottom room for three-line version + credits block
+        local VER_PAD = 90  -- bottom room: version/credit block + compact color swatch row
         local totalH
         if showHiddenSect then
             totalH = hidStartY + 22 + PAD + VER_PAD
@@ -146,6 +197,18 @@ function Addon:SyncGearPopup()
     if Addon._styleActionButton then
         if p._gearResetBtn              then Addon._styleActionButton(p._gearResetBtn)              end
         if p._gearHiddenCharsTrigger    then Addon._styleActionButton(p._gearHiddenCharsTrigger)    end
+    end
+
+    -- Sync the compact color swatch colors to current saved values.
+    if p._gearColorSwatches then
+        local gdb = Addon.db and Addon.db.global
+        local tc  = (gdb and gdb.themeColors) or {}
+        for i, def in ipairs(GEAR_COLOR_DEFS) do
+            local sw = p._gearColorSwatches[i]
+            if sw then
+                sw:SetColor(tc[def.rk] or def.dr, tc[def.gk] or def.dg, tc[def.bk] or def.db)
+            end
+        end
     end
 end
 
@@ -352,6 +415,62 @@ function Addon:ToggleGearPopup(anchor, growRight)
         local _locReg  = _G["LARIASWEEKLYCHECKLIST_LOCALE_REGISTRY"]
         local _dataVer = (_locReg and type(_locReg.sheet_version) == "string")
                          and _locReg.sheet_version or ""
+
+        -- ── Compact color swatches – 3 in a row above the version block ──────
+        -- Layout: swatch row sits at COLOR_BOT_Y px from popup bottom.
+        -- Above it: a thin divider. Labels are short ("Bg", "Text", "Hdr").
+        local COLOR_BOT_Y = 48   -- bottom of swatch row (px from popup BOTTOMLEFT)
+        local COLOR_DIV_Y = COLOR_BOT_Y + 22  -- divider px from popup bottom
+        local POPUP_INNER_W = 230 - 2 * PAD   -- 210 px
+        local SW_SLOT_W     = math.floor(POPUP_INNER_W / 3)  -- ~70 px per slot
+
+        local colorSectionDiv = p:CreateTexture(nil, "ARTWORK")
+        colorSectionDiv:SetColorTexture(0.3, 0.3, 0.3, 0.5)
+        colorSectionDiv:SetHeight(1)
+        colorSectionDiv:SetPoint("BOTTOMLEFT",  p, "BOTTOMLEFT",  PAD,  COLOR_DIV_Y)
+        colorSectionDiv:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -PAD, COLOR_DIV_Y)
+
+        p._gearColorSwatches = {}
+        for si, sd in ipairs(GEAR_COLOR_DEFS) do
+            local _sd    = sd
+            local slotX  = PAD + (si - 1) * SW_SLOT_W
+
+            local lbl = p:CreateFontString(nil, "OVERLAY")
+            lbl:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
+            lbl:SetText(_sd.label)
+            lbl:SetTextColor(0.70, 0.70, 0.70, 1)
+            -- Vertically center the 9pt label against the 16px swatch.
+            lbl:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", slotX, COLOR_BOT_Y + 3)
+
+            local sw = MakePopupSwatch(p)
+            sw:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", slotX + 28, COLOR_BOT_Y)
+
+            local function getCurrentColor()
+                local gdb3 = Addon.db and Addon.db.global
+                local tc3  = (gdb3 and gdb3.themeColors) or {}
+                return tc3[_sd.rk] or _sd.dr, tc3[_sd.gk] or _sd.dg, tc3[_sd.bk] or _sd.db
+            end
+            local function saveColorToDb(r, g, b)
+                local gdb3 = Addon.db and Addon.db.global
+                if not gdb3 then return end
+                gdb3.themeColors          = gdb3.themeColors or {}
+                gdb3.themeColors[_sd.rk]  = r
+                gdb3.themeColors[_sd.gk]  = g
+                gdb3.themeColors[_sd.bk]  = b
+                if Addon.ApplyThemeColors then Addon:ApplyThemeColors() end
+            end
+
+            local ir, ig, ib = getCurrentColor()
+            sw:SetColor(ir, ig, ib)
+            sw:SetScript("OnClick", function()
+                local cr, cg, cb = getCurrentColor()
+                OpenPopupColorPicker(cr, cg, cb,
+                    function(nr, ng, nb) saveColorToDb(nr, ng, nb); sw:SetColor(nr, ng, nb) end,
+                    function(pr, pg, pb) saveColorToDb(pr, pg, pb); sw:SetColor(pr, pg, pb) end
+                )
+            end)
+            p._gearColorSwatches[si] = sw
+        end
 
         local creditLabel = p:CreateFontString(nil, "OVERLAY")
         creditLabel:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
