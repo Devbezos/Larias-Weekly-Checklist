@@ -1000,7 +1000,7 @@ function Addon:ApplyScrollLayout()
 
     local extra = sliderH + sliderBotPad + sliderTopPad - Addon.UI.scrollBottom
 
-    if (db.showGreatVault or db.showCurrency) and IsFrameShown(self._trackingFrame) then
+    if IsFrameShown(self._trackingFrame) then
         local trackingHeight = (self._trackingFrame.GetHeight and self._trackingFrame:GetHeight()) or Addon.UI.trackH
         trackingHeight = tonumber(trackingHeight) or Addon.UI.trackH
         extra = extra + trackingHeight + Addon.UI.trackTopPad
