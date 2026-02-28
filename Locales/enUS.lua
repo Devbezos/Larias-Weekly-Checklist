@@ -15,11 +15,9 @@ local STRINGS = {
 
 	-- Update popup
 	UPDATE_AVAILABLE_TEXT = "New version available",
-	UPDATE_AVAILABLE_FMT = "%s has an update available.\n\nPlease update the addon to the newest version.",
 
 	-- Shared buttons
-	BUTTON_OK = "OK",
-	BUTTON_CANCEL = "Cancel",
+	CLOSE         = "Close",
 
 	-- Options tab
 	OPTIONS_HIDE_GREAT_VAULT = "Hide Great Vault",
@@ -34,9 +32,7 @@ local STRINGS = {
 	UI_SCALE_LABEL       = "Scale",
 	UI_SCALE_MIN_LABEL   = "50%",
 	UI_SCALE_MAX_LABEL   = "150%",
-	OPTIONS_HIDE_SCALE_SLIDER   = "Hide Scale Slider",
 	OPTIONS_HIDE_SLIDERS        = "Hide Sliders",
-	OPTIONS_HIDE_OPACITY_SLIDER = "Hide Opacity Slider",
 	OPTIONS_HIDE_UPDATE_NOTICE  = "Hide Update Warnings",
 	OPTIONS_HIDE_MINIMAP_BTN    = "Hide Minimap Button",
 	-- Color picker swatch labels (gear popup)
@@ -44,7 +40,6 @@ local STRINGS = {
 	COLOR_PICKER_TEXT           = "Text",
 	COLOR_PICKER_HDR            = "Header",
 	-- Status banner (shown below the slider row)
-	STATUS_UPDATE_AVAILABLE_FMT  = "Update available! You have %s, newest is %s.",
 	STATUS_SHEET_UPDATE_FMT      = "Spreadsheet Update Detected - You are %d version(s) behind the spreadsheet",
 	STATUS_NO_TRANSLATION_FMT    = "No translation available for %s. Consider contributing!",
 	STATUS_TRANSLATION_NOTICE    = "English is the most up-to-date language. Your checklist may be slightly out of date.",
@@ -75,8 +70,6 @@ local STRINGS = {
 	TRACKING_TRADE_UP_SUFFIX = " Trade Up)",
 
 	TRACKING_CATALYST_LABEL = "Catalyst",
-
-	TRACKING_INF = "INF",
 
 	-- Minimap tooltip
 	MINIMAP_TOOLTIP_LEFT_CLICK_TOGGLE = "Left-click: Toggle checklist",
