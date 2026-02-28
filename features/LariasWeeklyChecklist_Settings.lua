@@ -73,7 +73,7 @@ local function MakeSwatch(parent)
     fill:SetColorTexture(1, 1, 1, 1)
     btn._fill = fill
     function btn:SetColor(r, g, b)
-        self._fill:SetVertexColor(r, g, b, 1)
+        self._fill:SetColorTexture(r, g, b, 1)
     end
     return btn
 end
