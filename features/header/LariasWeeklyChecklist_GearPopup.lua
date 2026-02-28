@@ -496,6 +496,8 @@ function Addon:ToggleGearPopup(anchor, growRight)
         verLabel:SetTextColor(0.45, 0.45, 0.45, 0.6)
 
         self._gearPopup = p
+        -- Apply saved opacity to the new popup (it was created with alpha=1.0).
+        if self.ApplyOpacity then self:ApplyOpacity() end
     end
 
     -- Sync current values and labels (includes hidden chars trigger label).

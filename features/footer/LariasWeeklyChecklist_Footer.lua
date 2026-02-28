@@ -189,6 +189,11 @@ function Addon:ApplyOpacity()
     if self._statusBanner then
         self._statusBanner:SetAlpha(alpha)
     end
+    -- Apply the same opacity to the options popup backdrop.
+    if self._gearPopup and self._gearPopup.SetBackdropColor then
+        local bg = self.THEME.bg
+        self._gearPopup:SetBackdropColor(bg.r, bg.g, bg.b, alpha)
+    end
     local sf = self._inFrameScaleSlider
     if sf and sf.SyncOpacity then sf.SyncOpacity() end
 end

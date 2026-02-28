@@ -24,7 +24,9 @@ function C.NewPopupPanel(strata, fadeTime)
     local ft = fadeTime or 0.15
     local p = Addon:NewThemedFrame(nil, UIParent)
     if p.SetBackdropColor then
-        p:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, 1.0)
+        local pct   = (Addon.db and Addon.db.global and tonumber(Addon.db.global.uiOpacityPct)) or 65
+        local alpha = math.max(0, math.min(1.0, pct / 100))
+        p:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, alpha)
     end
     p:SetFrameStrata(st)
     p:SetClampedToScreen(true)
