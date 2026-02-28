@@ -1314,7 +1314,7 @@ end
 -- tracking frame, below the Great Vault and Currency columns.
 -- Called from CreateTrackingPanel after self._trackingFrame is assigned.
 local WSEC_PAD_TOP  = 6    -- gap above header text (below separator)
-local WSEC_HEADER_H = 18   -- height of the "Weeklies" title row
+local WSEC_HEADER_H = 20   -- height of the "Weeklies" title row
 local WSEC_ROW_H    = 15   -- height of each quest status row
 local WSEC_PAD_BOT  = 6    -- padding below last row
 local WSEC_PAD_LR   = 10   -- horizontal inset from tracking frame edge
@@ -1358,7 +1358,7 @@ local function BuildWeekliesSection(trackingFrame)
     sec._sep = sep
 
     -- "Weeklies" header
-    local hdrFS = sec:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local hdrFS = sec:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     hdrFS:SetPoint("TOPLEFT",  sec, "TOPLEFT",  4, -WSEC_PAD_TOP)
     hdrFS:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -4, -WSEC_PAD_TOP)
     hdrFS:SetHeight(WSEC_HEADER_H)
