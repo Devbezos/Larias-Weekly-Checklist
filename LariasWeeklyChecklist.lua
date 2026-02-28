@@ -973,23 +973,28 @@ function Addon:ApplyScrollLayout()
     scrollFrame:ClearAllPoints()
     scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", Addon.UI.padOuterX, -Addon.UI.scrollTop)
 
-    local extra = 0
+    -- Slider + banner space must always be reserved, even when the tracking panel
+    -- is hidden (both Great Vault and Currency off).  Previously this block was
+    -- inside the tracking-visible guard, so hiding both caused the scroll list
+    -- to overlap the sliders.
+    local sf          = self._inFrameScaleSlider
+    local sliderShown = sf and sf.IsShown and sf:IsShown()
+    local sliderRowH  = (Addon.UI.sliderH or 0) + (Addon.UI.sliderLabelH or 0) + 2
+    local sliderH     = sliderShown and sliderRowH or 0
+    -- Banner row always occupies space (frame is permanently visible).
+    local bannerExtra = self._statusBanner
+        and ((self._statusBannerH or 14) + (self._statusBannerPad or 3))
+        or 0
+    -- Banner always occupies space; include its height even when sliders are hidden.
+    local sliderBotPad = (sliderShown and (Addon.UI.sliderBottomPad or 0) or 0) + bannerExtra
+    local sliderTopPad = sliderShown and (Addon.UI.sliderTopPad or 0) or 0
+
+    local extra = sliderH + sliderBotPad + sliderTopPad - Addon.UI.scrollBottom
+
     if (db.showGreatVault or db.showCurrency) and IsFrameShown(self._trackingFrame) then
         local trackingHeight = (self._trackingFrame.GetHeight and self._trackingFrame:GetHeight()) or Addon.UI.trackH
         trackingHeight = tonumber(trackingHeight) or Addon.UI.trackH
-        local sf           = self._inFrameScaleSlider
-        local sliderShown  = sf and sf.IsShown and sf:IsShown()
-        local sliderRowH   = (Addon.UI.sliderH or 0) + (Addon.UI.sliderLabelH or 0) + 2
-        local sliderH      = sliderShown and sliderRowH                     or 0
-        -- Banner row always occupies space (frame is permanently visible).
-        local bannerExtra  = self._statusBanner
-            and ((self._statusBannerH or 14) + (self._statusBannerPad or 3))
-            or 0
-        -- Banner always occupies space; include its height even when sliders are hidden.
-        local sliderBotPad = (sliderShown and (Addon.UI.sliderBottomPad or 0) or 0) + bannerExtra
-        local sliderTopPad = sliderShown and (Addon.UI.sliderTopPad    or 0) or 0
-        extra = trackingHeight + Addon.UI.trackTopPad
-              + sliderH + sliderBotPad + sliderTopPad - Addon.UI.scrollBottom
+        extra = extra + trackingHeight + Addon.UI.trackTopPad
     end
 
     scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -Addon.UI.scrollRight, Addon.UI.scrollBottom + extra)
