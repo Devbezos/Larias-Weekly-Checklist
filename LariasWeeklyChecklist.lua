@@ -929,6 +929,17 @@ function Addon:ApplyThemeColors()
         local h = self.THEME.header
         if tf._lariasLeftTitle  then tf._lariasLeftTitle:SetTextColor(h.r, h.g, h.b, h.a)  end
         if tf._lariasRightTitle then tf._lariasRightTitle:SetTextColor(h.r, h.g, h.b, h.a) end
+        -- Refresh Great Vault row labels (Raid / Dungeons / World) with the current text color.
+        local t = self.THEME.text
+        local grids = tf._lariasGvGrids
+        if type(grids) == "table" then
+            for i = 1, 3 do
+                local g = grids[i]
+                if g and g.header then
+                    g.header:SetTextColor(t.r, t.g, t.b, t.a)
+                end
+            end
+        end
     end
 
     -- Refresh slider widget colors (title labels, min/max, thumb).
