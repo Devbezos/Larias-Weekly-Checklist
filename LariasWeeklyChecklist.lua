@@ -906,10 +906,9 @@ function Addon:ApplyThemeColors()
         end
     end
     if self._trackingFrame then self:ApplyTheme(self._trackingFrame) end
-    -- Refresh the gear popup backdrop immediately if it is open.
-    if self._gearPopup and self._gearPopup.IsShown and self._gearPopup:IsShown() then
-        self:ApplyTheme(self._gearPopup)
-    end
+    -- Refresh the gear popup backdrop (safe to call even when hidden; Reset hides
+    -- the popup before calling ApplyThemeColors, so IsShown() would miss it).
+    if self._gearPopup then self:ApplyTheme(self._gearPopup) end
 
     -- Header text color
     local defHdrR, defHdrG, defHdrB = 1.00, 0.82, 0.00
