@@ -78,7 +78,10 @@ local function QuestDoneAny(entry)
         local q = tonumber(entry) or 0
         if q == 0 then return nil end
         local ok, done = pcall(C_QuestLog.IsQuestFlaggedCompleted, q)
-        return ok and (done and true or false) or nil
+        -- NOTE: avoid "ok and X or nil" idiom here – when done==false that
+        -- collapses to nil via Lua short-circuit.  Use explicit if instead.
+        if not ok then return nil end
+        return done and true or false
     end
 end
 
@@ -226,16 +229,28 @@ end
 local SEC_GAP = 6   -- vertical gap between sections
 
 -- ── Row widgets ───────────────────────────────────────────────────────────────
-local function MakeZoneHdr(parent, text, posY)
+-- countFS is nil when there is no count to display (e.g. Treasures zone headers).
+local function MakeZoneHdr(parent, text, posY, showCount)
+    local COUNT_W = showCount and 44 or 0
     local fs = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    fs:SetPoint("TOPLEFT",  parent, "TOPLEFT",    PAD,    -posY)
-    fs:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -SBAR_W,  -posY)
+    fs:SetPoint("TOPLEFT",  parent, "TOPLEFT",   PAD,                  -posY)
+    fs:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -(SBAR_W + COUNT_W),   -posY)
     fs:SetHeight(ZONE_H)
     fs:SetJustifyH("LEFT")
     fs:SetJustifyV("MIDDLE")
     fs:SetTextColor(0.85, 0.75, 0.30, 1)
     fs:SetText(text)
-    return posY + ZONE_H
+
+    local countFS
+    if showCount then
+        countFS = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        countFS:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -SBAR_W, -posY)
+        countFS:SetSize(COUNT_W, ZONE_H)
+        countFS:SetJustifyH("RIGHT")
+        countFS:SetJustifyV("MIDDLE")
+        countFS:SetTextColor(0.85, 0.75, 0.30, 1)
+    end
+    return posY + ZONE_H, countFS
 end
 
 -- Returns (row, newPosY).  row exposes .lbl and .val for refresh.
@@ -425,6 +440,7 @@ local function BuildSidePanel(mainFrame)
     local weeklyRows         = {}
     local rareRows           = {}
     local treasureRowObjects = {}
+    local zoneCountFS        = {}   -- [zoneKey] = { fs=FontString, total=n }
     local builtSections      = {}
     local prevFrame          = nil
 
@@ -496,12 +512,15 @@ local function BuildSidePanel(mainFrame)
             for _, zoneKey in ipairs(ZONES_ORDER) do
                 local ids = rareData[zoneKey]
                 if ids and #ids > 0 then
-                    posY = MakeZoneHdr(content, ZONE_LABELS[zoneKey] or zoneKey, posY)
+                    local cfs
+                    posY, cfs = MakeZoneHdr(content, ZONE_LABELS[zoneKey] or zoneKey, posY, true)
+                    zoneCountFS[zoneKey] = { fs = cfs, total = #ids }
                     local names = RARE_NAMES[zoneKey] or {}
                     for _, npcID in ipairs(ids) do
                         local r
                         r, posY = MakeRareRow(content, npcID, posY)
                         r.lbl:SetText(names[npcID] or ("NPC #" .. npcID))
+                        r.zoneKey = zoneKey
                         tinsert(rareRows, r)
                     end
                 end
@@ -580,10 +599,12 @@ local function BuildSidePanel(mainFrame)
     end
 
     local function RefreshRareRows()
+        local zoneDone = {}
         for _, r in ipairs(rareRows) do
             local npcID = r.npcID
             if npcID then
                 if IsRareKilled(npcID) then
+                    zoneDone[r.zoneKey] = (zoneDone[r.zoneKey] or 0) + 1
                     r.val:SetText(GREEN .. "Done" .. CLOSE)
                     r.lbl:SetTextColor(0.50, 0.90, 0.50, 0.80)
                 else
@@ -591,6 +612,15 @@ local function BuildSidePanel(mainFrame)
                     r.lbl:SetTextColor(1, 1, 1, 1)
                 end
             end
+        end
+        -- update per-zone x/y header counts
+        for zoneKey, info in pairs(zoneCountFS) do
+            local done  = zoneDone[zoneKey] or 0
+            local total = info.total
+            local col   = (done >= total and total > 0) and GREEN
+                       or  done > 0                     and "|cffffd700"
+                       or  DIM
+            info.fs:SetText(col .. done .. "/" .. total .. CLOSE)
         end
     end
 
