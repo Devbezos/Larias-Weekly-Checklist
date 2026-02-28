@@ -164,6 +164,16 @@ local function BuildPanel()
             end,
         },
         {
+            label    = L.OPTIONS_HIDE_WEEKLIES or "Hide Weeklies",
+            getVal   = function(d) return d.showInlineWeeklies == false end,
+            onChange = function(v)
+                Addon:EnsurePrefs().showInlineWeeklies = not v
+                if Addon.ApplyInlineWeekliesVisibility then
+                    Addon:ApplyInlineWeekliesVisibility()
+                end
+            end,
+        },
+        {
             label    = L.OPTIONS_HIDE_CHANGE_WEEK_BTN or "Hide Week Selector",
             getVal   = function(d) return d.showChangeWeekBtn == false end,
             onChange = function(v)

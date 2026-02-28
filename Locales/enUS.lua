@@ -22,6 +22,7 @@ local STRINGS = {
 	-- Options tab
 	OPTIONS_HIDE_GREAT_VAULT = "Hide Great Vault",
 	OPTIONS_HIDE_CURRENCY = "Hide Currency",
+	OPTIONS_HIDE_WEEKLIES = "Hide Weeklies",
 	HIDE_COMPLETED_WEEKS = "Hide Completed Weeks",
 	HIDE_COMPLETED       = "Hide Completed",
 	OPTIONS_HIDE_CHANGE_WEEK_BTN = 'Hide Week Selector',

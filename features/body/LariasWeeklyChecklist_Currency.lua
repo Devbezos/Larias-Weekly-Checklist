@@ -1242,7 +1242,7 @@ local function ResizeTrackingPanelToContent(addon)
     -- to fit the weeklies block anchored at its bottom.
     local weeklyExtra = 0
     local ws = trackingFrame._lariasWeekliesSection
-    if ws then
+    if ws and ws.IsShown and ws:IsShown() then
         weeklyExtra = (tonumber(ws:GetHeight()) or 0) + 8  -- 8px gap between cols and section
     end
 
@@ -1269,19 +1269,32 @@ end
 -- Builds a compact weekly-quest status block anchored to the bottom of the
 -- tracking frame, below the Great Vault and Currency columns.
 -- Called from CreateTrackingPanel after self._trackingFrame is assigned.
-local WSEC_PAD_TOP  = 8    -- vertical gap between separator and header text
-local WSEC_HEADER_H = 20   -- height of the "Weeklies" title row
+local WSEC_PAD_TOP  = 6    -- gap above header text (below separator)
+local WSEC_HEADER_H = 18   -- height of the "Weeklies" title row
 local WSEC_ROW_H    = 15   -- height of each quest status row
 local WSEC_PAD_BOT  = 6    -- padding below last row
 local WSEC_PAD_LR   = 10   -- horizontal inset from tracking frame edge
 local WSEC_BOT_OFF  = 10   -- pixels above tracking frame bottom
+local WSEC_COL_GAP  = 12   -- gap between the two quest columns
+local WSEC_ROWS_PER_COL = 3  -- 6 rows split evenly across 2 columns
 
 local function BuildWeekliesSection(trackingFrame)
-    local L = Addon.L or {}
+    local L     = Addon.L or {}
+    local prefs = Addon:EnsurePrefs()
 
     local sec = CreateFrame("Frame", nil, trackingFrame)
     sec:SetPoint("BOTTOMLEFT",  trackingFrame, "BOTTOMLEFT",  WSEC_PAD_LR,  WSEC_BOT_OFF)
     sec:SetPoint("BOTTOMRIGHT", trackingFrame, "BOTTOMRIGHT", -WSEC_PAD_LR, WSEC_BOT_OFF)
+
+    Addon._inlineWeeklies              = sec
+    trackingFrame._lariasWeekliesSection = sec
+
+    -- Hide immediately when pref is off; return stub so resize skips it.
+    if prefs.showInlineWeeklies == false then
+        sec:SetHeight(0)
+        sec:Hide()
+        return sec
+    end
 
     -- Thin separator line at the very top of the section
     local sep = sec:CreateTexture(nil, "ARTWORK")
@@ -1298,44 +1311,54 @@ local function BuildWeekliesSection(trackingFrame)
     hdrFS:SetJustifyH("LEFT")
     hdrFS:SetJustifyV("MIDDLE")
     hdrFS:SetTextColor(THEME.header.r, THEME.header.g, THEME.header.b, THEME.header.a)
-    hdrFS:SetText(L.SIDE_PANEL_WEEKLIES or "Weeklies")
+    hdrFS:SetText(L.TRACKING_WEEKLIES_TITLE or "Weeklies")
 
-    -- Build quest row widgets
-    local QIDs  = Addon.TRACKING and Addon.TRACKING.questIDs or {}
-    local PQIDs = Addon.TRACKING and Addon.TRACKING.preyQuestIDs
-    local pGoal = (Addon.TRACKING and Addon.TRACKING.preyQuestGoal) or 4
+    -- Two column sub-frames: left = rows 1-3, right = rows 4-6.
+    -- Anchored using sec CENTER so no width query is needed at build time.
+    local colTopY = -(WSEC_PAD_TOP + WSEC_HEADER_H)
+    local leftCol = CreateFrame("Frame", nil, sec)
+    leftCol:SetPoint("TOPLEFT",  sec, "TOPLEFT",  0,               colTopY)
+    leftCol:SetPoint("TOPRIGHT", sec, "CENTER",   -WSEC_COL_GAP/2, colTopY)
+    leftCol:SetHeight(WSEC_ROWS_PER_COL * WSEC_ROW_H)
+
+    local rightCol = CreateFrame("Frame", nil, sec)
+    rightCol:SetPoint("TOPLEFT",  sec, "CENTER",   WSEC_COL_GAP/2, colTopY)
+    rightCol:SetPoint("TOPRIGHT", sec, "TOPRIGHT", 0,              colTopY)
+    rightCol:SetHeight(WSEC_ROWS_PER_COL * WSEC_ROW_H)
 
     local rowDefs = {
-        { isPrey = true,  pQuestIDs = PQIDs, pGoal = pGoal,          label = L.TRACKING_QUEST_PREY            or "Prey Hunted"           },
-        { questKey = "abundance",            label = L.TRACKING_QUEST_ABUNDANCE          or "Abundance"             },
-        { questKey = "lostLegends",          label = L.TRACKING_QUEST_LOST_LEGENDS       or "Lost Legends"          },
-        { questKey = "highEsteem",           label = L.TRACKING_QUEST_HIGH_ESTEEM        or "High Esteem"           },
-        { questKey = "fortifyRunestones",    label = L.TRACKING_QUEST_FORTIFY_RUNESTONES or "Fortify the Runestones" },
-        { questKey = "standYourGround",      label = L.TRACKING_QUEST_STAND_YOUR_GROUND  or "Stand Your Ground"     },
+        { isPrey = true,  label = L.TRACKING_QUEST_PREY            or "Prey Hunted"            },
+        { questKey = "abundance",         label = L.TRACKING_QUEST_ABUNDANCE          or "Abundance"              },
+        { questKey = "lostLegends",       label = L.TRACKING_QUEST_LOST_LEGENDS       or "Lost Legends"           },
+        { questKey = "highEsteem",        label = L.TRACKING_QUEST_HIGH_ESTEEM        or "High Esteem"            },
+        { questKey = "fortifyRunestones", label = L.TRACKING_QUEST_FORTIFY_RUNESTONES or "Fortify the Runestones"  },
+        { questKey = "standYourGround",   label = L.TRACKING_QUEST_STAND_YOUR_GROUND  or "Stand Your Ground"      },
     }
 
-    local baseY = WSEC_PAD_TOP + WSEC_HEADER_H
-    local rows  = {}
+    local rows = {}
     for i, d in ipairs(rowDefs) do
-        local rowY = baseY + (i - 1) * WSEC_ROW_H
+        local colFrame = (i <= WSEC_ROWS_PER_COL) and leftCol or rightCol
+        local colIdx   = (i <= WSEC_ROWS_PER_COL) and 1 or 2
+        local rowInCol = (i - 1) % WSEC_ROWS_PER_COL
+        local rowY     = rowInCol * WSEC_ROW_H
 
-        local lblFS = sec:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        lblFS:SetPoint("TOPLEFT", sec, "TOPLEFT", 8, -rowY)
+        local lblFS = colFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        lblFS:SetPoint("TOPLEFT", colFrame, "TOPLEFT", 4, -rowY)
         lblFS:SetHeight(WSEC_ROW_H)
         lblFS:SetJustifyH("LEFT")
         lblFS:SetJustifyV("MIDDLE")
         if lblFS.SetWordWrap then lblFS:SetWordWrap(false) end
 
-        local valFS = sec:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        valFS:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -4, -rowY)
-        valFS:SetSize(48, WSEC_ROW_H)
+        local valFS = colFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        valFS:SetPoint("TOPRIGHT", colFrame, "TOPRIGHT", -4, -rowY)
+        valFS:SetSize(40, WSEC_ROW_H)
         valFS:SetJustifyH("RIGHT")
         valFS:SetJustifyV("MIDDLE")
 
-        lblFS:SetPoint("TOPRIGHT", valFS, "TOPLEFT", -4, 0)
+        lblFS:SetPoint("TOPRIGHT", valFS, "TOPLEFT", -2, 0)
         lblFS:SetText(d.label)
 
-        local row = { lblFS = lblFS, valFS = valFS }
+        local row = { lblFS = lblFS, valFS = valFS, colIdx = colIdx }
         for k, v in pairs(d) do row[k] = v end
         tinsert(rows, row)
     end
@@ -1350,7 +1373,7 @@ local function BuildWeekliesSection(trackingFrame)
         local QIDs2  = Addon.TRACKING and Addon.TRACKING.questIDs or {}
         local PQIDs2 = Addon.TRACKING and Addon.TRACKING.preyQuestIDs
         local pGoal2 = (Addon.TRACKING and Addon.TRACKING.preyQuestGoal) or 4
-        local visibleCount = 0
+        local leftVis, rightVis = 0, 0
 
         for _, r in ipairs(rows) do
             local rowDone = false
@@ -1383,16 +1406,20 @@ local function BuildWeekliesSection(trackingFrame)
             local visible = not (hideCompleted and rowDone)
             r.lblFS:SetShown(visible)
             r.valFS:SetShown(visible)
-            if visible then visibleCount = visibleCount + 1 end
+            if visible then
+                if r.colIdx == 1 then leftVis = leftVis + 1
+                else                  rightVis = rightVis + 1 end
+            end
         end
 
-        -- Resize section to fit visible rows.
-        local newH = WSEC_PAD_TOP + WSEC_HEADER_H + visibleCount * WSEC_ROW_H + WSEC_PAD_BOT
+        -- Height based on tallest column.
+        local rowsH = max(leftVis, rightVis) * WSEC_ROW_H
+        local newH  = WSEC_PAD_TOP + WSEC_HEADER_H + rowsH + WSEC_PAD_BOT
+        leftCol:SetHeight(max(1, rowsH))
+        rightCol:SetHeight(max(1, rowsH))
         local curSecH = tonumber(sec:GetHeight()) or 0
         if math.abs(curSecH - newH) > 1 then
             sec:SetHeight(newH)
-            -- Re-size the tracking frame only after the first full data render
-            -- (guard: tracking frame height > minH means content has loaded).
             local tf  = Addon._trackingFrame
             local tfH = tf and (tonumber(tf:GetHeight()) or 0) or 0
             if tf and tfH > 90 then
@@ -1402,12 +1429,24 @@ local function BuildWeekliesSection(trackingFrame)
     end
 
     sec.Refresh = Refresh
-    Addon._inlineWeeklies = sec
-    trackingFrame._lariasWeekliesSection = sec
 
-    -- Set initial height using full row count (quest status loads later).
-    sec:SetHeight(WSEC_PAD_TOP + WSEC_HEADER_H + #rows * WSEC_ROW_H + WSEC_PAD_BOT)
+    -- Initial height: all rows shown, 3 rows tall (2-column layout).
+    sec:SetHeight(WSEC_PAD_TOP + WSEC_HEADER_H + WSEC_ROWS_PER_COL * WSEC_ROW_H + WSEC_PAD_BOT)
     return sec
+end
+
+function Addon:ApplyInlineWeekliesVisibility()
+    local ws = self._inlineWeeklies
+    if not ws then return end
+    local show = self:EnsurePrefs().showInlineWeeklies ~= false
+    if show then
+        ws:Show()
+        if ws.Refresh then ws:Refresh() end
+    else
+        ws:Hide()
+        ws:SetHeight(0)
+    end
+    ResizeTrackingPanelToContent(self)
 end
 
 function Addon:CreateTrackingPanel(parentFrame)

@@ -87,6 +87,8 @@ function Addon:SyncGearPopup()
          L.OPTIONS_HIDE_GREAT_VAULT  or "Hide Great Vault")
     Sync(p._cbHideCurrency,     not db.showCurrency,
          L.OPTIONS_HIDE_CURRENCY     or "Hide Currency")
+    Sync(p._cbHideWeeklies,     db.showInlineWeeklies == false,
+         L.OPTIONS_HIDE_WEEKLIES     or "Hide Weeklies")
     Sync(p._cbHideChangeWeek,   db.showChangeWeekBtn == false,
          L.OPTIONS_HIDE_CHANGE_WEEK_BTN or "Hide Week Selector")
     Sync(p._cbHideIlvlRef,      db.showIlvlRefBtn == false,
@@ -162,16 +164,16 @@ function Addon:SyncGearPopup()
     do
         local PAD      = 10
         local TILE_H   = 34   -- tile height
-        local N_TOTAL  = 9
+        local N_TOTAL  = 10
         local rstStartY  = PAD
         local div1StartY = rstStartY + 22 + 6
         local cbsY       = div1StartY + 1 + 8
-        -- Slots 1-5 always present; slot 6 = char picker (conditional);
-        -- slot 7 = sliders (combined); slot 8 = update notice; slot 9 = minimap btn.
-        -- When char picker is hidden, slots 7-9 each shift up by one.
-        local SLIDERS_IDX        = 7
-        local UPDATE_NOTICE_IDX  = 8
-        local MINIMAP_BTN_IDX    = 9
+        -- Slots 1-6 always present; slot 7 = char picker (conditional);
+        -- slot 8 = sliders (combined); slot 9 = update notice; slot 10 = minimap btn.
+        -- When char picker is hidden, slots 8-10 each shift up by one.
+        local SLIDERS_IDX        = 8
+        local UPDATE_NOTICE_IDX  = 9
+        local MINIMAP_BTN_IDX    = 10
         local slidersVisIdx      = showCharRow and SLIDERS_IDX       or (SLIDERS_IDX       - 1)
         local updateNoticeVisIdx = showCharRow and UPDATE_NOTICE_IDX  or (UPDATE_NOTICE_IDX  - 1)
         local minimapBtnVisIdx   = showCharRow and MINIMAP_BTN_IDX    or (MINIMAP_BTN_IDX    - 1)
@@ -314,6 +316,7 @@ function Addon:ToggleGearPopup(anchor, growRight)
             { key = "_cbHideCompleted",   },
             { key = "_cbHideGreatVault",  },
             { key = "_cbHideCurrency",    },
+            { key = "_cbHideWeeklies",    },
             { key = "_cbHideChangeWeek",  },
             { key = "_cbHideIlvlRef",     },
             { key = "_cbHideCharPicker",  },
@@ -339,6 +342,13 @@ function Addon:ToggleGearPopup(anchor, growRight)
                 local db = Addon:EnsurePrefs()
                 db.showCurrency = not checked
                 if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
+            end,
+            _cbHideWeeklies = function(checked)
+                local db = Addon:EnsurePrefs()
+                db.showInlineWeeklies = not checked
+                if Addon.ApplyInlineWeekliesVisibility then
+                    Addon:ApplyInlineWeekliesVisibility()
+                end
             end,
             _cbHideChangeWeek = function(checked)
                 local db = Addon:EnsurePrefs()

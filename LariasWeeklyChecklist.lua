@@ -315,6 +315,7 @@ local function SetupAddonDB()
             hideCompletedSections = true,
             showGreatVault        = true,
             showCurrency          = true,
+            showInlineWeeklies    = true,
             showChangeWeekBtn     = true,
             showIlvlRefBtn        = true,
             showCharPickerBtn     = true,
@@ -378,7 +379,8 @@ local function MigrateProfileDataToGlobalChars()
     end
     -- Preferences
     for _, k in ipairs({ "hideCompletedSections", "showGreatVault", "showCurrency",
-                         "showChangeWeekBtn", "showIlvlRefBtn", "showCharPickerBtn", "debug" }) do
+                         "showChangeWeekBtn", "showIlvlRefBtn", "showCharPickerBtn", "debug",
+                         "showInlineWeeklies" }) do
         if oldProf[k] ~= nil then cdb[k] = oldProf[k] end
     end
 
@@ -395,6 +397,7 @@ local function MigrateProfileDataToGlobalChars()
     oldProf.showIlvlRefBtn    = nil
     oldProf.showCharPickerBtn = nil
     oldProf.debug             = nil
+    oldProf.showInlineWeeklies = nil
 
 end
 
@@ -610,6 +613,7 @@ local _PREF_KEYS = {
     "hideCompletedSections", "showGreatVault", "showCurrency",
     "showChangeWeekBtn", "showIlvlRefBtn", "showCharPickerBtn",
     "showScaleSlider", "showOpacitySlider", "hideUpdateNotice",
+    "showInlineWeeklies",
 }
 function Addon:EnsurePrefs()
     if not self.db then SetupAddonDB() end
