@@ -75,50 +75,58 @@ local tracking = {
         "Professions-Icon-Quality-Tier5",
     },
     -- ────────────────────────────────────────────────────────────────────────
-    -- Rare NPC IDs, grouped by zone.
-    -- Each entry is { id=<npcID>, name=<displayName> }.
-    -- These have a weekly per-character lockout; killing grants zone Renown.
-    -- Source: https://www.wowhead.com/guide/midnight/eversong-woods-rares-treasures-locations-tips-rewards
+    -- Rare NPC IDs, grouped by zone (plain arrays of creature IDs).
+    -- Names are resolved at runtime via the WoW creature cache / tooltip API.
+    -- Weekly per-character lockout; killing grants zone Renown.
+    -- Sources:
+    --   eversongWoods : wowhead.com/guide/midnight/eversong-woods-rares-treasures-locations-tips-rewards
+    --   zulaman       : wowhead.com/guide/midnight/zulaman-rares-treasures-locations-tips-rewards
+    --   harandar      : wowhead.com/guide/midnight/harandar-rares-treasures-locations-tips-rewards
+    --   voidstorm     : wowhead.com/guide/midnight/voidstorm-rares-treasures-locations-tips-rewards
     rares = {
         eversongWoods = {
-            { id = 246332, name = "Warden of Weeds"        },
-            { id = 240129, name = "Overfester Hydra"        },
-            { id = 250719, name = "Cre'van"                 },
-            { id = 250754, name = "Lady Liminus"            },
-            { id = 250841, name = "Bad Zed"                 },
-            { id = 250826, name = "Banuran"                 },
-            { id = 255302, name = "Duskburn"                },
-            { id = 255348, name = "Dame Bloodshed"          },
-            { id = 246633, name = "Harried Hawkstrider"     },
-            { id = 250582, name = "Bloated Snapdragon"      },
-            { id = 250683, name = "Coralfang"               },
-            { id = 250876, name = "Terrinor"                },
-            { id = 250780, name = "Waverly"                 },
-            { id = 250788, name = "Lovely Sunflower"        },
-            { id = 250806, name = "Lost Guardian"           },
-            { id = 255329, name = "Malfunctioning Construct"},
+            246332, 240129, 250719, 250754, 250841, 250826,
+            255302, 255348, 246633, 250582, 250683, 250876,
+            250780, 250788, 250806, 255329,
         },
-        -- TODO: add harandar = { ... }, voidstorm = { ... }, etc. as guides release
+        zulaman = {
+            242023, 242025, 245975, 242031, 242033, 242035,
+            242027, 242024, 242028, 247976, 242032, 242034,
+            242026, 245692, 245691, 246122,
+        },
+        harandar = {
+            248741, 249849, 249962, 250226, 250246, 250321,
+            249844, 249902, 249997, 250180, 250231, 250347,
+            250086, 250358, 250317,
+        },
+        voidstorm = {
+            244272, 241443, 256923, 256925, 256770, 245044,
+            238498, 256922, 256924, 256926, 245182, 257027,
+            256808, 256821,
+        },
     },
 
     -- ────────────────────────────────────────────────────────────────────────
-    -- Treasure object IDs, grouped by zone.
-    -- Each entry is { id=<objectID>, name=<displayName> }.
-    -- One-time loots per character; grant Renown and zone-specific items.
-    -- Source: https://www.wowhead.com/guide/midnight/eversong-woods-rares-treasures-locations-tips-rewards
+    -- Treasure object IDs, grouped by zone (plain arrays of object IDs).
+    -- Names are resolved at runtime via the WoW object cache / tooltip API.
+    -- One-time loot per character; grants Renown and zone-specific items.
     treasures = {
         eversongWoods = {
-            { id = 617881, name = "Rookery Cache"                 },
-            { id = 613697, name = "Gift of the Phoenix"           },
-            { id = 617534, name = "Gilded Armillary Sphere"       },
-            { id = 613267, name = "Farstrider's Lost Quiver"      },
-            { id = 555351, name = "Burbling Paint Pot"            },
-            { id = 613252, name = "Triple-Locked Safebox"         },
-            { id = 617432, name = "Forgotten Ink and Quill"       },
-            { id = 613242, name = "Antique Nobleman's Signet Ring"},
-            { id = 587307, name = "Stone Vat"                     },
+            617881, 613697, 617534, 613267, 555351,
+            613252, 617432, 613242, 587307,
         },
-        -- TODO: add harandar = { ... }, voidstorm = { ... }, etc. as guides release
+        zulaman = {
+            539047, 617659, 539050, 539052,
+            613727, 539049, 539051, 539053,
+        },
+        harandar = {
+            572958, 573050, 573307, 572998, 614483, 616052,
+            573095, 590789, 589202, 588929, 615908, 615907,
+        },
+        voidstorm = {
+            605169, 612891, 613368, 613351, 613317, 572819,
+            572893, 555250, 612270, 613358, 613852,
+        },
     },
 
     -- ── Feature flags ──────────────────────────────────────────────────────
