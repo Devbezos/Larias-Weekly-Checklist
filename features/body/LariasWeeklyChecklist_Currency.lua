@@ -32,7 +32,7 @@ local function QuestDoneAny(entry)
                 if ok and done then return true end
             end
         end
-        return hasValid and false or nil
+        if hasValid then return false else return nil end
     else
         local q = tonumber(entry) or 0
         if q == 0 then return nil end
@@ -1328,6 +1328,12 @@ local function BuildWeekliesSection(trackingFrame)
 
     Addon._inlineWeeklies              = sec
     trackingFrame._lariasWeekliesSection = sec
+
+    -- Solid background so main-panel content (icons, text) never bleeds through
+    -- the transparent sec frame before the first resize fires.
+    local bg = sec:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints(sec)
+    bg:SetColorTexture(THEME.bg.r, THEME.bg.g, THEME.bg.b, THEME.bg.a)
 
     -- Hide immediately when pref is off; return stub so resize skips it.
     if prefs.showInlineWeeklies == false then
