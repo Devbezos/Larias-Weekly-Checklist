@@ -105,26 +105,26 @@ end
 
 -- ── Close button ──────────────────────────────────────────────────────────────
 -- Creates and returns a branded 20×20 close button as a child of `parent`.
--- Design: fixed dark backdrop, gold "✕" glyph at rest, white glyph + red bg
--- tint on hover, deeper red on push, "Close" tooltip.
+-- Design: fixed dark backdrop, dim-white "✕" glyph at rest, white glyph + red
+-- bg tint on hover, deeper red on push, "Close" tooltip.
+-- Colors are intentionally fixed (not driven by theme) so the glyph never
+-- changes color when the user adjusts header/text theme colors.
 -- onClick defaults to hiding parent.  Caller is responsible for positioning.
 function C.NewCloseButton(parent, onClick)
     local btn = CreateFrame("Button", nil, parent)
     btn:SetSize(20, 20)
     ApplyFixedBackdrop(btn)
 
-    local T  = Addon.THEME or {}
-    local th = T.header or { r = 1.00, g = 0.82, b = 0.00 }  -- gold accent
+    local REST_R, REST_G, REST_B, REST_A = 0.75, 0.75, 0.75, 0.65  -- dim white
 
     local norm = btn:CreateFontString(nil, "OVERLAY")
     norm:SetFont("Fonts\\FRIZQT__.TTF", 16, "OUTLINE")
     norm:SetAllPoints(btn)
     norm:SetJustifyH("CENTER")
     norm:SetJustifyV("MIDDLE")
-    norm:SetTextColor(th.r, th.g, th.b, 1)
+    norm:SetTextColor(REST_R, REST_G, REST_B, REST_A)
     norm:SetText("\195\151")  -- × (U+00D7)
     btn:SetFontString(norm)
-    btn._lariasCloseGlyph = norm  -- stored so ApplyThemeColors can refresh the tint
 
     local hl = btn:CreateTexture(nil, "HIGHLIGHT")
     hl:SetAllPoints(btn)
@@ -144,7 +144,7 @@ function C.NewCloseButton(parent, onClick)
         GameTooltip:Show()
     end)
     btn:SetScript("OnLeave", function()
-        norm:SetTextColor(th.r, th.g, th.b, 1)
+        norm:SetTextColor(REST_R, REST_G, REST_B, REST_A)
         GameTooltip:Hide()
     end)
 

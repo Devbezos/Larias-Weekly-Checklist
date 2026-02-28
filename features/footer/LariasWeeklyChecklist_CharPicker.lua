@@ -344,12 +344,6 @@ function Addon:InitCharPickerUI(frame, styleFunc)
     -- ── OnClick for the header button ─────────────────────────────────────────
     local function OnPickerBtnClick()
         local p = EnsurePanel()
-        if p and p._lariasJustClosedAt then
-            if (GetTime and GetTime() or 0) - p._lariasJustClosedAt < 0.5 then
-                return
-            end
-            p._lariasJustClosedAt = nil
-        end
         if p and p.IsShown and p:IsShown() then
             p:Hide()
             return

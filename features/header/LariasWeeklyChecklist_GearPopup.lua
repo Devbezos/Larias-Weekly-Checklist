@@ -240,17 +240,6 @@ end
 
 function Addon:ToggleGearPopup(anchor, growRight)
     local p = self._gearPopup
-    -- Guard: the outside-click catcher fires OnMouseDown (closes the popup) and
-    -- propagates the same input event to the gear button, whose OnClick fires
-    -- on mouse-UP — which can be 100–400 ms later on a normal click.  Ignore
-    -- re-open requests within 500 ms of the last close so re-clicking the gear
-    -- button correctly toggles the popup closed rather than re-opening it.
-    if p and p._lariasJustClosedAt then
-        if (GetTime and GetTime() or 0) - p._lariasJustClosedAt < 0.5 then
-            return
-        end
-        p._lariasJustClosedAt = nil
-    end
     if p and p.IsShown and p:IsShown() then
         p:Hide()
         return

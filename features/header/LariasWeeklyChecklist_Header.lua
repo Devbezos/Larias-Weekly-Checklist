@@ -419,16 +419,6 @@ function Addon:CreateHeader(frame)
             btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
             btn:SetScript("OnClick", function()
                 local p = EnsureHeaderPicker()
-                -- Guard: catcher closes the popup on MouseDown; the button's
-                -- OnClick arrives on MouseUp (up to ~500 ms later).  Without
-                -- this guard re-clicking the button would reopen the picker.
-                if p and p._lariasJustClosedAt then
-                    if (GetTime and GetTime() or 0) - p._lariasJustClosedAt < 0.5 then
-                        p._lariasJustClosedAt = nil
-                        return
-                    end
-                    p._lariasJustClosedAt = nil
-                end
                 if p and p.IsShown and p:IsShown() then
                     p:Hide()
                     return
