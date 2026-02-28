@@ -186,6 +186,33 @@ local function NpcIDFromGUID(guid)
     return (id and id > 0) and id or nil
 end
 
+-- ── Module-level event frames ───────────────────────────────────────────────
+-- Registered once at file-load time so RegisterEvent is never called inside a
+-- protected (slash-command) call stack.  BuildSidePanel wires the dispatch
+-- pointers; RebuildSidePanel nils them before destroying the old panel.
+local _onRareDied    = nil   -- function() called after a tracked rare dies
+local _onQuestUpdate = nil   -- function() called on quest log events
+
+local _clfFrame = CreateFrame("Frame")
+_clfFrame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+_clfFrame:SetScript("OnEvent", function()
+    if not _onRareDied then return end
+    local _, subevent, _, _, _, _, _, destGUID = CombatLogGetCurrentEventInfo()
+    if subevent ~= "UNIT_DIED" then return end
+    local npcID = NpcIDFromGUID(destGUID)
+    if npcID and GetRareSet()[npcID] then
+        MarkRareKilled(npcID)
+        _onRareDied()
+    end
+end)
+
+local _questFrame = CreateFrame("Frame")
+_questFrame:RegisterEvent("QUEST_TURNED_IN")
+_questFrame:RegisterEvent("QUEST_LOG_UPDATE")
+_questFrame:SetScript("OnEvent", function()
+    if _onQuestUpdate then _onQuestUpdate() end
+end)
+
 -- ── Section gap ──────────────────────────────────────────────────────────────
 local SEC_GAP = 6   -- vertical gap between sections
 
@@ -566,28 +593,14 @@ local function BuildSidePanel(mainFrame)
 
     panel.RefreshAll = RefreshAll
 
-    -- ── Events ────────────────────────────────────────────────────────────────
+    -- ── Wire module-level event dispatch to this panel's refresh functions ────
     if showRares then
-        local clf = CreateFrame("Frame", nil, panel)
-        clf:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
-        clf:SetScript("OnEvent", function()
-            local _, subevent, _, _, _, _, _, destGUID = CombatLogGetCurrentEventInfo()
-            if subevent ~= "UNIT_DIED" then return end
-            local npcID = NpcIDFromGUID(destGUID)
-            if npcID and GetRareSet()[npcID] then
-                MarkRareKilled(npcID)
-                RefreshRareRows()
-            end
-        end)
+        _onRareDied = RefreshRareRows
     end
-
     if showWeeklies then
-        local qf = CreateFrame("Frame", nil, panel)
-        qf:RegisterEvent("QUEST_TURNED_IN")
-        qf:RegisterEvent("QUEST_LOG_UPDATE")
-        qf:SetScript("OnEvent", function()
+        _onQuestUpdate = function()
             if panel:IsShown() then RefreshWeeklyRows() end
-        end)
+        end
     end
 
     panel:SetScript("OnShow", function()
@@ -625,7 +638,9 @@ function Addon:RebuildSidePanel()
         self._sidePanel:SetParent(nil)
         self._sidePanel = nil
     end
-    _rareSet = nil  -- force rebuild of the NPC ID set
+    _rareSet       = nil   -- force rebuild of the NPC ID set
+    _onRareDied    = nil   -- detach event dispatch before recreating
+    _onQuestUpdate = nil
     if mainFrame then
         self:CreateSidePanel(mainFrame)
         if self._sidePanel and mainFrame:IsShown() then
