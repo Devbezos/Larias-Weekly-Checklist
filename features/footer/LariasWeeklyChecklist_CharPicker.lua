@@ -107,80 +107,37 @@ function Addon:InitCharPickerUI(frame, styleFunc)
         if styleFunc then styleFunc(btn) end
         charPickerBtn              = btn
         frame._lariasCharPickerBtn = btn
+        btn:SetScript("OnEnter", function(self_)
+            local L = Addon.L or {}
+            GameTooltip:SetOwner(self_, "ANCHOR_BOTTOMLEFT")
+            GameTooltip:SetText(L.CHAR_PICKER_BUTTON or "Swap Profile", 1, 1, 1)
+            GameTooltip:AddLine(L.CHAR_PICKER_TOOLTIP_REMOVE or "To remove a character, use the Options menu.", 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
         return btn
     end
 
     local function UpdateLabel()
         local btn = charPickerBtn
         if not btn then return end
-        local ownKey     = Addon:GetCurrentProfileKey()
-        local displayKey = Addon._viewingChar or ownKey
-        -- For the logged-in character use the actual player name so the button never
-        -- shows "Default" when AceDB is using a shared profile key by that name.
-        local charName
-        if not Addon._viewingChar then
-            charName = (UnitName and UnitName("player")) or ""
-            if charName == "" then
-                charName = (displayKey:match("^(.-)%s*%-") or displayKey):gsub("^%s+",""):gsub("%s+$","")
-            end
-        else
-            charName = (displayKey:match("^(.-)%s*%-") or displayKey):gsub("^%s+",""):gsub("%s+$","")
-        end
-        if charName == "" then charName = "Me" end
-        btn:SetText(charName .. " |TInterface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up:10:10|t")
-        local gdb        = Addon.db and Addon.db.global
-        local classToken = gdb and gdb.charClasses and gdb.charClasses[displayKey]
-        local tr         = btn.Text or (btn.GetFontString and btn:GetFontString())
-        if tr then
-            local cc = classToken and RAID_CLASS_COLORS and RAID_CLASS_COLORS[classToken]
-            if cc then
-                tr:SetTextColor(cc.r, cc.g, cc.b, 1)
-            else
-                tr:SetTextColor(Addon.THEME.text.r, Addon.THEME.text.g, Addon.THEME.text.b, 1)
-            end
+        local L   = Addon.L or {}
+        local lbl = L.CHAR_PICKER_BUTTON or "Swap Profile"
+        btn:SetText(lbl .. " |TInterface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up:10:10|t")
+        local tr = btn.Text or (btn.GetFontString and btn:GetFontString())
+        if tr and Addon.THEME and Addon.THEME.text then
+            local t = Addon.THEME.text
+            tr:SetTextColor(t.r, t.g, t.b, 1)
         end
     end
 
     -- ── Panel ─────────────────────────────────────────────────────────────────
     local function EnsurePanel()
         if charPickerPanel then return charPickerPanel end
-        local p
-        if BackdropTemplateMixin then
-            p = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
-        else
-            p = CreateFrame("Frame", nil, UIParent)
-            if BackdropTemplateMixin and Mixin and not p.SetBackdrop then
-                Mixin(p, BackdropTemplateMixin)
-            end
-        end
-        p:SetFrameStrata("HIGH")
-        p:SetClampedToScreen(true)
+        local p = Addon.Controls.NewPopupPanel("HIGH", 0.15)
         p:SetSize(160, 40)
-        p:Hide()
-        if p.SetToplevel   then p:SetToplevel(true)  end
-        if p.SetFrameLevel then p:SetFrameLevel(200) end
-        Addon:ApplyTheme(p)
-        if p.SetBackdropColor then
-            p:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, 1.0)
-        end
-        p._buttons     = {}
-        p._buttonPool  = {}
-        p._xButtons    = {}
-        p._xButtonPool = {}
-        -- Invisible full-screen button: catches outside clicks and closes the panel.
-        local catcher = CreateFrame("Button", nil, UIParent)
-        catcher:SetAllPoints(UIParent)
-        catcher:SetFrameStrata("HIGH")
-        catcher:SetFrameLevel(199)
-        catcher:EnableMouse(true)
-        catcher:Hide()
-        catcher:SetScript("OnMouseDown", function() p:Hide() end)
-        p:SetScript("OnShow", function()
-            catcher:Show()
-            if UIFrameFadeIn then UIFrameFadeIn(p, 0.15, 0, 1)
-            else p:SetAlpha(1) end
-        end)
-        p:SetScript("OnHide", function() catcher:Hide() end)
+        p._buttons    = {}
+        p._buttonPool = {}
         charPickerPanel = p
         return p
     end
@@ -200,20 +157,6 @@ function Addon:InitCharPickerUI(frame, styleFunc)
             end
         end
         p._buttons = {}
-        if p._xButtons then
-            for i = #p._xButtons, 1, -1 do
-                local xBtn = p._xButtons[i]
-                p._xButtons[i] = nil
-                if xBtn then
-                    xBtn:Hide()
-                    xBtn:ClearAllPoints()
-                    xBtn:SetScript("OnClick", nil)
-                    p._xButtonPool = p._xButtonPool or {}
-                    tinsert(p._xButtonPool, xBtn)
-                end
-            end
-            p._xButtons = {}
-        end
     end
 
     local function AcquireBtn(p)
@@ -223,20 +166,7 @@ function Addon:InitCharPickerUI(frame, styleFunc)
             btn:SetFrameStrata("HIGH")
             if styleFunc then styleFunc(btn) end
             -- StyleMainTabButton resets backdrop colors; re-apply theme after it runs.
-            if btn.SetBackdrop then
-                btn:SetBackdrop({
-                    bgFile   = "Interface\\Buttons\\WHITE8x8",
-                    edgeFile = "Interface\\Buttons\\WHITE8x8",
-                    tile = false, edgeSize = 1,
-                    insets = { left = 1, right = 1, top = 1, bottom = 1 },
-                })
-                if btn.SetBackdropColor then
-                    btn:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, Addon.THEME.bg.a)
-                end
-                if btn.SetBackdropBorderColor then
-                    btn:SetBackdropBorderColor(Addon.THEME.border.r, Addon.THEME.border.g, Addon.THEME.border.b, Addon.THEME.border.a)
-                end
-            end
+            Addon:ApplyTheme(btn)
             local tr = btn.Text or (btn.GetFontString and btn:GetFontString())
             if tr then
                 if tr.SetJustifyH then tr:SetJustifyH("LEFT") end
@@ -249,24 +179,6 @@ function Addon:InitCharPickerUI(frame, styleFunc)
                 end
             end
         end
-        btn:Show()
-        return btn
-    end
-
-    local function AcquireXBtn(p)
-        local btn = p._xButtonPool and tremove(p._xButtonPool)
-        if not btn then
-            btn = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
-            btn:SetFrameStrata("HIGH")
-            if styleFunc then styleFunc(btn) end
-            local tr = btn.Text or (btn.GetFontString and btn:GetFontString())
-            if tr then
-                if tr.SetJustifyH then tr:SetJustifyH("CENTER") end
-            end
-        end
-        btn:SetSize(20, CPICK_ROW_H)
-        if btn.SetTextInsets then btn:SetTextInsets(0, 0, 0, 0) end
-        btn:SetText("|TInterface\\RaidFrame\\ReadyCheck-NotReady:12:12|t")
         btn:Show()
         return btn
     end
@@ -394,35 +306,6 @@ function Addon:InitCharPickerUI(frame, styleFunc)
                     end)
                 end
                 tinsert(p._buttons, btn)
-
-                -- X button: sits outside the panel, anchored to its right edge.
-                if not isViewing then
-                    local xBtn = AcquireXBtn(p)
-                    xBtn:ClearAllPoints()
-                    xBtn:SetPoint("TOPLEFT", p, "TOPRIGHT", 2, posY)
-                    xBtn:SetSize(20, CPICK_ROW_H)
-                    local _pkHide = profileKey
-                    xBtn:SetScript("OnClick", function()
-                        local gdbH = Addon.db and Addon.db.global
-                        if gdbH then
-                            gdbH.hiddenChars = gdbH.hiddenChars or {}
-                            gdbH.hiddenChars[_pkHide] = true
-                        end
-                        -- If currently viewing the hidden char, return to own.
-                        if Addon._viewingChar == _pkHide then
-                            Addon:SetViewingChar(nil)  -- also calls LayoutHeaderButtons
-                        elseif Addon.LayoutHeaderButtons then
-                            -- Re-evaluate button visibility (may now be empty).
-                            Addon:LayoutHeaderButtons()
-                        end
-                        if Addon.RefreshHiddenCharsList then
-                            Addon:RefreshHiddenCharsList()
-                        end
-                        -- Refresh the dropdown in-place; don't close it.
-                        Populate()
-                    end)
-                    tinsert(p._xButtons, xBtn)
-                end
                 posY = posY - CPICK_ROW_H
                 end  -- classToken guard
             end
@@ -461,14 +344,19 @@ function Addon:InitCharPickerUI(frame, styleFunc)
     -- ── OnClick for the header button ─────────────────────────────────────────
     local function OnPickerBtnClick()
         local p = EnsurePanel()
+        if p and p._lariasJustClosedAt then
+            if (GetTime and GetTime() or 0) - p._lariasJustClosedAt < 0.05 then
+                return
+            end
+            p._lariasJustClosedAt = nil
+        end
         if p and p.IsShown and p:IsShown() then
             p:Hide()
             return
         end
         local btn = EnsureBtn()
         p:ClearAllPoints()
-        -- Button is at the bottom of the frame, so open the dropdown upward.
-        p:SetPoint("BOTTOMLEFT", btn, "TOPLEFT", 0, 6)
+        p:SetPoint("TOPLEFT", btn, "BOTTOMLEFT", 0, -4)
         p:Show()
         if C_Timer and C_Timer.After then
             C_Timer.After(0, Populate)
@@ -482,6 +370,11 @@ function Addon:InitCharPickerUI(frame, styleFunc)
     Addon._cpUpdateLabel   = UpdateLabel
     Addon._cpPopulate      = Populate
     Addon._cpOnClick       = OnPickerBtnClick
+    Addon._cpClose         = function()
+        if charPickerPanel and charPickerPanel.IsShown and charPickerPanel:IsShown() then
+            charPickerPanel:Hide()
+        end
+    end
     -- Also expose UpdateLabel under the old name used by SetViewingChar above.
     Addon.UpdateCharPickerBtnLabel = UpdateLabel
 end

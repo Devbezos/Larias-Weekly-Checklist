@@ -7,6 +7,13 @@ import re
 def main() -> int:
     parser = argparse.ArgumentParser(description="Bump ## Version: in a WoW addon .toc")
     parser.add_argument("--toc", default="LariasWeeklyChecklist.toc")
+    parser.add_argument(
+        "--dev",
+        action="store_true",
+        help="Append -dev suffix (e.g. 2.0.6-dev). "
+             "Recipients on the live release will ignore this broadcast "
+             "so guild/group members won't get a false update notice.",
+    )
     args = parser.parse_args()
 
     with open(args.toc, "r", encoding="utf-8") as f:
@@ -27,6 +34,9 @@ def main() -> int:
         new_version = f"{major}.{minor}.{patch + 1}"
     else:
         new_version = "0.0.1"
+
+    if args.dev:
+        new_version = f"{new_version}-dev"
 
     new_line = f"## Version: {new_version}"
     updated, n = re.subn(r"^##\s*Version:.*$", new_line, text, flags=re.MULTILINE)

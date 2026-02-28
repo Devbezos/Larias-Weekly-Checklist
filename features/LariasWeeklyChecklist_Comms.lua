@@ -144,6 +144,21 @@ local function GetAddonVersion(name)
     return ""
 end
 
+local LOCALE_REGISTRY_KEY_COMMS = "LARIASWEEKLYCHECKLIST_LOCALE_REGISTRY"
+
+local function GetMySheetVersion()
+    local reg = _G[LOCALE_REGISTRY_KEY_COMMS]
+    return (reg and type(reg.sheet_version) == "string" and reg.sheet_version) or ""
+end
+
+-- Extract the last integer found in a freeform sheet-version string.
+-- e.g. "Week 5 - Apr 14" → 5,  "Pre-Season Week 2" → 2
+local function SheetVersionToNum(s)
+    local n = 0
+    for m in tostring(s or ""):gmatch("%d+") do n = tonumber(m) or n end
+    return n
+end
+
 function Addon:GetMyVersion()
     -- Cached in CommsOnEnable.
     return self._myVersion or ""
@@ -151,6 +166,16 @@ end
 
 local function IsVersionNewer(versionA, versionB)
     return CompareVersions(versionA, versionB) > 0
+end
+
+function Addon:ShouldShowSheetUpdateNotice()
+    -- Returns true when a group/guild member has broadcast a newer sheet version.
+    local database = self:EnsureDB()
+    local myVer = self:GetMyVersion()
+    if myVer == "" or not IsLiveVersion(myVer) then return false end
+    local newestSV = tostring(database._newestSeenRemoteSheetVersion or "")
+    if newestSV == "" then return false end
+    return SheetVersionToNum(newestSV) > SheetVersionToNum(GetMySheetVersion())
 end
 
 function Addon:ShouldShowUpdateNotice()
@@ -162,63 +187,7 @@ function Addon:ShouldShowUpdateNotice()
     local newestSeenVersion = tostring(database._newestSeenRemoteVersion or "")
     if newestSeenVersion == "" or myVersion == "" then return false end
     if not IsVersionNewer(newestSeenVersion, myVersion) then return false end
-    if tostring(database._dismissedRemoteVersion or "") == newestSeenVersion then return false end
     return true
-end
-
-function Addon:DismissUpdateNotice()
-    -- Remember the newest seen version as dismissed (until a newer one is seen).
-    local database = self:EnsureDB()
-    database._dismissedRemoteVersion = tostring(database._newestSeenRemoteVersion or "")
-end
-
-function Addon:EnsureUpdatePopup()
-    -- Register the StaticPopup dialog once.
-    if self._updatePopupRegistered then return end
-    self._updatePopupRegistered = true
-
-    if not StaticPopupDialogs then return end
-
-    local L = self.L or {}
-
-    StaticPopupDialogs["LARIASWEEKLYCHECKLIST_UPDATE"] = {
-        text = "%s",
-        button1 = (OKAY or (L.BUTTON_OK or "")),
-        button2 = (CANCEL or (L.BUTTON_CANCEL or "")),
-        OnAccept = function()
-            Addon:DismissUpdateNotice()
-        end,
-        OnCancel = function()
-            -- Dismiss on cancel too — user has seen the notice.
-            Addon:DismissUpdateNotice()
-        end,
-        timeout = 0,
-        whileDead = true,
-        hideOnEscape = true,
-        preferredIndex = 3,
-    }
-end
-
-function Addon:ShowUpdatePopupIfNeeded()
-    -- Show at most once per window-open to avoid spam.
-    if not self:ShouldShowUpdateNotice() then return end
-    if self._updatePopupShownThisOpen then return end
-
-    self:EnsureUpdatePopup()
-    if not (StaticPopup_Show and StaticPopupDialogs) then return end
-
-    local L = self.L or {}
-
-    local displayName = (self.DISPLAY_NAME or (L and L.DISPLAY_NAME) or addonName)
-    local popupText
-    if type(L.UPDATE_AVAILABLE_FMT) == "string" and L.UPDATE_AVAILABLE_FMT ~= "" then
-        popupText = string.format(L.UPDATE_AVAILABLE_FMT, tostring(displayName))
-    else
-        popupText = (L.UPDATE_AVAILABLE_TEXT or "")
-    end
-
-    StaticPopup_Show("LARIASWEEKLYCHECKLIST_UPDATE", popupText)
-    self._updatePopupShownThisOpen = true
 end
 
 function Addon:BroadcastVersion(force)
@@ -232,7 +201,7 @@ function Addon:BroadcastVersion(force)
 
     local myVersion = self:GetMyVersion()
     if myVersion == "" then return end
-    local payloadStructured = SerializeCommMessage({ t = "V", v = myVersion })
+    local payloadStructured = SerializeCommMessage({ t = "V", v = myVersion, sv = GetMySheetVersion() })
     if not payloadStructured then return end
 
     local channel = GetGroupChannel()
@@ -336,6 +305,21 @@ function Addon:OnAddonMessage(prefix, message, sender)
         if newestSeenVersion == "" or IsVersionNewer(remoteVersion, newestSeenVersion) then
             database._newestSeenRemoteVersion = remoteVersion
             database._newestSeenRemoteSender = tostring(sender or "")
+            -- Immediately refresh the status banner so the update notice appears.
+            if Addon.UpdateStatusBanner then Addon:UpdateStatusBanner() end
+        end
+    end
+
+    -- Track remote sheet version for spreadsheet-update notices.
+    local remoteSV = (type(decoded.sv) == "string" and decoded.sv ~= "") and decoded.sv or nil
+    if remoteSV then
+        local database = self:EnsureDB()
+        if SheetVersionToNum(remoteSV) > SheetVersionToNum(GetMySheetVersion()) then
+            local storedSV = tostring(database._newestSeenRemoteSheetVersion or "")
+            if storedSV == "" or SheetVersionToNum(remoteSV) > SheetVersionToNum(storedSV) then
+                database._newestSeenRemoteSheetVersion = remoteSV
+                if Addon.UpdateStatusBanner then Addon:UpdateStatusBanner() end
+            end
         end
     end
 end
@@ -360,7 +344,6 @@ function Addon:CommsOnEnable()
         if stored ~= "" and not IsVersionNewer(stored, myVer) then
             database._newestSeenRemoteVersion = ""
             database._newestSeenRemoteSender  = ""
-            database._dismissedRemoteVersion  = ""
         end
     end
 

@@ -23,7 +23,7 @@ local TrackingUI = { left = {}, right = {} }
 
 local tonumber, tostring, type = tonumber, tostring, type
 local floor, max, abs = math.floor, math.max, math.abs
-local tinsert, tremove, tconcat, tsort = table.insert, table.remove, table.concat, table.sort
+local tinsert, tremove, tconcat = table.insert, table.remove, table.concat
 -- Forward declaration: defined later (after all data-gathering helpers).
 local ComputeSnapshotData
 
@@ -41,7 +41,6 @@ local GV_BLOCK_STEP  = GV_GRID_H + 6                      -- 32px between sectio
 local GV_BLOCK_Y     = { 0, -GV_BLOCK_STEP, -GV_BLOCK_STEP * 2 } -- {0, -32, -64}
 local GV_CELL_W      = 40   -- wider single cell (no threshold row sharing width)
 local GV_GRID_W      = GV_CELL_W * 3                                -- total grid width = 120px
-local GV_CELL_ASPECT = GV_CELL_W / GV_ROW_H  -- preserved when cells scale (≈1.667)
 local GV_THRESHOLDS  = { {2,4,6}, {1,4,8}, {2,4,8} }            -- raid, dungeons, world
 local GV_SECTION_KEYS   = { "TRACKING_GV_RAID", "TRACKING_GV_DUNGEONS", "TRACKING_GV_WORLD" }
 local GV_SECTION_LABELS = { "Raid", "Dungeons", "World" }
@@ -215,7 +214,9 @@ local COLORS = {
 
 local function ColorWrap(hex, txt)
     -- Wrap a string in WoW color codes.
-    return ("|c%s%s|r"):format(hex, tostring(txt or ""))
+    -- Direct concatenation is measurably faster than (':format()') for a fixed
+    -- 3-piece template because it skips format-string parsing/dispatch.
+    return "|c" .. hex .. tostring(txt or "") .. "|r"
 end
 
 local function SetTextIfChanged(fontString, text)
@@ -230,8 +231,10 @@ end
 
 local function IsNonEmptyText(text)
     -- Treat color-coded strings with only whitespace as empty.
+    -- |[cr][%x]* matches both |cAARRGGBB (opening) and |r (closing) in one
+    -- pass, halving the string allocations vs two separate gsub calls.
     if type(text) ~= "string" then return false end
-    text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    text = text:gsub("|[cr][%x]*", "")
     return text:match("%S") ~= nil
 end
 
@@ -366,30 +369,11 @@ local function GetCurrencyQualityColor(currencyID)
 end
 
 local function GetCrestLabelText(currencyID)
-    -- Locale-driven crest name with stable fallbacks when untranslated/unknown.
-    local idNum = tonumber(currencyID)
-    local nameMap = L.TRACKING_CREST_NAMES_BY_ID
-    if type(nameMap) == "table" then
-        local name = nameMap[idNum or currencyID]
-        if type(name) == "string" and name ~= "" then
-            if name:sub(-1) == ":" then return name end
-            return name .. ":"
-        end
+    local gameName = GetCurrencyName(currencyID)
+    if type(gameName) == "string" and gameName ~= "" then
+        return gameName
     end
-
-    local fmt = L.TRACKING_CREST_ID_LABEL_FMT
-    if type(fmt) == "string" and fmt ~= "" then
-        local out = fmt:format(tostring(currencyID))
-        if out:sub(-1) == ":" then return out end
-        return out .. ":"
-    end
-
-    local base = L.TRACKING_CREST_LABEL
-    if type(base) ~= "string" or base == "" then base = "Crest:" end
-    if base:sub(-1) == ":" then
-        return base .. " " .. tostring(currencyID) .. ":"
-    end
-    return base .. ": " .. tostring(currencyID) .. ":"
+    return "Crest " .. tostring(currencyID)
 end
 
 local function BottomFor(obj)
@@ -477,8 +461,6 @@ local function IsActivityComplete(activity)
     -- Compatibility shim: activities have used multiple field shapes over time.
     if not activity then return false end
     if type(activity.isComplete) == "boolean" then return activity.isComplete end
-    if type(activity.isCompleted) == "boolean" then return activity.isCompleted end
-    if type(activity.completed) == "boolean" then return activity.completed end
     local progress = activity.progress
     local threshold = activity.threshold
 
@@ -559,17 +541,7 @@ local function GetGreatVaultBlockLines()
     local out = cache.out
     out[1], out[2], out[3], out[4], out[5], out[6], out[7], out[8], out[9] = "", "", "", "", "", "", "", "", ""
 
-    if not C_WeeklyRewards or not C_WeeklyRewards.GetActivities then
-        out[1] = MakeGVHeader(L.TRACKING_GV_RAID or "Raid")
-        out[2] = ColorWrap(COLORS.red, L.TRACKING_NA or "")
-        out[4] = MakeGVHeader(L.TRACKING_GV_DUNGEONS or "Dungeons")
-        out[5] = ColorWrap(COLORS.red, L.TRACKING_NA or "")
-        out[7] = MakeGVHeader(L.TRACKING_GV_WORLD or "World")
-        out[8] = ColorWrap(COLORS.red, L.TRACKING_NA or "")
-        return out
-    end
-
-    local activities = C_WeeklyRewards.GetActivities()
+    local activities = C_WeeklyRewards and C_WeeklyRewards.GetActivities and C_WeeklyRewards.GetActivities()
     if type(activities) ~= "table" then
         out[1] = MakeGVHeader(L.TRACKING_GV_RAID or "Raid")
         out[2] = ColorWrap(COLORS.red, L.TRACKING_NA or "")
@@ -596,7 +568,7 @@ local function GetGreatVaultBlockLines()
     for idx = 1, #activities do
         local activity = activities[idx]
         local activityType = activity and activity.type
-        
+
         if activityType == TYPE_RAID then
             raidTotal = raidTotal + 1
             local level = 0
@@ -609,10 +581,10 @@ local function GetGreatVaultBlockLines()
                 if level > raidMaxIlvl then raidMaxIlvl = level end
             end
             cache.rIlvls[#cache.rIlvls + 1] = level
-            
+
             local exLevel = GetExampleRewardIlvlForActivity(activity)
             if exLevel > raidExampleMax then raidExampleMax = exLevel end
-            
+
         elseif activityType == TYPE_MPLUS then
             mythicTotal = mythicTotal + 1
             local level = 0
@@ -625,7 +597,7 @@ local function GetGreatVaultBlockLines()
                 if level > mythicMaxIlvl then mythicMaxIlvl = level end
             end
             cache.mIlvls[#cache.mIlvls + 1] = level
-            
+
             local exLevel = GetExampleRewardIlvlForActivity(activity)
             if exLevel > dungeonExampleMax then dungeonExampleMax = exLevel end
 
@@ -937,7 +909,7 @@ local function GetCrestLines()
     for i = 1, crestCount do
         local id = ids[i]
         if id then
-            local name = GetCurrencyName(id) or GetCrestLabelText(id) or tostring(id)
+            local name = GetCrestLabelText(id) or GetCurrencyName(id) or tostring(id)
             if name then
                 local cur = crest.cur[i]
                 local cap = crest.cap[i]
@@ -1089,8 +1061,10 @@ local function GetCofferKeysParts()
     return label, ColorWrap(color, xy)
 end
 
-local function ComputeWantTrackingPanel(db)
+local function ComputeWantTrackingPanel(db, prefs)
     -- Decide whether the tracking panel should be shown at all.
+    -- db    = per-character data (EnsureDB)  → trackingSnapshot
+    -- prefs = account-wide prefs (EnsurePrefs) → showGreatVault, showCurrency
     if Addon._viewingChar then
         -- When viewing another character, only show the panel if we have a
         -- stored snapshot for them (they've opened the addon at least once).
@@ -1098,7 +1072,7 @@ local function ComputeWantTrackingPanel(db)
         local hasData = snap and (snap.leftLines ~= nil or (snap.rightRows ~= nil and #snap.rightRows > 0))
         return hasData and IsMainFrameOnListTab() and true or false
     end
-    local wantPanel = (db.showGreatVault or db.showCurrency) and true or false
+    local wantPanel = (prefs.showGreatVault or prefs.showCurrency) and true or false
     if wantPanel and not IsMainFrameOnListTab() then
         wantPanel = false
     end
@@ -1130,23 +1104,21 @@ local function ApplyGreatVaultGrid(gridBlocks)
             for col = 1, 3 do
                 local slot    = block.slots and block.slots[col]
                 local ilvl    = slot and slot.ilvl   or 0
-                -- done = number of completed vault slots; slot col is unlocked when done >= col
                 local unlocked = done >= col
-                -- Single cell: green for best reward, white for other unlocked, dim "-" locked.
-                grid.cells[col].bot:SetText(
-                    (unlocked and ilvl > 0)
+                local txt = (unlocked and ilvl > 0)
                     and ColorWrap((maxIlvl > 0 and ilvl == maxIlvl) and COLORS.green or COLORS.white, tostring(ilvl))
-                    or  ColorWrap(COLORS.dim, "-"))
+                    or  ColorWrap(COLORS.dim, "-")
+                SetTextIfChanged(grid.cells[col].bot, txt)
             end
         else
             for col = 1, 3 do
-                grid.cells[col].bot:SetText(ColorWrap(COLORS.dim, "-"))
+                SetTextIfChanged(grid.cells[col].bot, ColorWrap(COLORS.dim, "-"))
             end
         end
     end
 end
 
-local function SetRightRowPair(i, rowLabel, rowValue, iconFileID)
+local function SetRightRowPair(i, rowLabel, rowValue, iconFileID, currencyID)
     -- Write a {label,value} row and hide it if empty.
     local row = TrackingUI.right[RIGHT_ROW_KEYS[i]]
     if not (row and row.label and row.value) then return end
@@ -1159,9 +1131,13 @@ local function SetRightRowPair(i, rowLabel, rowValue, iconFileID)
     -- Icon: show when the row is visible and we have a valid file ID.
     if row.icon then
         if showRow and iconFileID and iconFileID ~= 0 then
-            row.icon:SetTexture(iconFileID)
+            -- icon is a Button; texture lives in icon._tex.
+            if row.icon._tex then row.icon._tex:SetTexture(iconFileID) end
+            -- Store the currency ID so the hover tooltip can call SetCurrencyByID.
+            row.icon._lariasIconCurrencyID = currencyID or nil
             SetShownIfChanged(row.icon, true)
         else
+            row.icon._lariasIconCurrencyID = nil
             SetShownIfChanged(row.icon, false)
         end
     end
@@ -1184,7 +1160,7 @@ local function ApplyRightColumnAsPairs()
         local rowLabel = (labelLines and labelLines[i]) or ""
         local rowValue = (valueLines and valueLines[i]) or ""
         if IsNonEmptyText(rowLabel) or IsNonEmptyText(rowValue) then
-            SetRightRowPair(idx, rowLabel, rowValue, GetCurrencyIconID(crestIDs[i]))
+            SetRightRowPair(idx, rowLabel, rowValue, GetCurrencyIconID(crestIDs[i]), crestIDs[i])
             idx = idx + 1
         end
     end
@@ -1192,21 +1168,24 @@ local function ApplyRightColumnAsPairs()
     local cLbl, cVal = GetCatalystParts()
     cLbl = cLbl or ""; cVal = cVal or ""
     if idx <= RIGHT_LINE_COUNT and (IsNonEmptyText(cLbl) or IsNonEmptyText(cVal)) then
-        SetRightRowPair(idx, cLbl, cVal, GetCurrencyIconID(tracking and tracking.catalystCurrencyID))
+        local cID = tracking and tracking.catalystCurrencyID
+        SetRightRowPair(idx, cLbl, cVal, GetCurrencyIconID(cID), cID)
         idx = idx + 1
     end
 
     local sLbl, sVal = GetSparksParts()
     sLbl = sLbl or ""; sVal = sVal or ""
     if idx <= RIGHT_LINE_COUNT and (IsNonEmptyText(sLbl) or IsNonEmptyText(sVal)) then
-        SetRightRowPair(idx, sLbl, sVal, GetCurrencyIconID(tracking and tracking.sparkCurrencyID))
+        local sID = tracking and tracking.sparkCurrencyID
+        SetRightRowPair(idx, sLbl, sVal, GetCurrencyIconID(sID), sID)
         idx = idx + 1
     end
 
     local kLbl, kVal = GetCofferKeysParts()
     kLbl = kLbl or ""; kVal = kVal or ""
     if idx <= RIGHT_LINE_COUNT and (IsNonEmptyText(kLbl) or IsNonEmptyText(kVal)) then
-        SetRightRowPair(idx, kLbl, kVal, GetCurrencyIconID(tracking and tracking.cofferKeysCurrencyID))
+        local kID = tracking and tracking.cofferKeysCurrencyID
+        SetRightRowPair(idx, kLbl, kVal, GetCurrencyIconID(kID), kID)
         idx = idx + 1
     end
 
@@ -1276,12 +1255,9 @@ end
 function Addon:CreateTrackingPanel(parentFrame)
     -- Build the tracking panel UI (left: Great Vault, right: currency rows).
     if self._trackingFrame then return end
-    local db = self:EnsureDB()
+    local db = self:EnsurePrefs()
 
     local trackingFrame = CreateFrame("Frame", nil, parentFrame)
-    if not trackingFrame.SetBackdrop and BackdropTemplateMixin and Mixin then
-        Mixin(trackingFrame, BackdropTemplateMixin)
-    end
     -- Lift tracking panel above the in-frame scale slider that sits below it.
     local trackingBottomY = (Addon.UI.sliderBottomPad or 4) + (Addon.UI.sliderH or 20)
     trackingFrame:SetPoint("BOTTOMLEFT", parentFrame, "BOTTOMLEFT", Addon.UI.sectionInsetX, trackingBottomY)
@@ -1315,7 +1291,10 @@ function Addon:CreateTrackingPanel(parentFrame)
     local BOX_PAD = 6
     local function MakeColBox(col)
         local box = CreateFrame("Frame", nil, trackingFrame)
-        if BackdropTemplateMixin and Mixin then Mixin(box, BackdropTemplateMixin) end
+        Addon:ApplyTheme(box)
+        -- Col boxes use lower alpha so column content stands out.
+        if box.SetBackdropColor    then box:SetBackdropColor(THEME.bg.r, THEME.bg.g, THEME.bg.b, 0.55) end
+        if box.SetBackdropBorderColor then box:SetBackdropBorderColor(THEME.border.r, THEME.border.g, THEME.border.b, 0.65) end
         -- Keep box behind column content: match trackingFrame's level so
         -- OVERLAY-layer FontStrings in the columns always render on top.
         local tfLevel = trackingFrame.GetFrameLevel and trackingFrame:GetFrameLevel() or 1
@@ -1324,25 +1303,57 @@ function Addon:CreateTrackingPanel(parentFrame)
         -- Extend above the column to cover the title (title is 24px above col.TOPLEFT).
         box:SetPoint("TOPLEFT",     col, "TOPLEFT",     -BOX_PAD,  24 + BOX_PAD)
         box:SetPoint("BOTTOMRIGHT", col, "BOTTOMRIGHT",  BOX_PAD, -BOX_PAD)
-        if box.SetBackdrop then
-            box:SetBackdrop({
-                bgFile   = "Interface\\Buttons\\WHITE8x8",
-                edgeFile = "Interface\\Buttons\\WHITE8x8",
-                tile = false, edgeSize = 1,
-                insets = { left=1, right=1, top=1, bottom=1 },
-            })
-            local bg  = THEME and THEME.bg
-            local bdr = THEME and THEME.border
-            if bg  then box:SetBackdropColor(bg.r, bg.g, bg.b, 0.55) end
-            if bdr then box:SetBackdropBorderColor(bdr.r, bdr.g, bdr.b, 0.65) end
-        end
         return box
+    end
+
+    -- A small transparent Button placed only over the title strip at the top of
+    -- each column (from the top of the decorative box down to where the column
+    -- content starts).  Height = title area (24px) + both BOX_PAD margins.
+    local function MakeTitleButton(col, tipText, onClick)
+        local btn = CreateFrame("Button", nil, trackingFrame)
+        btn:SetPoint("TOPLEFT",     col, "TOPLEFT",  -BOX_PAD,  24 + BOX_PAD)
+        btn:SetPoint("BOTTOMRIGHT", col, "TOPRIGHT",  BOX_PAD,  BOX_PAD)
+        btn:EnableMouse(true)
+        -- Subtle highlight only over the title strip on hover.
+        local hl = btn:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints()
+        hl:SetColorTexture(1, 1, 1, 0.07)
+        btn:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            GameTooltip:SetText(tipText, 1, 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        btn:RegisterForClicks("AnyUp")
+        if onClick then btn:SetScript("OnClick", onClick) end
+        return btn
     end
 
     local leftBox  = MakeColBox(leftCol)
     local rightBox = MakeColBox(rightCol)
     trackingFrame._lariasLeftBox  = leftBox
     trackingFrame._lariasRightBox = rightBox
+
+    -- Great Vault title button: toggles the Weekly Rewards frame.
+    MakeTitleButton(leftCol,
+        L.TOOLTIP_OPEN_GREAT_VAULT or "Click to open the Great Vault",
+        function()
+            -- WeeklyRewardsFrame is lazily created; ensure the module is loaded.
+            if not WeeklyRewardsFrame then
+                C_AddOns.LoadAddOn("Blizzard_WeeklyRewards")
+            end
+            if WeeklyRewardsFrame then
+                if WeeklyRewardsFrame:IsShown() then WeeklyRewardsFrame:Hide()
+                else WeeklyRewardsFrame:Show() end
+            end
+        end)
+
+    -- Currency title button: toggles the currency panel.
+    MakeTitleButton(rightCol,
+        L.TOOLTIP_OPEN_CURRENCIES or "Click to open the Currency panel",
+        function()
+            ToggleCharacter("TokenFrame")
+        end)
 
     local rightTitle = trackingFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     rightTitle:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", padL + colW + colGap, -8)
@@ -1359,18 +1370,6 @@ function Addon:CreateTrackingPanel(parentFrame)
     rightTitle:SetPoint("TOP", rightCol, "TOP", 0, 24)
     rightTitle:SetWidth(colW)
     rightTitle:SetJustifyH("CENTER")
-
-    local function MakeLine(parent, y, template, justify)
-        local fontString = parent:CreateFontString(nil, "OVERLAY", template or "GameFontHighlightSmall")
-        fontString:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, y)
-        fontString:SetWidth(colW)
-        fontString:SetJustifyH(justify or "LEFT")
-        if fontString.SetWordWrap then fontString:SetWordWrap(false) end
-        fontString:SetTextColor(THEME.text.r, THEME.text.g, THEME.text.b, THEME.text.a)
-        fontString:SetText("")
-        fontString._lariasBaseY = y
-        return fontString
-    end
 
     -- Build 3 Great Vault section grids (3 columns × 2 rows with borders).
     local GRID_BOR_A = 0.55  -- outer border opacity
@@ -1428,7 +1427,7 @@ function Addon:CreateTrackingPanel(parentFrame)
         hdr:SetJustifyH("LEFT")
         hdr:SetJustifyV("MIDDLE")
         if hdr.SetWordWrap then hdr:SetWordWrap(false) end
-        hdr:SetTextColor(THEME.text.r, THEME.text.g, THEME.text.b, THEME.text.a)
+        hdr:SetTextColor(THEME.header.r, THEME.header.g, THEME.header.b, THEME.header.a)
         hdr:SetText(L[GV_SECTION_KEYS[bi]] or GV_SECTION_LABELS[bi])
 
         -- Vertical borders and column dividers.
@@ -1458,27 +1457,35 @@ function Addon:CreateTrackingPanel(parentFrame)
     end
     TrackingUI.left.gvGrids    = gvGrids
     TrackingUI.left._gvSentinel = gvGrids[3] and gvGrids[3].botLine
+    -- Expose grid headers on the tracking frame so UpdateLocalizedUI can retranslate them.
+    trackingFrame._lariasGvGrids = gvGrids
 
-    -- ReflowGVGrid: repositions and resizes all GV grid elements so the 3 sections
-    -- collectively fill targetH pixels of vertical space in leftCol.
-    -- Called by ResizeTrackingPanelToContent after the right-column height is known.
+    -- ReflowGVGrid: repositions and resizes all GV grid elements inside leftCol.
+    -- Rows fill the available Y space (targetH) evenly across 3 sections.
+    -- cellW is independently width-driven from available horizontal space.
     local function ReflowGVGrid(targetH)
         local grds = TrackingUI.left.gvGrids
         if not grds then return end
         local GAP    = 6
         local BORDER = 1
         local CINSET = 4
-        -- Single-row grid: divide target height evenly across 3 sections.
-        local gridH = math.max(14, math.floor((targetH - GAP * 2) / 3))
-        local rowH  = math.max(10, gridH - BORDER * 2)  -- row fills grid minus borders
-        gridH = BORDER + rowH + BORDER                  -- normalise to exact px
-        -- Cap cellW so the grid never overflows the left column.
-        -- Available px for grid = leftCol width minus the label+gap zone.
+        -- Cache the last valid targetH so width-only callers (ResizeTrackingCols)
+        -- can pass nil and still use the correct height from the last content render.
+        -- If no height has ever been established, skip — don't collapse the initial
+        -- static layout to the minimum-height fallback before content renders.
+        if targetH and targetH > 0 then
+            TrackingUI.left._lastGvH = targetH
+        else
+            targetH = TrackingUI.left._lastGvH
+            if not (targetH and targetH > 0) then return end
+        end
+        -- Height-first layout: divide targetH evenly over 3 sections.
         local availGridW = math.max(60, (leftCol:GetWidth() or 0) - GV_GRID_X)
-        local cellW = math.min(
-            math.floor(availGridW / 3),
-            math.max(30, math.ceil(rowH * GV_CELL_ASPECT)))
+        local cellW = math.max(30, math.floor(availGridW / 3))
         local gridW = cellW * 3
+        local gridH = math.max(14, math.floor((math.max(0, targetH or 0) - GAP * 2) / 3))
+        local rowH  = math.max(10, gridH - BORDER * 2)
+        gridH = BORDER + rowH + BORDER  -- normalise to exact px
 
         for bi = 1, 3 do
             local blockY   = -(bi - 1) * (gridH + GAP)
@@ -1544,10 +1551,23 @@ function Addon:CreateTrackingPanel(parentFrame)
         row:SetHeight(16)
         row._lariasBaseY = y
 
-        local icon = row:CreateTexture(nil, "OVERLAY")
+        -- Use a Button for the icon so it can show a currency tooltip on hover.
+        local icon = CreateFrame("Button", nil, row)
         icon:SetSize(ROW_ICON_SZ, ROW_ICON_SZ)
         icon:SetPoint("LEFT", row, "LEFT", 0, 0)
         icon:Hide()
+        icon:EnableMouse(true)
+        local iconTex = icon:CreateTexture(nil, "ARTWORK")
+        iconTex:SetAllPoints(icon)
+        icon._tex = iconTex
+        icon:SetScript("OnEnter", function(self)
+            if self._lariasIconCurrencyID then
+                GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+                GameTooltip:SetCurrencyByID(self._lariasIconCurrencyID)
+                GameTooltip:Show()
+            end
+        end)
+        icon:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
         local label = row:CreateFontString(nil, "OVERLAY", template or "GameFontHighlightSmall")
         label:SetPoint("LEFT", row, "LEFT", ROW_ICON_SZ + ROW_ICON_GAP, 0)
@@ -1577,7 +1597,7 @@ function Addon:CreateTrackingPanel(parentFrame)
 
     if trackingFrame.SetScript then
         trackingFrame:SetScript("OnShow", function()
-            local database = Addon:EnsureDB()
+            local database = Addon:EnsurePrefs()
             Addon:ConfigureTrackingEvents(parentFrame, database.showGreatVault and true or false, database.showCurrency and true or false)
             Addon:RequestTrackingUpdate()
         end)
@@ -1597,6 +1617,15 @@ function Addon:CreateTrackingPanel(parentFrame)
         self:CreateInFrameScaleSlider(parentFrame)
     end
 
+    -- Status banner lives in the small space below the slider row.
+    if self.CreateStatusBanner then
+        self:CreateStatusBanner(parentFrame)
+        -- Banner now exists and always takes space; recalculate slider/panel offsets.
+        if self.ApplyScaleSliderVisibility then self:ApplyScaleSliderVisibility() end
+        -- Initial evaluation — show the right banner state immediately if needed.
+        if self.UpdateStatusBanner then self:UpdateStatusBanner() end
+    end
+
 end
 
 function Addon:ApplyTrackingPanelOptions()
@@ -1604,9 +1633,10 @@ function Addon:ApplyTrackingPanelOptions()
     local trackingFrame = self._trackingFrame
     if not trackingFrame then return end
 
-    local db = self:EnsureDB()
-    local showGreatVault = db.showGreatVault and true or false
-    local showCurrency = db.showCurrency and true or false
+    local db    = self:EnsureDB()    -- per-character data (snapshot, etc.)
+    local prefs = self:EnsurePrefs() -- account-wide display preferences
+    local showGreatVault = prefs.showGreatVault and true or false
+    local showCurrency = prefs.showCurrency and true or false
 
     local wantPanel
     if Addon._viewingChar then
@@ -1648,8 +1678,11 @@ function Addon:ApplyTrackingPanelOptions()
     SetShownIfChanged(rightTitle, showCurrency)
     local leftBox  = trackingFrame._lariasLeftBox
     local rightBox = trackingFrame._lariasRightBox
-    if leftBox  then SetShownIfChanged(leftBox,  showGreatVault) end
-    if rightBox then SetShownIfChanged(rightBox, showCurrency)   end
+    -- Decorative borders are only drawn when both columns are visible;
+    -- a single full-width column looks cleaner without the box chrome.
+    local showBothBoxes = showGreatVault and showCurrency
+    if leftBox  then SetShownIfChanged(leftBox,  showBothBoxes) end
+    if rightBox then SetShownIfChanged(rightBox, showBothBoxes) end
 
     if leftCol and leftCol.ClearAllPoints and leftCol.SetPoint then
         leftCol:ClearAllPoints()
@@ -1658,13 +1691,34 @@ function Addon:ApplyTrackingPanelOptions()
         rightCol:ClearAllPoints()
     end
 
+    local padR2 = tonumber(trackingFrame._lariasPadR) or 10
+
     if showGreatVault and showCurrency then
-        if leftCol then leftCol:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", padL, -32) end
+        -- Both columns visible: just anchor them.  ResizeTrackingCols (called via
+        -- ApplyScrollLayout below) owns the widths to avoid early-GetWidth() issues.
+        trackingFrame._lariasShowBoth = true
+        if leftCol  then leftCol:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", padL, -32) end
         if rightCol and leftCol then rightCol:SetPoint("TOPLEFT", leftCol, "TOPRIGHT", colGap, 0) end
-    elseif showGreatVault then
-        if leftCol then leftCol:SetPoint("TOP", trackingFrame, "TOP", 0, -32) end
     else
-        if rightCol then rightCol:SetPoint("TOP", trackingFrame, "TOP", 0, -32) end
+        -- Single column: stretch to fill the full usable tracking-frame width.
+        -- Use the design constant if the live width isn't available yet.
+        local tfW = tonumber(trackingFrame:GetWidth())
+        if not tfW or tfW < 10 then
+            tfW = math.max(10, (Addon.UI.frameW or 520) - 2 * (Addon.UI.sectionInsetX or 14))
+        end
+        local fullW = math.max(10, math.floor(tfW - padL - padR2))
+        trackingFrame._lariasShowBoth = false
+        if showGreatVault then
+            if leftCol then
+                leftCol:SetWidth(fullW)
+                leftCol:SetPoint("TOP", trackingFrame, "TOP", 0, -32)
+            end
+        else
+            if rightCol then
+                rightCol:SetWidth(fullW)
+                rightCol:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", padL, -32)
+            end
+        end
     end
 
     if showGreatVault and leftTitle and leftCol then
@@ -1782,7 +1836,7 @@ local function RenderSnapshotRow(row)
     if t == "crest" then
         local id  = row.id
         local qty = tonumber(row.qty) or 0
-        local name = GetCurrencyName(id) or GetCrestLabelText(id) or tostring(id or "?")
+        local name = GetCrestLabelText(id) or GetCurrencyName(id) or tostring(id or "?")
         local lbl = ColorWrap(GetCurrencyQualityColor(id), tostring(name))
         local _, cap = FormatCurrencyProgressParts(id)
         cap = tonumber(cap) or 0
@@ -1973,9 +2027,10 @@ end
 
 function Addon:UpdateTracking()
     -- Main throttled entry point: reconcile desired visibility, then render content.
-    local db = self:EnsureDB()
+    local db    = self:EnsureDB()
+    local prefs = self:EnsurePrefs()
 
-    local wantPanel = ComputeWantTrackingPanel(db)
+    local wantPanel = ComputeWantTrackingPanel(db, prefs)
     EnsureTrackingPanelCreatedIfNeeded(wantPanel)
 
     if self.ApplyTrackingPanelOptions then
@@ -2017,22 +2072,26 @@ function Addon:ResizeTrackingCols()
     local padL    = tonumber(tf._lariasPadL)   or 10
     local padR    = tonumber(tf._lariasPadR)   or 10
     local colGap  = tonumber(tf._lariasColGap) or 12
-    local newColW = math.max(10, math.floor((frameW - padL - padR - colGap) / 2))
-
     local leftCol  = tf._lariasLeftCol
     local rightCol = tf._lariasRightCol
+    local leftShown  = leftCol  and leftCol.IsShown  and leftCol:IsShown()  or false
+    local rightShown = rightCol and rightCol.IsShown and rightCol:IsShown() or false
+    local bothShown = leftShown and rightShown
 
-    if leftCol  and leftCol.SetWidth  then leftCol:SetWidth(newColW)  end
-    if rightCol and rightCol.SetWidth then rightCol:SetWidth(newColW) end
-    -- Only re-anchor rightCol relative to leftCol when both are visible.
-    -- When only one column is shown, ApplyTrackingPanelOptions owns the anchor.
-    if rightCol and leftCol then
-        local leftShown  = leftCol.IsShown  and leftCol:IsShown()  or false
-        local rightShown = rightCol.IsShown and rightCol:IsShown() or false
-        if leftShown and rightShown then
-            rightCol:ClearAllPoints()
-            rightCol:SetPoint("TOPLEFT", leftCol, "TOPRIGHT", colGap, 0)
-        end
+    -- When only one column is visible give it the full usable width (no gap needed).
+    local newColW
+    if bothShown then
+        newColW = math.max(10, math.floor((frameW - padL - padR - colGap) / 2))
+    else
+        newColW = math.max(10, math.floor(frameW - padL - padR))
+    end
+
+    if leftShown  and leftCol.SetWidth  then leftCol:SetWidth(newColW)  end
+    if rightShown and rightCol.SetWidth then rightCol:SetWidth(newColW) end
+    -- Re-anchor rightCol relative to leftCol only when both are visible.
+    if bothShown and leftCol and rightCol then
+        rightCol:ClearAllPoints()
+        rightCol:SetPoint("TOPLEFT", leftCol, "TOPRIGHT", colGap, 0)
     end
 
     -- Keep left-column font strings constrained to the new column width.
@@ -2053,9 +2112,12 @@ function Addon:ResizeTrackingCols()
         end
     end
 
-    -- GV grids are fixed-width (GV_GRID_W) so no repositioning needed on resize.
+    -- GV grid cells fill the left column: reflow so cells expand/contract to
+    -- match the new column width (important when currency is hidden and GV takes
+    -- the full panel width).
+    if leftShown and Addon._reflowGVGrid then
+        Addon._reflowGVGrid(nil)
+    end
 
     tf._lariasColW = newColW
 end
-
-
