@@ -1430,11 +1430,11 @@ local function BuildWeekliesSection(trackingFrame)
         local PQIDs2 = Addon.TRACKING and Addon.TRACKING.preyQuestIDs
         local pGoal2 = (Addon.TRACKING and Addon.TRACKING.preyQuestGoal) or 4
 
-        -- "below" mode has full panel width and gets 2 columns (3 rows each).
-        -- Any side/solo mode is narrow, so all rows stack in a single column.
+        -- Layout: 2 columns when weeklies has full width (below or full mode),
+        -- 1 column when sharing space side-by-side with GV or Currency.
         local tf        = Addon._trackingFrame
         local wMode     = tf and tf._weekliesMode or "below"
-        local singleCol = (wMode ~= "below")
+        local singleCol = (wMode == "side-right" or wMode == "side-left")
 
         -- Reflow the two column sub-frames to match the current mode.
         if singleCol then
