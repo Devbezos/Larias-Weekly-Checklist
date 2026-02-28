@@ -1276,11 +1276,10 @@ local function ResizeTrackingPanelToContent(addon)
     local minH = 90
 
     -- Weeklies height contribution depends on its layout mode.
-    -- "below"     → strip below both columns; adds to targetH.
-    -- "side-*"    → weeklies is a column starting at y=-8; compare against contentH.
-    -- "top-left"  → weeklies top-left, currency top-right, GV below; topOffset adjusted.
-    -- "full"      → only content; starts at y=-8.
-    -- "hidden"    → ignored.
+    -- "below"  → strip below both columns; adds to targetH.
+    -- "side-*" → weeklies is a column; min frame height = 32 + wsH + pad.
+    -- "full"   → only content; starts at y=-32.
+    -- "hidden" → ignored.
     local weeklyExtra    = 0
     local weeklyColBottom = 0  -- minimum targetH when weeklies is a column
     local ws    = trackingFrame._lariasWeekliesSection
@@ -1291,45 +1290,21 @@ local function ResizeTrackingPanelToContent(addon)
             weeklyExtra = wsH + 8
         elseif wMode == "side-right" or wMode == "side-left" or wMode == "full" then
             weeklyColBottom = 32 + wsH + bottomPad
-        elseif wMode == "top-left" then
-            -- GV sits below the taller of weeklies or currency.
-            -- rightCol starts at y=-32 and extends bottomRight px; GV_GAP=30 for the GV title.
-            local GV_GAP = 30
-            topOffset = 32 + bottomRight + GV_GAP  -- where GV data starts
-            contentH  = bottomLeft  -- GV content drives remaining height
-            -- Store currency height so ResizeTrackingCols can position GV correctly.
-            trackingFrame._lariasCurrencyH = bottomRight
         end
     end
 
     local targetH = max(minH, topOffset + contentH + bottomPad + weeklyExtra, weeklyColBottom)
 
     local curH = tonumber(trackingFrame:GetHeight()) or 0
-    if math.abs(curH - targetH) <= 1 then
-        -- Even if overall height is unchanged, GV col position may need updating.
-        if wMode == "top-left" and addon.ResizeTrackingCols then
-            addon:ResizeTrackingCols()
-        end
-        return
-    end
+    if math.abs(curH - targetH) <= 1 then return end
 
     trackingFrame:SetHeight(targetH)
-    -- Column heights: in top-left mode rightCol (currency) and leftCol (GV) have different heights.
-    if wMode == "top-left" then
-        if trackingFrame._lariasRightCol and trackingFrame._lariasRightCol.SetHeight then
-            trackingFrame._lariasRightCol:SetHeight(max(1, bottomRight + 2))
-        end
-        if trackingFrame._lariasLeftCol and trackingFrame._lariasLeftCol.SetHeight then
-            trackingFrame._lariasLeftCol:SetHeight(max(1, bottomLeft + 2))
-        end
-    else
-        local colH = max(1, contentH + 2)
-        if trackingFrame._lariasLeftCol and trackingFrame._lariasLeftCol.SetHeight then
-            trackingFrame._lariasLeftCol:SetHeight(colH)
-        end
-        if trackingFrame._lariasRightCol and trackingFrame._lariasRightCol.SetHeight then
-            trackingFrame._lariasRightCol:SetHeight(colH)
-        end
+    local colH = max(1, contentH + 2)
+    if trackingFrame._lariasLeftCol and trackingFrame._lariasLeftCol.SetHeight then
+        trackingFrame._lariasLeftCol:SetHeight(colH)
+    end
+    if trackingFrame._lariasRightCol and trackingFrame._lariasRightCol.SetHeight then
+        trackingFrame._lariasRightCol:SetHeight(colH)
     end
     if addon.ApplyScrollLayout then
         addon:ApplyScrollLayout()
@@ -1469,7 +1444,7 @@ local function BuildWeekliesSection(trackingFrame)
         -- 1 column when sharing space side-by-side with GV or Currency.
         local tf        = Addon._trackingFrame
         local wMode     = tf and tf._weekliesMode or "below"
-        local singleCol = (wMode == "side-right" or wMode == "side-left" or wMode == "top-left")
+        local singleCol = (wMode == "side-right" or wMode == "side-left")
 
         -- Show separator + background only in "below" mode.
         local isBelow = (wMode == "below")
@@ -1988,7 +1963,7 @@ function Addon:ApplyTrackingPanelOptions()
     -- Layout modes for the weeklies section:
     --   "below"      GV + Currency both on  → weeklies is a full-width strip below them
     --   "side-right" GV on, Currency off    → weeklies takes the right column slot
-    --   "side-left"  Currency on, GV off   → weeklies takes the left column slot
+    --   "side-left"  one column on, other off → weeklies takes the left column slot
     --   "full"       neither GV nor Currency → weeklies spans full width as only content
     --   "hidden"     weeklies disabled
     local trackingFrame = self._trackingFrame
@@ -2037,11 +2012,9 @@ function Addon:ApplyTrackingPanelOptions()
     local weekliesMode = "hidden"
     if showWeeklies and not Addon._viewingChar then
         if showGreatVault and showCurrency then
-            weekliesMode = "top-left"  -- weeklies top-left, currency top-right, GV below
-        elseif showGreatVault then
-            weekliesMode = "side-left"  -- weeklies left, GV right
-        elseif showCurrency then
-            weekliesMode = "side-left"  -- weeklies left, currency right
+            weekliesMode = "below"      -- weeklies strip below both columns
+        elseif showGreatVault or showCurrency then
+            weekliesMode = "side-left"  -- weeklies left, GV/Currency right
         else
             weekliesMode = "full"
         end
@@ -2067,24 +2040,17 @@ function Addon:ApplyTrackingPanelOptions()
 
     trackingFrame._lariasShowBoth = showGreatVault and showCurrency
 
-    if weekliesMode == "top-left" then
-        -- "top-left": weeklies top-left, currency top-right, GV full-width below.
-        -- ResizeTrackingCols provides exact positions; set placeholder anchors here.
+    if showCurrency then
+        -- Currency (rightCol) is always the leftmost column.
         if rightCol then rightCol:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", padL, -32) end
-        if leftCol  then leftCol:SetPoint("TOPLEFT",  trackingFrame, "TOPLEFT", padL, -32) end
-    else
-        if showCurrency then
-            -- Currency (rightCol) is always the leftmost column.
-            if rightCol then rightCol:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", padL, -32) end
-        end
-        if showGreatVault then
-            if showCurrency and rightCol then
-                -- Both cols: leftCol (GV) starts right of rightCol (Currency).
-                if leftCol then leftCol:SetPoint("TOPLEFT", rightCol, "TOPRIGHT", colGap, 0) end
-            else
-                -- GV-only or GV+weeklies-right: GV takes the left anchor.
-                if leftCol then leftCol:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", padL, -32) end
-            end
+    end
+    if showGreatVault then
+        if showCurrency and rightCol then
+            -- Both cols: leftCol (GV) starts right of rightCol (Currency).
+            if leftCol then leftCol:SetPoint("TOPLEFT", rightCol, "TOPRIGHT", colGap, 0) end
+        else
+            -- GV-only: GV takes the left anchor.
+            if leftCol then leftCol:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", padL, -32) end
         end
     end
 
@@ -2098,7 +2064,7 @@ function Addon:ApplyTrackingPanelOptions()
             ws:SetPoint("BOTTOMRIGHT", trackingFrame, "BOTTOMRIGHT", -WSEC_PAD_LR, WSEC_BOT_OFF)
             ws:Show()
             if ws.Refresh then ws.Refresh() end
-        elseif weekliesMode == "side-right" or weekliesMode == "side-left" or weekliesMode == "full" or weekliesMode == "top-left" then
+        elseif weekliesMode == "side-right" or weekliesMode == "side-left" or weekliesMode == "full" then
             -- Position / width set by ResizeTrackingCols; just make sure it is shown.
             ws:Show()
             if ws.Refresh then ws.Refresh() end
@@ -2126,28 +2092,30 @@ ComputeSnapshotData = function(snap)
     -- Used both after a live panel render and for background updates when the
     -- panel is hidden. No UI frame required.
 
-    -- Left column: Great Vault (9 lines: Raid + Dungeons + World).
-    local gvLines = GetGreatVaultBlockLines()
-    snap.leftLines = snap.leftLines or {}
-    for i = 1, 9 do
-        snap.leftLines[i] = gvLines[i] or ""
-    end
-    -- Also persist structured grid data for the grid-based rendering path.
-    local gvc = Addon.TRACKING._gvCache
-    if gvc and gvc.gridBlocks then
-        snap.leftGrid = snap.leftGrid or {{},{},{}}
-        for bi = 1, 3 do
-            local src = gvc.gridBlocks[bi]
-            local dst = snap.leftGrid[bi]
-            if src and dst then
-                dst.available = src.available
-                dst.complete  = src.complete
-                dst.maxIlvl   = src.maxIlvl
-                dst.slots = dst.slots or {{},{},{}}
-                for si = 1, 3 do
-                    if src.slots and src.slots[si] and dst.slots[si] then
-                        dst.slots[si].thresh = src.slots[si].thresh
-                        dst.slots[si].ilvl   = src.slots[si].ilvl
+    -- Left column: Great Vault (when feature is enabled).
+    if FEATURE_GREAT_VAULT then
+        local gvLines = GetGreatVaultBlockLines()
+        snap.leftLines = snap.leftLines or {}
+        for i = 1, 9 do
+            snap.leftLines[i] = gvLines[i] or ""
+        end
+        -- Persist structured grid data for the grid-based rendering path.
+        local gvc = Addon.TRACKING._gvCache
+        if gvc and gvc.gridBlocks then
+            snap.leftGrid = snap.leftGrid or {{},{},{}}
+            for bi = 1, 3 do
+                local src = gvc.gridBlocks[bi]
+                local dst = snap.leftGrid[bi]
+                if src and dst then
+                    dst.available = src.available
+                    dst.complete  = src.complete
+                    dst.maxIlvl   = src.maxIlvl
+                    dst.slots = dst.slots or {{},{},{}}
+                    for si = 1, 3 do
+                        if src.slots and src.slots[si] and dst.slots[si] then
+                            dst.slots[si].thresh = src.slots[si].thresh
+                            dst.slots[si].ilvl   = src.slots[si].ilvl
+                        end
                     end
                 end
             end
@@ -2342,11 +2310,13 @@ local function RenderSnapshotIntoPanel(snap)
     -- Apply a stored snapshot into the tracking panel UI.
     -- New schema rows carry a `type` field and are rendered live (caps fetched from API).
     -- Legacy rows without `type` fall back to their stored label/value strings.
-    if snap.leftGrid then
-        ApplyGreatVaultGrid(snap.leftGrid)
-    else
-        -- Old snapshot (no structured grid data): show N/A placeholders.
-        ApplyGreatVaultGrid(nil)
+    if FEATURE_GREAT_VAULT then
+        if snap.leftGrid then
+            ApplyGreatVaultGrid(snap.leftGrid)
+        else
+            -- No GV grid data in snapshot: show N/A placeholders.
+            ApplyGreatVaultGrid(nil)
+        end
     end
     if snap.rightRows then
         local idx = 1
@@ -2440,7 +2410,7 @@ function Addon:UpdateTracking()
     end
 
     -- Normal path: read live WoW APIs for the current player.
-    ApplyGreatVaultGrid(GetGreatVaultGridData())
+    if FEATURE_GREAT_VAULT then ApplyGreatVaultGrid(GetGreatVaultGridData()) end
     ApplyRightColumnAsPairs()
     ResizeTrackingPanelToContent(self)
 
@@ -2481,9 +2451,8 @@ function Addon:ResizeTrackingCols()
     if leftShown  and leftCol.SetWidth  then leftCol:SetWidth(newColW)  end
     if rightShown and rightCol.SetWidth then rightCol:SetWidth(newColW) end
 
-    -- Re-anchor leftCol (GV) right of rightCol (Currency) in both-visible mode.
-    -- Skipped for "top-left" mode where the block below places GV beneath weeklies.
-    if leftShown and rightShown and wMode ~= "top-left" then
+    -- Re-anchor leftCol (GV) right of rightCol (Currency) when both are visible.
+    if leftShown and rightShown then
         leftCol:ClearAllPoints()
         leftCol:SetPoint("TOPLEFT", rightCol, "TOPRIGHT", colGap, 0)
     end
@@ -2506,36 +2475,11 @@ function Addon:ResizeTrackingCols()
                 rightCol:SetWidth(newColW)
                 rightCol:SetPoint("TOPLEFT", tf, "TOPLEFT", padL + newColW + colGap, -32)
             end
-            -- GV (leftCol) placed right if it is somehow shown.
+            -- GV (leftCol) placed right when GV is also on in side-left mode.
             if leftShown and leftCol then
                 leftCol:ClearAllPoints()
                 leftCol:SetWidth(newColW)
                 leftCol:SetPoint("TOPLEFT", tf, "TOPLEFT", padL + newColW + colGap, -32)
-            end
-        elseif wMode == "top-left" then
-            -- Weeklies top-left, Currency top-right, GV full-width below.
-            ws:SetWidth(newColW)
-            ws:SetPoint("TOPLEFT", tf, "TOPLEFT", padL, -32)
-            -- rightCol (Currency) at top-right.
-            if rightShown and rightCol then
-                rightCol:ClearAllPoints()
-                rightCol:SetWidth(newColW)
-                rightCol:SetPoint("TOPLEFT", tf, "TOPLEFT", padL + newColW + colGap, -32)
-            end
-            -- leftCol (GV) full-width, positioned below the taller of weeklies/currency.
-            -- Use the stored measured currency height (set by ResizeTrackingPanelToContent)
-            -- rather than rightCol's frame height which may not be set yet.
-            if leftShown and leftCol then
-                local GV_GAP   = 30  -- space for the GV section title (24px) + 6px gap
-                local fullW    = math.max(10, math.floor(frameW - padL - padR))
-                local currencyH = tonumber(tf._lariasCurrencyH) or 0
-                local wsH       = tonumber(ws and ws:GetHeight()) or 0
-                -- GV starts below the bottom of the taller top column.
-                -- rightCol starts at -32 from tracking frame top.
-                local gvTopY = -(32 + currencyH + GV_GAP)
-                leftCol:ClearAllPoints()
-                leftCol:SetWidth(fullW)
-                leftCol:SetPoint("TOPLEFT", tf, "TOPLEFT", padL, gvTopY)
             end
         elseif wMode == "full" then
             local fullW = math.max(10, math.floor(frameW - 2 * WSEC_PAD_LR))
@@ -2547,15 +2491,7 @@ function Addon:ResizeTrackingCols()
     -- Update title widths and anchors.
     local leftTitle  = tf._lariasLeftTitle
     local rightTitle = tf._lariasRightTitle
-    if leftTitle  and leftTitle.SetWidth  then
-        -- In top-left mode GV spans full width, so its title does too.
-        if wMode == "top-left" then
-            local fullW = math.max(10, math.floor(frameW - padL - padR))
-            leftTitle:SetWidth(fullW)
-        else
-            leftTitle:SetWidth(newColW)
-        end
-    end
+    if leftTitle  and leftTitle.SetWidth  then leftTitle:SetWidth(newColW) end
     if rightTitle and rightTitle.SetWidth then
         rightTitle:SetWidth(newColW)
         if rightCol then
@@ -2566,13 +2502,6 @@ function Addon:ResizeTrackingCols()
     -- Weeklies title width matches its column slot.
     if ws and ws._hdrFS and ws._hdrFS.SetWidth then
         ws._hdrFS:SetWidth(newColW)
-    end
-
-    -- GV grid cells fill the left column: reflow so cells expand/contract to
-    -- match the new column width (important when currency is hidden and GV takes
-    -- the full panel width).
-    if leftShown and Addon._reflowGVGrid then
-        Addon._reflowGVGrid(nil)
     end
 
     tf._lariasColW = newColW
