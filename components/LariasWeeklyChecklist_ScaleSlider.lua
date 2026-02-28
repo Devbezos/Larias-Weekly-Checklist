@@ -86,15 +86,15 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
         thumb:SetFrameLevel(trackCont:GetFrameLevel() + 1)
         local thumbTex = thumb:CreateTexture(nil, "ARTWORK")
         thumbTex:SetAllPoints(thumb)
-        -- Thumb background = inverted list-text color so it always contrasts with the text inside.
-        thumbTex:SetColorTexture(1 - txt.r, 1 - txt.g, 1 - txt.b, 0.9)
+        -- Thumb background = darkened text color so it stays in the same hue as the rest of the UI.
+        thumbTex:SetColorTexture(txt.r * 0.45, txt.g * 0.45, txt.b * 0.45, 0.9)
         local thumbLbl = thumb:CreateFontString(nil, "OVERLAY")
         thumbLbl:SetFont("Fonts\\FRIZQT__.TTF", 11, "")
         thumbLbl:SetAllPoints(thumb)
         thumbLbl:SetJustifyH("CENTER")
         thumbLbl:SetJustifyV("MIDDLE")
         thumbLbl:SetWordWrap(false)
-        -- Thumb label = list-text color (readable on the inverted background).
+        -- Thumb label = full-brightness text color to contrast the darkened background.
         thumbLbl:SetTextColor(txt.r, txt.g, txt.b, 1)
 
         -- Max label (right of track).
@@ -274,26 +274,26 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
     -- Call this from ApplyThemeColors after THEME.text changes.
     sf.RefreshColors = function()
         local t = Addon.THEME.text
-        -- Inverted text color for the thumb background (always contrasts with label inside).
-        local invR, invG, invB = 1 - t.r, 1 - t.g, 1 - t.b
+        -- Darkened text color for the thumb background (same hue, lower brightness).
+        local dR, dG, dB = t.r * 0.45, t.g * 0.45, t.b * 0.45
         -- Slider title labels.
         if sf._scaleTitleLbl then sf._scaleTitleLbl:SetTextColor(t.r, t.g, t.b, 0.75) end
         if sf._opacTitleLbl  then sf._opacTitleLbl:SetTextColor(t.r, t.g, t.b, 0.75)  end
         -- Scale pane min/max labels and thumb.
         local sp = sf._scalePane
         if sp then
-            if sp._minLbl   then sp._minLbl:SetTextColor(t.r, t.g, t.b, 0.65)       end
-            if sp._maxLbl   then sp._maxLbl:SetTextColor(t.r, t.g, t.b, 0.65)       end
-            if sp._thumbTex then sp._thumbTex:SetColorTexture(invR, invG, invB, 0.9) end
-            if sp._thumbLbl then sp._thumbLbl:SetTextColor(t.r, t.g, t.b, 1)        end
+            if sp._minLbl   then sp._minLbl:SetTextColor(t.r, t.g, t.b, 0.65)     end
+            if sp._maxLbl   then sp._maxLbl:SetTextColor(t.r, t.g, t.b, 0.65)     end
+            if sp._thumbTex then sp._thumbTex:SetColorTexture(dR, dG, dB, 0.9)    end
+            if sp._thumbLbl then sp._thumbLbl:SetTextColor(t.r, t.g, t.b, 1)      end
         end
         -- Opacity pane min/max labels and thumb.
         local op = sf._opacityPane
         if op then
-            if op._minLbl   then op._minLbl:SetTextColor(t.r, t.g, t.b, 0.65)       end
-            if op._maxLbl   then op._maxLbl:SetTextColor(t.r, t.g, t.b, 0.65)       end
-            if op._thumbTex then op._thumbTex:SetColorTexture(invR, invG, invB, 0.9) end
-            if op._thumbLbl then op._thumbLbl:SetTextColor(t.r, t.g, t.b, 1)        end
+            if op._minLbl   then op._minLbl:SetTextColor(t.r, t.g, t.b, 0.65)     end
+            if op._maxLbl   then op._maxLbl:SetTextColor(t.r, t.g, t.b, 0.65)     end
+            if op._thumbTex then op._thumbTex:SetColorTexture(dR, dG, dB, 0.9)    end
+            if op._thumbLbl then op._thumbLbl:SetTextColor(t.r, t.g, t.b, 1)      end
         end
     end
 
