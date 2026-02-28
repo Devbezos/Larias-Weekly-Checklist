@@ -150,16 +150,17 @@ end
 
 -- ── Generic icon button ───────────────────────────────────────────────────────
 -- Creates a 20×20 branded icon button with any texture (2 px inset so the dark
--- backdrop border shows around it). White at rest, gold on hover.
+-- backdrop border shows around it). Fixed dim-white at rest, fixed gold on hover.
 -- onClick defaults to a no-op.
 function C.NewIconButton(parent, texturePath, onClick, tooltip)
     local btn = CreateFrame("Button", nil, parent)
     btn:SetSize(20, 20)
     ApplyFixedBackdrop(btn)
 
-    local T  = Addon.THEME or {}
-    local tt = T.text   or { r = 1, g = 1, b = 1 }
-    local th = T.header or { r = 1, g = 0.82, b = 0 }
+    -- Fixed colors — intentionally NOT driven by theme so the icon never
+    -- changes color when the user adjusts text/header theme colors.
+    local REST_R, REST_G, REST_B, REST_A = 0.75, 0.75, 0.75, 0.65  -- dim white
+    local HOV_R,  HOV_G,  HOV_B         = 1.00, 0.82, 0.00         -- gold
 
     local PAD = 2
     -- Keep norm as a plain BORDER texture (not registered via SetNormalTexture).
@@ -169,14 +170,14 @@ function C.NewIconButton(parent, texturePath, onClick, tooltip)
     norm:SetTexture(texturePath)
     norm:SetPoint("TOPLEFT",     btn, "TOPLEFT",      PAD, -PAD)
     norm:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -PAD,  PAD)
-    norm:SetVertexColor(tt.r, tt.g, tt.b, 0.65)
+    norm:SetVertexColor(REST_R, REST_G, REST_B, REST_A)
 
     -- Pushed overlay shown during click; lives above the norm texture.
     local pushed = btn:CreateTexture(nil, "OVERLAY")
     pushed:SetTexture(texturePath)
     pushed:SetPoint("TOPLEFT",     btn, "TOPLEFT",      PAD, -PAD)
     pushed:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -PAD,  PAD)
-    pushed:SetVertexColor(th.r * 0.45, th.g * 0.45, th.b * 0.45, 1)
+    pushed:SetVertexColor(HOV_R * 0.45, HOV_G * 0.45, HOV_B * 0.45, 1)
     pushed:Hide()
 
     local hl = btn:CreateTexture(nil, "HIGHLIGHT")
@@ -185,7 +186,7 @@ function C.NewIconButton(parent, texturePath, onClick, tooltip)
     btn:SetHighlightTexture(hl)
 
     btn:SetScript("OnEnter", function(self_)
-        norm:SetVertexColor(th.r, th.g, th.b, 1)
+        norm:SetVertexColor(HOV_R, HOV_G, HOV_B, 1)
         if tooltip then
             GameTooltip:SetOwner(self_, "ANCHOR_BOTTOMLEFT")
             GameTooltip:SetText(tooltip, 1, 1, 1, 1, true)
@@ -193,18 +194,18 @@ function C.NewIconButton(parent, texturePath, onClick, tooltip)
         end
     end)
     btn:SetScript("OnLeave", function()
-        norm:SetVertexColor(tt.r, tt.g, tt.b, 0.65)
+        norm:SetVertexColor(REST_R, REST_G, REST_B, REST_A)
         pushed:Hide()
         GameTooltip:Hide()
     end)
     btn:SetScript("OnMouseDown", function()
         pushed:Show()
-        norm:SetVertexColor(th.r * 0.45, th.g * 0.45, th.b * 0.45, 1)
+        norm:SetVertexColor(HOV_R * 0.45, HOV_G * 0.45, HOV_B * 0.45, 1)
     end)
     btn:SetScript("OnMouseUp", function()
         pushed:Hide()
         -- Mouse is still on the button after a click; restore hover color.
-        norm:SetVertexColor(th.r, th.g, th.b, 1)
+        norm:SetVertexColor(HOV_R, HOV_G, HOV_B, 1)
     end)
 
     btn:SetScript("OnClick", onClick or function() end)
