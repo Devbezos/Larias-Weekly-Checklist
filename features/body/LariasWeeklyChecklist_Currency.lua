@@ -1237,21 +1237,178 @@ local function ResizeTrackingPanelToContent(addon)
     local topOffset = 32
     local bottomPad = 10
     local minH = 90
-    local targetH = max(minH, topOffset + contentH + bottomPad)
+
+    -- Include the inline weeklies section height so the tracking frame grows
+    -- to fit the weeklies block anchored at its bottom.
+    local weeklyExtra = 0
+    local ws = trackingFrame._lariasWeekliesSection
+    if ws then
+        weeklyExtra = (tonumber(ws:GetHeight()) or 0) + 8  -- 8px gap between cols and section
+    end
+
+    local targetH = max(minH, topOffset + contentH + bottomPad + weeklyExtra)
 
     local curH = tonumber(trackingFrame:GetHeight()) or 0
     if math.abs(curH - targetH) <= 1 then return end
 
     trackingFrame:SetHeight(targetH)
+    -- Column height is based on the column content only (not the extended weeklies area).
+    local colH = max(1, contentH + 2)
     if trackingFrame._lariasLeftCol and trackingFrame._lariasLeftCol.SetHeight then
-        trackingFrame._lariasLeftCol:SetHeight(max(1, targetH - 40))
+        trackingFrame._lariasLeftCol:SetHeight(colH)
     end
     if trackingFrame._lariasRightCol and trackingFrame._lariasRightCol.SetHeight then
-        trackingFrame._lariasRightCol:SetHeight(max(1, targetH - 40))
+        trackingFrame._lariasRightCol:SetHeight(colH)
     end
     if addon.ApplyScrollLayout then
         addon:ApplyScrollLayout()
     end
+end
+
+-- ── Inline Weeklies Section ──────────────────────────────────────────────────────
+-- Builds a compact weekly-quest status block anchored to the bottom of the
+-- tracking frame, below the Great Vault and Currency columns.
+-- Called from CreateTrackingPanel after self._trackingFrame is assigned.
+local WSEC_PAD_TOP  = 8    -- vertical gap between separator and header text
+local WSEC_HEADER_H = 20   -- height of the "Weeklies" title row
+local WSEC_ROW_H    = 15   -- height of each quest status row
+local WSEC_PAD_BOT  = 6    -- padding below last row
+local WSEC_PAD_LR   = 10   -- horizontal inset from tracking frame edge
+local WSEC_BOT_OFF  = 10   -- pixels above tracking frame bottom
+
+local function BuildWeekliesSection(trackingFrame)
+    local L = Addon.L or {}
+
+    local sec = CreateFrame("Frame", nil, trackingFrame)
+    sec:SetPoint("BOTTOMLEFT",  trackingFrame, "BOTTOMLEFT",  WSEC_PAD_LR,  WSEC_BOT_OFF)
+    sec:SetPoint("BOTTOMRIGHT", trackingFrame, "BOTTOMRIGHT", -WSEC_PAD_LR, WSEC_BOT_OFF)
+
+    -- Thin separator line at the very top of the section
+    local sep = sec:CreateTexture(nil, "ARTWORK")
+    sep:SetHeight(1)
+    sep:SetColorTexture(THEME.border.r, THEME.border.g, THEME.border.b, 0.5)
+    sep:SetPoint("TOPLEFT",  sec, "TOPLEFT",  0, 0)
+    sep:SetPoint("TOPRIGHT", sec, "TOPRIGHT", 0, 0)
+
+    -- "Weeklies" header
+    local hdrFS = sec:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    hdrFS:SetPoint("TOPLEFT",  sec, "TOPLEFT",  4, -WSEC_PAD_TOP)
+    hdrFS:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -4, -WSEC_PAD_TOP)
+    hdrFS:SetHeight(WSEC_HEADER_H)
+    hdrFS:SetJustifyH("LEFT")
+    hdrFS:SetJustifyV("MIDDLE")
+    hdrFS:SetTextColor(THEME.header.r, THEME.header.g, THEME.header.b, THEME.header.a)
+    hdrFS:SetText(L.SIDE_PANEL_WEEKLIES or "Weeklies")
+
+    -- Build quest row widgets
+    local QIDs  = Addon.TRACKING and Addon.TRACKING.questIDs or {}
+    local PQIDs = Addon.TRACKING and Addon.TRACKING.preyQuestIDs
+    local pGoal = (Addon.TRACKING and Addon.TRACKING.preyQuestGoal) or 4
+
+    local rowDefs = {
+        { isPrey = true,  pQuestIDs = PQIDs, pGoal = pGoal,          label = L.TRACKING_QUEST_PREY            or "Prey Hunted"           },
+        { questKey = "abundance",            label = L.TRACKING_QUEST_ABUNDANCE          or "Abundance"             },
+        { questKey = "lostLegends",          label = L.TRACKING_QUEST_LOST_LEGENDS       or "Lost Legends"          },
+        { questKey = "highEsteem",           label = L.TRACKING_QUEST_HIGH_ESTEEM        or "High Esteem"           },
+        { questKey = "fortifyRunestones",    label = L.TRACKING_QUEST_FORTIFY_RUNESTONES or "Fortify the Runestones" },
+        { questKey = "standYourGround",      label = L.TRACKING_QUEST_STAND_YOUR_GROUND  or "Stand Your Ground"     },
+    }
+
+    local baseY = WSEC_PAD_TOP + WSEC_HEADER_H
+    local rows  = {}
+    for i, d in ipairs(rowDefs) do
+        local rowY = baseY + (i - 1) * WSEC_ROW_H
+
+        local lblFS = sec:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        lblFS:SetPoint("TOPLEFT", sec, "TOPLEFT", 8, -rowY)
+        lblFS:SetHeight(WSEC_ROW_H)
+        lblFS:SetJustifyH("LEFT")
+        lblFS:SetJustifyV("MIDDLE")
+        if lblFS.SetWordWrap then lblFS:SetWordWrap(false) end
+
+        local valFS = sec:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        valFS:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -4, -rowY)
+        valFS:SetSize(48, WSEC_ROW_H)
+        valFS:SetJustifyH("RIGHT")
+        valFS:SetJustifyV("MIDDLE")
+
+        lblFS:SetPoint("TOPRIGHT", valFS, "TOPLEFT", -4, 0)
+        lblFS:SetText(d.label)
+
+        local row = { lblFS = lblFS, valFS = valFS }
+        for k, v in pairs(d) do row[k] = v end
+        tinsert(rows, row)
+    end
+
+    local GREEN = "|cff40ff40"
+    local RED   = "|cffff4040"
+    local DIM   = "|cff808080"
+    local CLOSE = "|r"
+
+    local function Refresh()
+        local hideCompleted = Addon:EnsurePrefs().hideCompletedSections
+        local QIDs2  = Addon.TRACKING and Addon.TRACKING.questIDs or {}
+        local PQIDs2 = Addon.TRACKING and Addon.TRACKING.preyQuestIDs
+        local pGoal2 = (Addon.TRACKING and Addon.TRACKING.preyQuestGoal) or 4
+        local QDA    = Addon.QuestDoneAny  -- set by SidePanel.lua
+        local visibleCount = 0
+
+        for _, r in ipairs(rows) do
+            local rowDone = false
+            if r.isPrey then
+                local count = 0
+                if PQIDs2 and C_QuestLog and C_QuestLog.IsQuestFlaggedCompleted then
+                    for _, id in ipairs(PQIDs2) do
+                        id = tonumber(id) or 0
+                        if id > 0 then
+                            local ok, done = pcall(C_QuestLog.IsQuestFlaggedCompleted, id)
+                            if ok and done then count = count + 1 end
+                        end
+                    end
+                end
+                rowDone = count >= pGoal2
+                local col = rowDone and GREEN or RED
+                r.valFS:SetText(col .. count .. "/" .. pGoal2 .. CLOSE)
+            elseif r.questKey then
+                local entry = QIDs2[r.questKey]
+                local done  = QDA and entry and QDA(entry) or nil
+                rowDone = (done == true)
+                if done == nil then
+                    r.valFS:SetText(DIM .. (L.TRACKING_NA or "N/A") .. CLOSE)
+                elseif done then
+                    r.valFS:SetText(GREEN .. "✓" .. CLOSE)
+                else
+                    r.valFS:SetText(RED .. "✗" .. CLOSE)
+                end
+            end
+            local visible = not (hideCompleted and rowDone)
+            r.lblFS:SetShown(visible)
+            r.valFS:SetShown(visible)
+            if visible then visibleCount = visibleCount + 1 end
+        end
+
+        -- Resize section to fit visible rows.
+        local newH = WSEC_PAD_TOP + WSEC_HEADER_H + visibleCount * WSEC_ROW_H + WSEC_PAD_BOT
+        local curSecH = tonumber(sec:GetHeight()) or 0
+        if math.abs(curSecH - newH) > 1 then
+            sec:SetHeight(newH)
+            -- Re-size the tracking frame only after the first full data render
+            -- (guard: tracking frame height > minH means content has loaded).
+            local tf  = Addon._trackingFrame
+            local tfH = tf and (tonumber(tf:GetHeight()) or 0) or 0
+            if tf and tfH > 90 then
+                ResizeTrackingPanelToContent(Addon)
+            end
+        end
+    end
+
+    sec.Refresh = Refresh
+    Addon._inlineWeeklies = sec
+    trackingFrame._lariasWeekliesSection = sec
+
+    -- Set initial height using full row count (quest status loads later).
+    sec:SetHeight(WSEC_PAD_TOP + WSEC_HEADER_H + #rows * WSEC_ROW_H + WSEC_PAD_BOT)
+    return sec
 end
 
 function Addon:CreateTrackingPanel(parentFrame)
@@ -1597,11 +1754,18 @@ function Addon:CreateTrackingPanel(parentFrame)
     trackingFrame:SetShown((db.showGreatVault or db.showCurrency) and IsMainFrameOnListTab())
     self._trackingFrame = trackingFrame
 
+    -- Weeklies block sits below the Great Vault and Currency columns.
+    BuildWeekliesSection(trackingFrame)
+
     if trackingFrame.SetScript then
         trackingFrame:SetScript("OnShow", function()
             local database = Addon:EnsurePrefs()
             Addon:ConfigureTrackingEvents(parentFrame, database.showGreatVault and true or false, database.showCurrency and true or false)
             Addon:RequestTrackingUpdate()
+            -- Refresh weeklies rows on every show (quest state may have changed).
+            if Addon._inlineWeeklies and Addon._inlineWeeklies.Refresh then
+                Addon._inlineWeeklies.Refresh()
+            end
         end)
         trackingFrame:SetScript("OnHide", function()
             -- Keep events registered if this character has snapshot data so

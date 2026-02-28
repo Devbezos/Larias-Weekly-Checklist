@@ -39,6 +39,8 @@ local function QuestDoneAny(entry)
         return done and true or false
     end
 end
+-- Expose for use by the inline weeklies panel in Currency.lua.
+Addon.QuestDoneAny = QuestDoneAny
 
 -- ── Module-level event frames ───────────────────────────────────────────────
 -- Frames are created at file-load time but RegisterEvent is deferred until
@@ -50,6 +52,10 @@ local _onQuestUpdate = nil   -- function() called on quest log events
 local _questFrame = CreateFrame("Frame")
 _questFrame:SetScript("OnEvent", function()
     if _onQuestUpdate then _onQuestUpdate() end
+    -- Also refresh the inline weeklies panel embedded in the main tracking frame.
+    if Addon._inlineWeeklies and Addon._inlineWeeklies.Refresh then
+        Addon._inlineWeeklies.Refresh()
+    end
 end)
 
 -- Called once from Addon:OnEnable (Ace3 guarantees a safe, non-protected

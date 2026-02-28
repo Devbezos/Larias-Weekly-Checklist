@@ -329,6 +329,9 @@ function Addon:ToggleGearPopup(anchor, growRight)
                 if Addon._sidePanel and Addon._sidePanel.RefreshAll then
                     Addon._sidePanel.RefreshAll()
                 end
+                if Addon._inlineWeeklies and Addon._inlineWeeklies.Refresh then
+                    Addon._inlineWeeklies.Refresh()
+                end
             end,
             _cbHideGreatVault = function(checked)
                 local db = Addon:EnsurePrefs()
