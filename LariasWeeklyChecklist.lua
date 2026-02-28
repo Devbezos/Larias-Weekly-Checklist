@@ -964,12 +964,13 @@ function Addon:ApplyThemeColors()
     -- Refresh Settings panel color swatches if the panel is open.
     if self.RefreshSettingsSwatches then self:RefreshSettingsSwatches() end
 
-    -- Re-style the header buttons (Select Week / View Item Levels) so their labels
-    -- pick up the new text color immediately.
+    -- Re-style the header buttons (Select Week / View Item Levels / close / gear).
     local _mf = self._mainFrame
     if _mf and self._styleActionButton then
         if _mf._lariasChangeWeekBtn then self._styleActionButton(_mf._lariasChangeWeekBtn) end
         if _mf._lariasIlvlRefBtn    then self._styleActionButton(_mf._lariasIlvlRefBtn)    end
+        if _mf._lariasCloseBtn and _mf._lariasCloseBtn.RefreshColor then _mf._lariasCloseBtn:RefreshColor() end
+        if _mf._lariasGearBtn  and _mf._lariasGearBtn.RefreshColor  then _mf._lariasGearBtn:RefreshColor()  end
     end
 
     -- Refresh gear popup checkbox labels immediately (works whether the popup is shown or not).

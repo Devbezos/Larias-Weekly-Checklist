@@ -129,6 +129,11 @@ function C.NewCloseButton(parent, onClick)
     end)
 
     btn:SetScript("OnClick", onClick or function() parent:Hide() end)
+    -- Allow ApplyThemeColors to refresh the glyph color when header color changes.
+    function btn:RefreshColor()
+        local _th = Addon.THEME and Addon.THEME.header or th
+        norm:SetTextColor(_th.r, _th.g, _th.b, 1)
+    end
     return btn
 end
 
@@ -180,6 +185,11 @@ function C.NewIconButton(parent, texturePath, onClick, tooltip)
     end)
 
     btn:SetScript("OnClick", onClick or function() end)
+    -- Allow ApplyThemeColors to refresh the icon tint when text color changes.
+    function btn:RefreshColor()
+        local _tt = Addon.THEME and Addon.THEME.text or tt
+        norm:SetVertexColor(_tt.r, _tt.g, _tt.b, 0.65)
+    end
     return btn
 end
 
