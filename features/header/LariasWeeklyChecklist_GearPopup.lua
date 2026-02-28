@@ -22,11 +22,11 @@ end
 local function MakePopupSwatch(parent)
     local btn = CreateFrame("Button", nil, parent)
     btn:SetSize(16, 16)
-    local border = btn:CreateTexture(nil, "BACKGROUND", nil, 0)
+    local border = btn:CreateTexture(nil, "ARTWORK", nil, 0)
     border:SetPoint("TOPLEFT",     btn, "TOPLEFT",     -1,  1)
     border:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT",  1, -1)
     border:SetColorTexture(0.55, 0.55, 0.55, 1)
-    local fill = btn:CreateTexture(nil, "BACKGROUND", nil, 1)
+    local fill = btn:CreateTexture(nil, "ARTWORK", nil, 1)
     fill:SetAllPoints(btn)
     fill:SetColorTexture(1, 1, 1, 1)
     btn._fill = fill
