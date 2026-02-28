@@ -164,19 +164,22 @@ function C.NewIconButton(parent, texturePath, onClick, tooltip)
     local th = T.header or { r = 1, g = 0.82, b = 0 }
 
     local PAD = 2
+    -- Keep norm as a plain BORDER texture (not registered via SetNormalTexture).
+    -- Using SetNormalTexture would let WoW's button state machinery reset vertex
+    -- colors on click→release transitions, causing color flicker.
     local norm = btn:CreateTexture(nil, "BORDER")
     norm:SetTexture(texturePath)
     norm:SetPoint("TOPLEFT",     btn, "TOPLEFT",      PAD, -PAD)
     norm:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -PAD,  PAD)
     norm:SetVertexColor(tt.r, tt.g, tt.b, 0.65)
-    btn:SetNormalTexture(norm)
 
+    -- Pushed overlay shown during click; lives above the norm texture.
     local pushed = btn:CreateTexture(nil, "OVERLAY")
     pushed:SetTexture(texturePath)
     pushed:SetPoint("TOPLEFT",     btn, "TOPLEFT",      PAD, -PAD)
     pushed:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -PAD,  PAD)
-    pushed:SetVertexColor(th.r * 0.75, th.g * 0.75, th.b * 0.75, 1)
-    btn:SetPushedTexture(pushed)
+    pushed:SetVertexColor(th.r * 0.45, th.g * 0.45, th.b * 0.45, 1)
+    pushed:Hide()
 
     local hl = btn:CreateTexture(nil, "HIGHLIGHT")
     hl:SetAllPoints(btn)
@@ -193,7 +196,17 @@ function C.NewIconButton(parent, texturePath, onClick, tooltip)
     end)
     btn:SetScript("OnLeave", function()
         norm:SetVertexColor(tt.r, tt.g, tt.b, 0.65)
+        pushed:Hide()
         GameTooltip:Hide()
+    end)
+    btn:SetScript("OnMouseDown", function()
+        pushed:Show()
+        norm:SetVertexColor(th.r * 0.45, th.g * 0.45, th.b * 0.45, 1)
+    end)
+    btn:SetScript("OnMouseUp", function()
+        pushed:Hide()
+        -- Mouse is still on the button after a click; restore hover color.
+        norm:SetVertexColor(th.r, th.g, th.b, 1)
     end)
 
     btn:SetScript("OnClick", onClick or function() end)
