@@ -1,6 +1,7 @@
 -- LariasWeeklyChecklist_SidePanel.lua
--- Panel anchored to the right of the main window.
+-- Panel anchored to the LEFT of the main window.
 -- Sections: Weeklies (quest auto-detect), Rares (combat-log), Treasures (manual toggle).
+-- Each section header is clickable to collapse/expand.  If all are collapsed the panel hides.
 local addonName = ...
 local Addon = _G[addonName]
 if not Addon then return end
@@ -185,25 +186,10 @@ local function NpcIDFromGUID(guid)
     return (id and id > 0) and id or nil
 end
 
+-- ── Section gap ──────────────────────────────────────────────────────────────
+local SEC_GAP = 6   -- vertical gap between sections
+
 -- ── Row widgets ───────────────────────────────────────────────────────────────
-local function MakeSectionHdr(parent, text, posY)
-    local T = Addon.THEME
-    local bar = parent:CreateTexture(nil, "BACKGROUND")
-    bar:SetPoint("TOPLEFT",  parent, "TOPLEFT",     0,      -posY)
-    bar:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -SBAR_W,   -posY)
-    bar:SetHeight(SEC_H)
-    bar:SetColorTexture(T.bg.r * 2.2, T.bg.g * 2.0, T.bg.b * 1.6, 0.95)
-
-    local fs = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    fs:SetPoint("TOPLEFT", bar, "TOPLEFT", PAD, 0)
-    fs:SetSize(PANEL_W - PAD - SBAR_W, SEC_H)
-    fs:SetJustifyH("LEFT")
-    fs:SetJustifyV("MIDDLE")
-    fs:SetTextColor(T.header.r, T.header.g, T.header.b, T.header.a)
-    fs:SetText(text)
-    return posY + SEC_H
-end
-
 local function MakeZoneHdr(parent, text, posY)
     local fs = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     fs:SetPoint("TOPLEFT",  parent, "TOPLEFT",    PAD,    -posY)
@@ -216,7 +202,7 @@ local function MakeZoneHdr(parent, text, posY)
     return posY + ZONE_H
 end
 
--- Returns (row, newPosY).  row exposes ._lbl and ._val for refresh.
+-- Returns (row, newPosY).  row exposes .lbl and .val for refresh.
 local function MakeRareRow(parent, npcID, posY)
     local lbl = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     lbl:SetPoint("TOPLEFT",  parent, "TOPLEFT",   PAD * 2,  -posY)
@@ -271,7 +257,7 @@ local function MakeTreasureRow(parent, objectID, posY)
         Refresh()
     end)
     btn:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         local tip = IsTreasureFound(objectID) and "Click to unmark" or "Click to mark as found"
         GameTooltip:SetText(tip, 1, 1, 1, 1, true)
         GameTooltip:Show()
@@ -282,55 +268,166 @@ local function MakeTreasureRow(parent, objectID, posY)
            posY + ROW_H
 end
 
+-- ── Collapsible section container ────────────────────────────────────────────
+-- Creates a header button + content frame block stacked below prevFrame.
+-- After building rows into sec.content (with local posY from 0), call
+-- sec:FinalizeHeight(h) so the section knows its expanded size.
+-- Assign sec.onToggle = fn to be called whenever the section is toggled.
+local function MakeSection(sc, label, prevFrame)
+    local T = Addon.THEME
+
+    local secFrame = CreateFrame("Frame", nil, sc)
+    secFrame:SetWidth(PANEL_W)
+    if prevFrame then
+        secFrame:SetPoint("TOPLEFT", prevFrame, "BOTTOMLEFT", 0, -SEC_GAP)
+    else
+        secFrame:SetPoint("TOPLEFT", sc, "TOPLEFT", 0, -4)
+    end
+
+    -- Clickable colored header bar
+    local bar = CreateFrame("Button", nil, secFrame)
+    bar:SetPoint("TOPLEFT",  secFrame, "TOPLEFT",      0,       0)
+    bar:SetPoint("TOPRIGHT", secFrame, "TOPRIGHT", -SBAR_W,     0)
+    bar:SetHeight(SEC_H)
+
+    local baseR, baseG, baseB = T.bg.r * 2.2, T.bg.g * 2.0, T.bg.b * 1.6
+    local bg = bar:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints(bar)
+    bg:SetColorTexture(baseR, baseG, baseB, 0.95)
+
+    local titleFS = bar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    titleFS:SetPoint("TOPLEFT",  bar, "TOPLEFT",  PAD, 0)
+    titleFS:SetPoint("TOPRIGHT", bar, "TOPRIGHT", -(SEC_H + 4), 0)
+    titleFS:SetHeight(SEC_H)
+    titleFS:SetJustifyH("LEFT")
+    titleFS:SetJustifyV("MIDDLE")
+    titleFS:SetTextColor(T.header.r, T.header.g, T.header.b, T.header.a)
+    titleFS:SetText(label)
+
+    -- Collapse indicator [–] / [+]
+    local togFS = bar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    togFS:SetPoint("TOPRIGHT", bar, "TOPRIGHT", -4, 0)
+    togFS:SetSize(SEC_H, SEC_H)
+    togFS:SetJustifyH("RIGHT")
+    togFS:SetJustifyV("MIDDLE")
+    togFS:SetTextColor(T.header.r, T.header.g, T.header.b, T.header.a)
+    togFS:SetText("-")
+
+    -- Content frame (rows anchored inside this with local posY)
+    local content = CreateFrame("Frame", nil, secFrame)
+    content:SetPoint("TOPLEFT",  secFrame, "TOPLEFT",  0, -SEC_H)
+    content:SetPoint("TOPRIGHT", secFrame, "TOPRIGHT", 0, -SEC_H)
+    content:SetHeight(1)
+
+    local sec = {
+        frame     = secFrame,
+        content   = content,
+        collapsed = false,
+        contentH  = 0,
+        onToggle  = nil,
+    }
+
+    local function ApplyHeight()
+        if sec.collapsed then
+            content:Hide()
+            secFrame:SetHeight(SEC_H)
+            togFS:SetText("+")
+        else
+            content:Show()
+            secFrame:SetHeight(SEC_H + sec.contentH)
+            togFS:SetText("-")
+        end
+        if sec.onToggle then sec.onToggle() end
+    end
+
+    function sec:FinalizeHeight(h)
+        self.contentH = math.max(h, 1)
+        content:SetHeight(self.contentH)
+        ApplyHeight()
+    end
+
+    bar:SetScript("OnClick", function()
+        sec.collapsed = not sec.collapsed
+        ApplyHeight()
+    end)
+    bar:SetScript("OnEnter", function()
+        bg:SetColorTexture(baseR * 1.35, baseG * 1.35, baseB * 1.35, 0.95)
+    end)
+    bar:SetScript("OnLeave", function()
+        bg:SetColorTexture(baseR, baseG, baseB, 0.95)
+    end)
+
+    return sec
+end
+
 -- ── Panel builder ─────────────────────────────────────────────────────────────
 local function BuildSidePanel(mainFrame)
     local L     = Addon.L or {}
     local prefs = Addon:EnsurePrefs()
-    local T     = Addon.THEME
 
-    -- Outer panel frame (child of mainFrame → moves with it)
+    -- Outer panel frame – anchored to the LEFT of the main frame
     local panel = CreateFrame("Frame", "LariasWeeklySidePanelFrame", mainFrame)
-    panel:SetPoint("TOPLEFT",    mainFrame, "TOPRIGHT",    PANEL_GAP,  0)
-    panel:SetPoint("BOTTOMLEFT", mainFrame, "BOTTOMRIGHT", PANEL_GAP,  0)
+    panel:SetPoint("TOPRIGHT",    mainFrame, "TOPLEFT",    -PANEL_GAP, 0)
+    panel:SetPoint("BOTTOMRIGHT", mainFrame, "BOTTOMLEFT", -PANEL_GAP, 0)
     panel:SetWidth(PANEL_W)
     Addon:ApplyTheme(panel)
 
-    -- Scroll frame (fills the panel; 4px top/bottom insets)
+    -- Scroll frame
     local sf = CreateFrame("ScrollFrame", nil, panel, "UIPanelScrollFrameTemplate")
-    sf:SetPoint("TOPLEFT",     panel, "TOPLEFT",     0,    0)
-    sf:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", 0,    0)
+    sf:SetPoint("TOPLEFT",     panel, "TOPLEFT",     0, 0)
+    sf:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", 0, 0)
 
     local sc = CreateFrame("Frame", nil, sf)
     sc:SetWidth(PANEL_W)
-    sc:SetHeight(200) -- will be set after building rows
+    sc:SetHeight(200)
     sf:SetScrollChild(sc)
 
-    -- ── Build content ─────────────────────────────────────────────────────────
-    local posY      = 4                -- cursor: pixels from top of scroll child
-    local rareRows  = {}               -- { row, ... } for refresh
     local showWeeklies  = prefs.showSidePanelWeeklies  ~= false
     local showRares     = prefs.showSidePanelRares     ~= false
     local showTreasures = prefs.showSidePanelTreasures ~= false
 
-    -- ── Weeklies section ──────────────────────────────────────────────────────
-    local weeklyRows = {}
+    local weeklyRows         = {}
+    local rareRows           = {}
+    local treasureRowObjects = {}
+    local builtSections      = {}
+    local prevFrame          = nil
+
+    -- Recalculate scroll child height & auto-hide panel when all sections collapsed
+    local function UpdateLayout()
+        local h = 4
+        for _, sec in ipairs(builtSections) do
+            h = h + sec.frame:GetHeight() + SEC_GAP
+        end
+        sc:SetHeight(math.max(h, 50))
+
+        local allCollapsed = true
+        for _, sec in ipairs(builtSections) do
+            if not sec.collapsed then allCollapsed = false; break end
+        end
+        if allCollapsed then panel:Hide() else panel:Show() end
+    end
+
+    -- ── Weeklies ──────────────────────────────────────────────────────────────
     if showWeeklies then
-        posY = MakeSectionHdr(sc, L.SIDE_PANEL_WEEKLIES or "Weeklies", posY)
+        local sec = MakeSection(sc, L.SIDE_PANEL_WEEKLIES or "Weeklies", prevFrame)
+        sec.onToggle = UpdateLayout
+        tinsert(builtSections, sec)
+        prevFrame = sec.frame
 
-        local QIDs   = Addon.TRACKING and Addon.TRACKING.questIDs or {}
-        local PQIDs  = Addon.TRACKING and Addon.TRACKING.preyQuestIDs
-        local pGoal  = (Addon.TRACKING and Addon.TRACKING.preyQuestGoal) or 4
+        local content = sec.content
+        local posY    = 0
+        local QIDs    = Addon.TRACKING and Addon.TRACKING.questIDs or {}
+        local PQIDs   = Addon.TRACKING and Addon.TRACKING.preyQuestIDs
+        local pGoal   = (Addon.TRACKING and Addon.TRACKING.preyQuestGoal) or 4
 
-        -- Prey count row
         local preyRow
-        preyRow, posY = MakeRareRow(sc, nil, posY)
-        preyRow.isPrey   = true
-        preyRow.pGoal    = pGoal
+        preyRow, posY = MakeRareRow(content, nil, posY)
+        preyRow.isPrey    = true
+        preyRow.pGoal     = pGoal
         preyRow.pQuestIDs = PQIDs
         preyRow.lbl:SetText(L.TRACKING_QUEST_PREY or "Prey Hunted")
         tinsert(weeklyRows, preyRow)
 
-        -- 5 seasonal quest rows
         local defs = {
             { key = "abundance",         label = L.TRACKING_QUEST_ABUNDANCE          or "Abundance" },
             { key = "lostLegends",       label = L.TRACKING_QUEST_LOST_LEGENDS       or "Lost Legends" },
@@ -340,66 +437,75 @@ local function BuildSidePanel(mainFrame)
         }
         for _, d in ipairs(defs) do
             local r
-            r, posY = MakeRareRow(sc, nil, posY)
+            r, posY = MakeRareRow(content, nil, posY)
             r.questKey   = d.key
             r.questEntry = QIDs[d.key]
             r.lbl:SetText(d.label)
             tinsert(weeklyRows, r)
         end
+        sec:FinalizeHeight(posY + 4)
     end
 
-    -- ── Rares section ─────────────────────────────────────────────────────────
+    -- ── Rares ─────────────────────────────────────────────────────────────────
     if showRares then
-        posY = posY + 4  -- gap between sections
-        posY = MakeSectionHdr(sc, L.SIDE_PANEL_RARES or "Rares", posY)
+        local sec = MakeSection(sc, L.SIDE_PANEL_RARES or "Rares", prevFrame)
+        sec.onToggle = UpdateLayout
+        tinsert(builtSections, sec)
+        prevFrame = sec.frame
 
+        local content  = sec.content
+        local posY     = 0
         local rareData = Addon.TRACKING and Addon.TRACKING.rares
         if rareData then
             for _, zoneKey in ipairs(ZONES_ORDER) do
                 local ids = rareData[zoneKey]
                 if ids and #ids > 0 then
-                    posY = MakeZoneHdr(sc, ZONE_LABELS[zoneKey] or zoneKey, posY)
+                    posY = MakeZoneHdr(content, ZONE_LABELS[zoneKey] or zoneKey, posY)
                     local names = RARE_NAMES[zoneKey] or {}
                     for _, npcID in ipairs(ids) do
                         local r
-                        r, posY = MakeRareRow(sc, npcID, posY)
+                        r, posY = MakeRareRow(content, npcID, posY)
                         r.lbl:SetText(names[npcID] or ("NPC #" .. npcID))
                         tinsert(rareRows, r)
                     end
                 end
             end
         end
+        sec:FinalizeHeight(posY + 4)
     end
 
-    -- ── Treasures section ─────────────────────────────────────────────────────
-    local treasureRowObjects = {}
+    -- ── Treasures ─────────────────────────────────────────────────────────────
     if showTreasures then
-        posY = posY + 4
-        posY = MakeSectionHdr(sc, L.SIDE_PANEL_TREASURES or "Treasures", posY)
+        local sec = MakeSection(sc, L.SIDE_PANEL_TREASURES or "Treasures", prevFrame)
+        sec.onToggle = UpdateLayout
+        tinsert(builtSections, sec)
+        prevFrame = sec.frame
 
+        local content      = sec.content
+        local posY         = 0
         local treasureData = Addon.TRACKING and Addon.TRACKING.treasures
         if treasureData then
             for _, zoneKey in ipairs(ZONES_ORDER) do
                 local ids = treasureData[zoneKey]
                 if ids and #ids > 0 then
-                    posY = MakeZoneHdr(sc, ZONE_LABELS[zoneKey] or zoneKey, posY)
+                    posY = MakeZoneHdr(content, ZONE_LABELS[zoneKey] or zoneKey, posY)
                     local names = TREASURE_NAMES[zoneKey] or {}
                     for _, objID in ipairs(ids) do
                         local r
-                        r, posY = MakeTreasureRow(sc, objID, posY)
+                        r, posY = MakeTreasureRow(content, objID, posY)
                         r.lbl:SetText(names[objID] or ("Obj #" .. objID))
-                        r.Refresh()  -- set initial visual state
+                        r.Refresh()
                         tinsert(treasureRowObjects, r)
                     end
                 end
             end
         end
+        sec:FinalizeHeight(posY + 4)
     end
 
-    posY = posY + 8
-    sc:SetHeight(posY)
+    UpdateLayout()
 
-    -- ── Refresh: update quest/rare row values ─────────────────────────────────
+    -- ── Refresh ───────────────────────────────────────────────────────────────
     local GREEN = "|cff40ff40"
     local RED   = "|cffff4040"
     local DIM   = "|cff808080"
@@ -411,7 +517,6 @@ local function BuildSidePanel(mainFrame)
         local pGoal = (Addon.TRACKING and Addon.TRACKING.preyQuestGoal) or 4
         for _, r in ipairs(weeklyRows) do
             if r.isPrey then
-                -- Count prey quests
                 local count = 0
                 if PQIDs and C_QuestLog and C_QuestLog.IsQuestFlaggedCompleted then
                     for _, id in ipairs(PQIDs) do
@@ -456,13 +561,12 @@ local function BuildSidePanel(mainFrame)
     local function RefreshAll()
         if showWeeklies  then RefreshWeeklyRows() end
         if showRares     then RefreshRareRows()   end
-        -- treasure rows are self-refreshing via click; run initial pass on show
         for _, r in ipairs(treasureRowObjects) do r.Refresh() end
     end
 
     panel.RefreshAll = RefreshAll
 
-    -- ── Combat-log event for rare auto-detection ──────────────────────────────
+    -- ── Events ────────────────────────────────────────────────────────────────
     if showRares then
         local clf = CreateFrame("Frame", nil, panel)
         clf:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
@@ -477,7 +581,6 @@ local function BuildSidePanel(mainFrame)
         end)
     end
 
-    -- ── Quest events for weekly auto-detection ────────────────────────────────
     if showWeeklies then
         local qf = CreateFrame("Frame", nil, panel)
         qf:RegisterEvent("QUEST_TURNED_IN")
@@ -492,7 +595,6 @@ local function BuildSidePanel(mainFrame)
         RefreshAll()
     end)
 
-    -- Initial refresh if already visible
     if panel:IsShown() then
         PruneOldRareKills()
         RefreshAll()
@@ -523,6 +625,7 @@ function Addon:RebuildSidePanel()
         self._sidePanel:SetParent(nil)
         self._sidePanel = nil
     end
+    _rareSet = nil  -- force rebuild of the NPC ID set
     if mainFrame then
         self:CreateSidePanel(mainFrame)
         if self._sidePanel and mainFrame:IsShown() then
