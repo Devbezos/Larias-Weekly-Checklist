@@ -1389,6 +1389,65 @@ local function BuildWeekliesSection(trackingFrame)
         { questKey = "standYourGround",   label = L.TRACKING_QUEST_STAND_YOUR_GROUND  or "Stand Your Ground"      },
     }
 
+    -- ── Read-only checkbox widget ────────────────────────────────────────────
+    -- Returns a small frame with:
+    --   :SetState(true)  → green checkmark texture shown
+    --   :SetState(false) → red X texture shown
+    --   :SetState(nil)   → both hidden (empty dim box = N/A)
+    -- No mouse interaction.
+    local CHK_SZ = WSEC_ROW_H - 3   -- e.g. 12px for 15px rows
+    local function MakeReadOnlyChk(parent, anchorFrame, rowY)
+        local f = CreateFrame("Frame", nil, parent)
+        f:SetSize(CHK_SZ, CHK_SZ)
+        -- Vertically centre within the row height.
+        local yOff = -rowY - (WSEC_ROW_H - CHK_SZ) / 2
+        f:SetPoint("TOPRIGHT", anchorFrame, "TOPRIGHT", -4, yOff)
+        f:EnableMouse(false)
+
+        -- Border
+        local bdr = f:CreateTexture(nil, "BORDER")
+        bdr:SetAllPoints(f)
+        bdr:SetColorTexture(THEME.border.r, THEME.border.g, THEME.border.b, 0.8)
+
+        -- Dark fill inside border (1px inset)
+        local fill = f:CreateTexture(nil, "BACKGROUND")
+        fill:SetPoint("TOPLEFT",     f, "TOPLEFT",      1,  -1)
+        fill:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -1,   1)
+        fill:SetColorTexture(THEME.bg.r, THEME.bg.g, THEME.bg.b, 1)
+
+        -- Green checkmark (Blizzard texture, no unicode)
+        local tick = f:CreateTexture(nil, "OVERLAY")
+        tick:SetTexture("Interface\\Buttons\\UI-CheckBox-Check")
+        tick:SetPoint("TOPLEFT",     f, "TOPLEFT",      0,  0)
+        tick:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT",  0,  0)
+        tick:SetVertexColor(0.2, 1.0, 0.2, 1)
+        tick:Hide()
+
+        -- Red X (ReadyCheck-NotReady is WoW's standard red X — no unicode needed)
+        local cross = f:CreateTexture(nil, "OVERLAY")
+        cross:SetTexture("Interface\\RAIDFRAME\\ReadyCheck-NotReady")
+        cross:SetPoint("TOPLEFT",     f, "TOPLEFT",      1,  -1)
+        cross:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -1,   1)
+        cross:Hide()
+
+        f._tick  = tick
+        f._cross = cross
+        f.SetState = function(self, done)
+            if done == true then
+                self._tick:Show(); self._cross:Hide()
+            elseif done == false then
+                self._tick:Hide(); self._cross:Show()
+            else
+                self._tick:Hide(); self._cross:Hide()
+            end
+        end
+        return f
+    end
+
+    local GREEN = "|cff40ff40"
+    local RED   = "|cffff4040"
+    local CLOSE = "|r"
+
     local rows = {}
     for i, d in ipairs(rowDefs) do
         local colFrame = (i <= WSEC_ROWS_PER_COL) and leftCol or rightCol
@@ -1403,24 +1462,28 @@ local function BuildWeekliesSection(trackingFrame)
         lblFS:SetJustifyV("MIDDLE")
         if lblFS.SetWordWrap then lblFS:SetWordWrap(false) end
 
-        local valFS = colFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        valFS:SetPoint("TOPRIGHT", colFrame, "TOPRIGHT", -4, -rowY)
-        valFS:SetSize(40, WSEC_ROW_H)
-        valFS:SetJustifyH("RIGHT")
-        valFS:SetJustifyV("MIDDLE")
-
-        lblFS:SetPoint("TOPRIGHT", valFS, "TOPLEFT", -2, 0)
-        lblFS:SetText(d.label)
-
-        local row = { lblFS = lblFS, valFS = valFS, colIdx = colIdx }
+        local row = { lblFS = lblFS, colIdx = colIdx }
         for k, v in pairs(d) do row[k] = v end
+
+        if d.isPrey then
+            -- Prey row keeps a FontString value (shows "x/4" count).
+            local valFS = colFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            valFS:SetPoint("TOPRIGHT", colFrame, "TOPRIGHT", -4, -rowY)
+            valFS:SetSize(40, WSEC_ROW_H)
+            valFS:SetJustifyH("RIGHT")
+            valFS:SetJustifyV("MIDDLE")
+            lblFS:SetPoint("TOPRIGHT", valFS, "TOPLEFT", -2, 0)
+            row.valFS = valFS
+        else
+            -- Quest bool rows get a read-only checkbox widget.
+            local chk = MakeReadOnlyChk(colFrame, colFrame, rowY)
+            lblFS:SetPoint("TOPRIGHT", chk, "TOPLEFT", -4, (WSEC_ROW_H - CHK_SZ) / 2)
+            row.chk = chk
+        end
+
+        lblFS:SetText(d.label)
         tinsert(rows, row)
     end
-
-    local GREEN = "|cff40ff40"
-    local RED   = "|cffff4040"
-    local DIM   = "|cff808080"
-    local CLOSE = "|r"
 
     local function Refresh()
         local hideCompleted = Addon:EnsurePrefs().hideCompletedSections
@@ -1450,17 +1513,12 @@ local function BuildWeekliesSection(trackingFrame)
                 local done
                 if entry then done = QuestDoneAny(entry) end
                 rowDone = (done == true)
-                if done == nil then
-                    r.valFS:SetText(DIM .. (L.TRACKING_NA or "N/A") .. CLOSE)
-                elseif done then
-                    r.valFS:SetText(GREEN .. "✓" .. CLOSE)
-                else
-                    r.valFS:SetText(RED .. "✗" .. CLOSE)
-                end
+                r.chk:SetState(done)
             end
             local visible = not (hideCompleted and rowDone)
             r.lblFS:SetShown(visible)
-            r.valFS:SetShown(visible)
+            if r.chk   then r.chk:SetShown(visible)   end
+            if r.valFS then r.valFS:SetShown(visible) end
             if visible then
                 if r.colIdx == 1 then leftVis = leftVis + 1
                 else                  rightVis = rightVis + 1 end
