@@ -74,6 +74,53 @@ local tracking = {
         "Professions-Icon-Quality-Tier4",
         "Professions-Icon-Quality-Tier5",
     },
+    -- ────────────────────────────────────────────────────────────────────────
+    -- Rare NPC IDs, grouped by zone.
+    -- Each entry is { id=<npcID>, name=<displayName> }.
+    -- These have a weekly per-character lockout; killing grants zone Renown.
+    -- Source: https://www.wowhead.com/guide/midnight/eversong-woods-rares-treasures-locations-tips-rewards
+    rares = {
+        eversongWoods = {
+            { id = 246332, name = "Warden of Weeds"        },
+            { id = 240129, name = "Overfester Hydra"        },
+            { id = 250719, name = "Cre'van"                 },
+            { id = 250754, name = "Lady Liminus"            },
+            { id = 250841, name = "Bad Zed"                 },
+            { id = 250826, name = "Banuran"                 },
+            { id = 255302, name = "Duskburn"                },
+            { id = 255348, name = "Dame Bloodshed"          },
+            { id = 246633, name = "Harried Hawkstrider"     },
+            { id = 250582, name = "Bloated Snapdragon"      },
+            { id = 250683, name = "Coralfang"               },
+            { id = 250876, name = "Terrinor"                },
+            { id = 250780, name = "Waverly"                 },
+            { id = 250788, name = "Lovely Sunflower"        },
+            { id = 250806, name = "Lost Guardian"           },
+            { id = 255329, name = "Malfunctioning Construct"},
+        },
+        -- TODO: add harandar = { ... }, voidstorm = { ... }, etc. as guides release
+    },
+
+    -- ────────────────────────────────────────────────────────────────────────
+    -- Treasure object IDs, grouped by zone.
+    -- Each entry is { id=<objectID>, name=<displayName> }.
+    -- One-time loots per character; grant Renown and zone-specific items.
+    -- Source: https://www.wowhead.com/guide/midnight/eversong-woods-rares-treasures-locations-tips-rewards
+    treasures = {
+        eversongWoods = {
+            { id = 617881, name = "Rookery Cache"                 },
+            { id = 613697, name = "Gift of the Phoenix"           },
+            { id = 617534, name = "Gilded Armillary Sphere"       },
+            { id = 613267, name = "Farstrider's Lost Quiver"      },
+            { id = 555351, name = "Burbling Paint Pot"            },
+            { id = 613252, name = "Triple-Locked Safebox"         },
+            { id = 617432, name = "Forgotten Ink and Quill"       },
+            { id = 613242, name = "Antique Nobleman's Signet Ring"},
+            { id = 587307, name = "Stone Vat"                     },
+        },
+        -- TODO: add harandar = { ... }, voidstorm = { ... }, etc. as guides release
+    },
+
     -- ── Feature flags ──────────────────────────────────────────────────────
     -- Master switches for optional UI features.  Set a flag to false to
     -- completely disable that feature (no button, no gear-popup checkbox).
