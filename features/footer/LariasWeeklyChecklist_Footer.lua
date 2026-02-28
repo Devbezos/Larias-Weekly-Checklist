@@ -23,6 +23,14 @@ local function SheetVersionsBehind(myVer, newestVer)
     return diff > 0 and diff or 0
 end
 
+-- Applies all three label properties at once; avoids repeating the triple
+-- SetJustifyH / SetText / SetTextColor pattern inside UpdateStatusBanner.
+local function SetBannerLabel(lbl, text, r, g, b, a)
+    lbl:SetJustifyH("CENTER")
+    lbl:SetText(text)
+    lbl:SetTextColor(r, g, b, a or 1)
+end
+
 -- ── Addon:CreateStatusBanner ──────────────────────────────────────────────────
 -- Creates the one-line informational bar at the very bottom of the main frame.
 -- Called once from CreateTrackingPanel (features/body/LariasWeeklyChecklist_Currency.lua).
@@ -68,18 +76,14 @@ function Addon:UpdateStatusBanner()
         local behind = SheetVersionsBehind(mySV, newSV)
         local fmt    = L.STATUS_SHEET_UPDATE_FMT
                     or "Spreadsheet Update Detected - You are %d version(s) behind the spreadsheet"
-        banner._label:SetJustifyH("CENTER")
-        banner._label:SetText(string.format(fmt, behind))
-        banner._label:SetTextColor(1, 0.65, 0.0, 1)
+        SetBannerLabel(banner._label, string.format(fmt, behind), 1, 0.65, 0.0)
         return
     end
 
     -- Priority 1b: addon update available (no sheet-version info or sheet is current).
     if db.hideUpdateNotice ~= true and self.ShouldShowUpdateNotice and self:ShouldShowUpdateNotice() then
         local txt = L.UPDATE_AVAILABLE_TEXT or "New version available"
-        banner._label:SetJustifyH("CENTER")
-        banner._label:SetText(txt)
-        banner._label:SetTextColor(1, 0.2, 0.2, 1)
+        SetBannerLabel(banner._label, txt, 1, 0.2, 0.2)
         return
     end
 
@@ -96,15 +100,11 @@ function Addon:UpdateStatusBanner()
         if not hasLocale then
             local fmt = L.STATUS_NO_TRANSLATION_FMT
                      or "No translation available for %s. Consider contributing!"
-            banner._label:SetJustifyH("CENTER")
-            banner._label:SetText(string.format(fmt, wowLocale))
-            banner._label:SetTextColor(0.9, 0.7, 0.3, 1)
+            SetBannerLabel(banner._label, string.format(fmt, wowLocale), 0.9, 0.7, 0.3)
         else
             local txt = L.STATUS_TRANSLATION_NOTICE
                      or "This is a translation of the English guide. Notice any issues? Consider contributing!"
-            banner._label:SetJustifyH("CENTER")
-            banner._label:SetText(txt)
-            banner._label:SetTextColor(0.65, 0.65, 0.65, 0.8)
+            SetBannerLabel(banner._label, txt, 0.65, 0.65, 0.65, 0.8)
         end
         return
     end

@@ -60,7 +60,10 @@ function C.StyleButton(btn)
             tr:ClearAllPoints()
             tr:SetPoint("CENTER", btn, "CENTER", 0, 0)
         end
-        if tr.SetTextColor then tr:SetTextColor(1, 1, 1, 1) end
+        if tr.SetTextColor then
+            if T and T.text then tr:SetTextColor(T.text.r, T.text.g, T.text.b, T.text.a or 1)
+            else                 tr:SetTextColor(1, 1, 1, 1) end
+        end
     end
 
     if btn.CreateTexture and not btn._lariasCustomHighlight then

@@ -56,48 +56,8 @@ function Addon:CreateHeader(frame)
     frame._lariasGearBtn = gearBtn
 
     -- ── StyleMainTabButton ────────────────────────────────────────────────────
-    local function StyleMainTabButton(tabButton)
-        if not tabButton then return end
-        Addon:ApplyTheme(tabButton)
-        if tabButton.SetBackdropColor then
-            tabButton:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b,
-                math.max(0, (tonumber(Addon.THEME.bg.a) or 1) - 0.28))
-        end
-        local function ClearAndHideTexture(texture)
-            if not texture then return end
-            if texture.SetTexture then texture:SetTexture(nil) end
-            if texture.SetAlpha   then texture:SetAlpha(0) end
-            if texture.Hide       then texture:Hide() end
-        end
-        if tabButton.GetNormalTexture   then ClearAndHideTexture(tabButton:GetNormalTexture())   end
-        if tabButton.GetPushedTexture   then ClearAndHideTexture(tabButton:GetPushedTexture())   end
-        if tabButton.GetDisabledTexture then ClearAndHideTexture(tabButton:GetDisabledTexture()) end
-        if tabButton.GetHighlightTexture then ClearAndHideTexture(tabButton:GetHighlightTexture()) end
-        if tabButton.Left   and tabButton.Left.Hide   then tabButton.Left:Hide()   end
-        if tabButton.Middle and tabButton.Middle.Hide then tabButton.Middle:Hide() end
-        if tabButton.Right  and tabButton.Right.Hide  then tabButton.Right:Hide()  end
-        if tabButton.SetTextInsets then tabButton:SetTextInsets(12, 12, 4, 4) end
-        local textRegion = tabButton.Text or (tabButton.GetFontString and tabButton:GetFontString())
-        if textRegion then
-            if textRegion.SetJustifyV       then textRegion:SetJustifyV("MIDDLE") end
-            if textRegion.ClearAllPoints and textRegion.SetPoint then
-                textRegion:ClearAllPoints()
-                textRegion:SetPoint("CENTER", tabButton, "CENTER", 0, 0)
-            end
-            if textRegion.SetTextColor then
-                local _t = Addon.THEME and Addon.THEME.text
-                if _t then textRegion:SetTextColor(_t.r, _t.g, _t.b, _t.a or 1)
-                else        textRegion:SetTextColor(1, 1, 1, 1) end
-            end
-        end
-        if tabButton.CreateTexture and not tabButton._lariasCustomHighlight then
-            local highlight = tabButton:CreateTexture(nil, "HIGHLIGHT")
-            highlight:SetAllPoints(tabButton)
-            highlight:SetColorTexture(Addon.THEME.text.r, Addon.THEME.text.g, Addon.THEME.text.b, 0.06)
-            tabButton._lariasCustomHighlight = highlight
-        end
-        tabButton._lariasTabStyled = true
-    end
+    -- Delegates to the shared Controls.StyleButton so there is one implementation.
+    local StyleMainTabButton = Addon.Controls.StyleButton
     Addon._styleActionButton = StyleMainTabButton
 
     -- ── Lazy header button locals ─────────────────────────────────────────────
