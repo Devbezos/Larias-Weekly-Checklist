@@ -69,8 +69,8 @@ function Addon:SyncGearPopup()
          L.OPTIONS_HIDE_SLIDERS or "Hide Sliders")
     Sync(p._cbHideUpdateNotice, db.hideUpdateNotice and true or false,
          L.OPTIONS_HIDE_UPDATE_NOTICE or "Hide Update Notices")
-    local gdb0 = Addon.db and Addon.db.global
-    Sync(p._cbHideMinimapBtn, gdb0 and gdb0.minimap and gdb0.minimap.hide and true or false,
+    local _gdb = Addon.db and Addon.db.global
+    Sync(p._cbHideMinimapBtn, _gdb and _gdb.minimap and _gdb.minimap.hide and true or false,
          L.OPTIONS_HIDE_MINIMAP_BTN or "Hide Minimap Button")
 
     -- Reset button label.

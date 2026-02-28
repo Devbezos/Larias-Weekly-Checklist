@@ -867,31 +867,19 @@ function Addon:ApplyThemeColors()
     local gdb = self.db and self.db.global
     local tc  = gdb and gdb.themeColors
 
-    -- Hard defaults (must match CONSTANTS.theme init values).
-    local defBgR,   defBgG,   defBgB   = 0.10, 0.10, 0.10
-    local defTextR, defTextG, defTextB = 1.00, 1.00, 1.00
-
-    -- Background color ─────────────────────────────────────────────────────
-    if tc and tc.bgR ~= nil then
-        self.THEME.bg.r = tc.bgR
-        self.THEME.bg.g = tc.bgG
-        self.THEME.bg.b = tc.bgB
-    else
-        self.THEME.bg.r = defBgR
-        self.THEME.bg.g = defBgG
-        self.THEME.bg.b = defBgB
+    -- Loads a THEME channel (a table with .r/.g/.b) from saved values,
+    -- falling back to the compiled defaults when the key is absent.
+    local function loadColor(ch, rk, gk, bk, dr, dg, db_)
+        if tc and tc[rk] ~= nil then
+            ch.r = tc[rk]; ch.g = tc[gk]; ch.b = tc[bk]
+        else
+            ch.r = dr;     ch.g = dg;     ch.b = db_
+        end
     end
 
-    -- List-text color ──────────────────────────────────────────────────────
-    if tc and tc.textR ~= nil then
-        self.THEME.text.r = tc.textR
-        self.THEME.text.g = tc.textG
-        self.THEME.text.b = tc.textB
-    else
-        self.THEME.text.r = defTextR
-        self.THEME.text.g = defTextG
-        self.THEME.text.b = defTextB
-    end
+    loadColor(self.THEME.bg,     "bgR",     "bgG",     "bgB",     0.10, 0.10, 0.10)
+    loadColor(self.THEME.text,   "textR",   "textG",   "textB",   1.00, 1.00, 1.00)
+    loadColor(self.THEME.header, "headerR", "headerG", "headerB", 1.00, 0.82, 0.00)
 
     -- Re-apply backdrop to any already-open themed frames.
     if self._mainFrame then
@@ -909,18 +897,6 @@ function Addon:ApplyThemeColors()
     -- Refresh the gear popup backdrop (safe to call even when hidden; Reset hides
     -- the popup before calling ApplyThemeColors, so IsShown() would miss it).
     if self._gearPopup then self:ApplyTheme(self._gearPopup) end
-
-    -- Header text color
-    local defHdrR, defHdrG, defHdrB = 1.00, 0.82, 0.00
-    if tc and tc.headerR ~= nil then
-        self.THEME.header.r = tc.headerR
-        self.THEME.header.g = tc.headerG
-        self.THEME.header.b = tc.headerB
-    else
-        self.THEME.header.r = defHdrR
-        self.THEME.header.g = defHdrG
-        self.THEME.header.b = defHdrB
-    end
 
     -- Update tracking panel column title colors.
     local tf = self._trackingFrame

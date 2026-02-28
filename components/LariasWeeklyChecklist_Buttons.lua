@@ -28,13 +28,12 @@ local C = Addon.Controls
 function C.StyleButton(btn)
     if not btn then return end
 
+    local T = Addon.THEME  -- single reference; all uses below share this upvalue
+
     Addon:ApplyTheme(btn)
     -- Buttons use a slightly lower bg alpha than panels.
-    if btn.SetBackdropColor then
-        local T = Addon.THEME
-        if T then
-            btn:SetBackdropColor(T.bg.r, T.bg.g, T.bg.b, math.max(0, (tonumber(T.bg.a) or 1) - 0.28))
-        end
+    if btn.SetBackdropColor and T then
+        btn:SetBackdropColor(T.bg.r, T.bg.g, T.bg.b, math.max(0, (tonumber(T.bg.a) or 1) - 0.28))
     end
 
     local function ClearTex(t)
@@ -67,7 +66,6 @@ function C.StyleButton(btn)
     if btn.CreateTexture and not btn._lariasCustomHighlight then
         local hl = btn:CreateTexture(nil, "HIGHLIGHT")
         hl:SetAllPoints(btn)
-        local T = Addon.THEME
         if T then
             hl:SetColorTexture(T.text.r, T.text.g, T.text.b, 0.06)
         else
