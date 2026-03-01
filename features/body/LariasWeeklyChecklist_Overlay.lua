@@ -361,14 +361,25 @@ local function ResizeTrackingPanelToContent(addon)
     local trackingFrame = addon._trackingFrame
     if not (trackingFrame and trackingFrame.GetHeight and trackingFrame.SetHeight) then return end
 
+    -- Only measure columns that are actually visible; hidden columns retain stale
+    -- _lariasBaseY values on their labels which would inflate the panel height.
+    local rightColShown = trackingFrame._lariasRightCol
+                      and trackingFrame._lariasRightCol.IsShown
+                      and trackingFrame._lariasRightCol:IsShown()
+    local leftColShown  = trackingFrame._lariasLeftCol
+                      and trackingFrame._lariasLeftCol.IsShown
+                      and trackingFrame._lariasLeftCol:IsShown()
+
     -- Measure right column first so the GV grid can expand to match it.
     local bottomRight = 0
-    for i = 1, RIGHT_LINE_COUNT do
-        local row = TrackingUI.right[RIGHT_ROW_KEYS[i]]
-        if type(row) == "table" then
-            bottomRight = max(bottomRight, BottomFor(row.frame or row.label))
-        else
-            bottomRight = max(bottomRight, BottomFor(row))
+    if rightColShown then
+        for i = 1, RIGHT_LINE_COUNT do
+            local row = TrackingUI.right[RIGHT_ROW_KEYS[i]]
+            if type(row) == "table" then
+                bottomRight = max(bottomRight, BottomFor(row.frame or row.label))
+            else
+                bottomRight = max(bottomRight, BottomFor(row))
+            end
         end
     end
 
@@ -379,7 +390,9 @@ local function ResizeTrackingPanelToContent(addon)
 
     local bottomLeft = 0
     -- Use the bottom border of the last GV grid block as the left-column height sentinel.
-    bottomLeft = max(bottomLeft, BottomFor(TrackingUI.left._gvSentinel))
+    if leftColShown then
+        bottomLeft = max(bottomLeft, BottomFor(TrackingUI.left._gvSentinel))
+    end
 
     local contentH = max(bottomLeft, bottomRight)
     -- Only reserve space for the GV/currency title row when at least one column is shown.
