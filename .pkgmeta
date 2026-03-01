@@ -47,4 +47,3 @@ ignore:
   - setup-libs.ps1
   - setup-libs.sh
   - .pkgmeta
-  - lib
