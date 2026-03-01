@@ -114,6 +114,8 @@ function Addon:SyncGearPopup()
     local _minimap = Addon.db and Addon.db.global and Addon.db.global.minimap
     Sync(p._cbHideMinimapBtn, _minimap and _minimap.hide and true or false,
          L.OPTIONS_HIDE_MINIMAP_BTN or "Hide Minimap Button")
+    Sync(p._cbDisableUpgradeWarn, db.upgradeWarnDisabled and true or false,
+         L.OPTIONS_DISABLE_UPGRADE_WARN or "Disable Upgrade Warnings")
 
     -- Refresh color swatch labels in case locale changed since popup was built.
     if p._gearColorLabels then
@@ -151,14 +153,15 @@ function Addon:SyncGearPopup()
     do
         local PAD      = 10
         local TILE_H   = 34   -- tile height
-        local N_TOTAL  = 9
+        local N_TOTAL  = 10
         local rstStartY  = PAD
         local div1StartY = rstStartY + 22 + 6
         local cbsY       = div1StartY + 1 + 8
-        -- Slots 1-6 always present; slot 7 = sliders; slot 8 = update notice; slot 9 = minimap btn.
-        local SLIDERS_IDX        = 7
-        local UPDATE_NOTICE_IDX  = 8
-        local MINIMAP_BTN_IDX    = 9
+        -- Slots 1-6 always present; 7=sliders; 8=update notice; 9=minimap; 10=upgrade warn.
+        local SLIDERS_IDX             = 7
+        local UPDATE_NOTICE_IDX       = 8
+        local MINIMAP_BTN_IDX         = 9
+        local DISABLE_UPGRADE_WARN_IDX = 10
         local function ReflowCb(cb, visIdx)
             if not cb then return end
             local tileTopY = -(cbsY + (visIdx - 1) * TILE_H)
@@ -171,9 +174,10 @@ function Addon:SyncGearPopup()
                 cb._hit:SetPoint("TOPRIGHT", p, "TOPRIGHT", 0, tileTopY)
             end
         end
-        ReflowCb(p._cbHideSliders,       SLIDERS_IDX)
-        ReflowCb(p._cbHideUpdateNotice,  UPDATE_NOTICE_IDX)
-        ReflowCb(p._cbHideMinimapBtn,    MINIMAP_BTN_IDX)
+        ReflowCb(p._cbHideSliders,          SLIDERS_IDX)
+        ReflowCb(p._cbHideUpdateNotice,     UPDATE_NOTICE_IDX)
+        ReflowCb(p._cbHideMinimapBtn,       MINIMAP_BTN_IDX)
+        ReflowCb(p._cbDisableUpgradeWarn,   DISABLE_UPGRADE_WARN_IDX)
 
         -- When the language toggle button is visible, add 30 px for it + divider + padding.
         local VER_PAD = showLangToggle and 134 or 104
@@ -199,10 +203,11 @@ end
 
 function Addon:ToggleGearPopup(anchor, growRight)
     local p = self._gearPopup
-    -- Guard: the outside-click catcher's OnMouseDown sets _lariasJustClosed and
-    -- propagates the click; if that propagated click reaches the gear button's
-    -- OnClick in the same frame, this flag prevents an immediate reopen.
-    if p and p._lariasJustClosed then p._lariasJustClosed = false; return end
+    -- Guard: the outside-click catcher records GetTime() when it closes the panel;
+    -- if that propagated click reaches the gear button within 50 ms we treat it as
+    -- "the same event" and suppress the reopen.  A timestamp is used so a stale
+    -- flag from a click-elsewhere never permanently blocks a later toggle.
+    if p and p._lariasClosedAt and (GetTime() - p._lariasClosedAt) < 0.20 then p._lariasClosedAt = nil; return end
     if p and p.IsShown and p:IsShown() then
         p:Hide()
         return
@@ -274,26 +279,32 @@ function Addon:ToggleGearPopup(anchor, growRight)
 
         -- ── 8 Checkboxes ──────────────────────────────────────────────────
         local checks = {
-            { key = "_cbHideCompletedTasks", },
-            { key = "_cbHideCompleted",   },
-            { key = "_cbHideGreatVault",  },
-            { key = "_cbHideCurrency",    },
-            { key = "_cbHideChangeWeek",  },
-            { key = "_cbHideIlvlRef",     },
-            { key = "_cbHideSliders",     },
-            { key = "_cbHideUpdateNotice", },
-            { key = "_cbHideMinimapBtn",  },
+            { key = "_cbHideCompletedTasks",   },
+            { key = "_cbHideCompleted",         },
+            { key = "_cbHideGreatVault",        },
+            { key = "_cbHideCurrency",          },
+            { key = "_cbHideChangeWeek",        },
+            { key = "_cbHideIlvlRef",           },
+            { key = "_cbHideSliders",           },
+            { key = "_cbHideUpdateNotice",      },
+            { key = "_cbHideMinimapBtn",        },
+            { key = "_cbDisableUpgradeWarn",    },
         }
         local callbacks = {
             _cbHideCompletedTasks = function(checked)
                 local db = Addon:EnsurePrefs()
                 db.hideCompletedTasks = checked
+                -- "Hide Completed Tasks" implies "Hide Finished Weeks" — force it on
+                -- so completed sections are also hidden and the week label stays correct.
+                if checked then db.hideCompletedSections = true end
                 if Addon.SyncGearPopup then Addon:SyncGearPopup() end
+                if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
                 if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
             end,
             _cbHideCompleted  = function(checked)
                 local db = Addon:EnsurePrefs()
                 db.hideCompletedSections = checked
+                if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
                 if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
             end,
             _cbHideGreatVault = function(checked)
@@ -330,6 +341,10 @@ function Addon:ToggleGearPopup(anchor, growRight)
                     if Addon.RequestVersions then Addon:RequestVersions(false) end
                 end
                 if Addon.UpdateStatusBanner then Addon:UpdateStatusBanner() end
+            end,
+            _cbDisableUpgradeWarn = function(checked)
+                local db = Addon:EnsurePrefs()
+                db.upgradeWarnDisabled = checked or nil
             end,
             _cbHideMinimapBtn = function(checked)
                 local gdb = Addon.db and Addon.db.global
@@ -372,6 +387,15 @@ function Addon:ToggleGearPopup(anchor, growRight)
             hit:SetPoint("TOPLEFT",  p, "TOPLEFT",  0, tileTopY)
             hit:SetPoint("TOPRIGHT", p, "TOPRIGHT", 0, tileTopY)
             hit:SetHeight(TILE_H)
+
+            -- Hairline divider below each row except the last.
+            if i < #checks then
+                local div = p:CreateTexture(nil, "ARTWORK")
+                div:SetColorTexture(0.3, 0.3, 0.3, 0.5)
+                div:SetHeight(1)
+                div:SetPoint("TOPLEFT",  p, "TOPLEFT",  PAD,  tileTopY - TILE_H)
+                div:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PAD, tileTopY - TILE_H)
+            end
         end
 
         -- ── Version + credit ───────────────────────────────────────────────

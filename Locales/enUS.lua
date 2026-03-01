@@ -22,7 +22,7 @@ local STRINGS = {
 	BUTTON_CANCEL = "Cancel",
 
 	-- Options tab
-	OPTIONS_HIDE_COMPLETED_TASKS = "Hide Completed Tasks",
+	OPTIONS_HIDE_COMPLETED_TASKS = "Hide Finished Tasks",
 	HIDE_FINISHED_WEEKS          = "Hide Finished Weeks",
 	OPTIONS_HIDE_GREAT_VAULT     = "Hide Great Vault",
 	OPTIONS_HIDE_CURRENCY        = "Hide Currency",
@@ -52,7 +52,9 @@ local STRINGS = {
 	-- Settings panel language override
 	SETTINGS_LANGUAGE_AUTO     = "Auto (Client Default)",
 	-- Upgrade warning
-	UPGRADE_WARN_MSG = "Item is at %d/%d upgrades \226\128\148 upgrading now costs the most crests per ilvl.",
+	UPGRADE_WARN_MSG             = "You can save %d %s crests by upgrading a %s item instead",
+	UPGRADE_WARN_DISABLE_BTN     = "Disable Warning",
+	UPGRADE_WARN_DISABLE_TOOLTIP = "Check Laria's guide for more information.",
 	-- Color picker swatch labels (gear popup)
 	COLOR_PICKER_BG             = "Background",
 	COLOR_PICKER_TEXT           = "Text",
@@ -95,7 +97,8 @@ local STRINGS = {
 
 	-- Main window
 	TAB_OPTIONS = "Options",
-	CHANGE_WEEK_BUTTON = "Change Week",
+	CHANGE_WEEK_BUTTON  = "Change Week",
+	ALL_WEEKS_COMPLETE  = "Finished!",
 	ILVLREF_BUTTON = "View Item Levels",
 
 	-- Item level reference popup

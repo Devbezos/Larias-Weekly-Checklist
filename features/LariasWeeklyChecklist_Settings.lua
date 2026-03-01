@@ -486,7 +486,7 @@ local function BuildPanel()
 
     langDropBtn:SetScript("OnClick", function()
         local p = GetOrBuildLangPopup()
-        if p._lariasJustClosed then p._lariasJustClosed = false; return end
+        if p._lariasClosedAt and (GetTime() - p._lariasClosedAt) < 0.20 then p._lariasClosedAt = nil; return end
         if p:IsShown() then p:Hide(); return end
         p:ClearAllPoints()
         p:SetPoint("TOPLEFT", langDropBtn, "BOTTOMLEFT", 0, -2)

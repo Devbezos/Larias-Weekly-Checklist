@@ -1539,9 +1539,13 @@ local function OnCheckboxClick(selfBtn)
 
     LayoutFrom(sectionFrame._index or 1)
 
-    -- After hide/relayout, update the change-week button label to reflect
-    -- whatever section is now visible at the top of the scroll view.
-    if Addon._refreshChangeWeekLabel then
+    -- After a section completes, recompute the change-week button label from
+    -- scratch (LayoutHeaderButtons re-derives currentId from the DB so it
+    -- correctly reflects whichever week is now first-incomplete).
+    -- For non-completing clicks, a scroll-position refresh is sufficient.
+    if secCompleteNow then
+        if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
+    elseif Addon._refreshChangeWeekLabel then
         Addon._refreshChangeWeekLabel()
     end
 
