@@ -32,7 +32,8 @@ externals:
   lib/Ace3/AceBucket-3.0:
     url: https://repos.wowace.com/wow/ace3/trunk/AceBucket-3.0
   lib/LibDataBroker-1.1:
-    url: https://repos.wowace.com/wow/libdatabroker-1-1/trunk
+    url: https://github.com/tekkub/libdatabroker-1-1.git
+    branch: master
   lib/LibDBIcon-1.0:
     url: https://repos.wowace.com/wow/libdbicon-1-0/trunk
   lib/LibWindow-1.1/LibWindow-1.1:
