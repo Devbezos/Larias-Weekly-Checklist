@@ -15,11 +15,6 @@ local STRINGS = {
 
 	-- Update popup
 	UPDATE_AVAILABLE_TEXT = "New version available",
-	UPDATE_AVAILABLE_FMT = "%s has an update available.\n\nPlease update the addon to the newest version.",
-
-	-- Shared buttons
-	BUTTON_OK = "OK",
-	BUTTON_CANCEL = "Cancel",
 
 	-- Options tab
 	OPTIONS_HIDE_COMPLETED_TASKS = "Hide Finished Tasks",
@@ -53,14 +48,13 @@ local STRINGS = {
 	SETTINGS_LANGUAGE_AUTO     = "Auto (Client Default)",
 	-- Upgrade warning
 	UPGRADE_WARN_MSG             = "You can save %d %s crests by upgrading a %s item instead",
-	UPGRADE_WARN_DISABLE_BTN     = "Disable Warning",
+	UPGRADE_WARN_DISABLE_BTN     = "Hide Upgrade Warning",
 	UPGRADE_WARN_DISABLE_TOOLTIP = "Check Laria's guide for more information.",
 	-- Color picker swatch labels (gear popup)
 	COLOR_PICKER_BG             = "Background",
 	COLOR_PICKER_TEXT           = "Text",
 	COLOR_PICKER_HDR            = "Header",
 	-- Status banner (shown below the slider row)
-	STATUS_UPDATE_AVAILABLE_FMT  = "Update available! You have %s, newest is %s.",
 	STATUS_SHEET_UPDATE_FMT      = "Spreadsheet Update Detected - You are %d version(s) behind the spreadsheet",
 	STATUS_NO_TRANSLATION_FMT    = "No translation available for %s. Consider contributing!",
 	STATUS_TRANSLATION_NOTICE    = "English is the most up-to-date language. Your checklist may be slightly out of date.",
@@ -77,8 +71,8 @@ local STRINGS = {
 	TRACKING_NA = "N/A",
 
 	TRACKING_SPARKS_LABEL = "Sparks",
+	TRACKING_CREST_LABEL  = "Crests",
 	TRACKING_DONE = "Done",
-	TRACKING_NOT_DONE = "Not done",
 
 	TRACKING_QUEST_DELVERS_BOUNTY = "Delver's Bounty",
 	TRACKING_QUEST_WEEKLY_PREY = "Weekly Prey",
@@ -87,8 +81,6 @@ local STRINGS = {
 	TRACKING_TRADE_UP_SUFFIX = " Trade Up)",
 
 	TRACKING_CATALYST_LABEL = "Catalyst",
-
-	TRACKING_INF = "INF",
 
 	-- Minimap tooltip
 	MINIMAP_TOOLTIP_LEFT_CLICK_TOGGLE = "Left-click: Toggle checklist",
@@ -99,7 +91,12 @@ local STRINGS = {
 	TAB_OPTIONS = "Options",
 	CHANGE_WEEK_BUTTON  = "Change Week",
 	ALL_WEEKS_COMPLETE  = "Finished!",
+	DONE_PREFIX         = "",
 	ILVLREF_BUTTON = "View Item Levels",
+
+	-- Character picker
+	CHAR_PICKER_BUTTON          = "Swap Profile",
+	CHAR_PICKER_TOOLTIP_REMOVE  = "To remove a character, use the Options menu.",
 
 	-- Item level reference popup
 	ILVLREF_WINDOW_TITLE  = "Midnight Season 1 Item Level Reference",
