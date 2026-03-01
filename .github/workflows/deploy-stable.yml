@@ -141,6 +141,26 @@ jobs:
           git fetch --tags --force
           git reset --hard ${{ steps.release.outputs.tag }}
 
+      - name: Generate release changelog
+        if: steps.check.outputs.should_release == 'true'
+        run: |
+          set -euo pipefail
+          # Find the tag that came before this one so we only log the delta.
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)
+          if [ -n "$PREV_TAG" ]; then
+            RANGE="${PREV_TAG}..HEAD"
+          else
+            # First-ever release: include everything.
+            RANGE="HEAD"
+          fi
+
+          # Write bullet-point changelog, stripping CI-generated commits.
+          git log "$RANGE" --pretty=format:"- %s" \
+            | grep -v "^- Post-release:"          \
+            | grep -v "^- Release v"              \
+            | grep -v "^- Auto-update data/toc"   \
+            > CHANGELOG.md || true
+
       - name: Package + Upload (CurseForge & Wago)
         if: steps.check.outputs.should_release == 'true'
         uses: BigWigsMods/packager@v2.4.3
