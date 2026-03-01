@@ -138,22 +138,7 @@ function Addon:ApplyScaleSliderVisibility()
         and ((self._statusBannerH or BANNER_H) + (self._statusBannerPad or BANNER_PAD))
         or 0
     sf._bannerBotExtra = bannerExtra
-
-    if sf.AdjustForCpBtn then sf.AdjustForCpBtn(nil) end
-
-    -- Determine whether the char-picker button is visible in the bottom row.
-    local featureOn = (self.FEATURE_FLAGS and self.FEATURE_FLAGS.ENABLE_CHAR_SELECTOR) ~= false
-    local hasChars  = featureOn and (self.HasPickableChars and self:HasPickableChars())
-    local cpVisible = featureOn and hasChars and (db.showCharPickerBtn ~= false)
-
-    local cpBtnRef = self._mainFrame and self._mainFrame._lariasCharPickerBtn
-    if cpBtnRef and cpBtnRef.IsShown and cpBtnRef:IsShown() then
-        local _cpY = (Addon.UI.sliderBottomPad or 4) + bannerExtra
-        if anySlider then _cpY = _cpY + (sf:GetHeight() or 36) + 4 end
-        cpBtnRef:ClearAllPoints()
-        cpBtnRef:SetPoint("BOTTOMRIGHT", self._mainFrame, "BOTTOMRIGHT",
-            -(Addon.UI.sectionInsetX or 14), _cpY)
-    end
+    if sf.AdjustForCpBtn then sf.AdjustForCpBtn() end
 
     -- Re-anchor the tracking panel above the slider/banner row.
     local tf = self._trackingFrame
@@ -163,12 +148,8 @@ function Addon:ApplyScaleSliderVisibility()
         local topPad    = Addon.UI.sliderTopPad    or 4
         local sliderTot = (Addon.UI.sliderH or 20) + (Addon.UI.sliderLabelH or 14) + 2
         local botY
-        if anySlider and cpVisible then
-            botY = botPad + sliderTot + 4 + 22 + topPad
-        elseif anySlider then
+        if anySlider then
             botY = botPad + sliderTot + topPad
-        elseif cpVisible then
-            botY = botPad + 22 + topPad
         else
             botY = botPad
         end

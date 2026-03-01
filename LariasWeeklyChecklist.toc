@@ -49,6 +49,8 @@ features\header\LariasWeeklyChecklist_GearPopup.lua
 features\header\LariasWeeklyChecklist_IlvlRef.lua
 features\header\LariasWeeklyChecklist_Header.lua
 features\body\LariasWeeklyChecklist_ListData.lua
+features\body\LariasWeeklyChecklist_GreatVault.lua
 features\body\LariasWeeklyChecklist_Currency.lua
-features\footer\LariasWeeklyChecklist_CharPicker.lua
+features\body\LariasWeeklyChecklist_Overlay.lua
+features\LariasWeeklyChecklist_UpgradeWarning.lua
 features\footer\LariasWeeklyChecklist_Footer.lua

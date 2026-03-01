@@ -22,23 +22,37 @@ local STRINGS = {
 	BUTTON_CANCEL = "Cancel",
 
 	-- Options tab
-	OPTIONS_HIDE_GREAT_VAULT = "Hide Great Vault",
-	OPTIONS_HIDE_CURRENCY = "Hide Currency",
-	HIDE_COMPLETED_WEEKS = "Hide Completed Weeks",
-	OPTIONS_HIDE_CHANGE_WEEK_BTN = 'Hide Week Selector',
-	OPTIONS_HIDE_ILVL_REF_BTN = 'Hide Item Level Popup',
-	OPTIONS_HIDE_CHAR_SELECT = "Hide character selector",
-	OPTIONS_HIDDEN_CHARS_TITLE = "Hidden characters:",
-	OPTIONS_HIDDEN_CHARS_NONE = "None",
+	OPTIONS_HIDE_COMPLETED_TASKS = "Hide Completed Tasks",
+	HIDE_FINISHED_WEEKS          = "Hide Finished Weeks",
+	OPTIONS_HIDE_GREAT_VAULT     = "Hide Great Vault",
+	OPTIONS_HIDE_CURRENCY        = "Hide Currency",
+	OPTIONS_HIDE_CHANGE_WEEK_BTN = "Hide Week Selector",
+	OPTIONS_HIDE_ILVL_REF_BTN   = "Hide Item Level Popup",
+	OPTIONS_HIDE_SLIDERS         = "Hide Sliders",
+	OPTIONS_HIDE_UPDATE_NOTICE   = "Hide Update Warnings",
+	OPTIONS_DISABLE_UPGRADE_WARN = "Disable Upgrade Warnings",
+	OPTIONS_HIDE_MINIMAP_BTN     = "Hide Minimap Button",
 	RESET_BUTTON = "Reset List",
 	UI_SCALE_LABEL       = "Scale",
 	UI_SCALE_MIN_LABEL   = "50%",
 	UI_SCALE_MAX_LABEL   = "150%",
-	OPTIONS_HIDE_SCALE_SLIDER   = "Hide Scale Slider",
-	OPTIONS_HIDE_SLIDERS        = "Hide Sliders",
-	OPTIONS_HIDE_OPACITY_SLIDER = "Hide Opacity Slider",
-	OPTIONS_HIDE_UPDATE_NOTICE  = "Hide Update Warnings",
-	OPTIONS_HIDE_MINIMAP_BTN    = "Hide Minimap Button",
+	UI_OPACITY_LABEL     = "Opacity",
+	UI_OPACITY_MIN_LABEL = "10%",
+	UI_OPACITY_MAX_LABEL = "100%",
+	-- Settings panel section headers
+	SETTINGS_SECTION_ACTIONS = "Actions",
+	SETTINGS_SECTION_DISPLAY = "Display",
+	SETTINGS_SECTION_COLORS  = "Colors",
+	SETTINGS_SECTION_LANGUAGE = "Language",
+	-- Settings panel color-row labels
+	SETTINGS_COLOR_RESET       = "Reset",
+	SETTINGS_COLOR_BACKGROUND  = "Background",
+	SETTINGS_COLOR_LIST_TEXT   = "List Text",
+	SETTINGS_COLOR_HEADER_TEXT = "Header Text",
+	-- Settings panel language override
+	SETTINGS_LANGUAGE_AUTO     = "Auto (Client Default)",
+	-- Upgrade warning
+	UPGRADE_WARN_MSG = "Item is at %d/%d upgrades \226\128\148 upgrading now costs the most crests per ilvl.",
 	-- Color picker swatch labels (gear popup)
 	COLOR_PICKER_BG             = "Background",
 	COLOR_PICKER_TEXT           = "Text",
@@ -48,10 +62,6 @@ local STRINGS = {
 	STATUS_SHEET_UPDATE_FMT      = "Spreadsheet Update Detected - You are %d version(s) behind the spreadsheet",
 	STATUS_NO_TRANSLATION_FMT    = "No translation available for %s. Consider contributing!",
 	STATUS_TRANSLATION_NOTICE    = "English is the most up-to-date language. Your checklist may be slightly out of date.",
-	UI_OPACITY_LABEL     = "Opacity",
-	UI_OPACITY_MIN_LABEL = "10%",
-	UI_OPACITY_MAX_LABEL = "100%",
-
 	-- Tracking panel header tooltips
 	TOOLTIP_OPEN_GREAT_VAULT  = "Click to open the Great Vault",
 	TOOLTIP_OPEN_CURRENCIES   = "Click to open the Currency panel",
@@ -86,8 +96,6 @@ local STRINGS = {
 	-- Main window
 	TAB_OPTIONS = "Options",
 	CHANGE_WEEK_BUTTON = "Change Week",
-	CHAR_PICKER_BUTTON = "Swap Profile",
-	CHAR_PICKER_TOOLTIP_REMOVE = "To remove a character, use the Options menu.",
 	ILVLREF_BUTTON = "View Item Levels",
 
 	-- Item level reference popup
@@ -138,9 +146,6 @@ local STRINGS = {
 
 	-- Slash commands
 	SLASH_USAGE_TOGGLE = "Usage: /larias or /lcl to toggle the checklist",
-	SLASH_USAGE_LOCALE = "Usage: /larias locale auto|enUS|deDE|esES|esMX|frFR|itIT|ptBR|ruRU",
-	SLASH_LOCALE_SET_FMT = "Locale override set to %s (effective: %s)",
-	SLASH_LOCALE_NOT_FOUND = "Unknown locale '%s'. Available: auto|%s",
 }
 
 for key, value in pairs(STRINGS) do

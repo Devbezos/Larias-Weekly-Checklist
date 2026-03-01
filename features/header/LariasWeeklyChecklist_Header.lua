@@ -64,15 +64,6 @@ function Addon:CreateHeader(frame)
     local changeWeekBtn
     local ilvlRefBtn
 
-    -- ── Char-picker init ──────────────────────────────────────────────────────
-    if Addon.InitCharPickerUI then
-        Addon:InitCharPickerUI(frame, StyleMainTabButton)
-    end
-
-    local function EnsureCharPickerBtn_()
-        if Addon._cpEnsureBtn then return Addon._cpEnsureBtn() end
-    end
-
     -- ── EnsureChangeWeekBtn_ ──────────────────────────────────────────────────
     local function EnsureChangeWeekBtn_()
         if changeWeekBtn then return changeWeekBtn end
@@ -328,58 +319,6 @@ function Addon:CreateHeader(frame)
         local dbLocal = Addon:EnsurePrefs()
         local showCW  = dbLocal.showChangeWeekBtn ~= false
         local showIR  = dbLocal.showIlvlRefBtn    ~= false
-        local showCP  = dbLocal.showCharPickerBtn ~= false
-                    and (Addon.FEATURE_FLAGS and Addon.FEATURE_FLAGS.ENABLE_CHAR_SELECTOR) ~= false
-
-        if showCP then
-            if Addon.HasPickableChars then showCP = Addon:HasPickableChars() end
-        end
-
-        -- charPickerBtn is in the BOTTOM row; position it first.
-        local cpBtn = EnsureCharPickerBtn_()
-        if cpBtn then
-            if showCP then
-                cpBtn:SetScript("OnClick", function()
-                    if Addon._cpOnClick then Addon._cpOnClick() end
-                end)
-                cpBtn:ClearAllPoints()
-                local _cpBannerExtra = Addon._statusBanner
-                    and ((Addon._statusBannerH or 14) + (Addon._statusBannerPad or 3))
-                    or 0
-                local _spf = Addon._inFrameScaleSlider
-                local _cpY = (Addon.UI.sliderBottomPad or 4) + _cpBannerExtra
-                if _spf and _spf.IsShown and _spf:IsShown() then
-                    _cpY = _cpY + (_spf:GetHeight() or 36) + 4
-                end
-                cpBtn:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT",
-                    -(Addon.UI.sectionInsetX or 14), _cpY)
-                if Addon._cpUpdateLabel then Addon._cpUpdateLabel() end
-                cpBtn:Show()
-                local sf = Addon._inFrameScaleSlider
-                if sf and sf.AdjustForCpBtn then
-                    if C_Timer and C_Timer.After then
-                        C_Timer.After(0, function() sf.AdjustForCpBtn(cpBtn) end)
-                    else
-                        sf.AdjustForCpBtn(cpBtn)
-                    end
-                end
-            else
-                if Addon._viewingChar then
-                    Addon._viewingChar = nil
-                    if Addon._cpUpdateLabel  then Addon._cpUpdateLabel() end
-                    if Addon.RequestRefresh  then Addon:RequestRefresh() else Addon:Refresh() end
-                end
-                cpBtn:Hide()
-                local sf = Addon._inFrameScaleSlider
-                if sf and sf.AdjustForCpBtn then
-                    if C_Timer and C_Timer.After then
-                        C_Timer.After(0, function() sf.AdjustForCpBtn(nil) end)
-                    else
-                        sf.AdjustForCpBtn(nil)
-                    end
-                end
-            end
-        end
 
         -- changeWeekBtn: top-left of the frame.
         if showCW then
@@ -419,6 +358,7 @@ function Addon:CreateHeader(frame)
             btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
             btn:SetScript("OnClick", function()
                 local p = EnsureHeaderPicker()
+                if p and p._lariasJustClosed then p._lariasJustClosed = false; return end
                 if p and p.IsShown and p:IsShown() then
                     p:Hide()
                     return

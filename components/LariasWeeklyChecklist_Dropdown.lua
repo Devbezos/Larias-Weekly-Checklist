@@ -46,15 +46,18 @@ function C.NewPopupPanel(strata, fadeTime)
     if catcher.SetPropagateMouseClicks then catcher:SetPropagateMouseClicks(true) end
     catcher:Hide()
     catcher:SetScript("OnMouseDown", function()
-        -- Record the close time rather than a bare boolean.  Toggle functions
-        -- ignore re-open requests that arrive within 50 ms (same mouse event
-        -- still propagating), but allow later clicks to open normally.
-        p._lariasJustClosedAt = GetTime and GetTime() or 0
+        -- Flag that the panel was closed by the outside-click catcher so that
+        -- the propagated click arriving at the toggle button in the same frame
+        -- does not immediately reopen it.  The toggle clears the flag when it
+        -- consumes it; any stale flag left over (click landed elsewhere) is
+        -- cleared in OnShow before the panel can be opened again.
+        p._lariasJustClosed = true
         p:Hide()
     end)
 
     p:SetScript("OnHide", function() catcher:Hide() end)
     p:SetScript("OnShow", function()
+        p._lariasJustClosed = false   -- clear any stale flag from a previous close
         catcher:Show()
         if UIFrameFadeIn then UIFrameFadeIn(p, ft, 0, 1)
         else p:SetAlpha(1) end

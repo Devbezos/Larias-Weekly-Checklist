@@ -228,7 +228,7 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
         L.UI_SCALE_MAX_LABEL or "150%",
         function(v)
             local r = math.floor(v + 0.5)
-            return (r >= 150) and "unc." or (r .. "%")
+            return r .. "%"
         end,
         nil  -- no liveApply: scale is applied only on mouse-up to avoid jank while dragging
     )
