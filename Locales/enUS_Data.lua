@@ -5,7 +5,7 @@ NOTE: This is the canonical enUS dataset; other locales must keep IDs identical
 so completion tracking stays consistent across locales.
 ]]
 
--- @sheet-version: 11
+-- @sheet-version: 12
 
 local LOCALE = "enUS"
 
@@ -17,7 +17,7 @@ if type(reg) ~= "table" then
     _G[LOCALE_REGISTRY_KEY] = reg
 end
 if type(reg.data) ~= "table" then reg.data = {} end
-reg.sheet_version = "11"
+reg.sheet_version = "12"
 
 local DATASET = {
 
@@ -26,15 +26,15 @@ local DATASET = {
         title = "Early Access - Feb 26 through Mar 2 - Pay to Win",
         items = {
             { id = "log_on_to_each_character_you_plan_on_leveling_so_they_start_accumulating_rested_xp", text = "Log on to each character you plan on leveling so they start accumulating rested XP." },
-            { id = "level_characters_warmode_on_to_90_dmf_opens_sunday_for_10_more_exp_no_longer_gives_renown", text = "Level characters warmode on to 90 - DMF opens Sunday for 10% more exp. NO LONGER GIVES RENOWN" },
-            { id = "if_available_complete_the_weekly_saltheril_s_soiree_in_eversong_woods_not_available_in_early_access", text = "If available, complete the weekly Saltheril's Soiree in Eversong Woods. - NOT AVAILABLE IN EARLY ACCESS" },
-            { id = "if_available_complete_the_weekly_abundance_event_in_zul_aman_bugged_in_early_access_dont_do", text = "If available, complete the weekly Abundance Event in Zul'aman. - BUGGED IN EARLY ACCESS - DONT DO" },
-            { id = "if_available_complete_the_weekly_legends_of_the_haranir_event_in_harandar", text = "If available, complete the weekly Legends of the Haranir event in Harandar." },
-            { id = "if_available_complete_the_weekly_stormarion_assault_in_the_voidstorm_available_in_early_access", text = "If available, complete the weekly Stormarion Assault in the Voidstorm. - AVAILABLE IN EARLY ACCESS" },
+            { id = "level_characters_warmode_on_to_90_dmf_opens_sunday_for_10_more_exp", text = "Level characters warmode on to 90 - DMF opens Sunday for 10% more exp." },
+            { id = "complete_the_weekly_stormarion_assault_in_the_voidstorm_it_is_available_in_early_access", text = "Complete the weekly Stormarion Assault in the Voidstorm. (It is available in Early Access)" },
             { id = "optional_kill_each_rare_once_in_each_zone_for_renown_these_are_a_weekly_lockout_for_each_rare", text = "(Optional) Kill each rare once in each zone for renown. These are a weekly lockout for each rare." },
             { id = "hunt_down_each_region_s_treasures_for_free_renown_see_doc_for_guide", text = "Hunt down each region's treasures for free Renown. See doc for guide" },
             { id = "complete_4x_prey_on_normal_difficulty_for_renown", text = "Complete 4x Prey on normal difficulty for renown" },
-            { id = "complete_side_quest_chains_for_renown_can_be_done_on_alts_to_level_at_same_time_new_darkmoon_faire_no_longer_gives_a_renown_buff", text = "Complete side quest chains for renown. (can be done on alts to level at same time). NEW: DARKMOON FAIRE NO LONGER GIVES A RENOWN BUFF!" },
+            { id = "complete_the_midnight_lore_hunter_achievement_for_renown_see_doc_for_guide", text = "Complete the Midnight Lore Hunter achievement for renown - see doc for guide" },
+            { id = "complete_the_highest_peaks_achievement_for_renown_see_doc_for_guide", text = "Complete the Highest Peaks achievement for renown - see doc for guide" },
+            { id = "complete_side_quest_chains_for_renown_can_be_done_on_alts_to_level_at_same_time_dmf_buff_does_not_give_renown", text = "Complete side quest chains for renown. (can be done on alts to level at same time). DMF buff does not give renown." },
+            { id = "note_only_the_singularity_champion_renown_trinket_is_available_in_early_access_the_others_will_become_available_either_monday_after_the_official_launch_or_after_each_region_s_weekly_reset", text = "Note: Only the Singularity champion renown trinket is available in early access - the others will become available either Monday after the official launch or after each region's weekly reset." },
         },
     },
     {
@@ -43,9 +43,9 @@ local DATASET = {
         items = {
             { id = "do_not_spend_any_crests_until_told_to_do_so", text = "Do not spend any Crests until told to do so" },
             { id = "raise_the_singularity_renown_to_rank_7_for_1_6_champion_trinket_available_in_early_access_comes_from_quest_from_the_renown_vendor_not_purchased", text = "Raise The Singularity renown to rank 7 for 1/6 champion trinket - available in early access - comes from quest from the renown vendor (not purchased)" },
-            { id = "raise_hara_ti_renown_to_rank_8_for_1_6_champion_belt_not_available_in_early_access_comes_from_quest_from_the_renown_vendor_not_purchased", text = "Raise Hara'ti renown to rank 8 for 1/6 champion belt - not available in early access? - comes from quest from the renown vendor (not purchased)" },
+            { id = "raise_hara_ti_renown_to_rank_8_for_1_6_champion_belt_not_available_in_early_access_comes_from_quest_from_the_renown_vendor_not_purchased", text = "Raise Hara'ti renown to rank 8 for 1/6 champion belt - NOT available in early access - comes from quest from the renown vendor (not purchased)" },
             { id = "raise_silvermoon_renown_to_rank_9_for_1_6_champion_helm_not_available_in_early_access_comes_from_quest_from_the_renown_vendor_not_purchased", text = "Raise Silvermoon renown to rank 9 for 1/6 champion helm - NOT available in early access - comes from quest from the renown vendor (not purchased)" },
-            { id = "raise_amani_tribe_renown_to_rank_9_for_1_6_champion_necklace_not_available_in_early_access_comes_from_quest_from_the_renown_vendor_not_purchased", text = "Raise Amani Tribe renown to rank 9 for 1/6 champion necklace - not available in early access? - comes from quest from the renown vendor (not purchased)" },
+            { id = "raise_amani_tribe_renown_to_rank_9_for_1_6_champion_necklace_not_available_in_early_access_comes_from_quest_from_the_renown_vendor_not_purchased", text = "Raise Amani Tribe renown to rank 9 for 1/6 champion necklace - NOT available in early access - comes from quest from the renown vendor (not purchased)" },
             { id = "complete_the_weekly_saltheril_s_soiree_in_eversong_woods", text = "Complete the weekly Saltheril's Soiree in Eversong Woods." },
             { id = "complete_the_weekly_abundance_event_in_zul_aman", text = "Complete the weekly Abundance Event in Zul'aman." },
             { id = "complete_the_weekly_legends_of_the_haranir_event_in_harandar", text = "Complete the weekly Legends of the Haranir event in Harandar." },
@@ -82,7 +82,7 @@ local DATASET = {
         items = {
             { id = "do_not_spend_any_crests_until_told_to_do_so", text = "Do not spend any Crests until told to do so" },
             { id = "do_lfr_for_tier_pieces_check_guide_for_why", text = "Do LFR for tier pieces (check guide for why)" },
-            { id = "complete_a_world_tour_of_m0_dungeons_rewards_champ_ilvl", text = "Complete a World Tour of M0 dungeons - rewards champ ilvl" },
+            { id = "optional_complete_a_world_tour_of_m0_dungeons_rewards_champ_ilvl", text = "(Optional?) Complete a World Tour of M0 dungeons - rewards champ ilvl" },
             { id = "complete_4x_nightmare_prey_for_champion_gear_and_renown", text = "Complete 4x Nightmare Prey for Champion gear and renown." },
             { id = "kill_world_boss_for_champ_2_6_250_ilvl_item", text = "Kill World Boss for champ 2/6 250 ilvl item" },
             { id = "if_available_complete_pvp_quest_for_guaranteed_hero_neck_ring", text = "If available, complete pvp quest for guaranteed hero neck/ring" },
