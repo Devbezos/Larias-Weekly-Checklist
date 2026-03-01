@@ -459,6 +459,44 @@ local function SetRightRowPair(i, rowLabel, rowValue, iconFileID, currencyID)
     end
 end
 
+-- ── Wide-mode reflow ────────────────────────────────────────────────────────
+-- Repositions currency row frames when the column is full-width (solo panel).
+-- wideMode=true  → crests in left half, non-crests in right half.
+-- wideMode=false → all rows span the full column width (normal).
+-- Must be called AFTER SetRightRowPair populates / hides rows so that
+-- BottomFor() returns correct values in ResizeTrackingPanelToContent.
+local CURR_INNER_GAP = 8
+local CURR_ROW_H     = 18
+
+function TI.ReflowCurrencyRows(wideMode, crestCount, colW)
+    local tf       = Addon._trackingFrame
+    local rightCol = tf and tf._lariasRightCol
+    if not rightCol then return end
+    local halfW = math.max(10, math.floor((colW - CURR_INNER_GAP) / 2))
+
+    for i = 1, RIGHT_LINE_COUNT do
+        local entry = TrackingUI.right["line" .. i]
+        if not (entry and entry.frame) then break end
+        local f = entry.frame
+        f:ClearAllPoints()
+
+        if wideMode then
+            local inLeft = (i <= crestCount)
+            local rowIdx = inLeft and (i - 1) or (i - crestCount - 1)
+            local y      = -(CURR_ROW_H * rowIdx)
+            local xOff   = inLeft and 0 or (halfW + CURR_INNER_GAP)
+            f:SetPoint("TOPLEFT", rightCol, "TOPLEFT", xOff, y)
+            f:SetWidth(halfW)
+            f._lariasBaseY = y
+        else
+            local y = -(CURR_ROW_H * (i - 1))
+            f:SetPoint("TOPLEFT",  rightCol, "TOPLEFT",  0, y)
+            f:SetPoint("TOPRIGHT", rightCol, "TOPRIGHT", 0, y)
+            f._lariasBaseY = y
+        end
+    end
+end
+
 local function ApplyRightColumnAsPairs()
     local _, labelLines, valueLines, crestCount = GetCrestLines()
     crestCount = tonumber(crestCount) or 4
@@ -516,6 +554,19 @@ local function ApplyRightColumnAsPairs()
 
     for i = idx, RIGHT_LINE_COUNT do
         SetRightRowPair(i, "", "")
+    end
+
+    -- Reflow layout: split into two sub-columns when currency is the only panel.
+    local tf       = Addon._trackingFrame
+    local rightCol = tf and tf._lariasRightCol
+    if rightCol then
+        rightCol._currCrestCount = crestCount
+        local leftShown = tf._lariasLeftCol  and tf._lariasLeftCol.IsShown  and tf._lariasLeftCol:IsShown()
+        local ws        = tf._lariasWeekliesSection
+        local wShown    = ws and ws.IsShown and ws:IsShown()
+        local rcShown   = rightCol.IsShown and rightCol:IsShown()
+        local wideCurrency = rcShown and not leftShown and not wShown
+        TI.ReflowCurrencyRows(wideCurrency and true or false, crestCount, tonumber(rightCol:GetWidth()) or 200)
     end
 end
 

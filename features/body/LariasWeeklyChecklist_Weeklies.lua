@@ -178,14 +178,6 @@ local function BuildWeekliesSection(trackingFrame)
             leftCol:SetPoint("TOPLEFT",  sec, "TOPLEFT",  0, colOffY)
             leftCol:SetPoint("TOPRIGHT", sec, "TOPRIGHT", 0, colOffY)
             rightCol:Hide()
-            -- Reparent right-column rows to leftCol so they are not hidden
-            -- along with their original parent frame.
-            for _, r in ipairs(rows) do
-                if r.colIdx == 2 then
-                    r.lblFS:SetParent(leftCol)
-                    r.valFS:SetParent(leftCol)
-                end
-            end
         else
             leftCol:ClearAllPoints()
             leftCol:SetPoint("TOPLEFT",  sec,   "TOPLEFT",  0, colOffY)
@@ -194,22 +186,15 @@ local function BuildWeekliesSection(trackingFrame)
             rightCol:ClearAllPoints()
             rightCol:SetPoint("TOPLEFT",  spine, "TOPRIGHT", 0, 0)
             rightCol:SetPoint("TOPRIGHT", sec,   "TOPRIGHT", 0, colOffY)
-            -- Restore right-column rows to their original parent.
-            for _, r in ipairs(rows) do
-                if r.colIdx == 2 then
-                    r.lblFS:SetParent(rightCol)
-                    r.valFS:SetParent(rightCol)
-                end
-            end
         end
 
-        local leftVis, rightVis = 0, 0
-
+        -- Pass 1: evaluate visibility and content for every row.
+        local rowState = {}
+        local visCount = 0
         for i, r in ipairs(rows) do
             local rowDone = false
             local disabled = false
             if r.isPrey then
-                -- Detect highest active difficulty tier (Nightmare > Hard > Normal).
                 local count, tierSuffix = 0, ""
                 local nm = CountPreyArray(PQIDs_NM)
                 local hd = CountPreyArray(PQIDs_Hard)
@@ -227,7 +212,6 @@ local function BuildWeekliesSection(trackingFrame)
                 r.lblFS:SetText((L.TRACKING_QUEST_PREY or "Prey Hunted") .. tierSuffix)
             elseif r.questKey then
                 local entry = QIDs2[r.questKey]
-                -- Treat ID=0 as disabled: hide the row entirely.
                 local isEnabled = entry and not (type(entry) == "number" and entry == 0)
                 if not isEnabled then
                     disabled = true
@@ -243,27 +227,56 @@ local function BuildWeekliesSection(trackingFrame)
                     end
                 end
             end
-
             local visible = not disabled and not (hideCompleted and rowDone)
+            rowState[i] = { visible = visible }
+            if visible then visCount = visCount + 1 end
+        end
+
+        -- Pass 2: assign columns evenly so the two halves are balanced.
+        -- In single-col mode everything goes left; otherwise split ceil/floor.
+        local splitAt = singleCol and visCount or math.ceil(visCount / 2)
+        local visIdx = 0
+        for i, r in ipairs(rows) do
+            if rowState[i].visible then
+                visIdx = visIdx + 1
+                r.colIdx = (visIdx <= splitAt) and 1 or 2
+            end
+        end
+
+        -- Reparent FontStrings to the correct column frame (affects visibility inheritance).
+        for _, r in ipairs(rows) do
+            local target = (singleCol or r.colIdx == 1) and leftCol or rightCol
+            r.lblFS:SetParent(target)
+            r.valFS:SetParent(target)
+        end
+
+        -- Pass 3: show/hide and anchor each row within its column.
+        local leftVis, rightVis = 0, 0
+        local leftSlot, rightSlot = 0, 0
+        for i, r in ipairs(rows) do
+            local visible = rowState[i].visible
             r.lblFS:SetShown(visible)
             r.valFS:SetShown(visible)
             if visible then
-                if singleCol or r.colIdx == 1 then leftVis = leftVis + 1
-                else                               rightVis = rightVis + 1 end
+                local refFrame, slot
+                if singleCol or r.colIdx == 1 then
+                    leftSlot  = leftSlot + 1
+                    leftVis   = leftVis  + 1
+                    refFrame  = leftCol
+                    slot      = leftSlot
+                else
+                    rightSlot = rightSlot + 1
+                    rightVis  = rightVis  + 1
+                    refFrame  = rightCol
+                    slot      = rightSlot
+                end
+                local rowY = -((slot - 1) * WSEC_ROW_H)
+                r.valFS:ClearAllPoints()
+                r.valFS:SetPoint("TOPRIGHT", refFrame, "TOPRIGHT", -4, rowY)
+                r.lblFS:ClearAllPoints()
+                r.lblFS:SetPoint("TOPLEFT",  refFrame, "TOPLEFT",  4, rowY)
+                r.lblFS:SetPoint("TOPRIGHT", r.valFS, "TOPLEFT", -2, 0)
             end
-
-            -- Re-anchor row elements to the correct column frame + Y position.
-            local refFrame = singleCol and leftCol
-                             or (r.colIdx == 1 and leftCol or rightCol)
-            local rowY = singleCol
-                and ((i - 1) * WSEC_ROW_H)
-                or  (((i - 1) % WSEC_ROWS_PER_COL) * WSEC_ROW_H)
-
-            r.valFS:ClearAllPoints()
-            r.valFS:SetPoint("TOPRIGHT", refFrame, "TOPRIGHT", -4, -rowY)
-            r.lblFS:ClearAllPoints()
-            r.lblFS:SetPoint("TOPLEFT",  refFrame, "TOPLEFT",  4, -rowY)
-            r.lblFS:SetPoint("TOPRIGHT", r.valFS, "TOPLEFT", -2, 0)
         end
 
         -- Height: single-col tallies all rows; two-col uses the tallest column.

@@ -778,6 +778,12 @@ function Addon:ApplyTrackingPanelOptions()
     end
 
     if self.ApplyScrollLayout then self:ApplyScrollLayout() end
+
+    -- Immediately size the panel to content so the height updates in the same
+    -- frame as the layout change (not deferred to the next UpdateTracking tick).
+    if self._trackingFrame and self._trackingFrame:IsShown() then
+        ResizeTrackingPanelToContent(self)
+    end
 end
 
 function Addon:UpdateTracking()
@@ -851,6 +857,13 @@ function Addon:ResizeTrackingCols()
 
     if leftShown  and leftCol.SetWidth  then leftCol:SetWidth(newColW)  end
     if rightShown and rightCol.SetWidth then rightCol:SetWidth(newColW) end
+
+    -- Reflow currency rows: two sub-columns when currency is the only panel.
+    if rightShown and TI.ReflowCurrencyRows then
+        local wideCurrency = not leftShown and not wShown
+        local crestCount   = (rightCol and rightCol._currCrestCount) or 4
+        TI.ReflowCurrencyRows(wideCurrency, crestCount, newColW)
+    end
 
     -- Re-anchor leftCol (GV) right of rightCol (Currency) when both are visible.
     if leftShown and rightShown then
