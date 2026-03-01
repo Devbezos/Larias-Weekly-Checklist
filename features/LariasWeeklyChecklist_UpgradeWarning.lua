@@ -147,7 +147,7 @@ local function SetupHooks()
         local disableBtn = CreateFrame("Button", nil, holder, "UIPanelButtonTemplate")
         disableBtn:SetSize(120, ROW_H)
         disableBtn:SetPoint("TOP", holder, "TOP", 0, 0)
-        disableBtn:SetText(L.UPGRADE_WARN_DISABLE_BTN or "Disable Warning")
+        disableBtn:SetText(L.UPGRADE_WARN_DISABLE_BTN or "Hide Upgrade Warning")
         if Addon._styleActionButton then Addon._styleActionButton(disableBtn) end
         disableBtn:SetScript("OnClick", function()
             Addon:EnsurePrefs().upgradeWarnDisabled = true
@@ -207,6 +207,6 @@ end
 
 -- ── Locale key reference (for translators) ────────────────────────────────────
 -- L.UPGRADE_WARN_MSG             — Warning sentence shown above the upgrade button.
--- L.UPGRADE_WARN_DISABLE_BTN     — Label for the inline Disable button.
+-- L.UPGRADE_WARN_DISABLE_BTN     — Label for the inline Hide button.
 -- L.UPGRADE_WARN_DISABLE_TOOLTIP — Tooltip for the Disable button.
 -- L.OPTIONS_DISABLE_UPGRADE_WARN — Label for the Settings panel checkbox.
