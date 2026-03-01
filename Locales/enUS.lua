@@ -25,6 +25,7 @@ local STRINGS = {
 	OPTIONS_HIDE_WEEKLIES = "Hide Weeklies",
 	HIDE_COMPLETED_WEEKS = "Hide Completed Weeks",
 	HIDE_COMPLETED_TASKS = "Hide Completed Tasks",
+	DONE_PREFIX = "[Done] ",
 	OPTIONS_HIDE_CHANGE_WEEK_BTN = 'Hide Week Selector',
 	OPTIONS_HIDE_ILVL_REF_BTN = 'Hide Item Level Popup',
 

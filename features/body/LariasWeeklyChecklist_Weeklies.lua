@@ -21,11 +21,26 @@ local WSEC_PAD_BOT  = 6    -- padding below last row
 local WSEC_PAD_LR   = 10   -- horizontal inset from tracking frame edge
 local WSEC_BOT_OFF  = 10   -- pixels above tracking frame bottom
 local WSEC_COL_GAP  = 12   -- gap between the two quest columns
-local WSEC_ROWS_PER_COL = 3  -- 6 rows split evenly across 2 columns
+local WSEC_ROWS_PER_COL = 4  -- 7 rows split across 2 columns (4 left, 3 right)
 
 -- Expose constants so Overlay.lua can reference them via TI.
 TI.WSEC_PAD_LR  = WSEC_PAD_LR
 TI.WSEC_BOT_OFF = WSEC_BOT_OFF
+
+-- Count how many quest IDs from the given array are flagged completed this week.
+local function CountPreyArray(arr)
+    if not arr then return 0 end
+    if not (C_QuestLog and C_QuestLog.IsQuestFlaggedCompleted) then return 0 end
+    local n = 0
+    for _, id in ipairs(arr) do
+        id = tonumber(id) or 0
+        if id > 0 then
+            local ok, done = pcall(C_QuestLog.IsQuestFlaggedCompleted, id)
+            if ok and done then n = n + 1 end
+        end
+    end
+    return n
+end
 
 local function BuildWeekliesSection(trackingFrame)
     local L     = Addon.L or {}
@@ -99,6 +114,7 @@ local function BuildWeekliesSection(trackingFrame)
         { questKey = "highEsteem",        label = L.TRACKING_QUEST_HIGH_ESTEEM        },
         { questKey = "fortifyRunestones", label = L.TRACKING_QUEST_FORTIFY_RUNESTONES },
         { questKey = "standYourGround",   label = L.TRACKING_QUEST_STAND_YOUR_GROUND  },
+        { questKey = "delversBounty",     label = L.TRACKING_QUEST_DELVERS_BOUNTY     },
     }
 
     local GREEN = "|cff40ff40"
@@ -139,8 +155,10 @@ local function BuildWeekliesSection(trackingFrame)
 
     local function Refresh()
         local hideCompleted = Addon:EnsurePrefs().hideCompletedSections
-        local QIDs2  = Addon.TRACKING and Addon.TRACKING.questIDs or {}
-        local PQIDs2 = Addon.TRACKING and Addon.TRACKING.preyQuestIDs
+        local QIDs2      = Addon.TRACKING and Addon.TRACKING.questIDs or {}
+        local PQIDs2    = Addon.TRACKING and Addon.TRACKING.preyQuestIDs
+        local PQIDs_Hard = Addon.TRACKING and Addon.TRACKING.preyHardQuestIDs
+        local PQIDs_NM   = Addon.TRACKING and Addon.TRACKING.preyNightmareQuestIDs
         local pGoal2 = (Addon.TRACKING and Addon.TRACKING.preyQuestGoal) or 4
 
         -- Layout: 2 columns when weeklies has full width (below or full mode),
@@ -189,35 +207,44 @@ local function BuildWeekliesSection(trackingFrame)
 
         for i, r in ipairs(rows) do
             local rowDone = false
+            local disabled = false
             if r.isPrey then
-                local count = 0
-                if PQIDs2 and C_QuestLog and C_QuestLog.IsQuestFlaggedCompleted then
-                    for _, id in ipairs(PQIDs2) do
-                        id = tonumber(id) or 0
-                        if id > 0 then
-                            local ok, done = pcall(C_QuestLog.IsQuestFlaggedCompleted, id)
-                            if ok and done then count = count + 1 end
-                        end
-                    end
+                -- Detect highest active difficulty tier (Nightmare > Hard > Normal).
+                local count, tierSuffix = 0, ""
+                local nm = CountPreyArray(PQIDs_NM)
+                local hd = CountPreyArray(PQIDs_Hard)
+                local nr = CountPreyArray(PQIDs2)
+                if nm > 0 then
+                    count, tierSuffix = nm, " (Nightmare)"
+                elseif hd > 0 then
+                    count, tierSuffix = hd, " (Hard)"
+                else
+                    count = nr
                 end
                 rowDone = count >= pGoal2
                 local col = rowDone and GREEN or RED
                 r.valFS:SetText(col .. count .. "/" .. pGoal2 .. CLOSE)
+                r.lblFS:SetText((L.TRACKING_QUEST_PREY or "Prey Hunted") .. tierSuffix)
             elseif r.questKey then
                 local entry = QIDs2[r.questKey]
-                local done
-                if entry then done = QuestDoneAny(entry) end
-                rowDone = (done == true)
-                if done == true then
-                    r.valFS:SetText(GREEN .. "1/1" .. CLOSE)
-                elseif done == false then
-                    r.valFS:SetText(RED .. "0/1" .. CLOSE)
+                -- Treat ID=0 as disabled: hide the row entirely.
+                local isEnabled = entry and not (type(entry) == "number" and entry == 0)
+                if not isEnabled then
+                    disabled = true
                 else
-                    r.valFS:SetText(RED .. "0/1" .. CLOSE)
+                    local done = QuestDoneAny(entry)
+                    rowDone = (done == true)
+                    if done == true then
+                        r.valFS:SetText(GREEN .. "1/1" .. CLOSE)
+                    elseif done == false then
+                        r.valFS:SetText(RED .. "0/1" .. CLOSE)
+                    else
+                        r.valFS:SetText(RED .. "0/1" .. CLOSE)
+                    end
                 end
             end
 
-            local visible = not (hideCompleted and rowDone)
+            local visible = not disabled and not (hideCompleted and rowDone)
             r.lblFS:SetShown(visible)
             r.valFS:SetShown(visible)
             if visible then

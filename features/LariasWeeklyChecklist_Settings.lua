@@ -164,15 +164,6 @@ local function BuildPanel()
             end,
         },
         {
-            label      = L.OPTIONS_HIDE_GREAT_VAULT or "Hide Great Vault",
-            tooltipKey = "TOOLTIP_OPT_HIDE_GREAT_VAULT",
-            getVal   = function(d) return not d.showGreatVault end,
-            onChange = function(v)
-                Addon:EnsurePrefs().showGreatVault = not v
-                if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
-            end,
-        },
-        {
             label      = L.OPTIONS_HIDE_CURRENCY or "Hide Currency",
             tooltipKey = "TOOLTIP_OPT_HIDE_CURRENCY",
             getVal   = function(d) return not d.showCurrency end,
@@ -264,6 +255,18 @@ local function BuildPanel()
             end,
         },
     }
+    -- Great Vault hide option only present when the feature flag is enabled.
+    if Addon.TrackingInternal and Addon.TrackingInternal.FEATURE_GREAT_VAULT == true then
+        table.insert(rows, 3, {
+            label      = L.OPTIONS_HIDE_GREAT_VAULT or "Hide Great Vault",
+            tooltipKey = "TOOLTIP_OPT_HIDE_GREAT_VAULT",
+            getVal   = function(d) return not d.showGreatVault end,
+            onChange = function(v)
+                Addon:EnsurePrefs().showGreatVault = not v
+                if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
+            end,
+        })
+    end
 
     _checkboxes = {}
     for _, row in ipairs(rows) do

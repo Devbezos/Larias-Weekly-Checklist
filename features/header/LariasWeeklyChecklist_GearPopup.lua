@@ -90,8 +90,10 @@ function Addon:SyncGearPopup()
     if p._cbHideCompleted then
         p._cbHideCompleted:SetAlpha(hideTasksOn and 0.40 or 1.0)
     end
-    Sync(p._cbHideGreatVault,   not db.showGreatVault,
-         L.OPTIONS_HIDE_GREAT_VAULT  or "Hide Great Vault")
+    if p._cbHideGreatVault then
+        Sync(p._cbHideGreatVault, not db.showGreatVault,
+             L.OPTIONS_HIDE_GREAT_VAULT or "Hide Great Vault")
+    end
     Sync(p._cbHideCurrency,     not db.showCurrency,
          L.OPTIONS_HIDE_CURRENCY     or "Hide Currency")
     Sync(p._cbHideWeeklies,     db.showInlineWeeklies == false,
@@ -171,17 +173,20 @@ function Addon:SyncGearPopup()
     do
         local PAD      = 10
         local TILE_H   = 34   -- tile height
-        local N_TOTAL  = 11
+        -- When FEATURE_GREAT_VAULT was off at popup creation, one fixed slot is absent;
+        -- SLIDERS/UPDATE/MINIMAP indices each shift down by 1.
+        local _gvOff     = not p._gvInPopup
+        local N_TOTAL    = _gvOff and 10 or 11
         local rstStartY  = PAD
         local div1StartY = rstStartY + 22 + 6
         local cbsY       = div1StartY + 1 + 8
-        -- Slots 1-7 always present (tasks, weeks, great vault, currency, weeklies,
-        -- change week, ilvl ref); slot 8 = char picker (conditional);
-        -- slot 9 = sliders; slot 10 = update notice; slot 11 = minimap btn.
-        -- When char picker is hidden, slots 9-11 each shift up by one.
-        local SLIDERS_IDX        = 9
-        local UPDATE_NOTICE_IDX  = 10
-        local MINIMAP_BTN_IDX    = 11
+        -- Fixed slots: tasks, weeks, [great vault], currency, weeklies, change week, ilvl ref
+        -- then: char picker (conditional), sliders, update notice, minimap btn.
+        -- When great vault absent, all indices shift down by 1.
+        -- When char picker hidden, last 3 shift up by 1.
+        local SLIDERS_IDX        = _gvOff and 8 or 9
+        local UPDATE_NOTICE_IDX  = _gvOff and 9 or 10
+        local MINIMAP_BTN_IDX    = _gvOff and 10 or 11
         local slidersVisIdx      = showCharRow and SLIDERS_IDX       or (SLIDERS_IDX       - 1)
         local updateNoticeVisIdx = showCharRow and UPDATE_NOTICE_IDX  or (UPDATE_NOTICE_IDX  - 1)
         local minimapBtnVisIdx   = showCharRow and MINIMAP_BTN_IDX    or (MINIMAP_BTN_IDX    - 1)
@@ -319,20 +324,24 @@ function Addon:ToggleGearPopup(anchor, growRight)
         local div1StartY = rstStartY + 22 + 6
         Addon.Controls.NewDivider(p, -div1StartY, PAD, PAD)
 
-        -- ── 8 Checkboxes ──────────────────────────────────────────────────
+        -- ── Checkboxes (great vault row only present when FEATURE_GREAT_VAULT is on) ──
+        local _gvInPopup = Addon.TrackingInternal and Addon.TrackingInternal.FEATURE_GREAT_VAULT == true
+        p._gvInPopup = _gvInPopup
         local checks = {
             { key = "_cbHideCompletedTasks",  tipKey = "TOOLTIP_OPT_HIDE_COMPLETED_TASKS" },
             { key = "_cbHideCompleted",        tipKey = "TOOLTIP_OPT_HIDE_COMPLETED_WEEKS" },
-            { key = "_cbHideGreatVault",       tipKey = "TOOLTIP_OPT_HIDE_GREAT_VAULT"     },
-            { key = "_cbHideCurrency",         tipKey = "TOOLTIP_OPT_HIDE_CURRENCY"        },
-            { key = "_cbHideWeeklies",         tipKey = "TOOLTIP_OPT_HIDE_WEEKLIES"        },
-            { key = "_cbHideChangeWeek",       tipKey = "TOOLTIP_OPT_HIDE_CHANGE_WEEK"     },
-            { key = "_cbHideIlvlRef",          tipKey = "TOOLTIP_OPT_HIDE_ILVL_REF"        },
-            { key = "_cbHideCharPicker",       tipKey = "TOOLTIP_OPT_HIDE_CHAR_SELECT"     },
-            { key = "_cbHideSliders",          tipKey = "TOOLTIP_OPT_HIDE_SLIDERS"         },
-            { key = "_cbHideUpdateNotice",     tipKey = "TOOLTIP_OPT_HIDE_UPDATE_NOTICE"   },
-            { key = "_cbHideMinimapBtn",       tipKey = "TOOLTIP_OPT_HIDE_MINIMAP_BTN"     },
         }
+        if _gvInPopup then
+            checks[#checks + 1] = { key = "_cbHideGreatVault", tipKey = "TOOLTIP_OPT_HIDE_GREAT_VAULT" }
+        end
+        checks[#checks + 1] = { key = "_cbHideCurrency",     tipKey = "TOOLTIP_OPT_HIDE_CURRENCY"      }
+        checks[#checks + 1] = { key = "_cbHideWeeklies",     tipKey = "TOOLTIP_OPT_HIDE_WEEKLIES"      }
+        checks[#checks + 1] = { key = "_cbHideChangeWeek",   tipKey = "TOOLTIP_OPT_HIDE_CHANGE_WEEK"   }
+        checks[#checks + 1] = { key = "_cbHideIlvlRef",      tipKey = "TOOLTIP_OPT_HIDE_ILVL_REF"      }
+        checks[#checks + 1] = { key = "_cbHideCharPicker",   tipKey = "TOOLTIP_OPT_HIDE_CHAR_SELECT"   }
+        checks[#checks + 1] = { key = "_cbHideSliders",      tipKey = "TOOLTIP_OPT_HIDE_SLIDERS"       }
+        checks[#checks + 1] = { key = "_cbHideUpdateNotice", tipKey = "TOOLTIP_OPT_HIDE_UPDATE_NOTICE" }
+        checks[#checks + 1] = { key = "_cbHideMinimapBtn",   tipKey = "TOOLTIP_OPT_HIDE_MINIMAP_BTN"   }
         local callbacks = {
             _cbHideCompletedTasks = function(checked)
                 local db = Addon:EnsurePrefs()

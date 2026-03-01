@@ -231,6 +231,7 @@ end
 
 local COLORS = {
     red    = "ffff4040",
+    orange = "ffff8040",
     yellow = "ffffd34d",
     green  = "ff40ff40",
     white  = "ffffffff",
@@ -288,12 +289,14 @@ local function FormatXY(currentAmount, maxAmount)
 end
 
 local function ColorForXY(currentAmount, maxAmount)
-    -- Progress coloring: 0 => red, complete => green, otherwise yellow.
+    -- Progress coloring: <=50% => red, 51-99% => orange, 100% => green.
     currentAmount = tonumber(currentAmount) or 0
     maxAmount = tonumber(maxAmount) or 0
-    if currentAmount <= 0 then return COLORS.red end
-    if maxAmount > 0 and currentAmount >= maxAmount then return COLORS.green end
-    return COLORS.yellow
+    if maxAmount <= 0 then return COLORS.yellow end  -- no cap; neutral fallback
+    local pct = currentAmount / maxAmount
+    if pct >= 1   then return COLORS.green  end
+    if pct > 0.5  then return COLORS.orange end
+    return COLORS.red
 end
 
 local function IsAchievementCompleteSafe(achievementID)

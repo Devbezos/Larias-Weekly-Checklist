@@ -42,21 +42,34 @@ local function GetQuestDoneAny(key)
     end
 end
 
--- Returns (count, goal) or nil if IDs are not configured.
+-- Returns (count, goal, tierSuffix) or nil if IDs are not configured.
+-- Checks Nightmare > Hard > Normal and returns the highest tier with completions.
 local function GetPreyCount()
     local t = Addon.TRACKING
     if not (t and t.preyQuestIDs and t.preyQuestGoal) then return nil end
     if not (C_QuestLog and C_QuestLog.IsQuestFlaggedCompleted) then return nil end
-    local goal  = tonumber(t.preyQuestGoal) or 4
-    local count = 0
-    for _, id in ipairs(t.preyQuestIDs) do
-        id = tonumber(id) or 0
-        if id > 0 then
-            local ok, done = pcall(C_QuestLog.IsQuestFlaggedCompleted, id)
-            if ok and done then count = count + 1 end
+    local goal = tonumber(t.preyQuestGoal) or 4
+    local function CountArr(arr)
+        if not arr then return 0 end
+        local n = 0
+        for _, id in ipairs(arr) do
+            id = tonumber(id) or 0
+            if id > 0 then
+                local ok, done = pcall(C_QuestLog.IsQuestFlaggedCompleted, id)
+                if ok and done then n = n + 1 end
+            end
         end
+        return n
     end
-    return count, goal
+    if t.preyNightmareQuestIDs then
+        local nm = CountArr(t.preyNightmareQuestIDs)
+        if nm > 0 then return nm, goal, " (Nightmare)" end
+    end
+    if t.preyHardQuestIDs then
+        local hd = CountArr(t.preyHardQuestIDs)
+        if hd > 0 then return hd, goal, " (Hard)" end
+    end
+    return CountArr(t.preyQuestIDs), goal, ""
 end
 
 -- ── Window builder ────────────────────────────────────────────────────────────
@@ -92,8 +105,8 @@ local function BuildWeekliesWindow()
     local closeBtn = Addon.Controls.NewCloseButton(win, function() win:Hide() end)
     closeBtn:SetPoint("TOPRIGHT", win, "TOPRIGHT", -4, -4)
 
-    -- Pre-create 7 rows (max: 1 prey + 5 quests + 1 spare)
-    local MAX_ROWS = 7
+    -- Pre-create 8 rows (max: 1 prey + 6 quests + 1 spare)
+    local MAX_ROWS = 8
     local rows = {}
     for i = 1, MAX_ROWS do
         local y = TITLE_H + ROW_H * (i - 1)
@@ -122,29 +135,34 @@ local function BuildWeekliesWindow()
         end
 
         -- Prey count
-        local preyCount, preyGoal = GetPreyCount()
+        local preyCount, preyGoal, preyTier = GetPreyCount()
         if preyCount then
             local xy  = preyCount .. "/" .. preyGoal
             local col = (preyCount >= preyGoal) and GREEN or RED
-            SetRow(Locale.TRACKING_QUEST_PREY or "Prey Hunted", CW(col, xy))
+            local preyLabel = (Locale.TRACKING_QUEST_PREY or "Prey Hunted") .. (preyTier or "")
+            SetRow(preyLabel, CW(col, xy))
         end
 
-        -- 5 season weeklies
+        -- 6 season weeklies
         local defs = {
             { key = "abundance",         label = Locale.TRACKING_QUEST_ABUNDANCE          or "Abundance" },
             { key = "lostLegends",       label = Locale.TRACKING_QUEST_LOST_LEGENDS       or "Lost Legends" },
             { key = "highEsteem",        label = Locale.TRACKING_QUEST_HIGH_ESTEEM        or "High Esteem" },
             { key = "fortifyRunestones", label = Locale.TRACKING_QUEST_FORTIFY_RUNESTONES or "Fortify the Runestones" },
             { key = "standYourGround",   label = Locale.TRACKING_QUEST_STAND_YOUR_GROUND  or "Stand Your Ground" },
+            { key = "delversBounty",     label = Locale.TRACKING_QUEST_DELVERS_BOUNTY     or "Delver's Bounty" },
         }
         for _, d in ipairs(defs) do
-            local done = GetQuestDoneAny(d.key)
-            if done == nil then
-                SetRow(d.label, CW(DIM, Locale.TRACKING_NA or "N/A"))
-            elseif done then
-                SetRow(d.label, CW(GREEN, "1/1"))
-            else
-                SetRow(d.label, CW(RED, "0/1"))
+            -- Skip rows whose quest ID is 0 (unknown/disabled).
+            if GetWeekliesQuestEntry(d.key) then
+                local done = GetQuestDoneAny(d.key)
+                if done == nil then
+                    SetRow(d.label, CW(DIM, Locale.TRACKING_NA or "N/A"))
+                elseif done then
+                    SetRow(d.label, CW(GREEN, "1/1"))
+                else
+                    SetRow(d.label, CW(RED, "0/1"))
+                end
             end
         end
 
