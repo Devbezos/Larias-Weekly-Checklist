@@ -1,0 +1,279 @@
+-- Inline Weeklies section: per-quest status rows shown below the tracking panel.
+-- Depends on LariasWeeklyChecklist_Overlay.lua being loaded first (provides Addon.TrackingInternal).
+local addonName = ...
+local Addon = _G[addonName]
+if not Addon then return end
+
+local TI = Addon.TrackingInternal
+local QuestDoneAny = TI.QuestDoneAny
+local max = math.max
+local tinsert = table.insert
+local THEME = Addon.THEME
+
+-- ── Inline Weeklies Section ──────────────────────────────────────────────────────
+-- Builds a compact weekly-quest status block anchored to the bottom of the
+-- tracking frame, below the Great Vault and Currency columns.
+-- Called from CreateTrackingPanel after self._trackingFrame is assigned.
+local WSEC_PAD_TOP  = 6    -- gap above header text (below separator)
+local WSEC_HEADER_H = 20   -- height of the "Weeklies" title row
+local WSEC_ROW_H    = 15   -- height of each quest status row
+local WSEC_PAD_BOT  = 6    -- padding below last row
+local WSEC_PAD_LR   = 10   -- horizontal inset from tracking frame edge
+local WSEC_BOT_OFF  = 10   -- pixels above tracking frame bottom
+local WSEC_COL_GAP  = 12   -- gap between the two quest columns
+local WSEC_ROWS_PER_COL = 3  -- 6 rows split evenly across 2 columns
+
+-- Expose constants so Overlay.lua can reference them via TI.
+TI.WSEC_PAD_LR  = WSEC_PAD_LR
+TI.WSEC_BOT_OFF = WSEC_BOT_OFF
+
+local function BuildWeekliesSection(trackingFrame)
+    local L     = Addon.L or {}
+    local prefs = Addon:EnsurePrefs()
+
+    local sec = CreateFrame("Frame", nil, trackingFrame)
+    sec:SetPoint("BOTTOMLEFT",  trackingFrame, "BOTTOMLEFT",  WSEC_PAD_LR,  WSEC_BOT_OFF)
+    sec:SetPoint("BOTTOMRIGHT", trackingFrame, "BOTTOMRIGHT", -WSEC_PAD_LR, WSEC_BOT_OFF)
+
+    Addon._inlineWeeklies              = sec
+    trackingFrame._lariasWeekliesSection = sec
+
+    -- Solid background so checklist items never bleed through the section.
+    -- Only shown in "below" mode; in side/full modes the section blends into
+    -- the tracking frame background.
+    local bg = sec:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints(sec)
+    bg:SetColorTexture(THEME.bg.r, THEME.bg.g, THEME.bg.b, THEME.bg.a)
+    sec._bg = bg
+
+    -- Hide immediately when pref is off; return stub so resize skips it.
+    if prefs.showInlineWeeklies == false then
+        sec:SetHeight(0)
+        sec:Hide()
+        return sec
+    end
+
+    -- Thin separator line at the very top of the section.
+    -- Only shown in "below" mode where it divides GV/Currency from Weeklies.
+    local sep = sec:CreateTexture(nil, "ARTWORK")
+    sep:SetHeight(1)
+    sep:SetColorTexture(THEME.border.r, THEME.border.g, THEME.border.b, 0.5)
+    sep:SetPoint("TOPLEFT",  sec, "TOPLEFT",  0, 0)
+    sep:SetPoint("TOPRIGHT", sec, "TOPRIGHT", 0, 0)
+    sec._sep = sep
+
+    -- "Weeklies" header
+    -- Header positioned ABOVE sec (matching the currency column title style).
+    -- Width is updated by ResizeTrackingCols for side/full modes.
+    local hdrFS = sec:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    hdrFS:SetPoint("TOP", sec, "TOP", 0, 24)
+    hdrFS:SetHeight(WSEC_HEADER_H)
+    hdrFS:SetWidth(200)  -- initial width; overridden by ResizeTrackingCols
+    hdrFS:SetJustifyH("CENTER")
+    hdrFS:SetJustifyV("MIDDLE")
+    hdrFS:SetTextColor(THEME.header.r, THEME.header.g, THEME.header.b, THEME.header.a)
+    hdrFS:SetText(L.TRACKING_WEEKLIES_TITLE)
+    sec._hdrFS = hdrFS
+
+    -- Two column sub-frames: content starts at the top of sec (title is above sec).
+    local colOffY = 0
+    local spine = CreateFrame("Frame", nil, sec)
+    spine:SetPoint("TOPLEFT",  sec, "TOP", -WSEC_COL_GAP/2, colOffY)
+    spine:SetPoint("TOPRIGHT", sec, "TOP",  WSEC_COL_GAP/2, colOffY)
+    spine:SetHeight(1)
+
+    local leftCol = CreateFrame("Frame", nil, sec)
+    leftCol:SetPoint("TOPLEFT",  sec,   "TOPLEFT",  0, colOffY)
+    leftCol:SetPoint("TOPRIGHT", spine, "TOPLEFT",  0, 0)
+    leftCol:SetHeight(WSEC_ROWS_PER_COL * WSEC_ROW_H)
+
+    local rightCol = CreateFrame("Frame", nil, sec)
+    rightCol:SetPoint("TOPLEFT",  spine, "TOPRIGHT", 0, 0)
+    rightCol:SetPoint("TOPRIGHT", sec,   "TOPRIGHT", 0, colOffY)
+    rightCol:SetHeight(WSEC_ROWS_PER_COL * WSEC_ROW_H)
+
+    local rowDefs = {
+        { isPrey = true,  label = L.TRACKING_QUEST_PREY            },
+        { questKey = "abundance",         label = L.TRACKING_QUEST_ABUNDANCE          },
+        { questKey = "lostLegends",       label = L.TRACKING_QUEST_LOST_LEGENDS       },
+        { questKey = "highEsteem",        label = L.TRACKING_QUEST_HIGH_ESTEEM        },
+        { questKey = "fortifyRunestones", label = L.TRACKING_QUEST_FORTIFY_RUNESTONES },
+        { questKey = "standYourGround",   label = L.TRACKING_QUEST_STAND_YOUR_GROUND  },
+    }
+
+    local GREEN = "|cff40ff40"
+    local RED   = "|cffff4040"
+    local CLOSE = "|r"
+
+    local rows = {}
+    for i, d in ipairs(rowDefs) do
+        if d.label then
+        local colFrame = (i <= WSEC_ROWS_PER_COL) and leftCol or rightCol
+        local colIdx   = (i <= WSEC_ROWS_PER_COL) and 1 or 2
+        local rowInCol = (i - 1) % WSEC_ROWS_PER_COL
+        local rowY     = rowInCol * WSEC_ROW_H
+
+        local lblFS = colFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        lblFS:SetPoint("TOPLEFT", colFrame, "TOPLEFT", 4, -rowY)
+        lblFS:SetHeight(WSEC_ROW_H)
+        lblFS:SetJustifyH("LEFT")
+        lblFS:SetJustifyV("MIDDLE")
+        if lblFS.SetWordWrap then lblFS:SetWordWrap(false) end
+        do local t = THEME.text; lblFS:SetTextColor(t.r, t.g, t.b, 1) end
+
+        -- All rows use a right-aligned value FontString ("x/4", "0/1", "1/1").
+        local valFS = colFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        valFS:SetPoint("TOPRIGHT", colFrame, "TOPRIGHT", -4, -rowY)
+        valFS:SetSize(40, WSEC_ROW_H)
+        valFS:SetJustifyH("RIGHT")
+        valFS:SetJustifyV("MIDDLE")
+        lblFS:SetPoint("TOPRIGHT", valFS, "TOPLEFT", -2, 0)
+
+        local row = { lblFS = lblFS, valFS = valFS, colIdx = colIdx }
+        for k, v in pairs(d) do row[k] = v end
+        lblFS:SetText(d.label)
+        tinsert(rows, row)
+        end
+    end
+    sec._rows = rows
+
+    local function Refresh()
+        local hideCompleted = Addon:EnsurePrefs().hideCompletedSections
+        local QIDs2  = Addon.TRACKING and Addon.TRACKING.questIDs or {}
+        local PQIDs2 = Addon.TRACKING and Addon.TRACKING.preyQuestIDs
+        local pGoal2 = (Addon.TRACKING and Addon.TRACKING.preyQuestGoal) or 4
+
+        -- Layout: 2 columns when weeklies has full width (below or full mode),
+        -- 1 column when sharing space side-by-side with GV or Currency.
+        local tf        = Addon._trackingFrame
+        local wMode     = tf and tf._weekliesMode or "below"
+        local singleCol = (wMode == "side-right" or wMode == "side-left")
+
+        -- Show separator + background only in "below" mode.
+        local isBelow = (wMode == "below")
+        if sec._sep then sec._sep:SetShown(isBelow) end
+        if sec._bg  then sec._bg:SetShown(isBelow)  end
+
+        -- Reflow the two column sub-frames to match the current mode.
+        if singleCol then
+            leftCol:ClearAllPoints()
+            leftCol:SetPoint("TOPLEFT",  sec, "TOPLEFT",  0, colOffY)
+            leftCol:SetPoint("TOPRIGHT", sec, "TOPRIGHT", 0, colOffY)
+            rightCol:Hide()
+            -- Reparent right-column rows to leftCol so they are not hidden
+            -- along with their original parent frame.
+            for _, r in ipairs(rows) do
+                if r.colIdx == 2 then
+                    r.lblFS:SetParent(leftCol)
+                    r.valFS:SetParent(leftCol)
+                end
+            end
+        else
+            leftCol:ClearAllPoints()
+            leftCol:SetPoint("TOPLEFT",  sec,   "TOPLEFT",  0, colOffY)
+            leftCol:SetPoint("TOPRIGHT", spine, "TOPLEFT",  0, 0)
+            rightCol:Show()
+            rightCol:ClearAllPoints()
+            rightCol:SetPoint("TOPLEFT",  spine, "TOPRIGHT", 0, 0)
+            rightCol:SetPoint("TOPRIGHT", sec,   "TOPRIGHT", 0, colOffY)
+            -- Restore right-column rows to their original parent.
+            for _, r in ipairs(rows) do
+                if r.colIdx == 2 then
+                    r.lblFS:SetParent(rightCol)
+                    r.valFS:SetParent(rightCol)
+                end
+            end
+        end
+
+        local leftVis, rightVis = 0, 0
+
+        for i, r in ipairs(rows) do
+            local rowDone = false
+            if r.isPrey then
+                local count = 0
+                if PQIDs2 and C_QuestLog and C_QuestLog.IsQuestFlaggedCompleted then
+                    for _, id in ipairs(PQIDs2) do
+                        id = tonumber(id) or 0
+                        if id > 0 then
+                            local ok, done = pcall(C_QuestLog.IsQuestFlaggedCompleted, id)
+                            if ok and done then count = count + 1 end
+                        end
+                    end
+                end
+                rowDone = count >= pGoal2
+                local col = rowDone and GREEN or RED
+                r.valFS:SetText(col .. count .. "/" .. pGoal2 .. CLOSE)
+            elseif r.questKey then
+                local entry = QIDs2[r.questKey]
+                local done
+                if entry then done = QuestDoneAny(entry) end
+                rowDone = (done == true)
+                if done == true then
+                    r.valFS:SetText(GREEN .. "1/1" .. CLOSE)
+                elseif done == false then
+                    r.valFS:SetText(RED .. "0/1" .. CLOSE)
+                else
+                    r.valFS:SetText(RED .. "0/1" .. CLOSE)
+                end
+            end
+
+            local visible = not (hideCompleted and rowDone)
+            r.lblFS:SetShown(visible)
+            r.valFS:SetShown(visible)
+            if visible then
+                if singleCol or r.colIdx == 1 then leftVis = leftVis + 1
+                else                               rightVis = rightVis + 1 end
+            end
+
+            -- Re-anchor row elements to the correct column frame + Y position.
+            local refFrame = singleCol and leftCol
+                             or (r.colIdx == 1 and leftCol or rightCol)
+            local rowY = singleCol
+                and ((i - 1) * WSEC_ROW_H)
+                or  (((i - 1) % WSEC_ROWS_PER_COL) * WSEC_ROW_H)
+
+            r.valFS:ClearAllPoints()
+            r.valFS:SetPoint("TOPRIGHT", refFrame, "TOPRIGHT", -4, -rowY)
+            r.lblFS:ClearAllPoints()
+            r.lblFS:SetPoint("TOPLEFT",  refFrame, "TOPLEFT",  4, -rowY)
+            r.lblFS:SetPoint("TOPRIGHT", r.valFS, "TOPLEFT", -2, 0)
+        end
+
+        -- Height: single-col tallies all rows; two-col uses the tallest column.
+        local rowsH = singleCol
+            and (leftVis * WSEC_ROW_H)
+            or  (max(leftVis, rightVis) * WSEC_ROW_H)
+        local newH = rowsH + WSEC_PAD_BOT
+        leftCol:SetHeight(max(1, rowsH))
+        rightCol:SetHeight(max(1, rowsH))
+        local curSecH = tonumber(sec:GetHeight()) or 0
+        if math.abs(curSecH - newH) > 1 then
+            sec:SetHeight(newH)
+            local tf2  = Addon._trackingFrame
+            local tfH = tf2 and (tonumber(tf2:GetHeight()) or 0) or 0
+            if tf2 and tfH > 90 then
+                TI.ResizeTrackingPanelToContent(Addon)
+            end
+        end
+    end
+
+    sec.Refresh = Refresh
+
+    -- Initial height: all rows shown, 3 rows tall (2-column layout).
+    sec:SetHeight(WSEC_PAD_TOP + WSEC_HEADER_H + WSEC_ROWS_PER_COL * WSEC_ROW_H + WSEC_PAD_BOT)
+    return sec
+end
+
+TI.BuildWeekliesSection = BuildWeekliesSection
+
+function Addon:ApplyInlineWeekliesVisibility()
+    -- Delegate: ApplyTrackingPanelOptions re-evaluates the full layout mode
+    -- (below / side / full / hidden) and repositions everything correctly.
+    if not self._trackingFrame then return end
+    if self.ApplyTrackingPanelOptions then
+        self:ApplyTrackingPanelOptions()
+    end
+    if self.RequestTrackingUpdate then
+        self:RequestTrackingUpdate()
+    end
+end

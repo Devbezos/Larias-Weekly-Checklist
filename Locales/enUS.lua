@@ -25,7 +25,6 @@ local STRINGS = {
 	OPTIONS_HIDE_WEEKLIES = "Hide Weeklies",
 	HIDE_COMPLETED_WEEKS = "Hide Completed Weeks",
 	HIDE_COMPLETED_TASKS = "Hide Completed Tasks",
-	HIDE_COMPLETED       = "Hide Completed",
 	OPTIONS_HIDE_CHANGE_WEEK_BTN = 'Hide Week Selector',
 	OPTIONS_HIDE_ILVL_REF_BTN = 'Hide Item Level Popup',
 
@@ -67,7 +66,6 @@ local STRINGS = {
 	-- Tracking panel header tooltips
 	TOOLTIP_OPEN_GREAT_VAULT  = "Click to open the Great Vault",
 	TOOLTIP_OPEN_CURRENCIES   = "Click to open the Currency panel",
-	TOOLTIP_OPEN_WEEKLY       = "Click to open the Weekly Rewards",
 
 	-- Tracking panel
 	TRACKING_GREAT_VAULT_TITLE = "Great Vault",
@@ -78,6 +76,7 @@ local STRINGS = {
 	TRACKING_NA = "N/A",
 
 	TRACKING_SPARKS_LABEL = "Sparks",
+	TRACKING_CREST_LABEL  = "Crest",
 	TRACKING_DONE = "Done",
 	TRACKING_NOT_DONE = "Not done",
 

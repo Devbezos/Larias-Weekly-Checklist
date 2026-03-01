@@ -402,65 +402,14 @@ local function MigrateProfileDataToGlobalChars()
 
 end
 
--- Set up LibDataBroker and LibDBIcon for minimap icon
-local function SetupMinimapIcon()
-    local LDB = LibStub("LibDataBroker-1.1")
-    local icon = LibStub("LibDBIcon-1.0")
-
-    local dataObject = LDB:NewDataObject(addonName, {
-        type = "data source",
-        text = addonName,
-        icon = "Interface\\AddOns\\LariasWeeklyChecklist\\assets\\icon",
-        OnClick = function(self_, button)
-            if button == "LeftButton" then
-                if Addon.CreateFrame then
-                    Addon:CreateFrame()
-                end
-                Addon:Toggle()
-            elseif button == "RightButton" then
-                -- Dismiss any visible tooltip so it doesn't overlap the popup.
-                if GameTooltip then GameTooltip:Hide() end
-                -- Open the gear popup anchored to the minimap button.
-                if Addon.ToggleGearPopup then
-                    Addon:ToggleGearPopup(self_)
-                end
-            elseif button == "MiddleButton" then
-                if Addon.ToggleIlvlRefWindow then
-                    Addon:ToggleIlvlRefWindow()
-                end
-            end
-        end,
-        OnTooltipShow = function(tooltip)
-            if not tooltip then return end
-            tooltip:AddLine(L.DISPLAY_NAME or addonName, 1, 0.82, 0)
-            tooltip:AddLine(L.MINIMAP_TOOLTIP_LEFT_CLICK_TOGGLE or "", 1, 1, 1)
-            tooltip:AddLine(L.MINIMAP_TOOLTIP_RIGHT_CLICK_OPTIONS or "", 1, 1, 1)
-            tooltip:AddLine(L.MINIMAP_TOOLTIP_MIDDLE_CLICK_ILVL or "Middle-click: toggle ilvl refs", 1, 1, 1)
-
-            if Addon.ShouldShowLocalizationCompanionHint and Addon:ShouldShowLocalizationCompanionHint() then
-                tooltip:AddLine(" ")
-                tooltip:AddLine(Addon.LOCALIZATION_COMPANION_HINT_TEXT, 0.9, 0.9, 0.9)
-            end
-        end,
-    })
-
-    -- Store minimap config in the global DB so LibDBIcon persists the icon
-    -- position and hide-state across sessions, and so Reset List never touches it.
-    local gdb = Addon.db and Addon.db.global
-    if gdb then
-        gdb.minimap = gdb.minimap or {}
-    end
-    local minimapCfg = (gdb and gdb.minimap) or {}
-    icon:Register(addonName, dataObject, minimapCfg)
-end
-
 -- Initialize AceDB and minimap icon on addon load
 function Addon:OnInitialize()
     SetupAddonDB()
     if self.ApplyLocaleOverride then
         self:ApplyLocaleOverride()
     end
-    SetupMinimapIcon()
+    -- Minimap icon: defined in features/LariasWeeklyChecklist_Minimap.lua (remove that file to disable).
+    if Addon.SetupMinimapIcon then Addon:SetupMinimapIcon() end
     -- Register the Blizzard Interface Options panel early so it appears
     -- in the Interface -> AddOns list even before the window is opened.
     if self.CreateBlizzOptionsPanel then
@@ -1373,50 +1322,8 @@ function Addon:IsListComplete(db)
     return true
 end
 
-function Addon:UpdateCompletionEasterEgg(db)
-    -- Fun cosmetic: show pig icon when everything is done.
-    -- Also hides the scrollbar when the list is complete.
-    if not (frame and scrollFrame) then return end
-
-    db = db or self:EnsureDB()
-    local isComplete = self:IsListComplete(db)
-
-    local visibleSections = 0
-    if self._activeSections then
-        for i = 1, #self._activeSections do
-            local sectionFrame = self._activeSections[i]
-            if IsFrameShown(sectionFrame) then
-                visibleSections = visibleSections + 1
-                break
-            end
-        end
-    end
-
-    local showPig = isComplete and (visibleSections == 0)
-
-    local pig = frame._lariasPigTexture
-    if pig and pig.SetShown then
-        pig:SetShown(showPig)
-        if showPig and scrollFrame and scrollFrame.GetWidth and scrollFrame.GetHeight then
-            local scrollWidth = tonumber(scrollFrame:GetWidth()) or 0
-            local scrollHeight = tonumber(scrollFrame:GetHeight()) or 0
-            local size = math.min(scrollWidth > 0 and scrollWidth or 260, scrollHeight > 0 and scrollHeight or 260)
-            size = math.max(120, size)
-            if pig.SetSize then
-                pig:SetSize(size, size)
-            end
-        end
-    end
-
-    local sb = scrollFrame.ScrollBar
-    if sb and sb.SetShown then
-        sb:SetShown(not isComplete)
-    elseif sb and isComplete and sb.Hide then
-        sb:Hide()
-    elseif sb and (not isComplete) and sb.Show then
-        sb:Show()
-    end
-end
+-- UpdateCompletionEasterEgg is defined in features/LariasWeeklyChecklist_EasterEgg.lua
+-- (remove that file from the TOC to disable the completion animation)
 
 local function CalcDataSig(data)
     if type(data) ~= "table" then return 0 end
@@ -1939,56 +1846,10 @@ function Addon:CreateFrame()
     scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
     scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", Addon.UI.padOuterX, -Addon.UI.scrollTop)
 
-    do
-        -- Easter egg: "touch grass" trio -- hand + plus + grass icons.
-        local egg = CreateFrame("Frame", nil, scrollFrame)
-        egg:SetPoint("CENTER", scrollFrame, "CENTER", 0, 0)
-        egg:SetSize(1, 1)
-        egg:Hide()
-
-        local handTex = egg:CreateTexture(nil, "ARTWORK")
-        handTex:SetTexture("Interface\\Icons\\Spell_Holy_LayOnHands")
-        if handTex.SetTexCoord then handTex:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
-        handTex:SetAlpha(0.95)
-
-        local plusFS = egg:CreateFontString(nil, "OVERLAY")
-        plusFS:SetFont("Fonts\\FRIZQT__.TTF", 32, "OUTLINE")
-        plusFS:SetText("+")
-        plusFS:SetTextColor(1, 1, 1, 0.95)
-        plusFS:SetJustifyH("CENTER")
-        plusFS:SetJustifyV("MIDDLE")
-
-        local grassTex = egg:CreateTexture(nil, "ARTWORK")
-        grassTex:SetTexture("Interface\\Icons\\Ability_Druid_Flourish")
-        if grassTex.SetTexCoord then grassTex:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
-        grassTex:SetAlpha(0.95)
-
-        -- Override SetSize so the three elements reflow whenever the caller
-        -- resizes the container (icons scale with available scroll area).
-        local _rawSetSize = egg.SetSize
-        function egg:SetSize(w, h)
-            local iconSize = math.max(32, math.min(160, math.floor(h * 0.43)))
-            local gap      = math.max(4,  math.floor(iconSize * 0.10))
-            local plusW    = math.max(16, math.floor(iconSize * 0.45))
-            local totalW   = iconSize + gap + plusW + gap + iconSize
-            _rawSetSize(self, totalW, iconSize)
-
-            handTex:SetSize(iconSize, iconSize)
-            handTex:ClearAllPoints()
-            handTex:SetPoint("LEFT", self, "LEFT", 0, 0)
-
-            plusFS:SetSize(plusW, iconSize)
-            plusFS:ClearAllPoints()
-            plusFS:SetPoint("LEFT", handTex, "RIGHT", gap, 0)
-            plusFS:SetFont("Fonts\\FRIZQT__.TTF",
-                math.max(14, math.floor(iconSize * 0.55)), "OUTLINE")
-
-            grassTex:SetSize(iconSize, iconSize)
-            grassTex:ClearAllPoints()
-            grassTex:SetPoint("LEFT", plusFS, "RIGHT", gap, 0)
-        end
-
-        frame._lariasPigTexture = egg
+    -- Easter egg: defined in features/LariasWeeklyChecklist_EasterEgg.lua
+    -- (remove that file from the TOC to disable the completion animation)
+    if Addon.CreateCompletionEasterEgg then
+        Addon:CreateCompletionEasterEgg(scrollFrame)
     end
 
     scrollChild = CreateFrame("Frame", nil, scrollFrame)

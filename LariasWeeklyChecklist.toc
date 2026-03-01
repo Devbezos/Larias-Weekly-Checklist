@@ -45,10 +45,15 @@ components\LariasWeeklyChecklist_Options.lua
 # Feature modules
 features\LariasWeeklyChecklist_Comms.lua
 features\LariasWeeklyChecklist_Settings.lua
+features\LariasWeeklyChecklist_Minimap.lua
+features\LariasWeeklyChecklist_EasterEgg.lua
 features\header\LariasWeeklyChecklist_GearPopup.lua
 features\header\LariasWeeklyChecklist_IlvlRef.lua
 features\header\LariasWeeklyChecklist_Header.lua
 features\body\LariasWeeklyChecklist_ListData.lua
+features\body\LariasWeeklyChecklist_Overlay.lua
+features\body\LariasWeeklyChecklist_GreatVault.lua
 features\body\LariasWeeklyChecklist_Currency.lua
+features\body\LariasWeeklyChecklist_Weeklies.lua
 features\footer\LariasWeeklyChecklist_CharPicker.lua
 features\footer\LariasWeeklyChecklist_Footer.lua
