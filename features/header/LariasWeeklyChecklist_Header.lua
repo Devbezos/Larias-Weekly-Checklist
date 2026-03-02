@@ -104,6 +104,17 @@ function Addon:CreateHeader(frame)
         picker._buttons    = {}
         picker._buttonPool = {}
         frame._lariasHeaderPicker = picker
+        -- Keep the change-week button arrow in sync with panel open/close state.
+        local function SyncArrow()
+            local btn = changeWeekBtn
+            if not (btn and btn._lariasArrowTex) then return end
+            local open = picker.IsShown and picker:IsShown()
+            btn._lariasArrowTex:SetTexture(open
+                and "Interface\\Buttons\\UI-ScrollBar-ScrollUpButton-Up"
+                or  "Interface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up")
+        end
+        picker:HookScript("OnShow", SyncArrow)
+        picker:HookScript("OnHide", SyncArrow)
         return picker
     end
 

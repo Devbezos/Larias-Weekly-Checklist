@@ -123,7 +123,11 @@ function Addon:InitCharPickerUI(frame, styleFunc)
         if not btn then return end
         local L   = Addon.L or {}
         local lbl = L.CHAR_PICKER_BUTTON or "Swap Profile"
-        btn:SetText(lbl .. " |TInterface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up:10:10|t")
+        local panelOpen = charPickerPanel and charPickerPanel.IsShown and charPickerPanel:IsShown()
+        local arrowTex  = panelOpen
+            and "|TInterface\\Buttons\\UI-ScrollBar-ScrollUpButton-Up:10:10|t"
+            or  "|TInterface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up:10:10|t"
+        btn:SetText(lbl .. " " .. arrowTex)
         local tr = btn.Text or (btn.GetFontString and btn:GetFontString())
         if tr and Addon.THEME and Addon.THEME.text then
             local t = Addon.THEME.text
@@ -139,6 +143,9 @@ function Addon:InitCharPickerUI(frame, styleFunc)
         p._buttons    = {}
         p._buttonPool = {}
         charPickerPanel = p
+        -- Keep the toggle-button arrow in sync with panel visibility.
+        p:HookScript("OnShow", function() UpdateLabel() end)
+        p:HookScript("OnHide", function() UpdateLabel() end)
         return p
     end
 
