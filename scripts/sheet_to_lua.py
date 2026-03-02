@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import csv
+import hashlib
 import re
 import sys
 from pathlib import Path
@@ -37,6 +38,14 @@ def wow_safe_text(s: str) -> str:
     # strip any remaining non-ascii chars
     s = s.encode("ascii", "ignore").decode("ascii")
     return s
+
+def hash_id(s: str) -> str:
+    """Stable 8-character hex ID derived from the normalised text.
+    Using a content hash keeps IDs short, unique, and stable across renames
+    as long as the canonical English text doesn't change."""
+    cleaned = wow_safe_text(s.strip())
+    return hashlib.md5(cleaned.encode("utf-8")).hexdigest()[:8]
+
 
 def slug(s: str) -> str:
     s = s.strip().lower()
@@ -117,12 +126,12 @@ def main(csv_in: str, lua_out: str) -> None:
             continue
 
         if is_section_header(text):
-            current = {"id": slug(text), "title": text, "items": []}
+            current = {"id": hash_id(text), "title": text, "items": []}
             sections.append(current)
         else:
             if current is None:
                 continue
-            current["items"].append({"id": slug(text), "text": text})
+            current["items"].append({"id": hash_id(text), "text": text})
     out: list[str] = []
 
     existing_text = None

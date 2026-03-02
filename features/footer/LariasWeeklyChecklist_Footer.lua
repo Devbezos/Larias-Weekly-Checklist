@@ -118,63 +118,19 @@ function Addon:UpdateStatusBanner()
 end
 
 -- ── Addon:ApplyScaleSliderVisibility ─────────────────────────────────────────
--- Shows or hides the scale/opacity slider panes and re-anchors all bottom-row
--- elements (tracking panel, char-picker button) accordingly.
+-- Re-anchors the tracking panel at the bottom of the main frame.
+-- Sliders were moved to the options menus; no in-frame slider exists.
 function Addon:ApplyScaleSliderVisibility()
-    local sf = self._inFrameScaleSlider
-    if not sf then return end
-    local db           = self:EnsurePrefs()
-    local scaleShown   = db.showScaleSlider   ~= false
-    local opacityShown = db.showOpacitySlider ~= false
-    local anySlider    = scaleShown or opacityShown
-
-    if sf._scalePane   then sf._scalePane:SetShown(scaleShown)     end
-    if sf._opacityPane then sf._opacityPane:SetShown(opacityShown) end
-    if sf._layout      then sf._layout() end
-    sf:SetShown(anySlider)
-
-    -- The banner always reserves its space; include it in offset calculations.
     local bannerExtra = self._statusBanner
         and ((self._statusBannerH or BANNER_H) + (self._statusBannerPad or BANNER_PAD))
         or 0
-    sf._bannerBotExtra = bannerExtra
-
-    if sf.AdjustForCpBtn then sf.AdjustForCpBtn(nil) end
-
-    -- Determine whether the char-picker button is visible in the bottom row.
-    local featureOn = (self.FEATURE_FLAGS and self.FEATURE_FLAGS.ENABLE_CHAR_SELECTOR) ~= false
-    local hasChars  = featureOn and (self.HasPickableChars and self:HasPickableChars())
-    local cpVisible = featureOn and hasChars and (db.showCharPickerBtn ~= false)
-
-    local cpBtnRef = self._mainFrame and self._mainFrame._lariasCharPickerBtn
-    if cpBtnRef and cpBtnRef.IsShown and cpBtnRef:IsShown() then
-        local _cpY = (Addon.UI.sliderBottomPad or 4) + bannerExtra
-        if anySlider then _cpY = _cpY + (sf:GetHeight() or 36) + 4 end
-        cpBtnRef:ClearAllPoints()
-        cpBtnRef:SetPoint("BOTTOMRIGHT", self._mainFrame, "BOTTOMRIGHT",
-            -(Addon.UI.sectionInsetX or 14), _cpY)
-    end
-
-    -- Re-anchor the tracking panel above the slider/banner row.
     local tf = self._trackingFrame
     if tf then
-        local inset     = Addon.UI.sectionInsetX or 14
-        local botPad    = (Addon.UI.sliderBottomPad or 4) + bannerExtra
-        local topPad    = Addon.UI.sliderTopPad    or 4
-        local sliderTot = (Addon.UI.sliderH or 20) + (Addon.UI.sliderLabelH or 14) + 2
-        local botY
-        if anySlider and cpVisible then
-            botY = botPad + sliderTot + 4 + 22 + topPad
-        elseif anySlider then
-            botY = botPad + sliderTot + topPad
-        elseif cpVisible then
-            botY = botPad + 22 + topPad
-        else
-            botY = botPad
-        end
+        local inset  = Addon.UI.sectionInsetX  or 14
+        local botPad = (Addon.UI.sliderBottomPad or 4) + bannerExtra
         tf:ClearAllPoints()
-        tf:SetPoint("BOTTOMLEFT",  tf:GetParent(), "BOTTOMLEFT",  inset,  botY)
-        tf:SetPoint("BOTTOMRIGHT", tf:GetParent(), "BOTTOMRIGHT", -inset, botY)
+        tf:SetPoint("BOTTOMLEFT",  tf:GetParent(), "BOTTOMLEFT",  inset,  botPad)
+        tf:SetPoint("BOTTOMRIGHT", tf:GetParent(), "BOTTOMRIGHT", -inset, botPad)
     end
     if self.ApplyScrollLayout then self:ApplyScrollLayout() end
 end
@@ -193,10 +149,10 @@ function Addon:ApplyOpacity()
     if self._statusBanner then
         self._statusBanner:SetAlpha(alpha)
     end
-    -- Apply the same opacity to the options popup backdrop.
+    -- Gear popup is always fully opaque regardless of the main frame opacity.
     if self._gearPopup and self._gearPopup.SetBackdropColor then
         local bg = self.THEME.bg
-        self._gearPopup:SetBackdropColor(bg.r, bg.g, bg.b, alpha)
+        self._gearPopup:SetBackdropColor(bg.r, bg.g, bg.b, 1.0)
     end
     local sf = self._inFrameScaleSlider
     if sf and sf.SyncOpacity then sf.SyncOpacity() end

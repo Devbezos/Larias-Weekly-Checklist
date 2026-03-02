@@ -1,7 +1,5 @@
 ﻿scripts/deploy_to_wow.ps1
 
-# In Libs, only track .lua files (ignore xml, toc, txt, md, etc.)
-Libs/**
-!Libs/**/
-!Libs/**/*.lua
-!Libs/*.lua
+# Libraries are fetched by the packager via .pkgmeta externals.
+# Keep them on disk for local dev but do not commit them.
+lib/
