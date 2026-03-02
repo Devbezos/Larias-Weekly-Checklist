@@ -5,7 +5,7 @@ NOTE: This is the canonical enUS dataset; other locales must keep IDs identical
 so completion tracking stays consistent across locales.
 ]]
 
--- @sheet-version: 12
+-- @sheet-version: 13
 
 local LOCALE = "enUS"
 
@@ -17,13 +17,13 @@ if type(reg) ~= "table" then
     _G[LOCALE_REGISTRY_KEY] = reg
 end
 if type(reg.data) ~= "table" then reg.data = {} end
-reg.sheet_version = "12"
+reg.sheet_version = "13"
 
 local DATASET = {
 
     {
-        id = "e225d803",
-        title = "Early Access - Feb 26 through Mar 2 - Pay to Win",
+        id = "bd6b2f68",
+        title = "Early Access - Feb 26 through Mar 2",
         items = {
             { id = "f4b92a82", text = "Log on to each character you plan on leveling so they start accumulating rested XP." },
             { id = "90db618c", text = "Level characters warmode on to 90 - DMF opens Sunday for 10% more exp." },
@@ -42,19 +42,23 @@ local DATASET = {
         title = "Pre-Season Week 1 - March 3 - M0's",
         items = {
             { id = "c3de7d35", text = "Do not spend any Crests until told to do so" },
+            { id = "c06ee1a3", text = "If you are on an alt and don't see some of these quests, go to Soridormi in the Silvermoon City Inn and choose \"I Stopped the Voidstorm\" to skip the campaign." },
             { id = "6b199064", text = "Raise The Singularity renown to rank 7 for 1/6 champion trinket - available in early access - comes from quest from the renown vendor (not purchased)" },
             { id = "2a9b4f4c", text = "Raise Hara'ti renown to rank 8 for 1/6 champion belt - NOT available in early access - comes from quest from the renown vendor (not purchased)" },
             { id = "6f39070d", text = "Raise Silvermoon renown to rank 9 for 1/6 champion helm - NOT available in early access - comes from quest from the renown vendor (not purchased)" },
             { id = "6ba4afc1", text = "Raise Amani Tribe renown to rank 9 for 1/6 champion necklace - NOT available in early access - comes from quest from the renown vendor (not purchased)" },
+            { id = "101e78a9", text = "Complete weekly dungeon quest from Halduron Brightwing for 1000 renown" },
+            { id = "0c3b8835", text = "Complete weekly world event quest for pinnacle cache from Lady Liadrin - can pick weekly event quest and do it with the events below" },
+            { id = "879d3833", text = "Complete weekly world tour quest from Lorthremar for spark by doing the below quests" },
+            { id = "9f3c8578", text = "Complete weekly housing quest from Vaeli for ??" },
             { id = "e326ed96", text = "Complete the weekly Saltheril's Soiree in Eversong Woods." },
             { id = "da2fa0ef", text = "Complete the weekly Abundance Event in Zul'aman." },
             { id = "dbc8384b", text = "Complete the weekly Legends of the Haranir event in Harandar." },
             { id = "9ad64245", text = "Complete the weekly Stormarion Assault in the Voidstorm." },
             { id = "35bc0cfd", text = "(Optional) Kill each rare once in each zone for renown. These are a weekly lockout for each rare." },
-            { id = "d47e5b93", text = "If not done, hunt down each region's treasures for free Renown. See doc for guide" },
+            { id = "1b42ce30", text = "If not done, hunt down each region's treasures, lore hunter, and high peaks for free Renown. See doc for guide" },
             { id = "346bdd7e", text = "Unlock Delves through tier 8 (11 if available)" },
-            { id = "91b50b0a", text = "(Optional) Complete 4x Normal Prey for adventurer gear and renown." },
-            { id = "e0029ef7", text = "Complete 4x Hard Prey for Veteran gear and renown." },
+            { id = "9bc44f02", text = "Complete 2x Hard Prey for Veteran gear on each character - if only one character, do 4x on one character for renown" },
             { id = "a7ee4829", text = "Complete a World Tour of M0 dungeons - rewards vet ilvl - do not upgrade yet" },
         },
     },
@@ -64,14 +68,17 @@ local DATASET = {
         items = {
             { id = "c3de7d35", text = "Do not spend any Crests until told to do so" },
             { id = "75c5fe6e", text = "If not completed, continue to raise renown for Champion Pieces" },
+            { id = "101e78a9", text = "Complete weekly dungeon quest from Halduron Brightwing for 1000 renown" },
+            { id = "0c3b8835", text = "Complete weekly world event quest for pinnacle cache from Lady Liadrin - can pick weekly event quest and do it with the events below" },
+            { id = "879d3833", text = "Complete weekly world tour quest from Lorthremar for spark by doing the below quests" },
+            { id = "9f3c8578", text = "Complete weekly housing quest from Vaeli for ??" },
             { id = "e326ed96", text = "Complete the weekly Saltheril's Soiree in Eversong Woods." },
             { id = "da2fa0ef", text = "Complete the weekly Abundance Event in Zul'aman." },
             { id = "dbc8384b", text = "Complete the weekly Legends of the Haranir event in Harandar." },
             { id = "9ad64245", text = "Complete the weekly Stormarion Assault in the Voidstorm." },
             { id = "35bc0cfd", text = "(Optional) Kill each rare once in each zone for renown. These are a weekly lockout for each rare." },
             { id = "072e6955", text = "Unlock Delves through tier 8 (11 if available) if not done yet" },
-            { id = "91b50b0a", text = "(Optional) Complete 4x Normal Prey for adventurer gear and renown." },
-            { id = "e0029ef7", text = "Complete 4x Hard Prey for Veteran gear and renown." },
+            { id = "9bc44f02", text = "Complete 2x Hard Prey for Veteran gear on each character - if only one character, do 4x on one character for renown" },
             { id = "a7ee4829", text = "Complete a World Tour of M0 dungeons - rewards vet ilvl - do not upgrade yet" },
             { id = "c33e5c84", text = "If you raid Tuesday the 17th, craft. See doc for more info." },
         },
@@ -82,8 +89,10 @@ local DATASET = {
         items = {
             { id = "c3de7d35", text = "Do not spend any Crests until told to do so" },
             { id = "5b379666", text = "Do LFR for tier pieces (check guide for why)" },
-            { id = "1e5c80bc", text = "(Optional?) Complete a World Tour of M0 dungeons - rewards champ ilvl" },
-            { id = "123747cb", text = "Complete 4x Nightmare Prey for Champion gear and renown." },
+            { id = "879d3833", text = "Complete weekly world tour quest from Lorthremar for spark by doing the below quests" },
+            { id = "9f3c8578", text = "Complete weekly housing quest from Vaeli for ??" },
+            { id = "952916cd", text = "(Optional) Complete a World Tour of M0 dungeons - rewards champ ilvl" },
+            { id = "22842538", text = "Complete 2x Nightmare Prey for Champion gear on each character" },
             { id = "dc0e2686", text = "Kill World Boss for champ 2/6 250 ilvl item" },
             { id = "3e0dfde7", text = "If available, complete pvp quest for guaranteed hero neck/ring" },
             { id = "fdfd56bc", text = "Do t8 bountiful delves with coffer keys, use map on t8+ delve" },
