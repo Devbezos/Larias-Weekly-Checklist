@@ -113,18 +113,19 @@ function C.NewCloseButton(parent, onClick)
     btn:SetSize(20, 20)
     ApplyFixedBackdrop(btn)
 
-    local T  = Addon.THEME or {}
-    local th = T.header or { r = 1.00, g = 0.82, b = 0.00 }  -- gold accent
+    -- Fixed colors: intentionally NOT driven by theme so the × never changes
+    -- when the user adjusts the header color.
+    local CLOSE_R, CLOSE_G, CLOSE_B = 1.00, 0.82, 0.00
 
     local norm = btn:CreateFontString(nil, "OVERLAY")
     norm:SetFont("Fonts\\FRIZQT__.TTF", 16, "OUTLINE")
     norm:SetAllPoints(btn)
     norm:SetJustifyH("CENTER")
     norm:SetJustifyV("MIDDLE")
-    norm:SetTextColor(th.r, th.g, th.b, 1)
+    norm:SetTextColor(CLOSE_R, CLOSE_G, CLOSE_B, 1)
     norm:SetText("\195\151")  -- × (U+00D7)
     btn:SetFontString(norm)
-    btn._lariasCloseGlyph = norm  -- stored so ApplyThemeColors can refresh the tint
+    -- _lariasCloseGlyph intentionally not stored — ApplyThemeColors must not restyle this button.
 
     local hl = btn:CreateTexture(nil, "HIGHLIGHT")
     hl:SetAllPoints(btn)
@@ -144,7 +145,7 @@ function C.NewCloseButton(parent, onClick)
         GameTooltip:Show()
     end)
     btn:SetScript("OnLeave", function()
-        norm:SetTextColor(th.r, th.g, th.b, 1)
+        norm:SetTextColor(CLOSE_R, CLOSE_G, CLOSE_B, 1)
         GameTooltip:Hide()
     end)
 
@@ -227,10 +228,12 @@ end
 function C.NewExpandButton(parent, onToggle, initialExpanded, expandTip, shrinkTip)
     local btn = CreateFrame("Button", nil, parent)
     btn:SetSize(20, 20)
-    Addon:ApplyTheme(btn)
+    ApplyFixedBackdrop(btn)
 
-    local T  = Addon.THEME or {}
-    local th = T.header or { r = 1.00, g = 0.82, b = 0.00 }
+    -- Fixed colors — intentionally NOT driven by theme so the arrow never
+    -- changes color when the user adjusts header/background theme colors.
+    local REST_R, REST_G, REST_B, REST_A = 0.75, 0.75, 0.75, 0.65  -- dim white
+    local HOV_R,  HOV_G,  HOV_B         = 1.00, 1.00, 1.00         -- white
 
     local _expandTip = expandTip or "Expand"
     local _shrinkTip = shrinkTip or "Shrink"
@@ -240,20 +243,22 @@ function C.NewExpandButton(parent, onToggle, initialExpanded, expandTip, shrinkT
     local TEX_DOWN = "Interface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up"
     local TEX_UP   = "Interface\\Buttons\\UI-ScrollBar-ScrollUpButton-Up"
 
-    local normTex = btn:CreateTexture(nil, "ARTWORK")
-    normTex:SetAllPoints(btn)
-    normTex:SetVertexColor(th.r, th.g, th.b, 1)
-    btn:SetNormalTexture(normTex)
+    local PAD = 2
+    local normTex = btn:CreateTexture(nil, "BORDER")
+    normTex:SetPoint("TOPLEFT",     btn, "TOPLEFT",      PAD, -PAD)
+    normTex:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -PAD,  PAD)
+    normTex:SetVertexColor(REST_R, REST_G, REST_B, REST_A)
 
     local hlTex = btn:CreateTexture(nil, "HIGHLIGHT")
     hlTex:SetAllPoints(btn)
     hlTex:SetColorTexture(1, 1, 1, 0.10)
     btn:SetHighlightTexture(hlTex)
 
-    local pushedTex = btn:CreateTexture(nil, "ARTWORK")
-    pushedTex:SetAllPoints(btn)
-    pushedTex:SetVertexColor(1, 1, 1, 1)
-    btn:SetPushedTexture(pushedTex)
+    local pushedTex = btn:CreateTexture(nil, "OVERLAY")
+    pushedTex:SetPoint("TOPLEFT",     btn, "TOPLEFT",      PAD, -PAD)
+    pushedTex:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -PAD,  PAD)
+    pushedTex:SetVertexColor(HOV_R * 0.45, HOV_G * 0.45, HOV_B * 0.45, 1)
+    pushedTex:Hide()
 
     btn._expanded = (initialExpanded ~= false)
 
@@ -271,15 +276,24 @@ function C.NewExpandButton(parent, onToggle, initialExpanded, expandTip, shrinkT
     RefreshGlyph()
 
     btn:SetScript("OnEnter", function(self_)
-        normTex:SetVertexColor(1, 1, 1, 1)
+        normTex:SetVertexColor(HOV_R, HOV_G, HOV_B, 1)
         local tip = self_._expanded and _shrinkTip or _expandTip
         GameTooltip:SetOwner(self_, "ANCHOR_BOTTOMLEFT")
         GameTooltip:SetText(tip, 1, 1, 1, 1, true)
         GameTooltip:Show()
     end)
     btn:SetScript("OnLeave", function()
-        normTex:SetVertexColor(th.r, th.g, th.b, 1)
+        normTex:SetVertexColor(REST_R, REST_G, REST_B, REST_A)
+        pushedTex:Hide()
         GameTooltip:Hide()
+    end)
+    btn:SetScript("OnMouseDown", function()
+        pushedTex:Show()
+        normTex:SetVertexColor(HOV_R * 0.45, HOV_G * 0.45, HOV_B * 0.45, 1)
+    end)
+    btn:SetScript("OnMouseUp", function()
+        pushedTex:Hide()
+        normTex:SetVertexColor(HOV_R, HOV_G, HOV_B, 1)
     end)
     btn:SetScript("OnClick", function(self_)
         self_:SetExpanded(not self_._expanded)

@@ -64,15 +64,6 @@ function Addon:CreateHeader(frame)
     local changeWeekBtn
     local ilvlRefBtn
 
-    -- ── Char-picker init ──────────────────────────────────────────────────────
-    if Addon.InitCharPickerUI then
-        Addon:InitCharPickerUI(frame, StyleMainTabButton)
-    end
-
-    local function EnsureCharPickerBtn_()
-        if Addon._cpEnsureBtn then return Addon._cpEnsureBtn() end
-    end
-
     -- ── EnsureChangeWeekBtn_ ──────────────────────────────────────────────────
     local function EnsureChangeWeekBtn_()
         if changeWeekBtn then return changeWeekBtn end
@@ -162,8 +153,28 @@ function Addon:CreateHeader(frame)
         local db       = Addon:EnsureDB()
         local picker   = EnsureHeaderPicker()
         local order    = Addon._order or {}
-        local oldStart = tostring(db.startAtSectionId or "")
         local newStart = tostring(sectionId or "")
+
+        -- Resolve the "current" position using the same logic as PopulateHeaderPicker
+        -- and LayoutHeaderButtons_: prefer the stored pin, but if it's empty or its
+        -- week is now complete, fall back to the first incomplete week.
+        local rawStored = tostring(db.startAtSectionId or "")
+        local oldStart
+        if rawStored ~= "" and not (Addon._IsSectionCompleteById and
+                Addon._IsSectionCompleteById(rawStored, db)) then
+            oldStart = rawStored
+        else
+            -- First incomplete week (same as the ">" marker in the picker).
+            for i = 1, #order do
+                if Addon._IsSectionCompleteById and
+                   not Addon._IsSectionCompleteById(order[i], db) then
+                    oldStart = tostring(order[i])
+                    break
+                end
+            end
+            if not oldStart and order[1] then oldStart = tostring(order[1]) end
+        end
+        oldStart = oldStart or ""
 
         local oldIdx, newIdx = 0, 0
         for i = 1, #order do
@@ -189,7 +200,10 @@ function Addon:CreateHeader(frame)
             local checked   = type(db.checked)          == "table" and db.checked          or nil
             local collapsed = type(db.collapsedSections) == "table" and db.collapsedSections or nil
             local fromIdx   = (newIdx == 0 and 1 or newIdx)
-            for i = fromIdx, oldIdx do
+            -- Clear from the selected week all the way to the end: jumping back to
+            -- a week means "show everything from here forward", regardless of how
+            -- far ahead oldIdx happened to be.
+            for i = fromIdx, #order do
                 local secId  = order[i]
                 local secDef = Addon._sectionsById and Addon._sectionsById[secId]
                 local items  = secDef and secDef.items or {}
@@ -226,23 +240,29 @@ function Addon:CreateHeader(frame)
         local storedStart = tostring(db0.startAtSectionId or "")
         local currentId
         if storedStart ~= "" then
-            currentId = storedStart
-        else
-            -- No explicit pick: find the last section that has at least one checked item.
-            -- This keeps the ">" marker on the week the user was most recently working on
-            -- rather than jumping forward to the next incomplete week the moment the current
-            -- one is fully done (which would feel premature before the Tuesday reset).
+            -- If that pinned week is now complete, clear the pin so the marker
+            -- advances to the first-incomplete / last-active week below.
+            if Addon._IsSectionCompleteById and
+               Addon._IsSectionCompleteById(storedStart, db0) then
+                db0.startAtSectionId = ""
+                storedStart = ""
+            else
+                currentId = storedStart
+            end
+        end
+        if not currentId then
+            -- No explicit pin: find the first incomplete week, matching the same
+            -- logic used by LayoutHeaderButtons_ so the ">" marker always lands
+            -- on the same week shown in the button label.
             local order = Addon._order or {}
-            local lastActiveId = nil
             for i = 1, #order do
-                if Addon._HasAnySectionItemChecked and Addon._HasAnySectionItemChecked(order[i], db0) then
-                    lastActiveId = tostring(order[i])
+                if Addon._IsSectionCompleteById and
+                   not Addon._IsSectionCompleteById(order[i], db0) then
+                    currentId = tostring(order[i])
+                    break
                 end
             end
-            if lastActiveId then
-                currentId = lastActiveId
-            elseif Addon._order and Addon._order[1] then
-                -- Nothing checked yet: default to the first section.
+            if not currentId and Addon._order and Addon._order[1] then
                 currentId = tostring(Addon._order[1])
             end
         end
@@ -253,7 +273,7 @@ function Addon:CreateHeader(frame)
                 if type(section) == "table" then
                     local id        = section.id
                     local isCurrent = (tostring(id or "") == currentId)
-                    local label     = ExtractMonthRangeLabel(section.title or id or "")
+                    local label = ExtractMonthRangeLabel(section.title or id or "")
                     if label == "" then label = tostring(id or i) end
                     if isCurrent then label = "> " .. label end
 
@@ -267,16 +287,6 @@ function Addon:CreateHeader(frame)
                     btn:SetScript("OnClick", function()
                         HandlePick(capturedId, Addon._scrollFrame)
                     end)
-
-                    if isCurrent then
-                        SetPickerButtonTextColor(btn, Addon.THEME.textDim or Addon.THEME.text)
-                        btn:SetScript("OnEnter", function()
-                            SetPickerButtonTextColor(btn, Addon.THEME.header)
-                        end)
-                        btn:SetScript("OnLeave", function()
-                            SetPickerButtonTextColor(btn, Addon.THEME.textDim or Addon.THEME.text)
-                        end)
-                    end
 
                     tinsert(picker._buttons, btn)
                     posY = posY - PICKER_ROW_HEIGHT
@@ -328,58 +338,6 @@ function Addon:CreateHeader(frame)
         local dbLocal = Addon:EnsurePrefs()
         local showCW  = dbLocal.showChangeWeekBtn ~= false
         local showIR  = dbLocal.showIlvlRefBtn    ~= false
-        local showCP  = dbLocal.showCharPickerBtn ~= false
-                    and (Addon.FEATURE_FLAGS and Addon.FEATURE_FLAGS.ENABLE_CHAR_SELECTOR) ~= false
-
-        if showCP then
-            if Addon.HasPickableChars then showCP = Addon:HasPickableChars() end
-        end
-
-        -- charPickerBtn is in the BOTTOM row; position it first.
-        local cpBtn = EnsureCharPickerBtn_()
-        if cpBtn then
-            if showCP then
-                cpBtn:SetScript("OnClick", function()
-                    if Addon._cpOnClick then Addon._cpOnClick() end
-                end)
-                cpBtn:ClearAllPoints()
-                local _cpBannerExtra = Addon._statusBanner
-                    and ((Addon._statusBannerH or 14) + (Addon._statusBannerPad or 3))
-                    or 0
-                local _spf = Addon._inFrameScaleSlider
-                local _cpY = (Addon.UI.sliderBottomPad or 4) + _cpBannerExtra
-                if _spf and _spf.IsShown and _spf:IsShown() then
-                    _cpY = _cpY + (_spf:GetHeight() or 36) + 4
-                end
-                cpBtn:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT",
-                    -(Addon.UI.sectionInsetX or 14), _cpY)
-                if Addon._cpUpdateLabel then Addon._cpUpdateLabel() end
-                cpBtn:Show()
-                local sf = Addon._inFrameScaleSlider
-                if sf and sf.AdjustForCpBtn then
-                    if C_Timer and C_Timer.After then
-                        C_Timer.After(0, function() sf.AdjustForCpBtn(cpBtn) end)
-                    else
-                        sf.AdjustForCpBtn(cpBtn)
-                    end
-                end
-            else
-                if Addon._viewingChar then
-                    Addon._viewingChar = nil
-                    if Addon._cpUpdateLabel  then Addon._cpUpdateLabel() end
-                    if Addon.RequestRefresh  then Addon:RequestRefresh() else Addon:Refresh() end
-                end
-                cpBtn:Hide()
-                local sf = Addon._inFrameScaleSlider
-                if sf and sf.AdjustForCpBtn then
-                    if C_Timer and C_Timer.After then
-                        C_Timer.After(0, function() sf.AdjustForCpBtn(nil) end)
-                    else
-                        sf.AdjustForCpBtn(nil)
-                    end
-                end
-            end
-        end
 
         -- changeWeekBtn: top-left of the frame.
         if showCW then
@@ -390,23 +348,40 @@ function Addon:CreateHeader(frame)
                 local storedStart = tostring(db0.startAtSectionId or "")
                 local currentId
                 if storedStart ~= "" then
-                    currentId = storedStart
-                else
+                    -- If the pinned week is now fully complete, clear the pin and
+                    -- auto-advance to the first incomplete week instead.
+                    if Addon._IsSectionCompleteById and
+                       Addon._IsSectionCompleteById(storedStart, db0) then
+                        db0.startAtSectionId = ""
+                        storedStart = ""
+                    else
+                        currentId = storedStart
+                    end
+                end
+                if not currentId then
                     local order = Addon._order or {}
+                    local allComplete = true
                     for i = 1, #order do
                         if Addon._IsSectionCompleteById and
                            not Addon._IsSectionCompleteById(order[i], db0) then
-                            currentId = tostring(order[i])
+                            currentId   = tostring(order[i])
+                            allComplete = false
                             break
                         end
                     end
+                    if allComplete then
+                        -- Every week is done — show a completion label.
+                        cwWeekLabel = L.ALL_WEEKS_COMPLETE or "Finished!"
+                    end
+                end
+                if not cwWeekLabel then
                     if not currentId and Addon._order and Addon._order[1] then
                         currentId = tostring(Addon._order[1])
                     end
+                    local section   = currentId and Addon._sectionsById and Addon._sectionsById[currentId]
+                    local extracted = ExtractMonthRangeLabel((section and section.title) or currentId or "")
+                    cwWeekLabel = (extracted ~= "") and extracted or (L.CHANGE_WEEK_BUTTON or "Change Week")
                 end
-                local section   = currentId and Addon._sectionsById and Addon._sectionsById[currentId]
-                local extracted = ExtractMonthRangeLabel((section and section.title) or currentId or "")
-                cwWeekLabel = (extracted ~= "") and extracted or (L.CHANGE_WEEK_BUTTON or "Change Week")
             end
             btn._lariasSelectedLabel = cwWeekLabel
             btn:SetText(cwWeekLabel)
@@ -419,6 +394,7 @@ function Addon:CreateHeader(frame)
             btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
             btn:SetScript("OnClick", function()
                 local p = EnsureHeaderPicker()
+                if p and p._lariasClosedAt and (GetTime() - p._lariasClosedAt) < 0.20 then p._lariasClosedAt = nil; return end
                 if p and p.IsShown and p:IsShown() then
                     p:Hide()
                     return
