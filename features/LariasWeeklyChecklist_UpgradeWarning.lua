@@ -44,6 +44,15 @@ local function GetCrestShort(tierIdx)
     return hex and ("|cFF" .. hex .. name .. "|r") or name
 end
 
+-- ── Guild check ─────────────────────────────────────────────────────────────
+-- Special behaviour: members of <Refined> on Zul'jin-NA cannot proceed with
+-- a bad upgrade, because they really should know better by now.
+-- We match only on guild name; realm apostrophe encoding varies by client.
+-- local function IsInRefinedGuild()
+--     local guildName = GetGuildInfo("player")
+--     return guildName == "Refined"
+-- end
+
 -- ── Core check ────────────────────────────────────────────────────────────────
 
 --- Called whenever the item upgrade frame shows or a new item is slotted.
@@ -54,6 +63,8 @@ function Addon:CheckUpgradeWarning()
 
     local prefs = self:EnsurePrefs()
     if prefs.upgradeWarnDisabled then return end
+    -- Panel hasn't been built yet (Blizzard_ItemUpgradeUI not loaded); nothing to show.
+    if not _warn then return end
 
     if not (C_ItemUpgrade and C_ItemUpgrade.GetItemUpgradeItemInfo) then return end
 
@@ -82,7 +93,9 @@ function Addon:CheckUpgradeWarning()
         upgradeCurrencyID = costs[1].currencyID
         upgradeCount      = costs[1].cost
     end
-    if not upgradeCurrencyID and not IsDevBuild() then return end
+
+    local isDev = IsDevBuild()
+    if not upgradeCurrencyID and not isDev then return end
 
     local tierIdx
     if upgradeCurrencyID then
@@ -93,18 +106,16 @@ function Addon:CheckUpgradeWarning()
 
     -- In release mode only warn for tracks that have a cheaper previous track
     -- (Veteran and above). Adventurer has no previous track so nothing to save.
-    if not IsDevBuild() and (not tierIdx or tierIdx < 2) then return end
+    if not isDev and (not tierIdx or tierIdx < 2) then return end
     if not tierIdx then tierIdx = 1 end
 
     local upgradeCost = upgradeCount or 0
     local currentName = GetCrestShort(tierIdx)
     local prevName    = GetCrestShort(math.max(tierIdx - 1, 1))
 
-    if _warn then
-        local fmt = L.UPGRADE_WARN_MSG or "Upgrading a 1/6 %s item is a waste of %d crests. You should upgrade a 5/6 %s item instead"
-        _warn.label:SetText(string.format(fmt, currentName, upgradeCost, prevName))
-        _warn.holder:Show()
-    end
+    local fmt = L.UPGRADE_WARN_MSG or "Upgrading a 1/6 %s item is a waste of %d crests.\nYou should upgrade a 5/6 %s item instead"
+    _warn.label:SetText(string.format(fmt, currentName, upgradeCost, prevName))
+    _warn.holder:Show()
 end
 
 -- ── Deferred setup ────────────────────────────────────────────────────────────
@@ -122,7 +133,7 @@ local function SetupHooks()
         local holder = Addon:NewThemedFrame(nil, UIParent)
         holder:SetFrameStrata("DIALOG")
         holder:SetFrameLevel(200)
-        holder:SetSize(260, PANEL_H)
+        holder:SetSize(380, PANEL_H)
         holder:SetClampedToScreen(true)
         holder:EnableMouse(true)
         -- Anchor directly below the ItemUpgradeFrame, horizontally centered.
@@ -159,6 +170,8 @@ local function SetupHooks()
         disableBtn:SetScript("OnClick", function()
             Addon:EnsurePrefs().upgradeWarnDisabled = true
             holder:Hide()
+            if Addon.RefreshSettingsCheckboxes then Addon:RefreshSettingsCheckboxes() end
+            if Addon.SyncGearPopup then Addon:SyncGearPopup() end
         end)
 
         _warn = { holder = holder, label = label, disableBtn = disableBtn }
@@ -166,7 +179,7 @@ local function SetupHooks()
         -- Delay one frame after Show so item data is populated before we read it.
         hooksecurefunc(ItemUpgradeFrame, "Show", function()
             C_Timer.After(0, function()
-                if Addon.CheckUpgradeWarning then Addon:CheckUpgradeWarning() end
+                Addon:CheckUpgradeWarning()
             end)
         end)
         hooksecurefunc(ItemUpgradeFrame, "Hide", function()
@@ -178,7 +191,7 @@ local function SetupHooks()
     local slotFrame = CreateFrame("Frame")
     slotFrame:RegisterEvent("ITEM_UPGRADE_MASTER_SET_ITEM")
     slotFrame:SetScript("OnEvent", function()
-        if Addon.CheckUpgradeWarning then Addon:CheckUpgradeWarning() end
+        Addon:CheckUpgradeWarning()
     end)
 end
 

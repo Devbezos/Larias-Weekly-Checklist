@@ -238,6 +238,7 @@ local function BuildPanel()
             getVal   = function(d) return d.upgradeWarnDisabled and true or false end,
             onChange = function(v)
                 Addon:EnsurePrefs().upgradeWarnDisabled = v
+                if Addon.CheckUpgradeWarning then Addon:CheckUpgradeWarning() end
             end,
         },
         {
@@ -305,15 +306,23 @@ local function BuildPanel()
     div2:SetPoint("TOPRIGHT", canvas, "TOPRIGHT", -PAD, curY)
     curY = curY - 8
 
-    -- ── Scale & Opacity sliders ───────────────────────────────────────────────
+    -- ── Scale & Opacity (left) + Colors (right) ──────────────────────────────
+    local SROW_H       = (Addon.UI.sliderLabelH or 14) + 2 + math.max(16, Addon.UI.sliderH or 20)
+    local SLIDER_COL_W = 220
+    local COLOR_COL_X  = PAD + SLIDER_COL_W + 14   -- right column start
+
+    -- Section titles share the same baseline.
     local secSliders = canvas:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     secSliders:SetPoint("TOPLEFT", canvas, "TOPLEFT", PAD, curY)
     secSliders:SetText(L.SETTINGS_SECTION_SLIDERS or "Scale & Opacity")
+
+    local secColors = canvas:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    secColors:SetPoint("TOPLEFT", canvas, "TOPLEFT", COLOR_COL_X, curY)
+    secColors:SetText(L.SETTINGS_SECTION_COLORS or "Colors")
+
     curY = curY - 20 - 4
 
-    local SROW_H     = (Addon.UI.sliderLabelH or 14) + 2 + math.max(16, Addon.UI.sliderH or 20)
-    local SLIDER_COL_W = 220
-
+    -- Left: Scale slider
     local scalePaneS = CreateFrame("Frame", nil, canvas)
     scalePaneS:SetSize(SLIDER_COL_W, SROW_H)
     scalePaneS:SetPoint("TOPLEFT", canvas, "TOPLEFT", PAD, curY)
@@ -334,11 +343,11 @@ local function BuildPanel()
         fmtFn      = function(v) return math.floor(v + 0.5) .. "%" end,
         titleLabel = L.UI_SCALE_LABEL       or "Scale",
     })
-    curY = curY - SROW_H - 8
 
+    -- Left: Opacity slider (below Scale)
     local opacPaneS = CreateFrame("Frame", nil, canvas)
     opacPaneS:SetSize(SLIDER_COL_W, SROW_H)
-    opacPaneS:SetPoint("TOPLEFT", canvas, "TOPLEFT", PAD, curY)
+    opacPaneS:SetPoint("TOPLEFT", canvas, "TOPLEFT", PAD, curY - SROW_H - 8)
     opacPaneS:EnableMouse(true)
     _settingsOpacSync = Addon:CreateSliderWidget(opacPaneS, {
         minV       = 10, maxV = 100, stepV = 5,
@@ -357,9 +366,11 @@ local function BuildPanel()
         titleLabel = L.UI_OPACITY_LABEL     or "Opacity",
         liveApply  = true,
     })
-    curY = curY - SROW_H - 14
 
-    -- ── "Colors" section ──────────────────────────────────────────────────────
+    -- Right: 3 color rows stacked vertically — [swatch] [label ... reset]
+    local COLOR_ROW_H   = 24
+    local COLOR_ROW_GAP = 6
+
     local function makeColorDef(label, rk, gk, bk, dr, dg, db_)
         return {
             label = label,
@@ -396,26 +407,14 @@ local function BuildPanel()
         makeColorDef(L.SETTINGS_COLOR_HEADER_TEXT or "Header Text", "headerR", "headerG", "headerB", 1.00, 0.82, 0.00),
     }
 
-    -- Horizontal row: 3 color entries side by side.
-    local COLOR_SLOT_W = 120
-
-    local secColors = canvas:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    secColors:SetPoint("TOPLEFT", canvas, "TOPLEFT", PAD, curY)
-    secColors:SetText(L.SETTINGS_SECTION_COLORS or "Colors")
-    curY = curY - 20 - 4
-
     _colorSwatches = {}
     for i, def in ipairs(colorDefs) do
-        local _def   = def
-        local slotX  = PAD + (i - 1) * COLOR_SLOT_W
-        local swatchY = curY - 14 - 4
-
-        local lbl = canvas:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        lbl:SetPoint("TOPLEFT", canvas, "TOPLEFT", slotX, curY)
-        lbl:SetText(_def.label)
+        local _def = def
+        local rowY = curY - (i - 1) * (COLOR_ROW_H + COLOR_ROW_GAP)
 
         local swatch = MakeSwatch(canvas)
-        swatch:SetPoint("TOPLEFT", canvas, "TOPLEFT", slotX, swatchY - (BTN_H - 22) / 2)
+        swatch:SetSize(22, 22)
+        swatch:SetPoint("TOPLEFT", canvas, "TOPLEFT", COLOR_COL_X, rowY - 1)
         local cr, cg, cb = _def.getColor()
         swatch:SetColor(cr, cg, cb)
         swatch:SetScript("OnClick", function()
@@ -427,8 +426,8 @@ local function BuildPanel()
         end)
 
         local resetColorBtn = CreateFrame("Button", nil, canvas, "UIPanelButtonTemplate")
-        resetColorBtn:SetPoint("TOPLEFT", canvas, "TOPLEFT", slotX + 22 + 6, swatchY)
-        resetColorBtn:SetSize(60, BTN_H)
+        resetColorBtn:SetSize(60, COLOR_ROW_H)
+        resetColorBtn:SetPoint("TOPRIGHT", canvas, "TOPRIGHT", -PAD, rowY)
         resetColorBtn:SetText(L.SETTINGS_COLOR_RESET or "Reset")
         if Addon._styleActionButton then Addon._styleActionButton(resetColorBtn) end
         resetColorBtn:SetScript("OnClick", function()
@@ -437,9 +436,19 @@ local function BuildPanel()
             swatch:SetColor(dr, dg, db)
         end)
 
+        local lbl = canvas:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        lbl:SetPoint("TOPLEFT",  swatch,        "TOPRIGHT", 6,  0)
+        lbl:SetPoint("TOPRIGHT", resetColorBtn, "TOPLEFT",  -4, 0)
+        lbl:SetJustifyH("LEFT")
+        lbl:SetText(_def.label)
+
         _colorSwatches[#_colorSwatches + 1] = { swatch = swatch, def = _def }
     end
-    curY = curY - 14 - 4 - BTN_H - 8
+
+    -- Advance curY past the taller of the two columns.
+    local sliderBodyH = SROW_H + 8 + SROW_H
+    local colorBodyH  = #colorDefs * COLOR_ROW_H + (#colorDefs - 1) * COLOR_ROW_GAP
+    curY = curY - math.max(sliderBodyH, colorBodyH) - 14
 
     -- ── Divider ─────────────────────────────────────────────────────────────────────────────
     local divLang = canvas:CreateTexture(nil, "ARTWORK")
@@ -573,6 +582,16 @@ function Addon:RefreshSettingsSwatches()
         local r, g, b = entry.def.getColor()
         entry.swatch:SetColor(r, g, b)
     end
+end
+
+--- Re-syncs all checkboxes in the Settings panel to the current saved prefs.
+--- Safe to call at any time; no-op if the panel hasn't been built yet.
+function Addon:RefreshSettingsCheckboxes()
+    local d = Addon:EnsurePrefs()
+    for _, entry in ipairs(_checkboxes) do
+        entry.cb:SetChecked(entry.row.getVal(d))
+    end
+    SetRowEnabled(_finishedWeeksEntry, not d.hideCompletedTasks)
 end
 
 --- Called from OnEnable to register the panel with the WoW UI.

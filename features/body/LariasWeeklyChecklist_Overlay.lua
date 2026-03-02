@@ -318,7 +318,7 @@ local function ResizeTrackingPanelToContent(addon)
     if addon.ApplyScrollLayout then addon:ApplyScrollLayout() end
 end
 
-local function ComputeWantTrackingPanel(db, prefs)
+local function ComputeWantTrackingPanel(prefs)
     local wantPanel = (prefs.showGreatVault or prefs.showCurrency) and true or false
     if wantPanel and not IsMainFrameOnListTab() then wantPanel = false end
     return wantPanel
@@ -819,7 +819,7 @@ function Addon:UpdateTracking()
     local db    = self:EnsureDB()
     local prefs = self:EnsurePrefs()
 
-    local wantPanel = ComputeWantTrackingPanel(db, prefs)
+    local wantPanel = ComputeWantTrackingPanel(prefs)
     EnsureTrackingPanelCreatedIfNeeded(wantPanel)
 
     if self.ApplyTrackingPanelOptions then self:ApplyTrackingPanelOptions() end

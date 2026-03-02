@@ -1803,14 +1803,12 @@ function Addon:Refresh()
         self:ApplyScrollLayout()
     end
 
-    if self.LayoutHeaderButtons then self:LayoutHeaderButtons() end
-
     SyncAllDataAndFrames()
 
     -- Size the change-week button to fit the widest week label in the dataset.
     if self._calcChangeWeekBtnWidth then self._calcChangeWeekBtnWidth() end
 
-    -- Re-run after SyncAllDataAndFrames so _sectionsById is fully populated and
+    -- Run after SyncAllDataAndFrames so _sectionsById is fully populated and
     -- the change-week button shows the real current week from the very first load.
     if self.LayoutHeaderButtons then self:LayoutHeaderButtons() end
 

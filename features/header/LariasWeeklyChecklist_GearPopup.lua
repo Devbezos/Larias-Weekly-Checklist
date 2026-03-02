@@ -319,6 +319,7 @@ function Addon:ToggleGearPopup(anchor, growRight)
             _cbDisableUpgradeWarn = function(checked)
                 local db = Addon:EnsurePrefs()
                 db.upgradeWarnDisabled = checked or nil
+                if Addon.CheckUpgradeWarning then Addon:CheckUpgradeWarning() end
             end,
             _cbHideMinimapBtn = function(checked)
                 local gdb = Addon.db and Addon.db.global
