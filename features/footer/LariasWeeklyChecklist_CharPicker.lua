@@ -183,6 +183,36 @@ function Addon:InitCharPickerUI(frame, styleFunc)
         return btn
     end
 
+    -- Helper: look up class token for a charKey.
+    -- Only direct charKey lookups are used; profile-name fallbacks are
+    -- intentionally omitted to avoid inheriting colours from shared AceDB
+    -- profiles (e.g. "Default") which may belong to a different class.
+    local function classFor(charKey)
+        local gdb = Addon.db and Addon.db.global
+        if not (gdb and gdb.charClasses) then return nil end
+        return gdb.charClasses[charKey] or nil
+    end
+
+    -- Helper: returns true only if the char has enough saved data to be
+    -- worth showing.  A char with only all-zero currency rows (e.g. first
+    -- login before doing any weeklies) is treated as having no usable data.
+    local function hasUsableData(charKey)
+        local gdb = Addon.db and Addon.db.global
+        local cdb = gdb and gdb.chars and gdb.chars[charKey]
+        if not cdb then return false end
+        local snap = cdb.trackingSnapshot
+        if not snap then return false end
+        -- Weekly-task tracking lines present → definitely has data.
+        if snap.leftLines ~= nil then return true end
+        -- Currency rows present, but only count if at least one is non-zero.
+        if type(snap.rightRows) == "table" then
+            for _, row in ipairs(snap.rightRows) do
+                if row.qty and row.qty > 0 then return true end
+            end
+        end
+        return false
+    end
+
     local function Populate()
         local CHECK = "|TInterface\\RaidFrame\\ReadyCheck-Ready:12:12|t"
         local p       = EnsurePanel()
@@ -190,36 +220,7 @@ function Addon:InitCharPickerUI(frame, styleFunc)
         local ownKey  = Addon:GetCurrentProfileKey()
         local allKeys = Addon:GetCharProfileKeys()
         local gdb     = Addon.db and Addon.db.global
-        local sv      = Addon.db and Addon.db.sv
         local posY    = -CPICK_PAD
-
-        -- Helper: look up class token for a charKey.
-        -- Only direct charKey lookups are used; profile-name fallbacks are
-        -- intentionally omitted to avoid inheriting colours from shared AceDB
-        -- profiles (e.g. "Default") which may belong to a different class.
-        local function classFor(charKey)
-            if not (gdb and gdb.charClasses) then return nil end
-            return gdb.charClasses[charKey] or nil
-        end
-
-        -- Helper: returns true only if the char has enough saved data to be
-        -- worth showing.  A char with only all-zero currency rows (e.g. first
-        -- login before doing any weeklies) is treated as having no usable data.
-        local function hasUsableData(charKey)
-            local cdb = gdb and gdb.chars and gdb.chars[charKey]
-            if not cdb then return false end
-            local snap = cdb.trackingSnapshot
-            if not snap then return false end
-            -- Weekly-task tracking lines present → definitely has data.
-            if snap.leftLines ~= nil then return true end
-            -- Currency rows present, but only count if at least one is non-zero.
-            if type(snap.rightRows) == "table" then
-                for _, row in ipairs(snap.rightRows) do
-                    if row.qty and row.qty > 0 then return true end
-                end
-            end
-            return false
-        end
 
         -- When viewing another character, show a "back to me" entry first.
         if Addon._viewingChar then
@@ -344,12 +345,7 @@ function Addon:InitCharPickerUI(frame, styleFunc)
     -- ── OnClick for the header button ─────────────────────────────────────────
     local function OnPickerBtnClick()
         local p = EnsurePanel()
-        if p and p._lariasJustClosedAt then
-            if (GetTime and GetTime() or 0) - p._lariasJustClosedAt < 0.05 then
-                return
-            end
-            p._lariasJustClosedAt = nil
-        end
+        if p and p._lariasClosedAt and (GetTime() - p._lariasClosedAt) < 0.20 then p._lariasClosedAt = nil; return end
         if p and p.IsShown and p:IsShown() then
             p:Hide()
             return

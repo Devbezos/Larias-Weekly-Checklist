@@ -41,15 +41,16 @@ function C.NewPopupPanel(strata, fadeTime)
     catcher:SetFrameStrata(st)
     catcher:SetFrameLevel((p.GetFrameLevel and p:GetFrameLevel() or 200) - 1)
     catcher:EnableMouse(true)
-    -- Propagate so the click still reaches whatever frame is underneath;
-    -- without this the catcher eats every click while it is shown.
-    if catcher.SetPropagateMouseClicks then catcher:SetPropagateMouseClicks(true) end
+    -- Note: SetPropagateMouseClicks is protected and cannot be called by addons.
+    -- The _lariasClosedAt timestamp handles the toggle-button re-click case instead.
     catcher:Hide()
     catcher:SetScript("OnMouseDown", function()
-        -- Record the close time rather than a bare boolean.  Toggle functions
-        -- ignore re-open requests that arrive within 50 ms (same mouse event
-        -- still propagating), but allow later clicks to open normally.
-        p._lariasJustClosedAt = GetTime and GetTime() or 0
+        -- Record the time the panel was closed via the outside-click catcher so
+        -- that the propagated click arriving at the toggle button does not
+        -- immediately reopen it.  A 200 ms window covers the full mouse-down →
+        -- mouse-up (OnClick) duration of a normal human click, while a stale
+        -- timestamp (>200 ms old) never silently blocks a later toggle click.
+        p._lariasClosedAt = GetTime()
         p:Hide()
     end)
 
@@ -67,28 +68,45 @@ end
 -- API (ColorPickerFrame:SetupColorPickerAndShow) and the legacy Classic API.
 -- onUpdate(r,g,b) fires live while dragging; onCancel(r,g,b) fires on cancel.
 function C.OpenColorPicker(r, g, b, onUpdate, onCancel)
+    -- If all channels are near-zero the HSV picker opens with V=0 (solid black),
+    -- making H/S impossible to navigate.  Open at mid-grey instead; cancel still
+    -- restores the real saved color via the closed-over originals below.
+    local nearBlack = (r < 0.08) and (g < 0.08) and (b < 0.08)
+    local openR = nearBlack and 0.5 or r
+    local openG = nearBlack and 0.5 or g
+    local openB = nearBlack and 0.5 or b
+
     if ColorPickerFrame.SetupColorPickerAndShow then
+        -- Retail 10.x+ API.  previousValues and cancel arg are handled internally.
+        -- Close over the real originals so the cancel callback always reverts to them.
+        local origR, origG, origB = r, g, b
         ColorPickerFrame:SetupColorPickerAndShow({
-            r = r, g = g, b = b, hasOpacity = false,
+            r = openR, g = openG, b = openB,
+            hasOpacity = false,
             swatchFunc = function()
                 local nr, ng, nb = ColorPickerFrame:GetColorRGB()
                 onUpdate(nr, ng, nb)
             end,
-            cancelFunc = function(prev) onCancel(prev.r, prev.g, prev.b) end,
+            cancelFunc = function()
+                onCancel(origR, origG, origB)
+            end,
         })
     else
+        -- Classic / legacy API.  Must call SetColorRGB so GetColorRGB is correct.
+        -- previousValues must be a positional array; cancelFunc receives it.
+        local origR, origG, origB = r, g, b
         ColorPickerFrame.hasOpacity     = false
-        ColorPickerFrame.r, ColorPickerFrame.g, ColorPickerFrame.b = r, g, b
-        ColorPickerFrame.previousValues = { r = r, g = g, b = b }
+        ColorPickerFrame.previousValues = { origR, origG, origB }
         ColorPickerFrame.func = function()
             local nr, ng, nb = ColorPickerFrame:GetColorRGB()
             onUpdate(nr, ng, nb)
         end
         ColorPickerFrame.cancelFunc = function()
             local pv = ColorPickerFrame.previousValues
-            onCancel(pv.r, pv.g, pv.b)
+            onCancel(pv[1], pv[2], pv[3])
         end
-        ShowUIPanel(ColorPickerFrame)
+        ColorPickerFrame:SetColorRGB(openR, openG, openB)
+        ColorPickerFrame:Show()
     end
 end
 

@@ -95,6 +95,8 @@ jobs:
           fi
 
           echo "should_release=$SHOULD_RELEASE" >> "$GITHUB_OUTPUT"
+          echo "data_changed=$DATA_CHANGED"   >> "$GITHUB_OUTPUT"
+          echo "toc_changed=$TOC_CHANGED"    >> "$GITHUB_OUTPUT"
 
       - name: Commit data/toc update (no release)
         if: steps.check.outputs.should_release == 'false'
@@ -141,6 +143,48 @@ jobs:
           git fetch --tags --force
           git reset --hard ${{ steps.release.outputs.tag }}
 
+      - name: Generate release changelog
+        if: steps.check.outputs.should_release == 'true'
+        env:
+          DATA_CHANGED: ${{ steps.check.outputs.data_changed }}
+          TOC_CHANGED:  ${{ steps.check.outputs.toc_changed }}
+        run: |
+          set -euo pipefail
+          # Find the tag that came before this one so we only log the delta.
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)
+          if [ -n "$PREV_TAG" ]; then
+            RANGE="${PREV_TAG}..HEAD"
+          else
+            RANGE="HEAD"
+          fi
+
+          # Human commits between releases, stripping CI-generated ones.
+          HUMAN_LINES=$(git log "$RANGE" --pretty=format:"- %s" --no-merges \
+            | grep -v -E "^- Post-release:"       \
+            | grep -v -E "^- Release v"           \
+            | grep -v -E "^- Auto-update data/toc" \
+            | grep -v -E "\(#[0-9]+\)$"           \
+            | grep -v -E "^- [A-Za-z]+/[^[:space:]]" \
+            || true)
+
+          # If this was a scheduled/automatic data update with no human commits,
+          # produce a clear automated message instead of leaving notes blank.
+          if [ -z "${HUMAN_LINES:-}" ] && [ "${DATA_CHANGED:-false}" = "true" ]; then
+            HUMAN_LINES="- Updated checklist data from spreadsheet"
+          fi
+          if [ -z "${HUMAN_LINES:-}" ] && [ "${TOC_CHANGED:-false}" = "true" ]; then
+            HUMAN_LINES="- Updated interface version for new WoW patch"
+          fi
+
+          # Write a keep-a-changelog header so the BigWigsMods packager picks up
+          # exactly this section for CurseForge/Wago release notes.
+          VERSION_NUM=$(git describe --tags --exact-match HEAD 2>/dev/null | sed 's/^v//' || true)
+          DATE=$(date -u +%Y-%m-%d)
+          {
+            printf '## [%s] - %s\n' "${VERSION_NUM:-unreleased}" "$DATE"
+            printf '%s\n' "${HUMAN_LINES:-}"
+          } > CHANGELOG.md
+
       - name: Package + Upload (CurseForge & Wago)
         if: steps.check.outputs.should_release == 'true'
         uses: BigWigsMods/packager@v2.4.3
@@ -186,3 +230,19 @@ jobs:
           curl -sS -H "Content-Type: application/json" \
             -d "$payload" \
             "$DISCORD_WEBHOOK_URL"
+
+      # ── Trigger locale auto-translate whenever enUS_Data.lua changed ────────
+      # Requires a PAT stored as LOCALES_REPO_TOKEN with repo scope on the
+      # locales repo. The token only needs to be set once in the main repo secrets.
+      - name: Trigger locale auto-translate
+        if: steps.check.outputs.data_changed == 'true'
+        env:
+          LOCALES_REPO_TOKEN: ${{ secrets.LOCALES_REPO_TOKEN }}
+        run: |
+          curl -s -o /dev/null -w "%{http_code}" \
+            -X POST \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Authorization: Bearer ${LOCALES_REPO_TOKEN}" \
+            https://api.github.com/repos/Devbezos/Larias-Weekly-Midnight-Checklist_Locales/dispatches \
+            -d '{"event_type":"enUS-data-updated"}' \
+          | grep -qE '^2' && echo "Dispatch sent." || echo "WARNING: dispatch may have failed (check LOCALES_REPO_TOKEN secret)."

@@ -62,7 +62,6 @@ local tracking = {
     -- Master switches for optional UI features.  Set a flag to false to
     -- completely disable that feature (no button, no gear-popup checkbox).
     featureFlags = {
-        ENABLE_CHAR_SELECTOR = false,   -- character-switcher button + dropdown
     },
 }
 

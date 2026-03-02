@@ -17,8 +17,24 @@ local BTN_H  = 24   -- action button height
 local panelFrame         -- outer canvas WoW hosts
 local _checkboxes = {}   -- { cb, row }
 local _colorSwatches = {} -- { swatch, def }
+local _langDropdownBtn   -- reference to locale dropdown button; synced in OnShow
+local _settingsScaleSync  -- Sync() closure for the settings-panel Scale slider
+local _settingsOpacSync   -- Sync() closure for the settings-panel Opacity slider
 
 local OpenColorPicker = Addon.Controls.OpenColorPicker
+
+-- Reload-prompt shown after the player picks a different language.
+-- Defined once at load time so StaticPopup_Show can reference it anywhere.
+StaticPopupDialogs["LARIAS_LOCALE_RELOAD"] = StaticPopupDialogs["LARIAS_LOCALE_RELOAD"] or {
+    text      = "Language change saved. Reload UI to apply the new language.",
+    button1   = "Reload Now",
+    button2   = "Later",
+    OnAccept  = function() ReloadUI() end,
+    timeout   = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    preferredIndex = 3,
+}
 
 -- Creates a small colored swatch button on `parent`.
 -- Call swatch:SetColor(r,g,b) to update the display color.
@@ -39,6 +55,20 @@ local function MakeSwatch(parent)
         self._fill:SetColorTexture(r, g, b, 1)
     end
     return btn
+end
+
+-- ── Interaction helpers ──────────────────────────────────────────────────────
+local _finishedWeeksEntry  -- cached after building checkboxes; used by "hide completed tasks"
+
+local function SetRowEnabled(entry, enabled)
+    if not (entry and entry.cb) then return end
+    local cb = entry.cb
+    local a  = enabled and 1.00 or 0.40
+    if cb._label then cb._label:SetAlpha(a) end
+    if cb._box   then cb._box:SetAlpha(a)   end
+    if cb._tick  then cb._tick:SetAlpha(a)  end
+    if cb.EnableMouse then cb:EnableMouse(enabled) end
+    if cb._hit and cb._hit.EnableMouse then cb._hit:EnableMouse(enabled) end
 end
 
 -- ── Build the panel (lazy, called once) ───────────────────────────────────────
@@ -66,7 +96,7 @@ local function BuildPanel()
     -- ── "Actions" section ─────────────────────────────────────────────────────
     local secActions = canvas:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     secActions:SetPoint("TOPLEFT", canvas, "TOPLEFT", PAD, curY)
-    secActions:SetText("Actions")
+    secActions:SetText(L.SETTINGS_SECTION_ACTIONS or "Actions")
     curY = curY - 20 - 4
 
     local resetBtn = CreateFrame("Button", nil, canvas, "UIPanelButtonTemplate")
@@ -75,8 +105,7 @@ local function BuildPanel()
     resetBtn:SetText(L.RESET_BUTTON or "Reset List")
     if Addon._styleActionButton then Addon._styleActionButton(resetBtn) end
     resetBtn:SetScript("OnClick", function()
-        local currentKey = Addon._viewingChar
-            or (Addon.GetCurrentProfileKey and Addon:GetCurrentProfileKey())
+        local currentKey = Addon.GetCurrentProfileKey and Addon:GetCurrentProfileKey()
         if currentKey then
             local chars = Addon.db and Addon.db.global and Addon.db.global.chars
             if chars and chars[currentKey] then
@@ -131,13 +160,29 @@ local function BuildPanel()
     -- ── "Display" section ─────────────────────────────────────────────────────
     local secDisplay = canvas:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     secDisplay:SetPoint("TOPLEFT", canvas, "TOPLEFT", PAD, curY)
-    secDisplay:SetText("Display")
+    secDisplay:SetText(L.SETTINGS_SECTION_DISPLAY or "Display")
     curY = curY - 20 - 4
+
+    -- Two-column checkbox layout (5 rows per column).
+    local CB_COL_W   = 255
+    local CB_COL_GAP = 8
+    local LEFT_CB_X  = PAD
+    local RIGHT_CB_X = PAD + CB_COL_W + CB_COL_GAP
 
     -- Row definitions: { label, getVal(db) → bool, onChange(v) }
     local rows = {
         {
-            label    = L.HIDE_COMPLETED_WEEKS or "Hide Completed Weeks",
+            label    = L.OPTIONS_HIDE_COMPLETED_TASKS or "Hide Completed Tasks",
+            getVal   = function(d) return d.hideCompletedTasks and true or false end,
+            onChange = function(v)
+                Addon:EnsurePrefs().hideCompletedTasks = v
+                SetRowEnabled(_finishedWeeksEntry, not v)
+                if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
+            end,
+        },
+        {
+            _isFinishedWeeks = true,
+            label    = L.HIDE_FINISHED_WEEKS or "Hide Finished Weeks",
             getVal   = function(d) return d.hideCompletedSections and true or false end,
             onChange = function(v)
                 Addon:EnsurePrefs().hideCompletedSections = v
@@ -177,25 +222,6 @@ local function BuildPanel()
             end,
         },
         {
-            label    = L.OPTIONS_HIDE_CHAR_SELECT or "Hide Character Selector",
-            getVal   = function(d) return d.showCharPickerBtn == false end,
-            onChange = function(v)
-                Addon:EnsurePrefs().showCharPickerBtn = not v
-                if Addon.LayoutHeaderButtons        then Addon:LayoutHeaderButtons()        end
-                if Addon.ApplyScaleSliderVisibility then Addon:ApplyScaleSliderVisibility() end
-            end,
-        },
-        {
-            label    = L.OPTIONS_HIDE_SLIDERS or "Hide Sliders",
-            getVal   = function(d) return d.showScaleSlider == false end,
-            onChange = function(v)
-                local d = Addon:EnsurePrefs()
-                d.showScaleSlider   = not v
-                d.showOpacitySlider = not v
-                if Addon.ApplyScaleSliderVisibility then Addon:ApplyScaleSliderVisibility() end
-            end,
-        },
-        {
             label    = L.OPTIONS_HIDE_UPDATE_NOTICE or "Hide Update Notices",
             getVal   = function(d) return d.hideUpdateNotice and true or false end,
             onChange = function(v)
@@ -205,6 +231,14 @@ local function BuildPanel()
                     if Addon.RequestVersions then Addon:RequestVersions(false) end
                 end
                 if Addon.UpdateStatusBanner then Addon:UpdateStatusBanner() else Addon:Refresh() end
+            end,
+        },
+        {
+            label    = L.OPTIONS_DISABLE_UPGRADE_WARN or "Hide Upgrade Warnings",
+            getVal   = function(d) return d.upgradeWarnDisabled and true or false end,
+            onChange = function(v)
+                Addon:EnsurePrefs().upgradeWarnDisabled = v
+                if Addon.CheckUpgradeWarning then Addon:CheckUpgradeWarning() end
             end,
         },
         {
@@ -228,18 +262,20 @@ local function BuildPanel()
     }
 
     _checkboxes = {}
-    for _, row in ipairs(rows) do
-        local _row = row   -- upvalue capture
+    for i, row in ipairs(rows) do
+        local _row  = row
+        local col   = (i <= 5) and 0 or 1              -- 0 = left column, 1 = right column
+        local ri    = (i <= 5) and (i - 1) or (i - 6)  -- 0-based row index within column
+        local colX  = (col == 0) and LEFT_CB_X or RIGHT_CB_X
+        local rowY  = curY - ri * STEP
         local cb = Addon.Controls.NewCheckBox(canvas, function(newState)
             _row.onChange(newState)
             if Addon.SyncGearPopup then Addon:SyncGearPopup() end
         end)
-        cb:SetPoint("TOPLEFT", canvas, "TOPLEFT", PAD, curY)
+        cb:SetPoint("TOPLEFT", canvas, "TOPLEFT", colX, rowY)
         cb:SetHeight(ROW_H)
-
-        -- Stretch the label to the right edge so the hit-area covers the row.
         if cb._label then
-            cb._label:SetPoint("RIGHT", canvas, "RIGHT", -PAD, 0)
+            cb._label:SetPoint("RIGHT", canvas, "TOPLEFT", colX + CB_COL_W, 0)
             cb._label:SetText(_row.label)
             if cb._label.SetTextColor and Addon.THEME and Addon.THEME.text then
                 local t = Addon.THEME.text
@@ -247,14 +283,20 @@ local function BuildPanel()
             end
         end
         if cb._hit then
-            cb._hit:SetPoint("TOPLEFT",  canvas, "TOPLEFT",  0, curY)
-            cb._hit:SetPoint("TOPRIGHT", canvas, "TOPRIGHT", 0, curY)
+            cb._hit:SetPoint("TOPLEFT",  canvas, "TOPLEFT", colX,           rowY)
+            cb._hit:SetPoint("TOPRIGHT", canvas, "TOPLEFT", colX + CB_COL_W, rowY)
             cb._hit:SetHeight(ROW_H)
         end
-
         _checkboxes[#_checkboxes + 1] = { cb = cb, row = _row }
-        curY = curY - STEP
     end
+
+    -- Cache the "hide finished weeks" entry so the "hide completed tasks" onChange
+    -- can dim/enable it without searching every time.
+    for _, entry in ipairs(_checkboxes) do
+        if entry.row._isFinishedWeeks then _finishedWeeksEntry = entry end
+    end
+
+    curY = curY - 5 * STEP   -- 5 rows per column
 
     -- ── Divider ───────────────────────────────────────────────────────────────
     local div2 = canvas:CreateTexture(nil, "ARTWORK")
@@ -264,16 +306,71 @@ local function BuildPanel()
     div2:SetPoint("TOPRIGHT", canvas, "TOPRIGHT", -PAD, curY)
     curY = curY - 8
 
-    -- ── "Colors" section ──────────────────────────────────────────────────────
+    -- ── Scale & Opacity (left) + Colors (right) ──────────────────────────────
+    local SROW_H       = (Addon.UI.sliderLabelH or 14) + 2 + math.max(16, Addon.UI.sliderH or 20)
+    local SLIDER_COL_W = 220
+    local COLOR_COL_X  = PAD + SLIDER_COL_W + 14   -- right column start
+
+    -- Section titles share the same baseline.
+    local secSliders = canvas:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    secSliders:SetPoint("TOPLEFT", canvas, "TOPLEFT", PAD, curY)
+    secSliders:SetText(L.SETTINGS_SECTION_SLIDERS or "Scale & Opacity")
+
     local secColors = canvas:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    secColors:SetPoint("TOPLEFT", canvas, "TOPLEFT", PAD, curY)
-    secColors:SetText("Colors")
+    secColors:SetPoint("TOPLEFT", canvas, "TOPLEFT", COLOR_COL_X, curY)
+    secColors:SetText(L.SETTINGS_SECTION_COLORS or "Colors")
+
     curY = curY - 20 - 4
 
-    -- Factory: builds a color-row definition from key names and hard defaults.
-    -- getColor() → r, g, b (saved value or default)
-    -- saveColor(r,g,b) → writes to db.global.themeColors and re-applies theme
-    -- resetColor()     → clears saved value and re-applies theme
+    -- Left: Scale slider
+    local scalePaneS = CreateFrame("Frame", nil, canvas)
+    scalePaneS:SetSize(SLIDER_COL_W, SROW_H)
+    scalePaneS:SetPoint("TOPLEFT", canvas, "TOPLEFT", PAD, curY)
+    scalePaneS:EnableMouse(true)
+    _settingsScaleSync = Addon:CreateSliderWidget(scalePaneS, {
+        minV       = 50, maxV = 150, stepV = 1,
+        getVal     = function()
+            local gdb = Addon.db and Addon.db.global
+            return (gdb and tonumber(gdb.uiScalePct)) or 100
+        end,
+        applyFn    = function(pct)
+            local gdb = Addon.db and Addon.db.global
+            if gdb then gdb.uiScalePct = pct end
+            if Addon.ApplyUIScale then Addon:ApplyUIScale() end
+        end,
+        minLabel   = L.UI_SCALE_MIN_LABEL   or "50%",
+        maxLabel   = L.UI_SCALE_MAX_LABEL   or "150%",
+        fmtFn      = function(v) return math.floor(v + 0.5) .. "%" end,
+        titleLabel = L.UI_SCALE_LABEL       or "Scale",
+    })
+
+    -- Left: Opacity slider (below Scale)
+    local opacPaneS = CreateFrame("Frame", nil, canvas)
+    opacPaneS:SetSize(SLIDER_COL_W, SROW_H)
+    opacPaneS:SetPoint("TOPLEFT", canvas, "TOPLEFT", PAD, curY - SROW_H - 8)
+    opacPaneS:EnableMouse(true)
+    _settingsOpacSync = Addon:CreateSliderWidget(opacPaneS, {
+        minV       = 10, maxV = 100, stepV = 5,
+        getVal     = function()
+            local gdb = Addon.db and Addon.db.global
+            return (gdb and tonumber(gdb.uiOpacityPct)) or 65
+        end,
+        applyFn    = function(pct)
+            local gdb = Addon.db and Addon.db.global
+            if gdb then gdb.uiOpacityPct = pct end
+            if Addon.ApplyOpacity then Addon:ApplyOpacity() end
+        end,
+        minLabel   = L.UI_OPACITY_MIN_LABEL or "10%",
+        maxLabel   = L.UI_OPACITY_MAX_LABEL or "100%",
+        fmtFn      = function(v) return math.floor(v + 0.5) .. "%" end,
+        titleLabel = L.UI_OPACITY_LABEL     or "Opacity",
+        liveApply  = true,
+    })
+
+    -- Right: 3 color rows stacked vertically — [swatch] [label ... reset]
+    local COLOR_ROW_H   = 24
+    local COLOR_ROW_GAP = 6
+
     local function makeColorDef(label, rk, gk, bk, dr, dg, db_)
         return {
             label = label,
@@ -305,46 +402,33 @@ local function BuildPanel()
     end
 
     local colorDefs = {
-        makeColorDef("Background", "bgR",     "bgG",     "bgB",     0.10, 0.10, 0.10),
-        makeColorDef("List Text",  "textR",   "textG",   "textB",   1.00, 1.00, 1.00),
-        makeColorDef("Header Text","headerR", "headerG", "headerB", 1.00, 0.82, 0.00),
+        makeColorDef(L.SETTINGS_COLOR_BACKGROUND  or "Background",  "bgR",     "bgG",     "bgB",     0.10, 0.10, 0.10),
+        makeColorDef(L.SETTINGS_COLOR_LIST_TEXT   or "List Text",   "textR",   "textG",   "textB",   1.00, 1.00, 1.00),
+        makeColorDef(L.SETTINGS_COLOR_HEADER_TEXT or "Header Text", "headerR", "headerG", "headerB", 1.00, 0.82, 0.00),
     }
 
     _colorSwatches = {}
-    for _, def in ipairs(colorDefs) do
-        local _def = def   -- upvalue capture
+    for i, def in ipairs(colorDefs) do
+        local _def = def
+        local rowY = curY - (i - 1) * (COLOR_ROW_H + COLOR_ROW_GAP)
 
-        -- Label
-        local lbl = canvas:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        lbl:SetPoint("TOPLEFT", canvas, "TOPLEFT", PAD, curY - (ROW_H - 12) / 2)
-        lbl:SetText(_def.label)
-
-        -- Colored swatch button
         local swatch = MakeSwatch(canvas)
-        swatch:SetPoint("TOPLEFT", canvas, "TOPLEFT", 140, curY - (ROW_H - 22) / 2)
+        swatch:SetSize(22, 22)
+        swatch:SetPoint("TOPLEFT", canvas, "TOPLEFT", COLOR_COL_X, rowY - 1)
         local cr, cg, cb = _def.getColor()
         swatch:SetColor(cr, cg, cb)
         swatch:SetScript("OnClick", function()
             local r, g, b = _def.getColor()
             OpenColorPicker(r, g, b,
-                -- onUpdate: live preview while dragging
-                function(nr, ng, nb)
-                    _def.saveColor(nr, ng, nb)
-                    swatch:SetColor(nr, ng, nb)
-                end,
-                -- onCancel: restore previous color on X
-                function(pr, pg, pb)
-                    _def.saveColor(pr, pg, pb)
-                    swatch:SetColor(pr, pg, pb)
-                end
+                function(nr, ng, nb) _def.saveColor(nr, ng, nb); swatch:SetColor(nr, ng, nb) end,
+                function(pr, pg, pb) _def.saveColor(pr, pg, pb); swatch:SetColor(pr, pg, pb) end
             )
         end)
 
-        -- Per-color Reset button
         local resetColorBtn = CreateFrame("Button", nil, canvas, "UIPanelButtonTemplate")
-        resetColorBtn:SetPoint("TOPLEFT", canvas, "TOPLEFT", 170, curY - (ROW_H - BTN_H) / 2)
-        resetColorBtn:SetSize(60, BTN_H)
-        resetColorBtn:SetText("Reset")
+        resetColorBtn:SetSize(60, COLOR_ROW_H)
+        resetColorBtn:SetPoint("TOPRIGHT", canvas, "TOPRIGHT", -PAD, rowY)
+        resetColorBtn:SetText(L.SETTINGS_COLOR_RESET or "Reset")
         if Addon._styleActionButton then Addon._styleActionButton(resetColorBtn) end
         resetColorBtn:SetScript("OnClick", function()
             _def.resetColor()
@@ -352,21 +436,136 @@ local function BuildPanel()
             swatch:SetColor(dr, dg, db)
         end)
 
+        local lbl = canvas:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        lbl:SetPoint("TOPLEFT",  swatch,        "TOPRIGHT", 6,  0)
+        lbl:SetPoint("TOPRIGHT", resetColorBtn, "TOPLEFT",  -4, 0)
+        lbl:SetJustifyH("LEFT")
+        lbl:SetText(_def.label)
+
         _colorSwatches[#_colorSwatches + 1] = { swatch = swatch, def = _def }
-        curY = curY - STEP
     end
+
+    -- Advance curY past the taller of the two columns.
+    local sliderBodyH = SROW_H + 8 + SROW_H
+    local colorBodyH  = #colorDefs * COLOR_ROW_H + (#colorDefs - 1) * COLOR_ROW_GAP
+    curY = curY - math.max(sliderBodyH, colorBodyH) - 14
+
+    -- ── Divider ─────────────────────────────────────────────────────────────────────────────
+    local divLang = canvas:CreateTexture(nil, "ARTWORK")
+    divLang:SetColorTexture(0.3, 0.3, 0.3, 0.6)
+    divLang:SetHeight(1)
+    divLang:SetPoint("TOPLEFT",  canvas, "TOPLEFT",  PAD,  curY)
+    divLang:SetPoint("TOPRIGHT", canvas, "TOPRIGHT", -PAD, curY)
+    curY = curY - 8
+
+    -- ── "Language" section ───────────────────────────────────────────────────────────────
+    local secLang = canvas:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    secLang:SetPoint("TOPLEFT", canvas, "TOPLEFT", PAD, curY)
+    secLang:SetText(L.SETTINGS_SECTION_LANGUAGE or "Language")
+    curY = curY - 20 - 4
+
+    -- Ordered list of locales with friendly display names.
+    local LOCALE_OPTIONS = {
+        { code = "auto", name = L.SETTINGS_LANGUAGE_AUTO or "Auto (Client Default)" },
+        { code = "enUS", name = "English"        },
+        { code = "deDE", name = "Deutsch"        },
+        { code = "esES", name = "Español (EU)"   },
+        { code = "esMX", name = "Español (MX)"   },
+        { code = "frFR", name = "Français"       },
+        { code = "itIT", name = "Italiano"       },
+        { code = "koKR", name = "한국어"           },
+        { code = "ptBR", name = "Português (BR)" },
+        { code = "ruRU", name = "Русский"        },
+        { code = "trTR", name = "Türkçe"         },
+    }
+
+    local function GetLocaleFriendlyName(code)
+        for _, opt in ipairs(LOCALE_OPTIONS) do
+            if opt.code == code then return opt.name end
+        end
+        return code
+    end
+
+    -- Dropdown-style button showing the current selection.
+    local langDropBtn = CreateFrame("Button", nil, canvas, "UIPanelButtonTemplate")
+    langDropBtn:SetPoint("TOPLEFT", canvas, "TOPLEFT", PAD, curY)
+    langDropBtn:SetSize(220, BTN_H)
+    if Addon._styleActionButton then Addon._styleActionButton(langDropBtn) end
+
+    -- Floating option-list popup (created lazily on first click).
+    local langPopup
+    local LANG_ITEM_H = 24
+    local LANG_PAD    = 6
+
+    local function GetOrBuildLangPopup()
+        if langPopup then return langPopup end
+        langPopup = Addon.Controls.NewPopupPanel("HIGH", 0.10)
+        langPopup:SetWidth(220)
+        langPopup:SetHeight(LANG_PAD * 2 + #LOCALE_OPTIONS * LANG_ITEM_H)
+        for idx, opt in ipairs(LOCALE_OPTIONS) do
+            local _code = opt.code
+            local _name = opt.name
+            local row = CreateFrame("Button", nil, langPopup)
+            row:SetPoint("TOPLEFT",  langPopup, "TOPLEFT",  LANG_PAD, -(LANG_PAD + (idx - 1) * LANG_ITEM_H))
+            row:SetPoint("TOPRIGHT", langPopup, "TOPRIGHT", -LANG_PAD, -(LANG_PAD + (idx - 1) * LANG_ITEM_H))
+            row:SetHeight(LANG_ITEM_H)
+            local rowHL = row:CreateTexture(nil, "HIGHLIGHT")
+            rowHL:SetAllPoints(row)
+            rowHL:SetColorTexture(1, 1, 1, 0.08)
+            local rowLbl = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+            rowLbl:SetPoint("LEFT", row, "LEFT", 4, 0)
+            rowLbl:SetText(_name)
+            row:SetScript("OnClick", function()
+                langPopup:Hide()
+                -- Save to db only; the change takes effect on the next reload.
+                local gdb = Addon.db and Addon.db.global
+                if gdb then
+                    gdb.localeOverride = (_code == "auto") and "" or _code
+                end
+                langDropBtn:SetText(GetLocaleFriendlyName(_code))
+                if Addon._styleActionButton then Addon._styleActionButton(langDropBtn) end
+                StaticPopup_Show("LARIAS_LOCALE_RELOAD")
+            end)
+        end
+        return langPopup
+    end
+
+    langDropBtn:SetScript("OnClick", function()
+        local p = GetOrBuildLangPopup()
+        if p._lariasClosedAt and (GetTime() - p._lariasClosedAt) < 0.20 then p._lariasClosedAt = nil; return end
+        if p:IsShown() then p:Hide(); return end
+        p:ClearAllPoints()
+        p:SetPoint("TOPLEFT", langDropBtn, "BOTTOMLEFT", 0, -2)
+        p:Show()
+    end)
+
+    -- Store reference so OnShow can sync the button text.
+    _langDropdownBtn = langDropBtn
+
+    curY = curY - BTN_H - 4
 
     canvas:SetHeight(math.abs(curY) + PAD)
 
-    -- Sync checkbox states and swatch colors every time the panel is shown.
+    -- Sync all controls every time the panel is shown.
     panelFrame:SetScript("OnShow", function()
         local d = Addon:EnsurePrefs()
         for _, entry in ipairs(_checkboxes) do
             entry.cb:SetChecked(entry.row.getVal(d))
         end
+        SetRowEnabled(_finishedWeeksEntry, not d.hideCompletedTasks)
         for _, entry in ipairs(_colorSwatches) do
             local r, g, b = entry.def.getColor()
             entry.swatch:SetColor(r, g, b)
+        end
+        -- Sync slider thumbs to current saved values.
+        if _settingsScaleSync then _settingsScaleSync() end
+        if _settingsOpacSync  then _settingsOpacSync()  end
+        -- Sync language dropdown to the persisted override value.
+        if _langDropdownBtn then
+            local savedCode = (Addon.db and Addon.db.global and Addon.db.global.localeOverride) or "auto"
+            if savedCode == "" then savedCode = "auto" end
+            _langDropdownBtn:SetText(GetLocaleFriendlyName(savedCode))
+            if Addon._styleActionButton then Addon._styleActionButton(_langDropdownBtn) end
         end
     end)
 
@@ -383,6 +582,16 @@ function Addon:RefreshSettingsSwatches()
         local r, g, b = entry.def.getColor()
         entry.swatch:SetColor(r, g, b)
     end
+end
+
+--- Re-syncs all checkboxes in the Settings panel to the current saved prefs.
+--- Safe to call at any time; no-op if the panel hasn't been built yet.
+function Addon:RefreshSettingsCheckboxes()
+    local d = Addon:EnsurePrefs()
+    for _, entry in ipairs(_checkboxes) do
+        entry.cb:SetChecked(entry.row.getVal(d))
+    end
+    SetRowEnabled(_finishedWeeksEntry, not d.hideCompletedTasks)
 end
 
 --- Called from OnEnable to register the panel with the WoW UI.

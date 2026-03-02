@@ -28,6 +28,7 @@ local LOCALE_NATIVE_NAMES = {
     koKR = "한국어",
     ptBR = "Português",
     ruRU = "Русский",
+    trTR = "Türkçe",
 }
 
 -- Creates a small 16×16 colored swatch button.  Call swatch:SetColor(r,g,b).
@@ -53,7 +54,10 @@ local function makeGearColorDef(labelKey, labelFallback, rk, gk, bk, dr, dg, db_
     local def = { labelKey = labelKey, label = labelFallback, rk = rk, gk = gk, bk = bk, dr = dr, dg = dg, db = db_ }
     function def.get()
         local tc = (Addon.db and Addon.db.global and Addon.db.global.themeColors) or {}
-        return tc[rk] or dr, tc[gk] or dg, tc[bk] or db_
+        local r = (tc[rk] ~= nil) and tc[rk] or dr
+        local g = (tc[gk] ~= nil) and tc[gk] or dg
+        local b = (tc[bk] ~= nil) and tc[bk] or db_
+        return r, g, b
     end
     function def.save(r, g, b)
         local gdb = Addon.db and Addon.db.global
@@ -81,8 +85,23 @@ function Addon:SyncGearPopup()
             SetCheckText(cb, label)
         end
     end
+    Sync(p._cbHideCompletedTasks, db.hideCompletedTasks and true or false,
+         L.OPTIONS_HIDE_COMPLETED_TASKS or "Hide Completed Tasks")
     Sync(p._cbHideCompleted,    db.hideCompletedSections and true or false,
-         L.HIDE_COMPLETED_WEEKS      or "Hide Completed Weeks")
+         L.HIDE_FINISHED_WEEKS or "Hide Finished Weeks")
+    -- Dim the "Hide Finished Weeks" row when "Hide Completed Tasks" is active.
+    do
+        local cb = p._cbHideCompleted
+        if cb then
+            local dim = db.hideCompletedTasks and true or false
+            local a = dim and 0.40 or 1.00
+            if cb._label then cb._label:SetAlpha(a) end
+            if cb._box   then cb._box:SetAlpha(a)   end
+            if cb._tick  then cb._tick:SetAlpha(a)  end
+            if cb.EnableMouse then cb:EnableMouse(not dim) end
+            if cb._hit and cb._hit.EnableMouse then cb._hit:EnableMouse(not dim) end
+        end
+    end
     Sync(p._cbHideGreatVault,   not db.showGreatVault,
          L.OPTIONS_HIDE_GREAT_VAULT  or "Hide Great Vault")
     Sync(p._cbHideCurrency,     not db.showCurrency,
@@ -91,15 +110,13 @@ function Addon:SyncGearPopup()
          L.OPTIONS_HIDE_CHANGE_WEEK_BTN or "Hide Week Selector")
     Sync(p._cbHideIlvlRef,      db.showIlvlRefBtn == false,
          L.OPTIONS_HIDE_ILVL_REF_BTN or "Hide Item Level Popup")
-    Sync(p._cbHideCharPicker,   db.showCharPickerBtn == false,
-         L.OPTIONS_HIDE_CHAR_SELECT  or "Hide Character Selector")
-    Sync(p._cbHideSliders, db.showScaleSlider == false,
-         L.OPTIONS_HIDE_SLIDERS or "Hide Sliders")
     Sync(p._cbHideUpdateNotice, db.hideUpdateNotice and true or false,
          L.OPTIONS_HIDE_UPDATE_NOTICE or "Hide Update Warnings")
     local _minimap = Addon.db and Addon.db.global and Addon.db.global.minimap
     Sync(p._cbHideMinimapBtn, _minimap and _minimap.hide and true or false,
          L.OPTIONS_HIDE_MINIMAP_BTN or "Hide Minimap Button")
+    Sync(p._cbDisableUpgradeWarn, db.upgradeWarnDisabled and true or false,
+         L.OPTIONS_DISABLE_UPGRADE_WARN or "Hide Upgrade Warnings")
 
     -- Refresh color swatch labels in case locale changed since popup was built.
     if p._gearColorLabels then
@@ -112,30 +129,6 @@ function Addon:SyncGearPopup()
     -- Reset button label.
     if p._gearResetBtn then
         p._gearResetBtn:SetText(L.RESET_BUTTON or "Reset List")
-    end
-
-    -- Determine visibility of char-selector-related rows.
-    -- Hidden when: feature flag off, or no pickable chars, or the user hid the char picker button.
-    local featureOn      = (Addon.FEATURE_FLAGS and Addon.FEATURE_FLAGS.ENABLE_CHAR_SELECTOR) ~= false
-    local hasChars       = featureOn and (Addon.HasPickableChars and Addon:HasPickableChars())
-    local charPickerOn   = featureOn and hasChars and (db.showCharPickerBtn ~= false)
-    local showCharRow    = hasChars   -- show the checkbox itself only when there are chars
-    local showHiddenSect = charPickerOn  -- hidden-chars section tracks whether the button is on
-
-    -- Char picker checkbox row.
-    local cb = p._cbHideCharPicker
-    if cb then
-        cb:SetShown(showCharRow and true or false)
-        if cb._label then cb._label:SetShown(showCharRow and true or false) end
-        if cb._hit   then cb._hit:SetShown(showCharRow and true or false) end
-    end
-
-    -- Hidden chars divider + trigger.
-    if p._gearHiddenCharsDiv     then p._gearHiddenCharsDiv:SetShown(showHiddenSect and true or false) end
-    if p._gearHiddenCharsTrigger then p._gearHiddenCharsTrigger:SetShown(showHiddenSect and true or false) end
-    if not showHiddenSect and self._hiddenCharsPicker then
-        local pk = self._hiddenCharsPicker
-        if pk.IsShown and pk:IsShown() then pk:Hide() end
     end
 
     -- Language toggle: show only for non-English WoW clients.
@@ -157,77 +150,28 @@ function Addon:SyncGearPopup()
         end
     end
 
-    -- Recalculate popup height based on visible content, and reposition any rows
-    -- below the (possibly-hidden) char picker slot so no gap is left behind.
+    -- Recalculate popup height based on visible content.
     do
-        local PAD      = 10
-        local TILE_H   = 34   -- tile height
-        local N_TOTAL  = 9
-        local rstStartY  = PAD
-        local div1StartY = rstStartY + 22 + 6
-        local cbsY       = div1StartY + 1 + 8
-        -- Slots 1-5 always present; slot 6 = char picker (conditional);
-        -- slot 7 = sliders (combined); slot 8 = update notice; slot 9 = minimap btn.
-        -- When char picker is hidden, slots 7-9 each shift up by one.
-        local SLIDERS_IDX        = 7
-        local UPDATE_NOTICE_IDX  = 8
-        local MINIMAP_BTN_IDX    = 9
-        local slidersVisIdx      = showCharRow and SLIDERS_IDX       or (SLIDERS_IDX       - 1)
-        local updateNoticeVisIdx = showCharRow and UPDATE_NOTICE_IDX  or (UPDATE_NOTICE_IDX  - 1)
-        local minimapBtnVisIdx   = showCharRow and MINIMAP_BTN_IDX    or (MINIMAP_BTN_IDX    - 1)
-        local function ReflowCb(cb, visIdx)
-            if not cb then return end
-            local tileTopY = -(cbsY + (visIdx - 1) * TILE_H)
-            cb:ClearAllPoints()
-            cb:SetPoint("TOPLEFT", p, "TOPLEFT", PAD, tileTopY)
-            cb:SetHeight(TILE_H)
-            if cb._hit then
-                cb._hit:ClearAllPoints()
-                cb._hit:SetPoint("TOPLEFT",  p, "TOPLEFT",  0, tileTopY)
-                cb._hit:SetPoint("TOPRIGHT", p, "TOPRIGHT", 0, tileTopY)
-            end
-        end
-        ReflowCb(p._cbHideSliders,       slidersVisIdx)
-        ReflowCb(p._cbHideUpdateNotice,  updateNoticeVisIdx)
-        ReflowCb(p._cbHideMinimapBtn,    minimapBtnVisIdx)
-
-        local nVisible = showCharRow and N_TOTAL or (N_TOTAL - 1)
-        -- Reposition the hidden-chars divider and trigger to follow the last checkbox.
-        local div2StartY = cbsY + nVisible * TILE_H + 6
-        local hidStartY  = div2StartY + 1 + 8
-        if p._gearHiddenCharsDiv then
-            p._gearHiddenCharsDiv:ClearAllPoints()
-            p._gearHiddenCharsDiv:SetPoint("TOPLEFT",  p, "TOPLEFT",  PAD,  -div2StartY)
-            p._gearHiddenCharsDiv:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PAD, -div2StartY)
-        end
-        if p._gearHiddenCharsTrigger then
-            p._gearHiddenCharsTrigger:ClearAllPoints()
-            p._gearHiddenCharsTrigger:SetPoint("TOPLEFT",  p, "TOPLEFT",  PAD,  -hidStartY)
-            p._gearHiddenCharsTrigger:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PAD, -hidStartY)
-        end
-
-        -- When the language toggle button is visible, add 30 px for it + divider + padding.
-        local VER_PAD = showLangToggle and 134 or 104
-        local totalH
-        if showHiddenSect then
-            totalH = hidStartY + 22 + PAD + VER_PAD
-        else
-            totalH = cbsY + nVisible * TILE_H + PAD + VER_PAD
-        end
+        -- Layout is 2-column (5 left + 4 right); height uses 5 rows (the taller column).
+        local PAD     = 10
+        local TILE_H  = 34
+        local cbsY    = 47  -- PAD(10) + reset(22) + 6 + div(1) + 8
+        -- VER_PAD covers slider section + color section + credit/ver + lang btn (30 if visible).
+        local VER_PAD = showLangToggle and 170 or 140
+        local totalH  = cbsY + 5 * TILE_H + PAD + VER_PAD
         p:SetHeight(totalH)
     end
-
-    -- Hidden chars trigger label — delegate to RefreshHiddenCharsList which
-    -- owns the button-text logic (including the OPTIONS_HIDDEN_CHARS_NONE key).
-    if self.RefreshHiddenCharsList then self:RefreshHiddenCharsList() end
 
     -- Re-apply custom styling after all SetText / SetEnabled calls above, which
     -- can trigger UIPanelButtonTemplate's OnDisable/OnEnable handlers and restore
     -- Blizzard's default grey text and art regions.
     if Addon._styleActionButton then
-        if p._gearResetBtn              then Addon._styleActionButton(p._gearResetBtn)              end
-        if p._gearHiddenCharsTrigger    then Addon._styleActionButton(p._gearHiddenCharsTrigger)    end
+        if p._gearResetBtn then Addon._styleActionButton(p._gearResetBtn) end
     end
+
+    -- Sync slider thumbs to current saved values.
+    if p._scaleSync then p._scaleSync() end
+    if p._opacSync  then p._opacSync()  end
 
     -- Sync the compact color swatch colors to current saved values.
     if p._gearColorSwatches then
@@ -240,16 +184,11 @@ end
 
 function Addon:ToggleGearPopup(anchor, growRight)
     local p = self._gearPopup
-    -- Guard: the outside-click catcher fires OnMouseDown (closes the popup) and
-    -- may propagate the same input event to the gear button, whose OnClick could
-    -- arrive after the catcher already hid it.  Ignore re-open requests that
-    -- arrive within 50 ms of the last close (same event still propagating).
-    if p and p._lariasJustClosedAt then
-        if (GetTime and GetTime() or 0) - p._lariasJustClosedAt < 0.05 then
-            return
-        end
-        p._lariasJustClosedAt = nil
-    end
+    -- Guard: the outside-click catcher records GetTime() when it closes the panel;
+    -- if that propagated click reaches the gear button within 50 ms we treat it as
+    -- "the same event" and suppress the reopen.  A timestamp is used so a stale
+    -- flag from a click-elsewhere never permanently blocks a later toggle.
+    if p and p._lariasClosedAt and (GetTime() - p._lariasClosedAt) < 0.20 then p._lariasClosedAt = nil; return end
     if p and p.IsShown and p:IsShown() then
         p:Hide()
         return
@@ -259,7 +198,7 @@ function Addon:ToggleGearPopup(anchor, growRight)
     if not p then
         p = Addon.Controls.NewPopupPanel("DIALOG", 0.12)
         if p.SetBackdropBorderColor then p:SetBackdropBorderColor(Addon.THEME.border.r, Addon.THEME.border.g, Addon.THEME.border.b, 1) end
-        p:SetSize(230, 10)   -- height set after rows are placed
+        p:SetSize(340, 10)   -- height set after rows are placed
 
         -- Layout constants.
         local PAD    = 10
@@ -275,7 +214,7 @@ function Addon:ToggleGearPopup(anchor, growRight)
             -- Reset only the current character's list data (checked items,
             -- collapsed sections, week pointer). Display preferences (hide
             -- great vault, currency, etc.) and UI scale are intentionally kept.
-            local currentKey = Addon._viewingChar or (Addon.GetCurrentProfileKey and Addon:GetCurrentProfileKey())
+            local currentKey = Addon.GetCurrentProfileKey and Addon:GetCurrentProfileKey()
             if currentKey then
                 local chars = Addon.db and Addon.db.global and Addon.db.global.chars
                 if chars and chars[currentKey] then
@@ -321,20 +260,31 @@ function Addon:ToggleGearPopup(anchor, growRight)
 
         -- ── 8 Checkboxes ──────────────────────────────────────────────────
         local checks = {
-            { key = "_cbHideCompleted",   },
-            { key = "_cbHideGreatVault",  },
-            { key = "_cbHideCurrency",    },
-            { key = "_cbHideChangeWeek",  },
-            { key = "_cbHideIlvlRef",     },
-            { key = "_cbHideCharPicker",  },
-            { key = "_cbHideSliders",     },
-            { key = "_cbHideUpdateNotice", },
-            { key = "_cbHideMinimapBtn",  },
+            { key = "_cbHideCompletedTasks",   },
+            { key = "_cbHideCompleted",         },
+            { key = "_cbHideGreatVault",        },
+            { key = "_cbHideCurrency",          },
+            { key = "_cbHideChangeWeek",        },
+            { key = "_cbHideIlvlRef",           },
+            { key = "_cbHideUpdateNotice",      },
+            { key = "_cbHideMinimapBtn",        },
+            { key = "_cbDisableUpgradeWarn",    },
         }
         local callbacks = {
+            _cbHideCompletedTasks = function(checked)
+                local db = Addon:EnsurePrefs()
+                db.hideCompletedTasks = checked
+                -- "Hide Completed Tasks" implies "Hide Finished Weeks" — force it on
+                -- so completed sections are also hidden and the week label stays correct.
+                if checked then db.hideCompletedSections = true end
+                if Addon.SyncGearPopup then Addon:SyncGearPopup() end
+                if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
+                if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
+            end,
             _cbHideCompleted  = function(checked)
                 local db = Addon:EnsurePrefs()
                 db.hideCompletedSections = checked
+                if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
                 if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
             end,
             _cbHideGreatVault = function(checked)
@@ -357,18 +307,6 @@ function Addon:ToggleGearPopup(anchor, growRight)
                 db.showIlvlRefBtn = not checked
                 if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
             end,
-            _cbHideCharPicker = function(checked)
-                local db = Addon:EnsurePrefs()
-                db.showCharPickerBtn = not checked
-                if Addon.LayoutHeaderButtons        then Addon:LayoutHeaderButtons()        end
-                if Addon.ApplyScaleSliderVisibility then Addon:ApplyScaleSliderVisibility() end
-            end,
-            _cbHideSliders = function(checked)
-                local db = Addon:EnsurePrefs()
-                db.showScaleSlider  = not checked
-                db.showOpacitySlider = not checked
-                if Addon.ApplyScaleSliderVisibility then Addon:ApplyScaleSliderVisibility() end
-            end,
             _cbHideUpdateNotice = function(checked)
                 local db = Addon:EnsurePrefs()
                 db.hideUpdateNotice = checked
@@ -377,6 +315,11 @@ function Addon:ToggleGearPopup(anchor, growRight)
                     if Addon.RequestVersions then Addon:RequestVersions(false) end
                 end
                 if Addon.UpdateStatusBanner then Addon:UpdateStatusBanner() end
+            end,
+            _cbDisableUpgradeWarn = function(checked)
+                local db = Addon:EnsurePrefs()
+                db.upgradeWarnDisabled = checked or nil
+                if Addon.CheckUpgradeWarning then Addon:CheckUpgradeWarning() end
             end,
             _cbHideMinimapBtn = function(checked)
                 local gdb = Addon.db and Addon.db.global
@@ -395,49 +338,31 @@ function Addon:ToggleGearPopup(anchor, growRight)
             end,
         }
 
-        local N          = #checks
         local TILE_H     = 34    -- total tile height (box + padding)
         local cbsY       = div1StartY + 1 + 8   -- checkboxes section top (px from popup top)
+        local COL_W      = math.floor((p:GetWidth() - 2 * PAD) / 2)  -- half inner width
 
         for i, info in ipairs(checks) do
-            local tileTopY = -(cbsY + (i - 1) * TILE_H)
+            local col      = (i <= 5) and 0 or 1              -- 0 = left, 1 = right
+            local ri       = (i <= 5) and (i - 1) or (i - 6) -- row within column
+            local colX     = PAD + col * COL_W
+            local tileTopY = -(cbsY + ri * TILE_H)
 
             local _key = info.key
             local cb = Addon.Controls.NewCheckBox(p, function(newState)
                 callbacks[_key](newState)
                 if Addon.SyncGearPopup then Addon:SyncGearPopup() end
             end)
-            -- Span the full tile height so the box centers vertically even
-            -- when the label wraps to multiple lines.
-            cb:SetPoint("TOPLEFT",  p, "TOPLEFT",  PAD, tileTopY)
+            cb:SetPoint("TOPLEFT", p, "TOPLEFT", colX, tileTopY)
             cb:SetHeight(TILE_H)
-            cb._label:SetPoint("RIGHT", p, "RIGHT", -PAD, 0)
+            cb._label:SetPoint("RIGHT", p, "TOPLEFT", colX + COL_W - 4, 0)
             p[info.key] = cb
 
-            -- Wire the pre-created _hit to span the full tile width.
             local hit = cb._hit
-            hit:SetPoint("TOPLEFT",  p, "TOPLEFT",  0, tileTopY)
-            hit:SetPoint("TOPRIGHT", p, "TOPRIGHT", 0, tileTopY)
+            hit:SetPoint("TOPLEFT",  p, "TOPLEFT", colX,          tileTopY)
+            hit:SetPoint("TOPRIGHT", p, "TOPLEFT", colX + COL_W,  tileTopY)
             hit:SetHeight(TILE_H)
         end
-
-        -- ── Divider before Hidden Characters ──────────────────────────────
-        local div2StartY = cbsY + N * TILE_H + 6
-        local div2 = Addon.Controls.NewDivider(p, -div2StartY, PAD, PAD)
-        p._gearHiddenCharsDiv = div2
-
-        -- ── Hidden Characters trigger ──────────────────────────────────────
-        local hidStartY = div2StartY + 1 + 8
-        local hiddenTrigger = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
-        hiddenTrigger:SetPoint("TOPLEFT",  p, "TOPLEFT",  PAD,  -hidStartY)
-        hiddenTrigger:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PAD, -hidStartY)
-        hiddenTrigger:SetHeight(22)
-        if Addon._styleActionButton then Addon._styleActionButton(hiddenTrigger) end
-        hiddenTrigger:SetScript("OnClick", function()
-            if Addon.ToggleHiddenCharsDropdown then Addon:ToggleHiddenCharsDropdown() end
-        end)
-        p._gearHiddenCharsTrigger  = hiddenTrigger
-        Addon._gearHiddenCharsTrigger = hiddenTrigger
 
         -- ── Version + credit ───────────────────────────────────────────────
         local _getMeta = C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata
@@ -445,37 +370,92 @@ function Addon:ToggleGearPopup(anchor, growRight)
         local _locReg  = _G["LARIASWEEKLYCHECKLIST_LOCALE_REGISTRY"]
         local _dataVer = (_locReg and type(_locReg.sheet_version) == "string" and _locReg.sheet_version) or ""
 
-        -- ── Compact color swatches – 3 in a row above the version block ──────
-        -- Layout: label row sits above the swatch row, both anchored from popup bottom.
-        -- COLOR_BOT_Y = swatch bottom; labels sit 20 px above that.
-        local COLOR_BOT_Y = 48   -- bottom of swatch row (px from popup BOTTOMLEFT)
-        local COLOR_DIV_Y = COLOR_BOT_Y + 36  -- divider sits above label+swatch stack
-        local POPUP_INNER_W = 230 - 2 * PAD   -- 210 px
-        local SW_SLOT_W     = math.floor(POPUP_INNER_W / 3)  -- ~70 px per slot
-
+        -- ── Compact color swatches – beside sliders (right column) ──────────
+        -- colorSectionDiv divides the slider+color zone from the credit block.
+        local COLOR_DIV_Y = 40   -- divider bottom (px from popup BOTTOMLEFT)
         local colorSectionDiv = p:CreateTexture(nil, "ARTWORK")
         colorSectionDiv:SetColorTexture(0.3, 0.3, 0.3, 0.5)
         colorSectionDiv:SetHeight(1)
         colorSectionDiv:SetPoint("BOTTOMLEFT",  p, "BOTTOMLEFT",  PAD,  COLOR_DIV_Y)
         colorSectionDiv:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -PAD, COLOR_DIV_Y)
 
+        -- ── Scale & Opacity (left) + Colors (right) in one row ─────────────
+        local SROW_H_P   = (Addon.UI.sliderLabelH or 14) + 2 + math.max(16, Addon.UI.sliderH or 20)
+        local OPAC_BOT   = COLOR_DIV_Y + 8
+        local SCALE_BOT  = OPAC_BOT + SROW_H_P + 8
+        local SDIV_BOT   = SCALE_BOT + SROW_H_P + 8
+
+        -- Divider above the combined zone.
+        local sliderSectionDiv = p:CreateTexture(nil, "ARTWORK")
+        sliderSectionDiv:SetColorTexture(0.3, 0.3, 0.3, 0.5)
+        sliderSectionDiv:SetHeight(1)
+        sliderSectionDiv:SetPoint("BOTTOMLEFT",  p, "BOTTOMLEFT",  PAD,  SDIV_BOT)
+        sliderSectionDiv:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -PAD, SDIV_BOT)
+
+        local SLIDER_W    = 190                  -- left column: slider width
+        local COLOR_COL_X = PAD + SLIDER_W + 10  -- right column: x from popup left
+
+        -- Opacity slider (left column).
+        local opacPaneP = CreateFrame("Frame", nil, p)
+        opacPaneP:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", PAD, OPAC_BOT)
+        opacPaneP:SetSize(SLIDER_W, SROW_H_P)
+        opacPaneP:EnableMouse(true)
+        p._opacSync = Addon:CreateSliderWidget(opacPaneP, {
+            minV       = 10, maxV = 100, stepV = 5,
+            getVal     = function()
+                local gdb = Addon.db and Addon.db.global
+                return (gdb and tonumber(gdb.uiOpacityPct)) or 65
+            end,
+            applyFn    = function(pct)
+                local gdb = Addon.db and Addon.db.global
+                if gdb then gdb.uiOpacityPct = pct end
+                if Addon.ApplyOpacity then Addon:ApplyOpacity() end
+            end,
+            minLabel   = (Addon.L or {}).UI_OPACITY_MIN_LABEL or "10%",
+            maxLabel   = (Addon.L or {}).UI_OPACITY_MAX_LABEL or "100%",
+            fmtFn      = function(v) return math.floor(v + 0.5) .. "%" end,
+            titleLabel = (Addon.L or {}).UI_OPACITY_LABEL     or "Opacity",
+            liveApply  = true,
+        })
+
+        local scalePaneP = CreateFrame("Frame", nil, p)
+        scalePaneP:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", PAD, SCALE_BOT)
+        scalePaneP:SetSize(SLIDER_W, SROW_H_P)
+        scalePaneP:EnableMouse(true)
+        p._scaleSync = Addon:CreateSliderWidget(scalePaneP, {
+            minV       = 50, maxV = 150, stepV = 1,
+            getVal     = function()
+                local gdb = Addon.db and Addon.db.global
+                return (gdb and tonumber(gdb.uiScalePct)) or 100
+            end,
+            applyFn    = function(pct)
+                local gdb = Addon.db and Addon.db.global
+                if gdb then gdb.uiScalePct = pct end
+                if Addon.ApplyUIScale then Addon:ApplyUIScale() end
+            end,
+            minLabel   = (Addon.L or {}).UI_SCALE_MIN_LABEL or "50%",
+            maxLabel   = (Addon.L or {}).UI_SCALE_MAX_LABEL or "150%",
+            fmtFn      = function(v) return math.floor(v + 0.5) .. "%" end,
+            titleLabel = (Addon.L or {}).UI_SCALE_LABEL     or "Scale",
+        })
+
+        -- ── Right column: 3 compact [swatch] Label rows ──────────────────────
+        -- Zone height = the same 2-slider span; stack rows centered within it.
+        local SW_H      = 16
+        local SW_GAP    = 6
+        local zoneH     = 2 * SROW_H_P + 8            -- matches OPAC_BOT..top of scale
+        local nColors   = #GEAR_COLOR_DEFS
+        local stackH    = nColors * SW_H + (nColors - 1) * SW_GAP
+        local colorBase = OPAC_BOT + math.floor((zoneH - stackH) / 2)
+
         p._gearColorSwatches = {}
         p._gearColorLabels   = {}
         for si, sd in ipairs(GEAR_COLOR_DEFS) do
-            local slotX = PAD + (si - 1) * SW_SLOT_W
+            local rowBotY = colorBase + (nColors - si) * (SW_H + SW_GAP)
             local _L = Addon.L or {}
 
-            local lbl = p:CreateFontString(nil, "OVERLAY")
-            lbl:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
-            lbl:SetText(_L[sd.labelKey] or sd.label)
-            lbl:SetTextColor(0.70, 0.70, 0.70, 1)
-            lbl:SetWidth(SW_SLOT_W)
-            lbl:SetJustifyH("CENTER")
-            lbl:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", slotX, COLOR_BOT_Y + 20)
-            p._gearColorLabels[si] = lbl
-
             local sw = MakePopupSwatch(p)
-            sw:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", slotX + math.floor((SW_SLOT_W - 16) / 2), COLOR_BOT_Y)
+            sw:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", COLOR_COL_X, rowBotY)
             sw:SetColor(sd.get())
             sw:SetScript("OnClick", function()
                 local cr, cg, cb = sd.get()
@@ -485,6 +465,13 @@ function Addon:ToggleGearPopup(anchor, growRight)
                 )
             end)
             p._gearColorSwatches[si] = sw
+
+            local lbl = p:CreateFontString(nil, "OVERLAY")
+            lbl:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
+            lbl:SetText(_L[sd.labelKey] or sd.label)
+            lbl:SetTextColor(0.70, 0.70, 0.70, 1)
+            lbl:SetPoint("LEFT", sw, "RIGHT", 4, 0)
+            p._gearColorLabels[si] = lbl
         end
 
         local creditLabel = p:CreateFontString(nil, "OVERLAY")
@@ -507,20 +494,20 @@ function Addon:ToggleGearPopup(anchor, growRight)
         verLabel:SetTextColor(0.45, 0.45, 0.45, 0.6)
 
         -- ── Language toggle button (non-English clients only) ────────────────────
-        -- Anchored from popup BOTTOM above the color section. Constants:
-        --   COLOR_DIV_Y=84  ->  lang btn bottom=89, lang divider bottom=115
-        --   VER_PAD grows from 104 to 134 when this button is visible.
+        -- Sits above the slider section divider when visible.
+        --   SDIV_BOT≈136  ->  lang btn bottom=141, lang divider bottom=167
+        --   VER_PAD grows from 140 to 170 when this button is visible.
         local langDivider = p:CreateTexture(nil, "ARTWORK")
         langDivider:SetColorTexture(0.3, 0.3, 0.3, 0.5)
         langDivider:SetHeight(1)
-        langDivider:SetPoint("BOTTOMLEFT",  p, "BOTTOMLEFT",  PAD,  115)
-        langDivider:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -PAD, 115)
+        langDivider:SetPoint("BOTTOMLEFT",  p, "BOTTOMLEFT",  PAD,  167)
+        langDivider:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -PAD, 167)
         langDivider:Hide()
         p._gearLangDiv = langDivider
 
         local langBtn = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
-        langBtn:SetPoint("BOTTOMLEFT",  p, "BOTTOMLEFT",  PAD,  89)
-        langBtn:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -PAD, 89)
+        langBtn:SetPoint("BOTTOMLEFT",  p, "BOTTOMLEFT",  PAD,  141)
+        langBtn:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -PAD, 141)
         langBtn:SetHeight(22)
         langBtn:Hide()
         if Addon._styleActionButton then Addon._styleActionButton(langBtn) end
