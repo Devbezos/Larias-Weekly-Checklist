@@ -50,7 +50,7 @@ local STRINGS = {
 	-- Upgrade warning
 	UPGRADE_WARN_MSG             = "Upgrading a 1/6 %s item is a waste of %d crests.\nYou should upgrade a 5/6 %s item instead",
 	UPGRADE_WARN_DISABLE_BTN     = "Hide Upgrade Warning",
-	UPGRADE_WARN_DISABLE_TOOLTIP = "Check Laria's guide for more information.",
+	UPGRADE_WARN_DISABLE_TOOLTIP = "Check Larias's guide for more information.",
 	-- Color picker swatch labels (gear popup)
 	COLOR_PICKER_BG             = "Background",
 	COLOR_PICKER_TEXT           = "Text",
