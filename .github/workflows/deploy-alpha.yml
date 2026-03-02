@@ -95,6 +95,37 @@ jobs:
           set -euo pipefail
           git fetch --tags --force
 
+      - name: Generate release changelog
+        run: |
+          set -euo pipefail
+          # Find the previous tag to limit the log to just changes since then.
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)
+          if [ -n "$PREV_TAG" ]; then
+            RANGE="${PREV_TAG}..HEAD"
+          else
+            RANGE="HEAD"
+          fi
+
+          HUMAN_LINES=$(git log "$RANGE" --pretty=format:"- %s" --no-merges \
+            | grep -v -E "^- Post-release:"        \
+            | grep -v -E "^- Release v"            \
+            | grep -v -E "^- Alpha release:"       \
+            | grep -v -E "^- Auto-update data/toc" \
+            | grep -v -E "\(#[0-9]+\)$"            \
+            | grep -v -E "^- [A-Za-z]+/[^[:space:]]" \
+            || true)
+
+          if [ -z "${HUMAN_LINES:-}" ]; then
+            HUMAN_LINES="- Alpha build"
+          fi
+
+          VERSION_NUM="${{ steps.ver.outputs.alpha }}"
+          DATE=$(date -u +%Y-%m-%d)
+          {
+            printf '## [%s] - %s\n' "$VERSION_NUM" "$DATE"
+            printf '%s\n' "$HUMAN_LINES"
+          } > CHANGELOG.md
+
       - name: Package + Upload (CurseForge & Wago)
         uses: BigWigsMods/packager@v2.4.3
         env:
