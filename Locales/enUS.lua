@@ -25,7 +25,7 @@ local STRINGS = {
 	OPTIONS_HIDE_ILVL_REF_BTN   = "Hide Item Level Popup",
 	OPTIONS_HIDE_SLIDERS         = "Hide Sliders",
 	OPTIONS_HIDE_UPDATE_NOTICE   = "Hide Update Warnings",
-	OPTIONS_DISABLE_UPGRADE_WARN = "Disable Upgrade Warnings",
+	OPTIONS_DISABLE_UPGRADE_WARN = "Hide Upgrade Warnings",
 	OPTIONS_HIDE_MINIMAP_BTN     = "Hide Minimap Button",
 	RESET_BUTTON = "Reset List",
 	UI_SCALE_LABEL       = "Scale",
@@ -39,6 +39,7 @@ local STRINGS = {
 	SETTINGS_SECTION_DISPLAY = "Display",
 	SETTINGS_SECTION_COLORS  = "Colors",
 	SETTINGS_SECTION_LANGUAGE = "Language",
+	SETTINGS_SECTION_SLIDERS = "Scale & Opacity",
 	-- Settings panel color-row labels
 	SETTINGS_COLOR_RESET       = "Reset",
 	SETTINGS_COLOR_BACKGROUND  = "Background",
@@ -47,6 +48,7 @@ local STRINGS = {
 	-- Settings panel language override
 	SETTINGS_LANGUAGE_AUTO     = "Auto (Client Default)",
 	-- Upgrade warning
+	UPGRADE_WARN_PANEL_TITLE     = "Upgrade Warning",
 	UPGRADE_WARN_MSG             = "You can save %d %s crests by upgrading a %s item instead",
 	UPGRADE_WARN_DISABLE_BTN     = "Hide Upgrade Warning",
 	UPGRADE_WARN_DISABLE_TOOLTIP = "Check Laria's guide for more information.",

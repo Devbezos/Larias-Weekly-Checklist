@@ -18,6 +18,8 @@ local panelFrame         -- outer canvas WoW hosts
 local _checkboxes = {}   -- { cb, row }
 local _colorSwatches = {} -- { swatch, def }
 local _langDropdownBtn   -- reference to locale dropdown button; synced in OnShow
+local _settingsScaleSync  -- Sync() closure for the settings-panel Scale slider
+local _settingsOpacSync   -- Sync() closure for the settings-panel Opacity slider
 
 local OpenColorPicker = Addon.Controls.OpenColorPicker
 
@@ -161,10 +163,11 @@ local function BuildPanel()
     secDisplay:SetText(L.SETTINGS_SECTION_DISPLAY or "Display")
     curY = curY - 20 - 4
 
-    -- Two-column layout: checkboxes on the left, Colors on the right (same Y level).
-    local colorSectionY  = curY   -- right column starts at the same Y as the first checkbox
-    local LEFT_COL_RIGHT = 310    -- checkbox labels/hit areas end at this x from canvas left
-    local RIGHT_COL_X    = 330    -- Colors column starts at this x from canvas left
+    -- Two-column checkbox layout (5 rows per column).
+    local CB_COL_W   = 255
+    local CB_COL_GAP = 8
+    local LEFT_CB_X  = PAD
+    local RIGHT_CB_X = PAD + CB_COL_W + CB_COL_GAP
 
     -- Row definitions: { label, getVal(db) → bool, onChange(v) }
     local rows = {
@@ -219,16 +222,6 @@ local function BuildPanel()
             end,
         },
         {
-            label    = L.OPTIONS_HIDE_SLIDERS or "Hide Sliders",
-            getVal   = function(d) return d.showScaleSlider == false end,
-            onChange = function(v)
-                local d = Addon:EnsurePrefs()
-                d.showScaleSlider   = not v
-                d.showOpacitySlider = not v
-                if Addon.ApplyScaleSliderVisibility then Addon:ApplyScaleSliderVisibility() end
-            end,
-        },
-        {
             label    = L.OPTIONS_HIDE_UPDATE_NOTICE or "Hide Update Notices",
             getVal   = function(d) return d.hideUpdateNotice and true or false end,
             onChange = function(v)
@@ -241,7 +234,7 @@ local function BuildPanel()
             end,
         },
         {
-            label    = L.OPTIONS_DISABLE_UPGRADE_WARN or "Disable Upgrade Warnings",
+            label    = L.OPTIONS_DISABLE_UPGRADE_WARN or "Hide Upgrade Warnings",
             getVal   = function(d) return d.upgradeWarnDisabled and true or false end,
             onChange = function(v)
                 Addon:EnsurePrefs().upgradeWarnDisabled = v
@@ -268,18 +261,20 @@ local function BuildPanel()
     }
 
     _checkboxes = {}
-    for _, row in ipairs(rows) do
-        local _row = row   -- upvalue capture
+    for i, row in ipairs(rows) do
+        local _row  = row
+        local col   = (i <= 5) and 0 or 1              -- 0 = left column, 1 = right column
+        local ri    = (i <= 5) and (i - 1) or (i - 6)  -- 0-based row index within column
+        local colX  = (col == 0) and LEFT_CB_X or RIGHT_CB_X
+        local rowY  = curY - ri * STEP
         local cb = Addon.Controls.NewCheckBox(canvas, function(newState)
             _row.onChange(newState)
             if Addon.SyncGearPopup then Addon:SyncGearPopup() end
         end)
-        cb:SetPoint("TOPLEFT", canvas, "TOPLEFT", PAD, curY)
+        cb:SetPoint("TOPLEFT", canvas, "TOPLEFT", colX, rowY)
         cb:SetHeight(ROW_H)
-
-        -- Stretch the label to the left-column edge (right column holds Colors).
         if cb._label then
-            cb._label:SetPoint("RIGHT", canvas, "TOPLEFT", LEFT_COL_RIGHT, 0)
+            cb._label:SetPoint("RIGHT", canvas, "TOPLEFT", colX + CB_COL_W, 0)
             cb._label:SetText(_row.label)
             if cb._label.SetTextColor and Addon.THEME and Addon.THEME.text then
                 local t = Addon.THEME.text
@@ -287,13 +282,11 @@ local function BuildPanel()
             end
         end
         if cb._hit then
-            cb._hit:SetPoint("TOPLEFT",  canvas, "TOPLEFT",  0, curY)
-            cb._hit:SetPoint("TOPRIGHT", canvas, "TOPLEFT", LEFT_COL_RIGHT, curY)
+            cb._hit:SetPoint("TOPLEFT",  canvas, "TOPLEFT", colX,           rowY)
+            cb._hit:SetPoint("TOPRIGHT", canvas, "TOPLEFT", colX + CB_COL_W, rowY)
             cb._hit:SetHeight(ROW_H)
         end
-
         _checkboxes[#_checkboxes + 1] = { cb = cb, row = _row }
-        curY = curY - STEP
     end
 
     -- Cache the "hide finished weeks" entry so the "hide completed tasks" onChange
@@ -301,6 +294,8 @@ local function BuildPanel()
     for _, entry in ipairs(_checkboxes) do
         if entry.row._isFinishedWeeks then _finishedWeeksEntry = entry end
     end
+
+    curY = curY - 5 * STEP   -- 5 rows per column
 
     -- ── Divider ───────────────────────────────────────────────────────────────
     local div2 = canvas:CreateTexture(nil, "ARTWORK")
@@ -310,11 +305,61 @@ local function BuildPanel()
     div2:SetPoint("TOPRIGHT", canvas, "TOPRIGHT", -PAD, curY)
     curY = curY - 8
 
-    -- ── "Colors" section (right column, alongside Display checkboxes) ────────────
-    -- Factory: builds a color-row definition from key names and hard defaults.
-    -- getColor() → r, g, b (saved value or default)
-    -- saveColor(r,g,b) → writes to db.global.themeColors and re-applies theme
-    -- resetColor()     → clears saved value and re-applies theme
+    -- ── Scale & Opacity sliders ───────────────────────────────────────────────
+    local secSliders = canvas:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    secSliders:SetPoint("TOPLEFT", canvas, "TOPLEFT", PAD, curY)
+    secSliders:SetText(L.SETTINGS_SECTION_SLIDERS or "Scale & Opacity")
+    curY = curY - 20 - 4
+
+    local SROW_H     = (Addon.UI.sliderLabelH or 14) + 2 + math.max(16, Addon.UI.sliderH or 20)
+    local SLIDER_COL_W = 220
+
+    local scalePaneS = CreateFrame("Frame", nil, canvas)
+    scalePaneS:SetSize(SLIDER_COL_W, SROW_H)
+    scalePaneS:SetPoint("TOPLEFT", canvas, "TOPLEFT", PAD, curY)
+    scalePaneS:EnableMouse(true)
+    _settingsScaleSync = Addon:CreateSliderWidget(scalePaneS, {
+        minV       = 50, maxV = 150, stepV = 1,
+        getVal     = function()
+            local gdb = Addon.db and Addon.db.global
+            return (gdb and tonumber(gdb.uiScalePct)) or 100
+        end,
+        applyFn    = function(pct)
+            local gdb = Addon.db and Addon.db.global
+            if gdb then gdb.uiScalePct = pct end
+            if Addon.ApplyUIScale then Addon:ApplyUIScale() end
+        end,
+        minLabel   = L.UI_SCALE_MIN_LABEL   or "50%",
+        maxLabel   = L.UI_SCALE_MAX_LABEL   or "150%",
+        fmtFn      = function(v) return math.floor(v + 0.5) .. "%" end,
+        titleLabel = L.UI_SCALE_LABEL       or "Scale",
+    })
+    curY = curY - SROW_H - 8
+
+    local opacPaneS = CreateFrame("Frame", nil, canvas)
+    opacPaneS:SetSize(SLIDER_COL_W, SROW_H)
+    opacPaneS:SetPoint("TOPLEFT", canvas, "TOPLEFT", PAD, curY)
+    opacPaneS:EnableMouse(true)
+    _settingsOpacSync = Addon:CreateSliderWidget(opacPaneS, {
+        minV       = 10, maxV = 100, stepV = 5,
+        getVal     = function()
+            local gdb = Addon.db and Addon.db.global
+            return (gdb and tonumber(gdb.uiOpacityPct)) or 65
+        end,
+        applyFn    = function(pct)
+            local gdb = Addon.db and Addon.db.global
+            if gdb then gdb.uiOpacityPct = pct end
+            if Addon.ApplyOpacity then Addon:ApplyOpacity() end
+        end,
+        minLabel   = L.UI_OPACITY_MIN_LABEL or "10%",
+        maxLabel   = L.UI_OPACITY_MAX_LABEL or "100%",
+        fmtFn      = function(v) return math.floor(v + 0.5) .. "%" end,
+        titleLabel = L.UI_OPACITY_LABEL     or "Opacity",
+        liveApply  = true,
+    })
+    curY = curY - SROW_H - 14
+
+    -- ── "Colors" section ──────────────────────────────────────────────────────
     local function makeColorDef(label, rk, gk, bk, dr, dg, db_)
         return {
             label = label,
@@ -351,33 +396,26 @@ local function BuildPanel()
         makeColorDef(L.SETTINGS_COLOR_HEADER_TEXT or "Header Text", "headerR", "headerG", "headerB", 1.00, 0.82, 0.00),
     }
 
-    -- Right-column single-column layout; placed alongside the checkboxes.
-    local COLOR_CELL_H  = 14 + 4 + BTN_H   -- label(14) + gap(4) + swatch/btn row
-    local COLOR_ROW_GAP = 8
+    -- Horizontal row: 3 color entries side by side.
+    local COLOR_SLOT_W = 120
 
-    -- "Colors" section header, anchored to the right column.
-    local colorCurY = colorSectionY
     local secColors = canvas:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    secColors:SetPoint("TOPLEFT", canvas, "TOPLEFT", RIGHT_COL_X, colorCurY)
+    secColors:SetPoint("TOPLEFT", canvas, "TOPLEFT", PAD, curY)
     secColors:SetText(L.SETTINGS_SECTION_COLORS or "Colors")
-    colorCurY = colorCurY - 20 - 4
+    curY = curY - 20 - 4
 
     _colorSwatches = {}
     for i, def in ipairs(colorDefs) do
-        local _def = def   -- upvalue capture
-        local row  = i - 1  -- 0-based row index
-        local cellY = colorCurY - row * (COLOR_CELL_H + COLOR_ROW_GAP)
+        local _def   = def
+        local slotX  = PAD + (i - 1) * COLOR_SLOT_W
+        local swatchY = curY - 14 - 4
 
-        -- Label
         local lbl = canvas:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        lbl:SetPoint("TOPLEFT", canvas, "TOPLEFT", RIGHT_COL_X, cellY)
+        lbl:SetPoint("TOPLEFT", canvas, "TOPLEFT", slotX, curY)
         lbl:SetText(_def.label)
 
-        -- Swatch + Reset on the row below the label.
-        local swatchY = cellY - 14 - 4
-
         local swatch = MakeSwatch(canvas)
-        swatch:SetPoint("TOPLEFT", canvas, "TOPLEFT", RIGHT_COL_X, swatchY - (BTN_H - 22) / 2)
+        swatch:SetPoint("TOPLEFT", canvas, "TOPLEFT", slotX, swatchY - (BTN_H - 22) / 2)
         local cr, cg, cb = _def.getColor()
         swatch:SetColor(cr, cg, cb)
         swatch:SetScript("OnClick", function()
@@ -388,9 +426,8 @@ local function BuildPanel()
             )
         end)
 
-        -- Reset button sits to the right of the swatch.
         local resetColorBtn = CreateFrame("Button", nil, canvas, "UIPanelButtonTemplate")
-        resetColorBtn:SetPoint("TOPLEFT", canvas, "TOPLEFT", RIGHT_COL_X + 22 + 6, swatchY)
+        resetColorBtn:SetPoint("TOPLEFT", canvas, "TOPLEFT", slotX + 22 + 6, swatchY)
         resetColorBtn:SetSize(60, BTN_H)
         resetColorBtn:SetText(L.SETTINGS_COLOR_RESET or "Reset")
         if Addon._styleActionButton then Addon._styleActionButton(resetColorBtn) end
@@ -402,7 +439,7 @@ local function BuildPanel()
 
         _colorSwatches[#_colorSwatches + 1] = { swatch = swatch, def = _def }
     end
-    -- Colors are placed alongside checkboxes; curY is NOT advanced here.
+    curY = curY - 14 - 4 - BTN_H - 8
 
     -- ── Divider ─────────────────────────────────────────────────────────────────────────────
     local divLang = canvas:CreateTexture(nil, "ARTWORK")
@@ -511,6 +548,9 @@ local function BuildPanel()
             local r, g, b = entry.def.getColor()
             entry.swatch:SetColor(r, g, b)
         end
+        -- Sync slider thumbs to current saved values.
+        if _settingsScaleSync then _settingsScaleSync() end
+        if _settingsOpacSync  then _settingsOpacSync()  end
         -- Sync language dropdown to the persisted override value.
         if _langDropdownBtn then
             local savedCode = (Addon.db and Addon.db.global and Addon.db.global.localeOverride) or "auto"

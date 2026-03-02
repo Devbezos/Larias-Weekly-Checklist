@@ -636,7 +636,6 @@ function Addon:CreateTrackingPanel(parentFrame)
     end
 
     self:ConfigureTrackingEvents(parentFrame, db.showGreatVault and true or false, db.showCurrency and true or false)
-    if self.CreateInFrameScaleSlider then self:CreateInFrameScaleSlider(parentFrame) end
     if self.CreateStatusBanner then
         self:CreateStatusBanner(parentFrame)
         if self.ApplyScaleSliderVisibility then self:ApplyScaleSliderVisibility() end

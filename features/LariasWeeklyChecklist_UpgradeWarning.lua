@@ -113,60 +113,53 @@ end
 
 local function SetupHooks()
     if ItemUpgradeFrame then
-        -- ── Warning holder ───────────────────────────────────────────────────
-        local ROW_H = 22
-        local GAP   = 4
-        local TOTAL = ROW_H * 2 + GAP   -- 48px
+        -- ── Warning panel (themed backdrop matching the addon's windows) ─────
+        local PAD_W   = 10
+        local BODY_H  = 34   -- two wrapped lines of GameFontNormal (~17px each)
+        local BTN_H   = 22
+        local PANEL_H = PAD_W + BODY_H + 6 + BTN_H + PAD_W
 
-        -- Parent to ItemUpgradeFrame so it follows the window.
-        local holder = CreateFrame("Frame", "LWCUpgradeWarnHolder", ItemUpgradeFrame)
+        local holder = Addon:NewThemedFrame(nil, UIParent)
         holder:SetFrameStrata("DIALOG")
-        holder:SetSize(ItemUpgradeFrame:GetWidth() or 350, TOTAL)
-        holder:EnableMouse(false)
+        holder:SetFrameLevel(200)
+        holder:SetSize(260, PANEL_H)
+        holder:SetClampedToScreen(true)
+        holder:EnableMouse(true)
+        -- Anchor directly below the ItemUpgradeFrame, horizontally centered.
+        holder:SetPoint("TOP", ItemUpgradeFrame, "BOTTOM", 0, -6)
+        local bg = Addon.THEME.bg
+        holder:SetBackdropColor(bg.r, bg.g, bg.b, 1.0)
+        if holder.SetBackdropBorderColor then
+            local bdr = Addon.THEME.border
+            holder:SetBackdropBorderColor(bdr.r, bdr.g, bdr.b, bdr.a or 1)
+        end
         holder:Hide()
 
-        -- Anchor between the item-slot row and the "Upgrade To:" dropdown.
-        -- Try known Blizzard child names for the track dropdown; fall back to
-        -- a fixed offset below the item button.
-        local function PositionHolder()
-            holder:ClearAllPoints()
-            local lpanel = ItemUpgradeFrame.LeftItemPreviewFrame
-            local rpanel = ItemUpgradeFrame.RightItemPreviewFrame
-            if lpanel and rpanel then
-                holder:SetPoint("BOTTOMLEFT",  lpanel, "TOPLEFT",  0, 2)
-                holder:SetPoint("BOTTOMRIGHT", rpanel, "TOPRIGHT", 0, 2)
-            elseif lpanel then
-                holder:SetPoint("BOTTOM", ItemUpgradeFrame, "CENTER", 0, lpanel:GetTop() - ItemUpgradeFrame:GetBottom() + 2)
-            else
-                holder:SetPoint("TOP", ItemUpgradeFrame, "TOP", 0, -150)
-            end
-        end
-        PositionHolder()
+        -- Warning message (wraps to ~2 lines).
+        local label = holder:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        label:SetPoint("TOPLEFT",  holder, "TOPLEFT",  PAD_W,  -PAD_W)
+        label:SetPoint("TOPRIGHT", holder, "TOPRIGHT", -PAD_W, -PAD_W)
+        label:SetJustifyH("CENTER")
+        label:SetTextColor(1, 0.4, 0.4)
+        label:SetWordWrap(true)
 
-        -- Disable button — centered in the top row.
+        -- "Hide" button — clearly styled as a clickable button.
         local disableBtn = CreateFrame("Button", nil, holder, "UIPanelButtonTemplate")
-        disableBtn:SetSize(120, ROW_H)
-        disableBtn:SetPoint("TOP", holder, "TOP", 0, 0)
+        disableBtn:SetSize(160, BTN_H)
+        disableBtn:SetPoint("TOP", label, "BOTTOM", 0, -6)
         disableBtn:SetText(L.UPGRADE_WARN_DISABLE_BTN or "Hide Upgrade Warning")
-        if Addon._styleActionButton then Addon._styleActionButton(disableBtn) end
+        disableBtn:SetScript("OnEnter", function()
+            GameTooltip:SetOwner(disableBtn, "ANCHOR_BOTTOM")
+            GameTooltip:SetText(L.UPGRADE_WARN_DISABLE_TOOLTIP or "Check Laria's guide for more information.", 1, 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        disableBtn:SetScript("OnLeave", function()
+            GameTooltip:Hide()
+        end)
         disableBtn:SetScript("OnClick", function()
             Addon:EnsurePrefs().upgradeWarnDisabled = true
             holder:Hide()
         end)
-        disableBtn:SetScript("OnEnter", function(self_)
-            GameTooltip:SetOwner(self_, "ANCHOR_TOP")
-            GameTooltip:SetText(L.UPGRADE_WARN_DISABLE_TOOLTIP or "Check Laria's guide for more information.", 1, 1, 1, 1, true)
-            GameTooltip:Show()
-        end)
-        disableBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
-
-        -- Dynamic message — full-width row at the bottom.
-        local label = holder:CreateFontString(nil, "OVERLAY", "GameFontNormalMed2")
-        label:SetPoint("BOTTOMLEFT",  holder, "BOTTOMLEFT",  0, 0)
-        label:SetPoint("BOTTOMRIGHT", holder, "BOTTOMRIGHT", 0, 0)
-        label:SetJustifyH("CENTER")
-        label:SetTextColor(1, 0.15, 0.15)
-        label:SetWordWrap(false)
 
         _warn = { holder = holder, label = label, disableBtn = disableBtn }
 
@@ -206,7 +199,8 @@ else
 end
 
 -- ── Locale key reference (for translators) ────────────────────────────────────
--- L.UPGRADE_WARN_MSG             — Warning sentence shown above the upgrade button.
+-- L.UPGRADE_WARN_PANEL_TITLE     — Title shown at the top of the warning panel.
+-- L.UPGRADE_WARN_MSG             — Warning sentence shown in the panel body.
 -- L.UPGRADE_WARN_DISABLE_BTN     — Label for the inline Hide button.
 -- L.UPGRADE_WARN_DISABLE_TOOLTIP — Tooltip for the Disable button.
 -- L.OPTIONS_DISABLE_UPGRADE_WARN — Label for the Settings panel checkbox.

@@ -1084,6 +1084,8 @@ function Addon:ApplyUIScaleLive()
     PinTopLeftScale(self._mainFrame, scale)
     local iw = self._ilvlRefWindow
     if iw and iw.SetScale then iw:SetScale(scale) end
+    local gp = self._gearPopup
+    if gp and gp.SetScale then gp:SetScale(scale) end
 end
 
 function Addon:ApplyUIScale()
@@ -1103,6 +1105,9 @@ function Addon:ApplyUIScale()
     local iw = self._ilvlRefWindow
     if iw and iw.SetScale then iw:SetScale(scale) end
     if iw and iw._ilvlReflow then iw._ilvlReflow() end
+    -- The gear popup is also parented to UIParent; scale it to match.
+    local gp = self._gearPopup
+    if gp and gp.SetScale then gp:SetScale(scale) end
     -- Do NOT call ApplyScrollLayout here.  SetScale only changes the visual
     -- size of the root frame; the logical frame dimensions are unchanged, so
     -- there is nothing to reflow.  ClearAllPoints+SetPoint inside
