@@ -369,6 +369,14 @@ function Addon:CreateHeader(frame)
                         currentId = storedStart
                     end
                 end
+                -- If the section index is built but no longer contains this ID
+                -- (stale SavedVariable from an older data format, version bump, etc.)
+                -- drop the pin so the first-incomplete-week logic takes over.
+                if currentId and next(Addon._sectionsById or {}) and
+                   not (Addon._sectionsById or {})[currentId] then
+                    db0.startAtSectionId = ""
+                    currentId = nil
+                end
                 if not currentId then
                     local order = Addon._order or {}
                     local allComplete = true
@@ -390,7 +398,10 @@ function Addon:CreateHeader(frame)
                         currentId = tostring(Addon._order[1])
                     end
                     local section   = currentId and Addon._sectionsById and Addon._sectionsById[currentId]
-                    local extracted = ExtractMonthRangeLabel((section and section.title) or currentId or "")
+                    -- Never fall back to the raw section ID as display text; if the
+                    -- section isn't found (not yet built or stale ID), show the
+                    -- generic label and let the next Refresh() supply the real one.
+                    local extracted = ExtractMonthRangeLabel(section and section.title or "")
                     cwWeekLabel = (extracted ~= "") and extracted or (L.CHANGE_WEEK_BUTTON or "Change Week")
                 end
             end
