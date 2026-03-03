@@ -1,8 +1,9 @@
 name: Cleanup Workflow Runs
 
-# Runs once a day and deletes any completed workflow run that did NOT result
-# in a real addon deployment.  Keeps the full history of successful
-# "Deploy Stable" and "Deploy Alpha" runs so release history is preserved.
+# Runs once a day.
+# - Successful "Deploy Stable" / "Deploy Alpha" runs are kept for 7 days,
+#   then deleted.
+# - Every other completed run is deleted immediately regardless of age.
 
 on:
   schedule:
@@ -17,44 +18,50 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Delete non-deploy workflow runs
+      - name: Delete workflow runs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO:     ${{ github.repository }}
           KEEP_THIS_RUN: ${{ github.run_id }}
         run: |
-          # Workflow display names whose SUCCESSFUL runs should be kept.
-          # All other completed runs (regardless of conclusion) are deleted.
+          # Successful runs of these workflows are kept for up to 7 days.
           KEEP_NAMES=("Deploy Stable" "Deploy Alpha")
+          CUTOFF=$(date -u -d "7 days ago" +%s)
 
           echo "Fetching all completed workflow runs..."
 
-          # --paginate iterates through all pages; -q outputs one TSV line per run.
           gh api "repos/$REPO/actions/runs?per_page=100&status=completed" \
               --paginate \
-              -q '.workflow_runs[] | [(.id | tostring), .name, (.conclusion // "null")] | @tsv' \
-          | while IFS=$'\t' read -r run_id run_name conclusion; do
+              -q '.workflow_runs[] | [(.id | tostring), .name, (.conclusion // "null"), .created_at] | @tsv' \
+          | while IFS=$'\t' read -r run_id run_name conclusion created_at; do
 
-              # Never delete the current cleanup run (it's still completing).
+              # Never delete the run that is currently executing this cleanup.
               if [[ "$run_id" == "$KEEP_THIS_RUN" ]]; then
                   echo "SKIP  (self)         [$run_id] $run_name"
                   continue
               fi
 
-              # Check if this run is one of the keeper workflows with a
-              # successful conclusion.
+              run_ts=$(date -d "$created_at" +%s 2>/dev/null || echo 0)
+              is_recent=false
+              if (( run_ts > CUTOFF )); then
+                  is_recent=true
+              fi
+
+              # Keep successful deploy runs that are under 7 days old.
               keep=false
-              for keeper in "${KEEP_NAMES[@]}"; do
-                  if [[ "$run_name" == "$keeper" && "$conclusion" == "success" ]]; then
-                      keep=true
-                      break
-                  fi
-              done
+              if [[ "$is_recent" == "true" ]]; then
+                  for keeper in "${KEEP_NAMES[@]}"; do
+                      if [[ "$run_name" == "$keeper" && "$conclusion" == "success" ]]; then
+                          keep=true
+                          break
+                      fi
+                  done
+              fi
 
               if [[ "$keep" == "true" ]]; then
-                  echo "KEEP  ($conclusion)  [$run_id] $run_name"
+                  echo "KEEP  ($conclusion)  [$run_id] $run_name ($created_at)"
               else
-                  echo "DELETE ($conclusion) [$run_id] $run_name"
+                  echo "DELETE ($conclusion) [$run_id] $run_name ($created_at)"
                   gh api -X DELETE "repos/$REPO/actions/runs/$run_id" \
                       --silent || echo "  (already gone or permission denied)"
               fi
