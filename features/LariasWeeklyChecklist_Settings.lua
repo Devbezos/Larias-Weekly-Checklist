@@ -291,20 +291,21 @@ local function BuildPanel()
                 cb._label:SetTextColor(t.r, t.g, t.b, t.a or 1)
             end
         end
+        if _row.tooltip then
+            local _tip = _row.tooltip
+            cb:SetScript("OnEnter", function(self_)
+                GameTooltip:SetOwner(self_, "ANCHOR_RIGHT")
+                GameTooltip:SetText(_tip, nil, nil, nil, nil, true)
+                GameTooltip:Show()
+            end)
+            cb:SetScript("OnLeave", function()
+                GameTooltip:Hide()
+            end)
+        end
         if cb._hit then
             cb._hit:SetPoint("TOPLEFT",  canvas, "TOPLEFT", colX,           rowY)
             cb._hit:SetPoint("TOPRIGHT", canvas, "TOPLEFT", colX + CB_COL_W, rowY)
             cb._hit:SetHeight(ROW_H)
-            if _row.tooltip then
-                cb._hit:SetScript("OnEnter", function(self_)
-                    GameTooltip:SetOwner(self_, "ANCHOR_RIGHT")
-                    GameTooltip:SetText(_row.tooltip, nil, nil, nil, nil, true)
-                    GameTooltip:Show()
-                end)
-                cb._hit:SetScript("OnLeave", function()
-                    GameTooltip:Hide()
-                end)
-            end
         end
         _checkboxes[#_checkboxes + 1] = { cb = cb, row = _row }
     end

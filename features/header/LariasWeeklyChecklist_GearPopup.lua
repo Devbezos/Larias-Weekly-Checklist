@@ -358,13 +358,9 @@ function Addon:ToggleGearPopup(anchor, growRight)
             cb._label:SetPoint("RIGHT", p, "TOPLEFT", colX + COL_W - 4, 0)
             p[info.key] = cb
 
-            local hit = cb._hit
-            hit:SetPoint("TOPLEFT",  p, "TOPLEFT", colX,          tileTopY)
-            hit:SetPoint("TOPRIGHT", p, "TOPLEFT", colX + COL_W,  tileTopY)
-            hit:SetHeight(TILE_H)
             local _tooltipKey = info.tooltipKey
             if _tooltipKey then
-                hit:SetScript("OnEnter", function(self_)
+                cb:SetScript("OnEnter", function(self_)
                     local tip = Addon.L and Addon.L[_tooltipKey]
                     if tip then
                         GameTooltip:SetOwner(self_, "ANCHOR_RIGHT")
@@ -372,10 +368,15 @@ function Addon:ToggleGearPopup(anchor, growRight)
                         GameTooltip:Show()
                     end
                 end)
-                hit:SetScript("OnLeave", function()
+                cb:SetScript("OnLeave", function()
                     GameTooltip:Hide()
                 end)
             end
+
+            local hit = cb._hit
+            hit:SetPoint("TOPLEFT",  p, "TOPLEFT", colX,          tileTopY)
+            hit:SetPoint("TOPRIGHT", p, "TOPLEFT", colX + COL_W,  tileTopY)
+            hit:SetHeight(TILE_H)
         end
 
         -- ── Version + credit ───────────────────────────────────────────────
