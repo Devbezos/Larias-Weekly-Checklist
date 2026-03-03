@@ -118,7 +118,7 @@ function C.NewCloseButton(parent, onClick)
     local CLOSE_R, CLOSE_G, CLOSE_B = 1.00, 0.82, 0.00
 
     local norm = btn:CreateFontString(nil, "OVERLAY")
-    norm:SetFont("Fonts\\FRIZQT__.TTF", 20, "OUTLINE")
+    norm:SetFont("Fonts\\FRIZQT__.TTF", 24, "OUTLINE")
     norm:SetAllPoints(btn)
     norm:SetJustifyH("CENTER")
     norm:SetJustifyV("MIDDLE")
