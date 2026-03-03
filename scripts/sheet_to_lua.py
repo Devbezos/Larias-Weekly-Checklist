@@ -12,7 +12,7 @@ SHEET_VERSION_LINE_RE = re.compile(r"^--\s*@sheet-version:\s*(.+)$", re.MULTILIN
 # Matches the runtime Lua variable line  reg.sheet_version = "<value>"
 SHEET_VERSION_VAR_RE  = re.compile(r'^reg\.sheet_version\s*=\s*"[^"]*"$', re.MULTILINE)
 
-HEADER_PREFIX_RE = re.compile(r"^\s*(Early Access|Pre-Season|Season|Week(?:s)?)\b", re.IGNORECASE)
+HEADER_PREFIX_RE = re.compile(r"^\s*(Early Access|Emergency|Pre-Season|Season|Week(?:s)?)\b", re.IGNORECASE)
 
 MONTHS = r"(Jan|January|Feb|February|Mar|March|Apr|April|May|Jun|June|Jul|July|Aug|August|Sep|Sept|September|Oct|October|Nov|November|Dec|December)"
 MONTH_DAY_RE = re.compile(rf"\b{MONTHS}\s+\d{{1,2}}\b", re.IGNORECASE)
