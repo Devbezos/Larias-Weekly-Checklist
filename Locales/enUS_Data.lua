@@ -35,7 +35,12 @@ local DATASET = {
             { id = "c886190c", text = "Complete the Highest Peaks achievement for renown - see doc for guide" },
             { id = "f9b8eb01", text = "Complete side quest chains for renown. (can be done on alts to level at same time). DMF buff does not give renown." },
             { id = "11425027", text = "Note: Only the Singularity AND Eversong champion renown trinket are available in early access - the others will become available either Monday after the official launch or after each region's weekly reset." },
-            { id = "eae61254", text = "Emergency Update - March 2" },
+        },
+    },
+    {
+        id = "eae61254",
+        title = "Emergency Update - March 2",
+        items = {
             { id = "2c77c3c4", text = "Complete the weekly Saltheril's Soiree in Eversong Woods. THIS JUST OPENED, YOU HAVE TO COMPLETE BEFORE WEEKLY RESET! Don't forget to grab renown quest for the champion helmet if you have the renown" },
         },
     },
