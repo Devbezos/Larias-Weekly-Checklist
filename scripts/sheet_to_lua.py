@@ -14,8 +14,11 @@ SHEET_VERSION_VAR_RE  = re.compile(r'^reg\.sheet_version\s*=\s*"[^"]*"$', re.MUL
 
 HEADER_PREFIX_RE = re.compile(r"^\s*(Early Access|Emergency|Pre-Season|Season|Week(?:s)?)\b", re.IGNORECASE)
 
-MONTHS = r"(Jan|January|Feb|February|Mar|March|Apr|April|May|Jun|June|Jul|July|Aug|August|Sep|Sept|September|Oct|October|Nov|November|Dec|December)"
-MONTH_DAY_RE = re.compile(rf"\b{MONTHS}\s+\d{{1,2}}\b", re.IGNORECASE)
+
+def is_section_header(text: str) -> bool:
+    if "\n" in text:
+        return False
+    return bool(HEADER_PREFIX_RE.match(text.strip()))
 
 
 def wow_safe_text(s: str) -> str:
@@ -57,12 +60,6 @@ def lua_escape(s: str) -> str:
     s = s.replace("\\", "\\\\").replace('"', '\\"')
     s = s.replace("\r\n", "\n").replace("\r", "\n")
     return s
-
-def is_section_header(text: str) -> bool:
-    t = text.strip()
-    if not HEADER_PREFIX_RE.match(t):
-        return False
-    return bool(MONTH_DAY_RE.search(t))
 
 
 def detect_newline(text: str) -> str:
