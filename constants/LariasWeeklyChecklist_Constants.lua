@@ -58,6 +58,31 @@ local tracking = {
         "Professions-Icon-Quality-Tier4",
         "Professions-Icon-Quality-Tier5",
     },
+    -- ── Work-order warning ────────────────────────────────────────────────────
+    -- Fixed primary stat for each craftable weapon item.  Used by the work-order
+    -- warning feature to alert a customer when the ordered item doesn't match
+    -- their spec's primary stat.
+    -- Stat values mirror GetSpecializationInfo primaryStat: 1=STR, 2=AGI, 4=INT.
+    -- Special value 3 = "PHYS" — item has AGI+STR but no INT; only warns casters.
+    workOrderItemStats = {
+        -- Blacksmithing — Midnight expansion (ilvl 246 base / 650 max quality)
+        [237837] = 2,    -- Farstrider's Mercy         (Dagger,     AGI)
+        [237838] = 4,    -- Magister's Ritual Knife    (Dagger,     INT)
+        [237839] = 3,    -- Spellbreaker's Blade       (1H Sword,   AGI+STR)
+        [237840] = 4,    -- Spellbreaker's Warglaive   (Warglaive,  INT)
+        [237841] = 3,    -- Spellbreaker's Ultimatum   (1H Mace,    AGI+STR)
+        [237842] = 3,    -- Bloomforged Greataxe       (2H Axe,     AGI+STR)
+        [237843] = 4,    -- Magister's Mana Sword      (1H Sword,   INT)
+        [237844] = 4,    -- Magister's Cleaver         (1H Axe,     INT)
+        [237845] = 3,    -- Bloomforged Claw           (Fist,       AGI+STR)
+        [237846] = 1,    -- Blood Knight's Warblade    (2H Sword,   STR)
+        [237847] = 3,    -- Blood Knight's Impetus     (Polearm,    AGI+STR)
+        [237848] = 3,    -- Blood Knight's Mercy       (2H Mace,    AGI+STR)
+        [237849] = 4,    -- Magister's Valediction     (2H Mace,    INT)
+        [237850] = 3,    -- Farstrider's Chopper       (1H Axe,     AGI+STR)
+        [244679] = 2,    -- Murder Row Fishhook        (Dagger,     AGI)
+        [268477] = 2,    -- P.O.W. x3                  (Gun,        AGI)
+    },
     -- ── Feature flags ──────────────────────────────────────────────────────
     -- Master switches for optional UI features.  Set a flag to false to
     -- completely disable that feature (no button, no gear-popup checkbox).
