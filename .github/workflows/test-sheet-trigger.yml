@@ -24,7 +24,7 @@ jobs:
         env:
           LOCALES_REPO_TOKEN: ${{ secrets.LOCALES_REPO_TOKEN }}
         run: |
-          RESPONSE=$(curl -s -w "\n%{http_code}" \
+          RESPONSE=$(curl -sL -w "\n%{http_code}" \
             -X POST \
             -H "Accept: application/vnd.github.v3+json" \
             -H "Authorization: Bearer ${LOCALES_REPO_TOKEN}" \
