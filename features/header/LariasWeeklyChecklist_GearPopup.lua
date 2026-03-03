@@ -260,15 +260,15 @@ function Addon:ToggleGearPopup(anchor, growRight)
 
         -- ── 8 Checkboxes ──────────────────────────────────────────────────
         local checks = {
-            { key = "_cbHideCompletedTasks",   },
-            { key = "_cbHideCompleted",         },
-            { key = "_cbHideGreatVault",        },
-            { key = "_cbHideCurrency",          },
-            { key = "_cbHideChangeWeek",        },
-            { key = "_cbHideIlvlRef",           },
-            { key = "_cbHideUpdateNotice",      },
-            { key = "_cbHideMinimapBtn",        },
-            { key = "_cbDisableUpgradeWarn",    },
+            { key = "_cbHideCompletedTasks",   tooltipKey = "OPTIONS_TOOLTIP_HIDE_COMPLETED_TASKS" },
+            { key = "_cbHideCompleted",         tooltipKey = "OPTIONS_TOOLTIP_HIDE_FINISHED_WEEKS"  },
+            { key = "_cbHideGreatVault",        tooltipKey = "OPTIONS_TOOLTIP_HIDE_GREAT_VAULT"     },
+            { key = "_cbHideCurrency",          tooltipKey = "OPTIONS_TOOLTIP_HIDE_CURRENCY"        },
+            { key = "_cbHideChangeWeek",        tooltipKey = "OPTIONS_TOOLTIP_HIDE_CHANGE_WEEK_BTN" },
+            { key = "_cbHideIlvlRef",           tooltipKey = "OPTIONS_TOOLTIP_HIDE_ILVL_REF_BTN"    },
+            { key = "_cbHideUpdateNotice",      tooltipKey = "OPTIONS_TOOLTIP_HIDE_UPDATE_NOTICE"   },
+            { key = "_cbHideMinimapBtn",        tooltipKey = "OPTIONS_TOOLTIP_HIDE_MINIMAP_BTN"     },
+            { key = "_cbDisableUpgradeWarn",    tooltipKey = "OPTIONS_TOOLTIP_DISABLE_UPGRADE_WARN" },
         }
         local callbacks = {
             _cbHideCompletedTasks = function(checked)
@@ -362,6 +362,20 @@ function Addon:ToggleGearPopup(anchor, growRight)
             hit:SetPoint("TOPLEFT",  p, "TOPLEFT", colX,          tileTopY)
             hit:SetPoint("TOPRIGHT", p, "TOPLEFT", colX + COL_W,  tileTopY)
             hit:SetHeight(TILE_H)
+            local _tooltipKey = info.tooltipKey
+            if _tooltipKey then
+                hit:SetScript("OnEnter", function(self_)
+                    local tip = Addon.L and Addon.L[_tooltipKey]
+                    if tip then
+                        GameTooltip:SetOwner(self_, "ANCHOR_RIGHT")
+                        GameTooltip:SetText(tip, nil, nil, nil, nil, true)
+                        GameTooltip:Show()
+                    end
+                end)
+                hit:SetScript("OnLeave", function()
+                    GameTooltip:Hide()
+                end)
+            end
         end
 
         -- ── Version + credit ───────────────────────────────────────────────
