@@ -35,13 +35,7 @@ local DATASET = {
             { id = "c886190c", text = "Complete the Highest Peaks achievement for renown - see doc for guide" },
             { id = "f9b8eb01", text = "Complete side quest chains for renown. (can be done on alts to level at same time). DMF buff does not give renown." },
             { id = "11425027", text = "Note: Only the Singularity AND Eversong champion renown trinket are available in early access - the others will become available either Monday after the official launch or after each region's weekly reset." },
-        },
-    },
-    {
-        id = "eae61254",
-        title = "Emergency Update - March 2",
-        items = {
-            { id = "2c77c3c4", text = "Complete the weekly Saltheril's Soiree in Eversong Woods. THIS JUST OPENED, YOU HAVE TO COMPLETE BEFORE WEEKLY RESET! Don't forget to grab renown quest for the champion helmet if you have the renown" },
+            { id = "ba1890e4", text = "Complete the weekly Saltheril's Soiree in Eversong Woods. Don't forget to grab renown quest for the champion helmet if you have the renown" },
         },
     },
     {
@@ -52,7 +46,7 @@ local DATASET = {
             { id = "c06ee1a3", text = "If you are on an alt and don't see some of these quests, go to Soridormi in the Silvermoon City Inn and choose \"I Stopped the Voidstorm\" to skip the campaign." },
             { id = "6b199064", text = "Raise The Singularity renown to rank 7 for 1/6 champion trinket - available in early access - comes from quest from the renown vendor (not purchased)" },
             { id = "2a9b4f4c", text = "Raise Hara'ti renown to rank 8 for 1/6 champion belt - NOT available in early access - comes from quest from the renown vendor (not purchased)" },
-            { id = "6f39070d", text = "Raise Silvermoon renown to rank 9 for 1/6 champion helm - NOT available in early access - comes from quest from the renown vendor (not purchased)" },
+            { id = "d9a7e304", text = "Raise Silvermoon renown to rank 9 for 1/6 champion helm - available in early access - comes from quest from the renown vendor (not purchased)" },
             { id = "6ba4afc1", text = "Raise Amani Tribe renown to rank 9 for 1/6 champion necklace - NOT available in early access - comes from quest from the renown vendor (not purchased)" },
             { id = "101e78a9", text = "Complete weekly dungeon quest from Halduron Brightwing for 1000 renown" },
             { id = "0c3b8835", text = "Complete weekly world event quest for pinnacle cache from Lady Liadrin - can pick weekly event quest and do it with the events below" },
