@@ -146,6 +146,7 @@ jobs:
       - name: Generate release changelog
         if: steps.check.outputs.should_release == 'true'
         env:
+          VERSION:      ${{ steps.check.outputs.version }}
           DATA_CHANGED: ${{ steps.check.outputs.data_changed }}
           TOC_CHANGED:  ${{ steps.check.outputs.toc_changed }}
         run: |
@@ -178,10 +179,12 @@ jobs:
 
           # Write a keep-a-changelog header so the BigWigsMods packager picks up
           # exactly this section for CurseForge/Wago release notes.
-          VERSION_NUM=$(git describe --tags --exact-match HEAD 2>/dev/null | sed 's/^v//' || true)
+          # Use VERSION from the check step directly — git describe can silently
+          # fail after a hard reset, leaving the header as "[unreleased]" which
+          # the packager won't match and will fall back to raw git commits.
           DATE=$(date -u +%Y-%m-%d)
           {
-            printf '## [%s] - %s\n' "${VERSION_NUM:-unreleased}" "$DATE"
+            printf '## [%s] - %s\n' "$VERSION" "$DATE"
             printf '%s\n' "${HUMAN_LINES:-}"
           } > CHANGELOG.md
 
