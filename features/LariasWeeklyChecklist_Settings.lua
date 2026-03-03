@@ -172,7 +172,8 @@ local function BuildPanel()
     -- Row definitions: { label, getVal(db) → bool, onChange(v) }
     local rows = {
         {
-            label    = L.OPTIONS_HIDE_COMPLETED_TASKS or "Hide Completed Tasks",
+            label   = L.OPTIONS_HIDE_COMPLETED_TASKS or "Hide Completed Tasks",
+            tooltip = L.OPTIONS_TOOLTIP_HIDE_COMPLETED_TASKS or "Hides individual checked-off tasks from all weeks.",
             getVal   = function(d) return d.hideCompletedTasks and true or false end,
             onChange = function(v)
                 Addon:EnsurePrefs().hideCompletedTasks = v
@@ -182,7 +183,8 @@ local function BuildPanel()
         },
         {
             _isFinishedWeeks = true,
-            label    = L.HIDE_FINISHED_WEEKS or "Hide Finished Weeks",
+            label   = L.HIDE_FINISHED_WEEKS or "Hide Finished Weeks",
+            tooltip = L.OPTIONS_TOOLTIP_HIDE_FINISHED_WEEKS or "Hides entire week sections once all tasks in them are completed.",
             getVal   = function(d) return d.hideCompletedSections and true or false end,
             onChange = function(v)
                 Addon:EnsurePrefs().hideCompletedSections = v
@@ -190,7 +192,8 @@ local function BuildPanel()
             end,
         },
         {
-            label    = L.OPTIONS_HIDE_GREAT_VAULT or "Hide Great Vault",
+            label   = L.OPTIONS_HIDE_GREAT_VAULT or "Hide Great Vault",
+            tooltip = L.OPTIONS_TOOLTIP_HIDE_GREAT_VAULT or "Hides the Great Vault progress tracker panel.",
             getVal   = function(d) return not d.showGreatVault end,
             onChange = function(v)
                 Addon:EnsurePrefs().showGreatVault = not v
@@ -198,7 +201,8 @@ local function BuildPanel()
             end,
         },
         {
-            label    = L.OPTIONS_HIDE_CURRENCY or "Hide Currency",
+            label   = L.OPTIONS_HIDE_CURRENCY or "Hide Currency",
+            tooltip = L.OPTIONS_TOOLTIP_HIDE_CURRENCY or "Hides the crests and currency tracker panel.",
             getVal   = function(d) return not d.showCurrency end,
             onChange = function(v)
                 Addon:EnsurePrefs().showCurrency = not v
@@ -206,7 +210,8 @@ local function BuildPanel()
             end,
         },
         {
-            label    = L.OPTIONS_HIDE_CHANGE_WEEK_BTN or "Hide Week Selector",
+            label   = L.OPTIONS_HIDE_CHANGE_WEEK_BTN or "Hide Week Selector",
+            tooltip = L.OPTIONS_TOOLTIP_HIDE_CHANGE_WEEK_BTN or "Hides the Change Week button in the header.",
             getVal   = function(d) return d.showChangeWeekBtn == false end,
             onChange = function(v)
                 Addon:EnsurePrefs().showChangeWeekBtn = not v
@@ -214,7 +219,8 @@ local function BuildPanel()
             end,
         },
         {
-            label    = L.OPTIONS_HIDE_ILVL_REF_BTN or "Hide Ilvl Reference",
+            label   = L.OPTIONS_HIDE_ILVL_REF_BTN or "Hide Ilvl Reference",
+            tooltip = L.OPTIONS_TOOLTIP_HIDE_ILVL_REF_BTN or "Hides the item level reference popup button in the header.",
             getVal   = function(d) return d.showIlvlRefBtn == false end,
             onChange = function(v)
                 Addon:EnsurePrefs().showIlvlRefBtn = not v
@@ -222,7 +228,8 @@ local function BuildPanel()
             end,
         },
         {
-            label    = L.OPTIONS_HIDE_UPDATE_NOTICE or "Hide Update Notices",
+            label   = L.OPTIONS_HIDE_UPDATE_NOTICE or "Hide Update Notices",
+            tooltip = L.OPTIONS_TOOLTIP_HIDE_UPDATE_NOTICE or "Hides the banner shown when a new spreadsheet version is available.",
             getVal   = function(d) return d.hideUpdateNotice and true or false end,
             onChange = function(v)
                 Addon:EnsurePrefs().hideUpdateNotice = v
@@ -234,7 +241,8 @@ local function BuildPanel()
             end,
         },
         {
-            label    = L.OPTIONS_DISABLE_UPGRADE_WARN or "Hide Upgrade Warnings",
+            label   = L.OPTIONS_DISABLE_UPGRADE_WARN or "Hide Upgrade Warnings",
+            tooltip = L.OPTIONS_TOOLTIP_DISABLE_UPGRADE_WARN or "Hides the popup warning shown when upgrading an item at 1/6 instead of 5/6.",
             getVal   = function(d) return d.upgradeWarnDisabled and true or false end,
             onChange = function(v)
                 Addon:EnsurePrefs().upgradeWarnDisabled = v
@@ -242,7 +250,8 @@ local function BuildPanel()
             end,
         },
         {
-            label    = L.OPTIONS_HIDE_MINIMAP_BTN or "Hide Minimap Button",
+            label   = L.OPTIONS_HIDE_MINIMAP_BTN or "Hide Minimap Button",
+            tooltip = L.OPTIONS_TOOLTIP_HIDE_MINIMAP_BTN or "Hides the minimap button.\nYou can still open the checklist with /larias.",
             getVal   = function(_d)
                 local g = Addon.db and Addon.db.global
                 return g and g.minimap and g.minimap.hide and true or false
@@ -286,6 +295,16 @@ local function BuildPanel()
             cb._hit:SetPoint("TOPLEFT",  canvas, "TOPLEFT", colX,           rowY)
             cb._hit:SetPoint("TOPRIGHT", canvas, "TOPLEFT", colX + CB_COL_W, rowY)
             cb._hit:SetHeight(ROW_H)
+            if _row.tooltip then
+                cb._hit:SetScript("OnEnter", function(self_)
+                    GameTooltip:SetOwner(self_, "ANCHOR_RIGHT")
+                    GameTooltip:SetText(_row.tooltip, nil, nil, nil, nil, true)
+                    GameTooltip:Show()
+                end)
+                cb._hit:SetScript("OnLeave", function()
+                    GameTooltip:Hide()
+                end)
+            end
         end
         _checkboxes[#_checkboxes + 1] = { cb = cb, row = _row }
     end

@@ -253,7 +253,7 @@ local function ApplyGreatVaultGrid(gridBlocks)
     end
 end
 
-local function SetRightRowPair(i, rowLabel, rowValue, iconFileID, currencyID)
+local function SetRightRowPair(i, rowLabel, rowValue, iconFileID, currencyID, tooltipText)
     local row = TrackingUI.right[RIGHT_ROW_KEYS[i]]
     if not (row and row.label and row.value) then return end
     rowLabel = rowLabel or ""; rowValue = rowValue or ""
@@ -261,6 +261,7 @@ local function SetRightRowPair(i, rowLabel, rowValue, iconFileID, currencyID)
     SetTextIfChanged(row.value, rowValue)
     local showRow = IsNonEmptyText(rowLabel) or IsNonEmptyText(rowValue)
     SetShownIfChanged(row.frame or row.label, showRow)
+    if row.frame then row.frame._lariasTooltipText = tooltipText or nil end
     if row.icon then
         if showRow and iconFileID and iconFileID ~= 0 then
             if row.icon._tex then row.icon._tex:SetTexture(iconFileID) end
@@ -278,7 +279,7 @@ local function ApplyRightColumnAsPairs()
     local panelRows = Addon:GetCurrencyPanelRows()
     for i, row in ipairs(panelRows) do
         if i > RIGHT_LINE_COUNT then break end
-        SetRightRowPair(i, row.label, row.value, row.iconID, row.currencyID)
+        SetRightRowPair(i, row.label, row.value, row.iconID, row.currencyID, row.tooltipText)
     end
     for i = #panelRows + 1, RIGHT_LINE_COUNT do
         SetRightRowPair(i, "", "")
@@ -597,6 +598,16 @@ function Addon:CreateTrackingPanel(parentFrame)
             end
         end)
         icon:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+        row:EnableMouse(true)
+        row:SetScript("OnEnter", function(self)
+            if self._lariasTooltipText and self._lariasTooltipText ~= "" then
+                GameTooltip:SetOwner(self, "ANCHOR_TOP")
+                GameTooltip:SetText(self._lariasTooltipText, 1, 1, 1, 1, true)
+                GameTooltip:Show()
+            end
+        end)
+        row:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
         local label = row:CreateFontString(nil, "OVERLAY", template or "GameFontHighlightSmall")
         label:SetPoint("LEFT", row, "LEFT", ROW_ICON_SZ + ROW_ICON_GAP, 0)

@@ -118,10 +118,47 @@ local function GetCurrencyQualityColor(currencyID)
     return (q and QUALITY_HEX[q]) or COLORS.dim
 end
 
-local function GetCrestLabelText(currencyID)
-    local gameName = GetCurrencyName(currencyID)
-    if type(gameName) == "string" and gameName ~= "" then return gameName end
-    return "Crest " .. tostring(currencyID)
+-- Builds a table (keyed by currency ID) of the shortest distinguishing label
+-- for each crest tier.  Words shared by every name are stripped; what remains
+-- is the tier-unique portion (e.g. "Adventurer", "Veteran", …).  Falls back
+-- to the first word when nothing distinguishes (e.g. only one crest defined).
+local function BuildCrestLabels(ids, crestCount)
+    -- Collect per-name word lists and a global word frequency count.
+    local wordLists = {}
+    local wordCount = {}
+    for i = 1, crestCount do
+        local id = ids[i]
+        local name = (id and GetCurrencyName(id)) or ""
+        wordLists[i] = {}
+        local seen = {}
+        for w in name:gmatch("%S+") do
+            tinsert(wordLists[i], w)
+            if not seen[w] then
+                seen[w] = true
+                wordCount[w] = (wordCount[w] or 0) + 1
+            end
+        end
+    end
+    -- Words present in every name are common; keep only the unique ones.
+    local labels = {}
+    for i = 1, crestCount do
+        local id = ids[i]
+        if id then
+            local unique = {}
+            for _, w in ipairs(wordLists[i]) do
+                if (wordCount[w] or 0) < crestCount then
+                    tinsert(unique, w)
+                end
+            end
+            if #unique > 0 then
+                labels[id] = tconcat(unique, " ")
+            else
+                -- All words are shared (or only one crest) – fall back to first word.
+                labels[id] = wordLists[i][1] or ("Crest " .. tostring(id))
+            end
+        end
+    end
+    return labels
 end
 
 --  Crest achievement helpers 
@@ -300,10 +337,12 @@ local function GetCrestLines()
     PopulateCrestCurCap(cache, ids, crestCount)
     PopulateCrestUnlocked(cache, crestCount)
     local highestTradeTarget, gained = ComputeCrestTradeup(cache, crestCount, batchLower, batchHigher)
+    local crestLabels = BuildCrestLabels(ids, crestCount)
+    local tooltipTexts = {}
     for i = 1, crestCount do
         local id = ids[i]
         if id then
-            local name = GetCrestLabelText(id) or GetCurrencyName(id) or tostring(id)
+            local name = crestLabels[id] or GetCurrencyName(id) or tostring(id)
             if name then
                 local cur, cap = cache.cur[i], cache.cap[i]
                 local xy, color
@@ -320,6 +359,7 @@ local function GetCrestLines()
                         tradeUp = ColorWrap(COLORS.dim, " (")
                             .. ColorWrap("ff4da6ff", "+" .. tostring(n))
                             .. ColorWrap(COLORS.dim, L.TRACKING_TRADE_UP_SUFFIX or "")
+                        tooltipTexts[i] = L.TRACKING_CONVERT_TOOLTIP or ""
                     end
                 end
                 local lbl = ColorWrap(GetCurrencyQualityColor(id), tostring(name)) .. tradeUp
@@ -332,7 +372,7 @@ local function GetCrestLines()
             labelOut[i] = lbl; valueOut[i] = val; out[i] = lbl .. " " .. val
         end
     end
-    return out, labelOut, valueOut, crestCount
+    return out, labelOut, valueOut, crestCount, tooltipTexts
 end
 
 --  Catalyst 
@@ -414,13 +454,14 @@ end
 local _panelRowBuf  = {}  -- result array, returned and reused each call
 local _panelRowPool = {}  -- pool of row sub-tables, one slot per max possible row
 
-local function FillRow(n, lbl, val, iconID, currencyID)
+local function FillRow(n, lbl, val, iconID, currencyID, tooltipText)
     if not _panelRowPool[n] then _panelRowPool[n] = {} end
     local r       = _panelRowPool[n]
     r.label       = lbl
     r.value       = val
     r.iconID      = iconID
     r.currencyID  = currencyID
+    r.tooltipText = tooltipText or nil
     _panelRowBuf[n] = r
 end
 
@@ -434,7 +475,7 @@ function Addon:GetCurrencyPanelRows()
     local tracking = self.TRACKING
 
     -- Crests
-    local _, labelLines, valueLines, crestCount = GetCrestLines()
+    local _, labelLines, valueLines, crestCount, crestTooltips = GetCrestLines()
     crestCount = tonumber(crestCount) or 4
     local crestIDs = tracking and GetCrestIDsAndCount(tracking) or {}
     if type(crestIDs) ~= "table" then crestIDs = {} end
@@ -445,7 +486,7 @@ function Addon:GetCurrencyPanelRows()
         if IsNonEmptyText(lbl) or IsNonEmptyText(val) then
             local id = crestIDs[i]
             n = n + 1
-            FillRow(n, lbl, val, GetCurrencyIconID(id), id)
+            FillRow(n, lbl, val, GetCurrencyIconID(id), id, crestTooltips and crestTooltips[i])
         end
     end
 
@@ -551,7 +592,10 @@ function Addon:RenderCurrencySnapshotRow(row)
     if t == "crest" then
         local id  = row.id
         local qty = tonumber(row.qty) or 0
-        local name  = GetCrestLabelText(id) or GetCurrencyName(id) or tostring(id or "?")
+        local tracking = self.TRACKING
+        local crestIDs, crestCount = GetCrestIDsAndCount(tracking or {})
+        local crestLabels = BuildCrestLabels(crestIDs, crestCount)
+        local name  = crestLabels[id] or GetCurrencyName(id) or tostring(id or "?")
         local lbl   = ColorWrap(GetCurrencyQualityColor(id), tostring(name))
         local _, cap = FormatCurrencyProgressParts(id)
         cap = tonumber(cap) or 0

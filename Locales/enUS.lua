@@ -27,6 +27,16 @@ local STRINGS = {
 	OPTIONS_HIDE_UPDATE_NOTICE   = "Hide Update Warnings",
 	OPTIONS_DISABLE_UPGRADE_WARN = "Hide Upgrade Warnings",
 	OPTIONS_HIDE_MINIMAP_BTN     = "Hide Minimap Button",
+	-- Options checkbox tooltips
+	OPTIONS_TOOLTIP_HIDE_COMPLETED_TASKS = "Hides individual checked-off tasks from all weeks.",
+	OPTIONS_TOOLTIP_HIDE_FINISHED_WEEKS  = "Hides entire week sections once all tasks in them are completed.\n|cffaaaaaa(Only active when Hide Finished Tasks is off.)|r",
+	OPTIONS_TOOLTIP_HIDE_GREAT_VAULT     = "Hides the Great Vault progress tracker panel.",
+	OPTIONS_TOOLTIP_HIDE_CURRENCY        = "Hides the currency tracker panel.",
+	OPTIONS_TOOLTIP_HIDE_CHANGE_WEEK_BTN = "Hides the Change Week button in the header.",
+	OPTIONS_TOOLTIP_HIDE_ILVL_REF_BTN    = "Hides the item level reference popup button in the header.",
+	OPTIONS_TOOLTIP_HIDE_UPDATE_NOTICE   = "Hides the banner shown when a new spreadsheet version is available.",
+	OPTIONS_TOOLTIP_DISABLE_UPGRADE_WARN = "Hides the popup warning shown when upgrading an item at 1/6 instead of 5/6.",
+	OPTIONS_TOOLTIP_HIDE_MINIMAP_BTN     = "Hides the minimap button.\nYou can still open the checklist with /larias.",
 	RESET_BUTTON = "Reset List",
 	UI_SCALE_LABEL       = "Scale",
 	UI_SCALE_MIN_LABEL   = "50%",
@@ -79,7 +89,8 @@ local STRINGS = {
 	TRACKING_QUEST_WEEKLY_PREY = "Weekly Prey",
 
 	TRACKING_NO_ID = "No ID",
-	TRACKING_TRADE_UP_SUFFIX = " Trade Up)",
+	TRACKING_TRADE_UP_SUFFIX = " Convert)",
+	TRACKING_CONVERT_TOOLTIP = "Number of crests you will gain from converting previous crests",
 
 	TRACKING_CATALYST_LABEL = "Catalyst",
 
@@ -90,6 +101,7 @@ local STRINGS = {
 
 	-- Main window
 	TAB_OPTIONS = "Options",
+	CLOSE               = "Close",
 	CHANGE_WEEK_BUTTON  = "Change Week",
 	ALL_WEEKS_COMPLETE  = "Finished!",
 	DONE_PREFIX         = "",
