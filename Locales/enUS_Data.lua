@@ -5,7 +5,7 @@ NOTE: This is the canonical enUS dataset; other locales must keep IDs identical
 so completion tracking stays consistent across locales.
 ]]
 
--- @sheet-version: 13
+-- @sheet-version: 14
 
 local LOCALE = "enUS"
 
@@ -17,7 +17,7 @@ if type(reg) ~= "table" then
     _G[LOCALE_REGISTRY_KEY] = reg
 end
 if type(reg.data) ~= "table" then reg.data = {} end
-reg.sheet_version = "13"
+reg.sheet_version = "14"
 
 local DATASET = {
 
@@ -35,7 +35,7 @@ local DATASET = {
             { id = "c886190c", text = "Complete the Highest Peaks achievement for renown - see doc for guide" },
             { id = "f9b8eb01", text = "Complete side quest chains for renown. (can be done on alts to level at same time). DMF buff does not give renown." },
             { id = "11425027", text = "Note: Only the Singularity AND Eversong champion renown trinket are available in early access - the others will become available either Monday after the official launch or after each region's weekly reset." },
-            { id = "34624ba9", text = "March 2nd Emergency Update" },
+            { id = "eae61254", text = "Emergency Update - March 2" },
             { id = "2c77c3c4", text = "Complete the weekly Saltheril's Soiree in Eversong Woods. THIS JUST OPENED, YOU HAVE TO COMPLETE BEFORE WEEKLY RESET! Don't forget to grab renown quest for the champion helmet if you have the renown" },
         },
     },
