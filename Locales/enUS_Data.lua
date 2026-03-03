@@ -5,7 +5,7 @@ NOTE: This is the canonical enUS dataset; other locales must keep IDs identical
 so completion tracking stays consistent across locales.
 ]]
 
--- @sheet-version: 14
+-- @sheet-version: 13
 
 local LOCALE = "enUS"
 
@@ -17,7 +17,7 @@ if type(reg) ~= "table" then
     _G[LOCALE_REGISTRY_KEY] = reg
 end
 if type(reg.data) ~= "table" then reg.data = {} end
-reg.sheet_version = "14"
+reg.sheet_version = "13"
 
 local DATASET = {
 
