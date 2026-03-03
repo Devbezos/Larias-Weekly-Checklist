@@ -236,7 +236,7 @@ jobs:
       # Requires a PAT stored as LOCALES_REPO_TOKEN with repo scope on the
       # locales repo. The token only needs to be set once in the main repo secrets.
       - name: Trigger locale auto-translate
-        if: steps.check.outputs.data_changed == 'true' && steps.check.outputs.should_release == 'true'
+        if: steps.check.outputs.should_release == 'true' && (steps.check.outputs.data_changed == 'true' || github.event.inputs.force == 'true')
         env:
           LOCALES_REPO_TOKEN: ${{ secrets.LOCALES_REPO_TOKEN }}
         run: |
