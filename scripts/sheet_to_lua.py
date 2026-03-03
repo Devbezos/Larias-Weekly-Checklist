@@ -176,18 +176,18 @@ def main(csv_in: str, lua_out: str) -> None:
         new_text += nl
 
     if existing_text is not None:
-        # Gate: only write when BOTH the sheet version has changed AND the
-        # underlying data content has changed.
+        # Gate: skip the write only when nothing at all has changed — neither
+        # the sheet version nor the underlying data content.
         stored_version = get_stored_sheet_version(existing_text)
         version_changed = sheet_version != stored_version
 
         # Compare content with the version line stripped so a pure version bump
-        # (no data change) never triggers a write, and vice-versa.
+        # (no data change) doesn't count as a content change, and vice-versa.
         existing_data = strip_version_line(existing_text.replace("\r\n", "\n"))
         new_data      = strip_version_line(new_text.replace("\r\n", "\n"))
         content_changed = existing_data != new_data
 
-        if not version_changed or not content_changed:
+        if not version_changed and not content_changed:
             return
 
     out_path.write_text(new_text, encoding="utf-8")
