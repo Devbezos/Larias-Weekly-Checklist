@@ -5,7 +5,7 @@ NOTE: This is the canonical enUS dataset; other locales must keep IDs identical
 so completion tracking stays consistent across locales.
 ]]
 
--- @sheet-version: 14
+-- @sheet-version: 15
 
 local LOCALE = "enUS"
 
@@ -17,7 +17,7 @@ if type(reg) ~= "table" then
     _G[LOCALE_REGISTRY_KEY] = reg
 end
 if type(reg.data) ~= "table" then reg.data = {} end
-reg.sheet_version = "14"
+reg.sheet_version = "15"
 
 local DATASET = {
 
@@ -28,7 +28,7 @@ local DATASET = {
             { id = "f4b92a82", text = "Log on to each character you plan on leveling so they start accumulating rested XP." },
             { id = "90db618c", text = "Level characters warmode on to 90 - DMF opens Sunday for 10% more exp." },
             { id = "6af1d802", text = "Complete the weekly Stormarion Assault in the Voidstorm. (It is available in Early Access)" },
-            { id = "35bc0cfd", text = "(Optional) Kill each rare once in each zone for renown. These are a weekly lockout for each rare." },
+            { id = "6762e305", text = "(Optional) Kill each rare once in each zone for renown. This is a one time bonus for each rare and does not reset weekly." },
             { id = "2687fe6c", text = "Hunt down each region's treasures for free Renown. See doc for guide" },
             { id = "91e7ee6c", text = "Complete 4x Prey on normal difficulty for renown" },
             { id = "8bf4f442", text = "Complete the Midnight Lore Hunter achievement for renown - see doc for guide" },
@@ -56,10 +56,11 @@ local DATASET = {
             { id = "da2fa0ef", text = "Complete the weekly Abundance Event in Zul'aman." },
             { id = "dbc8384b", text = "Complete the weekly Legends of the Haranir event in Harandar." },
             { id = "9ad64245", text = "Complete the weekly Stormarion Assault in the Voidstorm." },
-            { id = "35bc0cfd", text = "(Optional) Kill each rare once in each zone for renown. These are a weekly lockout for each rare." },
+            { id = "6762e305", text = "(Optional) Kill each rare once in each zone for renown. This is a one time bonus for each rare and does not reset weekly." },
             { id = "1b42ce30", text = "If not done, hunt down each region's treasures, lore hunter, and high peaks for free Renown. See doc for guide" },
             { id = "a892ac44", text = "Unlock Delves through tier 8" },
-            { id = "9bc44f02", text = "Complete 2x Hard Prey for Veteran gear on each character - if only one character, do 4x on one character for renown" },
+            { id = "636c0b3a", text = "Complete 4x Hard Prey for Veteran gear and Veteran crests on each character" },
+            { id = "efb035ba", text = "(Optional) Complete 2x random Hard Prey for Veteran crests on each character - doing 2x optional per week will cap Veteran crests by the end of week 2" },
             { id = "a7ee4829", text = "Complete a World Tour of M0 dungeons - rewards vet ilvl - do not upgrade yet" },
         },
     },
@@ -76,9 +77,10 @@ local DATASET = {
             { id = "da2fa0ef", text = "Complete the weekly Abundance Event in Zul'aman." },
             { id = "dbc8384b", text = "Complete the weekly Legends of the Haranir event in Harandar." },
             { id = "9ad64245", text = "Complete the weekly Stormarion Assault in the Voidstorm." },
-            { id = "35bc0cfd", text = "(Optional) Kill each rare once in each zone for renown. These are a weekly lockout for each rare." },
+            { id = "6762e305", text = "(Optional) Kill each rare once in each zone for renown. This is a one time bonus for each rare and does not reset weekly." },
             { id = "23cb93ed", text = "Unlock Delves through tier 8 if not done yet" },
-            { id = "9bc44f02", text = "Complete 2x Hard Prey for Veteran gear on each character - if only one character, do 4x on one character for renown" },
+            { id = "636c0b3a", text = "Complete 4x Hard Prey for Veteran gear and Veteran crests on each character" },
+            { id = "efb035ba", text = "(Optional) Complete 2x random Hard Prey for Veteran crests on each character - doing 2x optional per week will cap Veteran crests by the end of week 2" },
             { id = "a7ee4829", text = "Complete a World Tour of M0 dungeons - rewards vet ilvl - do not upgrade yet" },
             { id = "c33e5c84", text = "If you raid Tuesday the 17th, craft. See doc for more info." },
         },
