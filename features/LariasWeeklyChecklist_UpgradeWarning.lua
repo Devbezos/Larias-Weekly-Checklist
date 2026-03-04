@@ -110,6 +110,7 @@ function Addon:CheckUpgradeWarning()
     if not tierIdx then tierIdx = 1 end
 
     local upgradeCost = upgradeCount or 0
+    if upgradeCost <= 0 then return end  -- no crest cost, nothing to warn about
     local currentName = GetCrestShort(tierIdx)
     local prevName    = GetCrestShort(math.max(tierIdx - 1, 1))
 
