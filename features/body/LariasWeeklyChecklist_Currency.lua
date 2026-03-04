@@ -80,16 +80,15 @@ local function FormatCurrencyProgressParts(currencyID)
     if not currencyID or not C_CurrencyInfo or not C_CurrencyInfo.GetCurrencyInfo then return nil end
     local info = C_CurrencyInfo.GetCurrencyInfo(currencyID)
     if not info then return nil end
-    local weeklyMax = info.maxWeeklyQuantity
-    if weeklyMax and weeklyMax > 0 then
-        local held        = info.quantity or 0
-        local weeklyLeft  = math.max(0, weeklyMax - (info.weeklyQuantity or 0))
-        return held, held + weeklyLeft
+    local held        = tonumber(info.quantity)    or 0
+    local earnedSoFar = tonumber(info.totalEarned) or 0
+    local weeklyMax   = tonumber(info.maxQuantity) or 0
+    -- cap = held + still-earnable-this-week = held + (weeklyMax - earnedSoFar)
+    if weeklyMax > 0 then
+        local available = math.max(0, weeklyMax - earnedSoFar)
+        return held, held + available
     end
-    local qty = info.quantity or 0
-    local maxQ = info.maxQuantity
-    if maxQ and maxQ > 0 then return qty, maxQ end
-    return qty, 0
+    return held, 0
 end
 
 local function GetCurrencyIconID(currencyID)
