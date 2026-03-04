@@ -4,7 +4,7 @@
 ## Author: Dev
 ## X-Credits: Larias (checklist content and data)
 ## Author: Larias
-## Version: 2.1.10
+## Version: 2.1.11
 ## SavedVariables: LariasWeeklyChecklistDB
 ## OptionalDeps: LariasWeeklyChecklist_Localization
 ## IconTexture: Interface\AddOns\LariasWeeklyChecklist\assets\icon
