@@ -80,17 +80,13 @@ local function FormatCurrencyProgressParts(currencyID)
     if not currencyID or not C_CurrencyInfo or not C_CurrencyInfo.GetCurrencyInfo then return nil end
     local info = C_CurrencyInfo.GetCurrencyInfo(currencyID)
     if not info then return nil end
-    local held         = tonumber(info.quantity)          or 0
-    local weeklyEarned = tonumber(info.weeklyQuantity)    or 0
-    local weeklyMax    = tonumber(info.maxWeeklyQuantity) or 0
-    -- Midnight crests don't populate maxWeeklyQuantity; for those, maxQuantity
-    -- is the weekly earn cap. Use it as fallback.
-    if weeklyMax <= 0 then
-        weeklyMax = tonumber(info.maxQuantity) or 0
-    end
+    local held        = tonumber(info.quantity)    or 0
+    local earnedSoFar = tonumber(info.totalEarned) or 0
+    local weeklyMax   = tonumber(info.maxQuantity) or 0
+    -- cap = held + still-earnable-this-week = held + (weeklyMax - earnedSoFar)
     if weeklyMax > 0 then
-        local available = math.max(0, weeklyMax - weeklyEarned)
-        return held, held + available  -- current / (current + still earnable)
+        local available = math.max(0, weeklyMax - earnedSoFar)
+        return held, held + available
     end
     return held, 0
 end
