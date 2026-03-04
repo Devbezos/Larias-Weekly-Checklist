@@ -591,6 +591,7 @@ function Addon:EnsureDB()
     if cdb.checked           == nil then cdb.checked           = {} end
     if cdb.collapsedSections == nil then cdb.collapsedSections = {} end
     if cdb.trackingSnapshot  == nil then cdb.trackingSnapshot  = {} end
+    if cdb.sectionCompleted  == nil then cdb.sectionCompleted  = {} end
     return cdb
 end
 
@@ -1149,11 +1150,15 @@ local function SetSectionCollapsed(sectionId, collapsed, db)
 end
 
 local function IsSectionCompleteById(sectionId, db)
-    -- A section is complete if every item is checked.
+    -- A section is complete if every item is checked, OR if the sticky-complete
+    -- flag is set (written on first completion; survives addon updates that edit
+    -- item text, regenerating IDs via sheet_to_lua, without un-hiding done weeks).
     local section = Addon._sectionsById[sectionId]
     if not section then return false end
 
     db = db or Addon:EnsureDB()
+    -- Fast-path: sticky flag from a previous completion.
+    if db.sectionCompleted and db.sectionCompleted[sectionId] then return true end
     local checked = db.checked
     local items = section.items or {}
     -- Pre-build the constant prefix once instead of Key(sectionId, id) per item.
@@ -1507,8 +1512,19 @@ local function OnCheckboxClick(selfBtn)
     RefreshItemTextColor(selfBtn)
 
     local sectionId = selfBtn._sectionId
+    -- When the user explicitly unchecks an item, clear the sticky-complete flag
+    -- first so IsSectionCompleteById re-evaluates item states honestly.
+    if not checked then
+        if type(database.sectionCompleted) == "table" then
+            database.sectionCompleted[sectionId] = nil
+        end
+    end
     local secCompleteNow = IsSectionCompleteById(sectionId, database)
     if secCompleteNow then
+        -- Persist completion so it survives future item-ID changes caused by
+        -- developer text edits regenerating IDs via sheet_to_lua.
+        if type(database.sectionCompleted) ~= "table" then database.sectionCompleted = {} end
+        database.sectionCompleted[sectionId] = true
         SetSectionCollapsed(sectionId, true, database)
     end
 

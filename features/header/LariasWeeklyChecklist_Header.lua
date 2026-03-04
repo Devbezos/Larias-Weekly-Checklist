@@ -198,6 +198,7 @@ function Addon:CreateHeader(frame)
         if newIdx > oldIdx then
             if type(db.checked)          ~= "table" then db.checked          = {} end
             if type(db.collapsedSections) ~= "table" then db.collapsedSections = {} end
+            if type(db.sectionCompleted)  ~= "table" then db.sectionCompleted  = {} end
             for i = oldIdx, newIdx - 1 do
                 local secId  = order[i]
                 local secDef = Addon._sectionsById and Addon._sectionsById[secId]
@@ -206,10 +207,12 @@ function Addon:CreateHeader(frame)
                     db.checked[secId .. ":" .. tostring(item.id)] = true
                 end
                 db.collapsedSections[secId] = true
+                db.sectionCompleted[secId]  = true  -- persist so hide-finished-weeks survives updates
             end
         elseif newIdx <= oldIdx then
             local checked   = type(db.checked)          == "table" and db.checked          or nil
             local collapsed = type(db.collapsedSections) == "table" and db.collapsedSections or nil
+            local done      = type(db.sectionCompleted)  == "table" and db.sectionCompleted  or nil
             local fromIdx   = (newIdx == 0 and 1 or newIdx)
             -- Clear from the selected week all the way to the end: jumping back to
             -- a week means "show everything from here forward", regardless of how
@@ -224,6 +227,7 @@ function Addon:CreateHeader(frame)
                     end
                 end
                 if collapsed then collapsed[secId] = nil end
+                if done      then done[secId]      = nil end  -- un-complete when navigating backward
             end
         end
 

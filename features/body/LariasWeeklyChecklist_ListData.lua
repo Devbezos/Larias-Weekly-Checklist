@@ -88,6 +88,63 @@ function Addon:PruneObsoleteSavedState()
         end
     end
 
+    -- Backfill: seed sectionCompleted for sections that were fully checked in
+    -- db.checked, so the sticky flag works after upgrades.  Re-runs whenever
+    -- the sheet version changes so renamed items (which regenerate hash IDs
+    -- via sheet_to_lua) don't break already-completed weeks.
+    --
+    -- Two signals are combined to handle the three common update patterns:
+    --   (a) items renamed  → old IDs pruned, new IDs added; checkedCount stays
+    --       the same but matchCount drops.  checkedCount >= currentCount catches
+    --       this when item counts don't change net, and the 90% threshold below
+    --       helps when a couple of new items were also added.
+    --   (b) items removed  → currentCount shrinks; checkedCount >= currentCount
+    --       still holds.
+    --   (c) items added to an already-complete section (e.g. items moved in
+    --       from a deleted section) → checkedCount < currentCount but the ratio
+    --       is still high; the 90% threshold catches this.
+    local currentSheetVer = (function()
+        local r = GetLocaleRegistry()
+        return r and tostring(r.sheet_version or "") or ""
+    end)()
+    -- v2 sentinel: forces one extra run for saves that already had the v1
+    -- sentinel written (which used strict >= and missed the 90% threshold).
+    if (db._sectionCompletedSeedVer2 or "") ~= currentSheetVer and
+       type(db.checked) == "table" then
+        db._sectionCompletedSeedVer2 = currentSheetVer
+        if type(db.sectionCompleted) ~= "table" then db.sectionCompleted = {} end
+        -- Count checked entries per section prefix (format: "sectionId:itemId").
+        local checkedBySection = {}
+        for key in pairs(db.checked) do
+            local colonPos = string.find(key, ":", 1, true)
+            if colonPos and colonPos > 1 then
+                local sid = string.sub(key, 1, colonPos - 1)
+                checkedBySection[sid] = (checkedBySection[sid] or 0) + 1
+            end
+        end
+        for _, section in ipairs(data) do
+            local sid = section.id
+            if type(sid) == "string" and type(section.items) == "table" and
+               #section.items > 0 then
+                local currentCount = #section.items
+                local checkedCount = checkedBySection[sid] or 0
+                if checkedCount == 0 then
+                    -- Nothing was ever checked in this section; skip.
+                else
+                    -- Threshold: 90% of current items must be covered by old
+                    -- checked entries.  math.max(1,…) avoids a zero floor for
+                    -- single-item sections.  This is intentionally slightly
+                    -- lenient so that a section completed at the previous
+                    -- version survives even if 1-2 new items were added to it.
+                    local threshold = math.max(1, math.floor(currentCount * 0.9))
+                    if checkedCount >= threshold then
+                        db.sectionCompleted[sid] = true
+                    end
+                end
+            end
+        end
+    end
+
     local removedChecked   = 0
     local removedCollapsed = 0
 
@@ -105,6 +162,14 @@ function Addon:PruneObsoleteSavedState()
             if not validSections[k] then
                 db.collapsedSections[k] = nil
                 removedCollapsed = removedCollapsed + 1
+            end
+        end
+    end
+
+    if type(db.sectionCompleted) == "table" then
+        for k in pairs(db.sectionCompleted) do
+            if not validSections[k] then
+                db.sectionCompleted[k] = nil
             end
         end
     end
