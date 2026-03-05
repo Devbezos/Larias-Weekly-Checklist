@@ -134,7 +134,7 @@ local function SetupHooks()
         local holder = Addon:NewThemedFrame(nil, UIParent)
         holder:SetFrameStrata("DIALOG")
         holder:SetFrameLevel(200)
-        holder:SetSize(380, PANEL_H)
+        holder:SetSize(410, PANEL_H)
         holder:SetClampedToScreen(true)
         holder:EnableMouse(true)
         -- Anchor directly below the ItemUpgradeFrame, horizontally centered.

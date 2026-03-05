@@ -58,7 +58,7 @@ local STRINGS = {
 	-- Settings panel language override
 	SETTINGS_LANGUAGE_AUTO     = "Auto (Client Default)",
 	-- Upgrade warning
-	UPGRADE_WARN_MSG             = "Upgrading a 1/6 %s item is a waste of %d crests.\nYou should upgrade a 5/6 %s item instead",
+	UPGRADE_WARN_MSG             = "Upgrading a 1/6 %s item is a waste of %d crests.\nYou should upgrade a %s item to 6/6 first to save crests",
 	UPGRADE_WARN_DISABLE_BTN     = "Hide Upgrade Warning",
 	UPGRADE_WARN_DISABLE_TOOLTIP = "Check Larias's guide for more information.",
 	-- Color picker swatch labels (gear popup)
