@@ -91,6 +91,7 @@ local STRINGS = {
 	TRACKING_NO_ID = "No ID",
 	TRACKING_TRADE_UP_SUFFIX = " Convert)",
 	TRACKING_CONVERT_TOOLTIP = "Number of crests you will gain from converting previous crests",
+	TRACKING_CREST_AMOUNT_TOOLTIP = "Accurately tracks how many crests you can hold including overcapped crests",
 
 	TRACKING_CATALYST_LABEL = "Catalyst",
 
