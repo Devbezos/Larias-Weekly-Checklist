@@ -31,6 +31,13 @@ local LOCALE_NATIVE_NAMES = {
     trTR = "Türkçe",
 }
 
+-- Support resource URLs displayed in the Support section of the gear popup.
+local SUPPORT_LINKS = {
+    { label = "Guide Doc",  url = "https://docs.google.com/document/d/e/2PACX-1vTGkZ2Cjr0jlv90XqW9vy9VXsVucd-yMCgHdyCvX_kQfOrexNDAC7Lf3LifuhqxrcWqJ0W3zIhvK3ii/pub" },
+    { label = "Checklist",  url = "https://docs.google.com/spreadsheets/d/1iK2SZUcz_ljnkdTG7KW6pqfzaUDuSgnlh1HupcLrkus/edit?gid=53744607#gid=53744607" },
+    { label = "Discord",    url = "https://discord.gg/postnerfclarity" },
+}
+
 -- Creates a small 16×16 colored swatch button.  Call swatch:SetColor(r,g,b).
 local function MakePopupSwatch(parent)
     local btn = CreateFrame("Button", nil, parent)
@@ -156,8 +163,8 @@ function Addon:SyncGearPopup()
         local PAD     = 10
         local TILE_H  = 34
         local cbsY    = 47  -- PAD(10) + reset(22) + 6 + div(1) + 8
-        -- VER_PAD covers slider section + color section + credit/ver + lang btn (30 if visible).
-        local VER_PAD = showLangToggle and 170 or 140
+        -- VER_PAD covers slider section + color section + support links + credit/ver + lang btn (30 if visible).
+        local VER_PAD = showLangToggle and 202 or 172
         local totalH  = cbsY + 5 * TILE_H + PAD + VER_PAD
         p:SetHeight(totalH)
     end
@@ -387,7 +394,7 @@ function Addon:ToggleGearPopup(anchor, growRight)
 
         -- ── Compact color swatches – beside sliders (right column) ──────────
         -- colorSectionDiv divides the slider+color zone from the credit block.
-        local COLOR_DIV_Y = 40   -- divider bottom (px from popup BOTTOMLEFT)
+        local COLOR_DIV_Y = 72   -- divider bottom (px from popup BOTTOMLEFT); accounts for the support link section below
         local colorSectionDiv = p:CreateTexture(nil, "ARTWORK")
         colorSectionDiv:SetColorTexture(0.3, 0.3, 0.3, 0.5)
         colorSectionDiv:SetHeight(1)
@@ -508,21 +515,52 @@ function Addon:ToggleGearPopup(anchor, growRight)
         end
         verLabel:SetTextColor(0.45, 0.45, 0.45, 0.6)
 
+        -- ── Support links (Guide Doc / Checklist / Discord) ─────────────────────
+        local suppDiv = p:CreateTexture(nil, "ARTWORK")
+        suppDiv:SetColorTexture(0.3, 0.3, 0.3, 0.5)
+        suppDiv:SetHeight(1)
+        suppDiv:SetPoint("BOTTOMLEFT",  p, "BOTTOMLEFT",  PAD,  33)
+        suppDiv:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -PAD, 33)
+
+        local suppTitleLbl = p:CreateFontString(nil, "OVERLAY")
+        suppTitleLbl:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
+        suppTitleLbl:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", PAD + 2, 36)
+        suppTitleLbl:SetText("Support")
+        suppTitleLbl:SetTextColor(0.60, 0.60, 0.60, 1)
+
+        local SUPP_BTN_W = math.floor((p:GetWidth() - 2 * PAD - 8) / 3)
+        for si, sl in ipairs(SUPPORT_LINKS) do
+            local _url = sl.url
+            local sx   = PAD + (si - 1) * (SUPP_BTN_W + 4)
+            local sbtn = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
+            sbtn:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", sx, 48)
+            sbtn:SetSize(SUPP_BTN_W, 22)
+            sbtn:SetText(sl.label)
+            if Addon._styleActionButton then Addon._styleActionButton(sbtn) end
+            sbtn:SetScript("OnClick", function()
+                if C_Browser and C_Browser.OpenLink then
+                    C_Browser.OpenLink(_url)
+                else
+                    StaticPopup_Show("LARIAS_COPY_LINK", nil, nil, _url)
+                end
+            end)
+        end
+
         -- ── Language toggle button (non-English clients only) ────────────────────
         -- Sits above the slider section divider when visible.
-        --   SDIV_BOT≈136  ->  lang btn bottom=141, lang divider bottom=167
-        --   VER_PAD grows from 140 to 170 when this button is visible.
+        --   SDIV_BOT≈168  ->  lang btn bottom=173, lang divider bottom=199
+        --   VER_PAD grows from 172 to 202 when this button is visible.
         local langDivider = p:CreateTexture(nil, "ARTWORK")
         langDivider:SetColorTexture(0.3, 0.3, 0.3, 0.5)
         langDivider:SetHeight(1)
-        langDivider:SetPoint("BOTTOMLEFT",  p, "BOTTOMLEFT",  PAD,  167)
-        langDivider:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -PAD, 167)
+        langDivider:SetPoint("BOTTOMLEFT",  p, "BOTTOMLEFT",  PAD,  199)
+        langDivider:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -PAD, 199)
         langDivider:Hide()
         p._gearLangDiv = langDivider
 
         local langBtn = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
-        langBtn:SetPoint("BOTTOMLEFT",  p, "BOTTOMLEFT",  PAD,  141)
-        langBtn:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -PAD, 141)
+        langBtn:SetPoint("BOTTOMLEFT",  p, "BOTTOMLEFT",  PAD,  173)
+        langBtn:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -PAD, 173)
         langBtn:SetHeight(22)
         langBtn:Hide()
         if Addon._styleActionButton then Addon._styleActionButton(langBtn) end

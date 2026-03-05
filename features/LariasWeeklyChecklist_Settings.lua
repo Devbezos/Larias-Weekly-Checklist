@@ -36,6 +36,36 @@ StaticPopupDialogs["LARIAS_LOCALE_RELOAD"] = StaticPopupDialogs["LARIAS_LOCALE_R
     preferredIndex = 3,
 }
 
+-- Support resource URLs used by the Support section at the bottom of this panel.
+local SUPPORT_URL_DOC       = "https://docs.google.com/document/d/e/2PACX-1vTGkZ2Cjr0jlv90XqW9vy9VXsVucd-yMCgHdyCvX_kQfOrexNDAC7Lf3LifuhqxrcWqJ0W3zIhvK3ii/pub"
+local SUPPORT_URL_CHECKLIST = "https://docs.google.com/spreadsheets/d/1iK2SZUcz_ljnkdTG7KW6pqfzaUDuSgnlh1HupcLrkus/edit?gid=53744607#gid=53744607"
+local SUPPORT_URL_DISCORD   = "https://discord.gg/postnerfclarity"
+
+-- Generic "copy link" popup used when C_Browser.OpenLink is unavailable.
+-- The target URL is passed as the data argument to StaticPopup_Show.
+StaticPopupDialogs["LARIAS_COPY_LINK"] = StaticPopupDialogs["LARIAS_COPY_LINK"] or {
+    text         = "Copy link (Ctrl+C):",
+    button1      = "Close",
+    hasEditBox   = true,
+    editBoxWidth = 320,
+    timeout      = 0,
+    whileDead    = true,
+    hideOnEscape = true,
+    preferredIndex = 5,
+    OnShow = function(self)
+        C_Timer.After(0, function()
+            if self.editBox and self.data then
+                self.editBox:SetText(self.data)
+                self.editBox:SetFocus()
+                self.editBox:HighlightText()
+            end
+        end)
+    end,
+    OnKeyDown = function(self, key)
+        if key == "C" and IsControlKeyDown() then self:Hide() end
+    end,
+}
+
 -- Creates a small colored swatch button on `parent`.
 -- Call swatch:SetColor(r,g,b) to update the display color.
 local function MakeSwatch(parent)
@@ -563,6 +593,41 @@ local function BuildPanel()
     _langDropdownBtn = langDropBtn
 
     curY = curY - BTN_H - 4
+
+    -- ── Divider ───────────────────────────────────────────────────────────────
+    local divSupport = canvas:CreateTexture(nil, "ARTWORK")
+    divSupport:SetColorTexture(0.3, 0.3, 0.3, 0.6)
+    divSupport:SetHeight(1)
+    divSupport:SetPoint("TOPLEFT",  canvas, "TOPLEFT",  PAD,  curY)
+    divSupport:SetPoint("TOPRIGHT", canvas, "TOPRIGHT", -PAD, curY)
+    curY = curY - 8
+
+    -- ── "Support" section ─────────────────────────────────────────────────────
+    local secSupport = canvas:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    secSupport:SetPoint("TOPLEFT", canvas, "TOPLEFT", PAD, curY)
+    secSupport:SetText("Support")
+    curY = curY - 20 - 4
+
+    local SUPP_BTN_W   = 150
+    local SUPP_BTN_GAP = 8
+    local function MakeSuppBtn(label, url, xOff)
+        local btn = CreateFrame("Button", nil, canvas, "UIPanelButtonTemplate")
+        btn:SetPoint("TOPLEFT", canvas, "TOPLEFT", xOff, curY)
+        btn:SetSize(SUPP_BTN_W, BTN_H)
+        btn:SetText(label)
+        if Addon._styleActionButton then Addon._styleActionButton(btn) end
+        btn:SetScript("OnClick", function()
+            if C_Browser and C_Browser.OpenLink then
+                C_Browser.OpenLink(url)
+            else
+                StaticPopup_Show("LARIAS_COPY_LINK", nil, nil, url)
+            end
+        end)
+    end
+    MakeSuppBtn("Guide Doc",  SUPPORT_URL_DOC,       PAD)
+    MakeSuppBtn("Checklist",  SUPPORT_URL_CHECKLIST, PAD + SUPP_BTN_W + SUPP_BTN_GAP)
+    MakeSuppBtn("Discord",    SUPPORT_URL_DISCORD,   PAD + (SUPP_BTN_W + SUPP_BTN_GAP) * 2)
+    curY = curY - BTN_H - PAD
 
     canvas:SetHeight(math.abs(curY) + PAD)
 
