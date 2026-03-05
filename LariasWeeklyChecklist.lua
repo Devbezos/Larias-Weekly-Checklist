@@ -1305,6 +1305,7 @@ local function LayoutItems(sectionFrame, collapsed)
         local checkbox = checkboxes[i]
         checkbox:ClearAllPoints()
         checkbox:SetPoint("TOPLEFT", sectionFrame, "TOPLEFT", 0, posY)
+        checkbox:SetWidth(32)
         local rowHeight = checkbox:GetHeight() or Addon.UI.itemMinH
         local show = not collapsed and not (hideChecked and checkbox:GetChecked())
         checkbox:SetShown(show)
@@ -1575,6 +1576,60 @@ local function OnCheckboxClick(selfBtn)
     end
 end
 
+-- ── Guide-link helpers ──────────────────────────────────────────────────────
+local GUIDE_URL = "https://docs.google.com/document/d/e/2PACX-1vTGkZ2Cjr0jlv90XqW9vy9VXsVucd-yMCgHdyCvX_kQfOrexNDAC7Lf3LifuhqxrcWqJ0W3zIhvK3ii/pub"
+
+StaticPopupDialogs["LARIAS_GUIDE_LINK"] = {
+    text = "Press |cffffffffCtrl+C|r to copy, then close:",
+    button1 = "Close",
+    hasEditBox = true,
+    editBoxWidth = 380,
+    OnShow = function(self)
+        -- Defer one frame: WoW positions the editBox *after* calling OnShow,
+        -- so SetText/SetFocus here would target an invisible, unfocused box.
+        C_Timer.After(0, function()
+            local eb = self.editBox or _G[self:GetName() and (self:GetName() .. "EditBox")]
+            if not eb then return end
+            eb:SetText(GUIDE_URL)
+            eb:SetFocus()
+            eb:HighlightText()
+            eb:SetScript("OnKeyDown", function(_, key)
+                if key == "C" and IsControlKeyDown() then
+                    -- Text is already highlighted; WoW copies it natively.
+                    -- Close the popup a moment later so the copy completes.
+                    C_Timer.After(0.05, function()
+                        StaticPopup_Hide("LARIAS_GUIDE_LINK")
+                    end)
+                end
+            end)
+        end)
+    end,
+    OnAccept = function() end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    preferredIndex = 3,
+}
+
+local function ShowGuideLinkPopup()
+    StaticPopup_Show("LARIAS_GUIDE_LINK")
+end
+
+local function FormatGuideText(text)
+    -- Replace "see guide" / "check guide" (any capitalisation) with a gold
+    -- inline hyperlink.  SetHyperlinksEnabled on the parent Button lets WoW
+    -- fire OnHyperlinkClick when only that text is clicked.
+    local link = "|cffffd700|Hlarias:guide|h[CHECK GUIDE]|h|r"
+    return (text:gsub("[Ss]ee [Gg]uide",   link)
+                :gsub("[Cc]heck [Gg]uide", link))
+end
+
+local function TextHasGuide(text)
+    local lower = text:lower()
+    return lower:find("see guide", 1, true) ~= nil
+        or lower:find("check guide", 1, true) ~= nil
+end
+
 local function OnHeaderClick(header)
     -- Header click handler toggles collapsed state and relayouts.
     local sectionFrame = header and header._sectionFrame
@@ -1603,7 +1658,22 @@ local function SyncCheckboxesForSection(sectionFrame, sectionId, db)
             checkbox:ClearAllPoints()
             checkbox._sectionId = nil
             checkbox._itemId = nil
+            checkbox._isGuideRow = false
             checkbox:SetScript("OnClick", nil)
+            checkbox:SetScript("OnEnter", nil)
+            checkbox:SetScript("OnLeave", nil)
+            checkbox:SetScript("OnHyperlinkClick",  nil)
+            checkbox:SetScript("OnHyperlinkEnter", nil)
+            checkbox:SetScript("OnHyperlinkLeave", nil)
+            if checkbox.SetHyperlinksEnabled then checkbox:SetHyperlinksEnabled(false) end
+            if checkbox._hit then
+                checkbox._hit:SetScript("OnClick",  nil)
+                checkbox._hit:SetScript("OnEnter", nil)
+                checkbox._hit:SetScript("OnLeave", nil)
+            end
+            if checkbox._guideOverlay then
+                checkbox._guideOverlay:Hide()
+            end
             tinsert(Addon._checkboxPool, checkbox)
             sectionFrame._checkboxes[i] = nil
         end
@@ -1630,10 +1700,14 @@ local function SyncCheckboxesForSection(sectionFrame, sectionId, db)
         local dbKey = Key(sectionId, item.id)
         checkbox._dbKey = dbKey
 
+        local itemText = tostring(item.text or item.id)
+        local isGuide  = TextHasGuide(itemText)
+        checkbox._isGuideRow = isGuide
+
         local textLabel = checkbox.text or checkbox.Text
         if textLabel then
             textLabel:SetWidth(itemTextWidth)
-            textLabel:SetText(tostring(item.text or item.id))
+            textLabel:SetText(isGuide and FormatGuideText(itemText) or itemText)
 
             local textHeight = 0
             if textLabel.GetStringHeight then
@@ -1647,7 +1721,49 @@ local function SyncCheckboxesForSection(sectionFrame, sectionId, db)
         checkbox:SetChecked(checkedMap[dbKey] and true or false)
         RefreshItemTextColor(checkbox)
 
-        checkbox:SetScript("OnClick", OnCheckboxClick)
+        -- Restore cb and _hit to normal checkbox behaviour for every row.
+        checkbox:SetScript("OnClick",  OnCheckboxClick)
+        checkbox:SetScript("OnEnter", nil)
+        checkbox:SetScript("OnLeave", nil)
+        if checkbox._hit then
+            checkbox._hit:SetScript("OnClick",  nil)
+            checkbox._hit:SetScript("OnEnter", nil)
+            checkbox._hit:SetScript("OnLeave", nil)
+        end
+
+        if isGuide then
+            -- Enable WoW inline hyperlinks on cb so clicking |Hlarias:guide|h
+            -- text fires OnHyperlinkClick on exactly that word, nothing more.
+            if checkbox.SetHyperlinksEnabled then
+                checkbox:SetHyperlinksEnabled(true)
+            end
+            checkbox:SetScript("OnHyperlinkClick", function(_, link)
+                if link == "larias:guide" then
+                    ShowGuideLinkPopup()
+                end
+            end)
+            checkbox:SetScript("OnHyperlinkEnter", function(self_, _)
+                GameTooltip:SetOwner(self_, "ANCHOR_CURSOR")
+                GameTooltip:SetText("Click to copy guide link", 1, 1, 1, 1, true)
+                GameTooltip:Show()
+            end)
+            checkbox:SetScript("OnHyperlinkLeave", function()
+                GameTooltip:Hide()
+            end)
+            if checkbox._guideOverlay then
+                checkbox._guideOverlay:Hide()
+            end
+        else
+            if checkbox.SetHyperlinksEnabled then
+                checkbox:SetHyperlinksEnabled(false)
+            end
+            checkbox:SetScript("OnHyperlinkClick",  nil)
+            checkbox:SetScript("OnHyperlinkEnter", nil)
+            checkbox:SetScript("OnHyperlinkLeave", nil)
+            if checkbox._guideOverlay then
+                checkbox._guideOverlay:Hide()
+            end
+        end
     end
 end
 
