@@ -1581,8 +1581,8 @@ local GUIDE_URL  = "https://docs.google.com/document/d/e/2PACX-1vTGkZ2Cjr0jlv90X
 local GUIDE_LINK = "|cffffd700|Hlarias:guide|h[CHECK GUIDE]|h|r"
 
 StaticPopupDialogs["LARIAS_GUIDE_LINK"] = {
-    text = "Press |cffffffffCtrl+C|r to copy, then close:",
-    button1 = "Close",
+    text    = L.COPY_LINK_POPUP_TEXT or "Press |cffffffffCtrl+C|r to copy, then close:",
+    button1 = CLOSE or "Close",
     hasEditBox = true,
     editBoxWidth = 380,
     OnShow = function(self)
@@ -1629,7 +1629,7 @@ local function OnGuideHyperlinkClick(_, linkData)
 end
 local function OnGuideHyperlinkEnter(self_)
     GameTooltip:SetOwner(self_, "ANCHOR_CURSOR")
-    GameTooltip:SetText("Click to copy guide link", 1, 1, 1, 1, true)
+    GameTooltip:SetText(L.GUIDE_LINK_HOVER_TOOLTIP or "Click to copy guide link", 1, 1, 1, 1, true)
     GameTooltip:Show()
 end
 local function OnGuideHyperlinkLeave()

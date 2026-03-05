@@ -95,6 +95,15 @@ local STRINGS = {
 
 	TRACKING_CATALYST_LABEL = "Catalyst",
 
+	-- Copy-link popup (shown when C_Browser is unavailable)
+	COPY_LINK_POPUP_TEXT     = "Press |cffffffffCtrl+C|r to copy, then close:",
+	-- Guide hyperlink hover tooltip
+	GUIDE_LINK_HOVER_TOOLTIP = "Click to copy guide link",
+	-- Support section button labels (Settings panel + gear popup)
+	SUPPORT_BTN_GUIDE_DOC    = "Guide Doc",
+	SUPPORT_BTN_CHECKLIST    = "Checklist",
+	SUPPORT_BTN_DISCORD      = "Discord",
+
 	-- Minimap tooltip
 	MINIMAP_TOOLTIP_LEFT_CLICK_TOGGLE = "Left-click: Toggle checklist",
 	MINIMAP_TOOLTIP_RIGHT_CLICK_OPTIONS = "Right-click: Options",

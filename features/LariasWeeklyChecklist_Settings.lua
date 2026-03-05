@@ -52,8 +52,8 @@ local SUPPORT_URL_DISCORD   = _sl.discord   or "https://discord.gg/postnerfclari
 -- Always redefined (no `or` guard) so the OnShow closure always captures
 -- the current Addon reference and _pendingCopyUrl logic.
 StaticPopupDialogs["LARIAS_COPY_LINK"] = {
-    text         = "Press |cffffffffCtrl+C|r to copy, then close:",
-    button1      = "Close",
+    text         = (Addon.L or {}).COPY_LINK_POPUP_TEXT or "Press |cffffffffCtrl+C|r to copy, then close:",
+    button1      = CLOSE or "Close",
     hasEditBox   = true,
     editBoxWidth = 320,
     timeout      = 0,
@@ -642,9 +642,9 @@ local function BuildPanel()
         if Addon._styleActionButton then Addon._styleActionButton(btn) end
         btn:SetScript("OnClick", function() Addon.OpenSupportLink(url) end)
     end
-    MakeSuppBtn("Guide Doc",  SUPPORT_URL_DOC,       PAD)
-    MakeSuppBtn("Checklist",  SUPPORT_URL_CHECKLIST, PAD + SUPP_BTN_W + SUPP_BTN_GAP)
-    MakeSuppBtn("Discord",    SUPPORT_URL_DISCORD,   PAD + (SUPP_BTN_W + SUPP_BTN_GAP) * 2)
+    MakeSuppBtn(L.SUPPORT_BTN_GUIDE_DOC or "Guide Doc",  SUPPORT_URL_DOC,       PAD)
+    MakeSuppBtn(L.SUPPORT_BTN_CHECKLIST  or "Checklist",  SUPPORT_URL_CHECKLIST, PAD + SUPP_BTN_W + SUPP_BTN_GAP)
+    MakeSuppBtn(L.SUPPORT_BTN_DISCORD    or "Discord",    SUPPORT_URL_DISCORD,   PAD + (SUPP_BTN_W + SUPP_BTN_GAP) * 2)
     curY = curY - BTN_H - PAD
 
     canvas:SetHeight(math.abs(curY) + PAD)

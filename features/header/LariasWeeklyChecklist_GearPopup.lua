@@ -34,10 +34,11 @@ local LOCALE_NATIVE_NAMES = {
 -- Support resource URLs displayed in the Support section of the gear popup.
 local function GetSupportLinks()
     local sl = Addon.TRACKING and Addon.TRACKING.supportLinks or {}
+    local _L = Addon.L or {}
     return {
-        { label = "Guide Doc",  url = sl.doc       or "" },
-        { label = "Checklist",  url = sl.checklist or "" },
-        { label = "Discord",    url = sl.discord   or "" },
+        { label = _L.SUPPORT_BTN_GUIDE_DOC or "Guide Doc",  url = sl.doc       or "" },
+        { label = _L.SUPPORT_BTN_CHECKLIST  or "Checklist",  url = sl.checklist or "" },
+        { label = _L.SUPPORT_BTN_DISCORD    or "Discord",    url = sl.discord   or "" },
     }
 end
 
