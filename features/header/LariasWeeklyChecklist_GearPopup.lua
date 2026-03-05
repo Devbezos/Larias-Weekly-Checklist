@@ -32,11 +32,14 @@ local LOCALE_NATIVE_NAMES = {
 }
 
 -- Support resource URLs displayed in the Support section of the gear popup.
-local SUPPORT_LINKS = {
-    { label = "Guide Doc",  url = "https://docs.google.com/document/d/e/2PACX-1vTGkZ2Cjr0jlv90XqW9vy9VXsVucd-yMCgHdyCvX_kQfOrexNDAC7Lf3LifuhqxrcWqJ0W3zIhvK3ii/pub" },
-    { label = "Checklist",  url = "https://docs.google.com/spreadsheets/d/1iK2SZUcz_ljnkdTG7KW6pqfzaUDuSgnlh1HupcLrkus/edit?gid=53744607#gid=53744607" },
-    { label = "Discord",    url = "https://discord.gg/postnerfclarity" },
-}
+local function GetSupportLinks()
+    local sl = Addon.TRACKING and Addon.TRACKING.supportLinks or {}
+    return {
+        { label = "Guide Doc",  url = sl.doc       or "" },
+        { label = "Checklist",  url = sl.checklist or "" },
+        { label = "Discord",    url = sl.discord   or "" },
+    }
+end
 
 -- Creates a small 16×16 colored swatch button.  Call swatch:SetColor(r,g,b).
 local function MakePopupSwatch(parent)
@@ -462,18 +465,22 @@ function Addon:ToggleGearPopup(anchor, growRight)
         })
 
         -- ── Right column: 3 compact [swatch] Label rows ──────────────────────
-        -- Zone height = the same 2-slider span; stack rows centered within it.
-        local SW_H      = 16
-        local SW_GAP    = 6
-        local zoneH     = 2 * SROW_H_P + 8            -- matches OPAC_BOT..top of scale
-        local nColors   = #GEAR_COLOR_DEFS
-        local stackH    = nColors * SW_H + (nColors - 1) * SW_GAP
-        local colorBase = OPAC_BOT + math.floor((zoneH - stackH) / 2)
+        -- Pin each swatch to its matching slider rather than centering as a stack:
+        --   si=1 Background → vertically centered on the Scale slider
+        --   si=2 Text       → centered in the gap between the two sliders
+        --   si=3 Header     → vertically centered on the Opacity slider
+        local SW_H = 16
+        local half = math.floor(SW_H / 2)
+        local swatchBotYs = {
+            SCALE_BOT + math.floor(SROW_H_P / 2) - half,          -- Background ↔ Scale
+            OPAC_BOT  + SROW_H_P + 4             - half,          -- Text ↔ gap
+            OPAC_BOT  + math.floor(SROW_H_P / 2) - half,          -- Header ↔ Opacity
+        }
 
         p._gearColorSwatches = {}
         p._gearColorLabels   = {}
         for si, sd in ipairs(GEAR_COLOR_DEFS) do
-            local rowBotY = colorBase + (nColors - si) * (SW_H + SW_GAP)
+            local rowBotY = swatchBotYs[si] or swatchBotYs[#swatchBotYs]
             local _L = Addon.L or {}
 
             local sw = MakePopupSwatch(p)
@@ -516,20 +523,15 @@ function Addon:ToggleGearPopup(anchor, growRight)
         verLabel:SetTextColor(0.45, 0.45, 0.45, 0.6)
 
         -- ── Support links (Guide Doc / Checklist / Discord) ─────────────────────
+        -- Divider above the buttons.
         local suppDiv = p:CreateTexture(nil, "ARTWORK")
         suppDiv:SetColorTexture(0.3, 0.3, 0.3, 0.5)
         suppDiv:SetHeight(1)
-        suppDiv:SetPoint("BOTTOMLEFT",  p, "BOTTOMLEFT",  PAD,  33)
-        suppDiv:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -PAD, 33)
-
-        local suppTitleLbl = p:CreateFontString(nil, "OVERLAY")
-        suppTitleLbl:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
-        suppTitleLbl:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", PAD + 2, 36)
-        suppTitleLbl:SetText("Support")
-        suppTitleLbl:SetTextColor(0.60, 0.60, 0.60, 1)
+        suppDiv:SetPoint("BOTTOMLEFT",  p, "BOTTOMLEFT",  PAD,  76)
+        suppDiv:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -PAD, 76)
 
         local SUPP_BTN_W = math.floor((p:GetWidth() - 2 * PAD - 8) / 3)
-        for si, sl in ipairs(SUPPORT_LINKS) do
+        for si, sl in ipairs(GetSupportLinks()) do
             local _url = sl.url
             local sx   = PAD + (si - 1) * (SUPP_BTN_W + 4)
             local sbtn = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
@@ -537,13 +539,7 @@ function Addon:ToggleGearPopup(anchor, growRight)
             sbtn:SetSize(SUPP_BTN_W, 22)
             sbtn:SetText(sl.label)
             if Addon._styleActionButton then Addon._styleActionButton(sbtn) end
-            sbtn:SetScript("OnClick", function()
-                if C_Browser and C_Browser.OpenLink then
-                    C_Browser.OpenLink(_url)
-                else
-                    StaticPopup_Show("LARIAS_COPY_LINK", nil, nil, _url)
-                end
-            end)
+            sbtn:SetScript("OnClick", function() Addon.OpenSupportLink(_url) end)
         end
 
         -- ── Language toggle button (non-English clients only) ────────────────────
