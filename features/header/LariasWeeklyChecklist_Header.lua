@@ -306,9 +306,20 @@ function Addon:CreateHeader(frame)
                     btn:SetHeight(PICKER_ROW_HEIGHT)
                     btn:SetText(label)
                     btn:SetEnabled(true)
-                    local capturedId = id
+                    local capturedId    = id
+                    local capturedTitle = section.title or label
                     btn:SetScript("OnClick", function()
                         HandlePick(capturedId, Addon._scrollFrame)
+                    end)
+                    btn:SetScript("OnEnter", function(self_)
+                        GameTooltip:SetOwner(self_, "ANCHOR_RIGHT")
+                        GameTooltip:SetText(
+                            (L and L.PICKER_RESET_WEEK_TOOLTIP or "Reset to week:") .. "\n" .. capturedTitle,
+                            1, 1, 1, 1, true)
+                        GameTooltip:Show()
+                    end)
+                    btn:SetScript("OnLeave", function()
+                        GameTooltip:Hide()
                     end)
 
                     tinsert(picker._buttons, btn)
