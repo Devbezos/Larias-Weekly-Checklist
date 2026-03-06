@@ -91,8 +91,22 @@ local STRINGS = {
 	TRACKING_NO_ID = "No ID",
 	TRACKING_TRADE_UP_SUFFIX = " Convert)",
 	TRACKING_CONVERT_TOOLTIP = "Number of crests you will gain from converting previous crests",
+	TRACKING_CREST_AMOUNT_TOOLTIP = "Accurately tracks how many crests you can hold including overcapped crests",
 
 	TRACKING_CATALYST_LABEL = "Catalyst",
+
+	-- Locale reload popup (shown after changing language)
+	LOCALE_RELOAD_TEXT       = "Language change saved. Reload UI to apply the new language.",
+	LOCALE_RELOAD_BTN_NOW    = "Reload Now",
+	LOCALE_RELOAD_BTN_LATER  = "Later",
+	-- Copy-link popup (shown when C_Browser is unavailable)
+	COPY_LINK_POPUP_TEXT     = "Press |cffffffffCtrl+C|r to copy:",
+	-- Guide hyperlink hover tooltip
+	GUIDE_LINK_HOVER_TOOLTIP = "Click to copy guide link",
+	-- Support section button labels (Settings panel + gear popup)
+	SUPPORT_BTN_GUIDE_DOC    = "Guide Doc",
+	SUPPORT_BTN_CHECKLIST    = "Checklist",
+	SUPPORT_BTN_DISCORD      = "Discord",
 
 	-- Minimap tooltip
 	MINIMAP_TOOLTIP_LEFT_CLICK_TOGGLE = "Left-click: Toggle checklist",

@@ -20,21 +20,80 @@ local _colorSwatches = {} -- { swatch, def }
 local _langDropdownBtn   -- reference to locale dropdown button; synced in OnShow
 local _settingsScaleSync  -- Sync() closure for the settings-panel Scale slider
 local _settingsOpacSync   -- Sync() closure for the settings-panel Opacity slider
+-- Holds the URL for the most-recently clicked support button so the
+-- LARIAS_COPY_LINK popup can reliably display it (self.data can be nil
+-- on some client builds when the popup fires before WoW assigns it).
+-- _pendingCopyUrl lives on Addon so GearPopup can set it too.
+-- Initialise only if not already set (file may reload).
+Addon._pendingCopyUrl = Addon._pendingCopyUrl or ""
 
 local OpenColorPicker = Addon.Controls.OpenColorPicker
 
 -- Reload-prompt shown after the player picks a different language.
 -- Defined once at load time so StaticPopup_Show can reference it anywhere.
 StaticPopupDialogs["LARIAS_LOCALE_RELOAD"] = StaticPopupDialogs["LARIAS_LOCALE_RELOAD"] or {
-    text      = "Language change saved. Reload UI to apply the new language.",
-    button1   = "Reload Now",
-    button2   = "Later",
+    text      = (Addon.L or {}).LOCALE_RELOAD_TEXT      or "Language change saved. Reload UI to apply the new language.",
+    button1   = (Addon.L or {}).LOCALE_RELOAD_BTN_NOW   or "Reload Now",
+    button2   = (Addon.L or {}).LOCALE_RELOAD_BTN_LATER or "Later",
     OnAccept  = function() ReloadUI() end,
     timeout   = 0,
     whileDead = true,
     hideOnEscape = true,
     preferredIndex = 3,
 }
+
+-- Support resource URLs used by the Support section at the bottom of this panel.
+local _sl = Addon.TRACKING and Addon.TRACKING.supportLinks or {}
+local SUPPORT_URL_DOC       = _sl.doc       or "https://docs.google.com/document/d/e/2PACX-1vTGkZ2Cjr0jlv90XqW9vy9VXsVucd-yMCgHdyCvX_kQfOrexNDAC7Lf3LifuhqxrcWqJ0W3zIhvK3ii/pub"
+local SUPPORT_URL_CHECKLIST = _sl.checklist or "https://docs.google.com/spreadsheets/d/1iK2SZUcz_ljnkdTG7KW6pqfzaUDuSgnlh1HupcLrkus/edit?gid=53744607#gid=53744607"
+local SUPPORT_URL_DISCORD   = _sl.discord   or "https://discord.gg/postnerfclarity"
+
+-- Generic "copy link" popup used when C_Browser.OpenLink is unavailable.
+-- Always redefined (no `or` guard) so the OnShow closure always captures
+-- the current Addon reference and _pendingCopyUrl logic.
+StaticPopupDialogs["LARIAS_COPY_LINK"] = {
+    text         = (Addon.L or {}).COPY_LINK_POPUP_TEXT or "Press |cffffffffCtrl+C|r to copy, then close:",
+    button1      = CLOSE or "Close",
+    hasEditBox   = true,
+    editBoxWidth = 320,
+    timeout      = 0,
+    whileDead    = true,
+    hideOnEscape = true,
+    preferredIndex = 5,
+    OnShow = function(self)
+        -- Defer one frame: WoW positions the editBox *after* calling OnShow.
+        C_Timer.After(0, function()
+            local eb = self.editBox or _G[self:GetName() and (self:GetName() .. "EditBox")]
+            if not eb then return end
+            eb:SetText(Addon._pendingCopyUrl or "")
+            eb:SetFocus()
+            eb:HighlightText()
+            eb:SetScript("OnKeyDown", function(_, key)
+                if key == "C" and IsControlKeyDown() then
+                    C_Timer.After(0.05, function()
+                        StaticPopup_Hide("LARIAS_COPY_LINK")
+                    end)
+                end
+            end)
+        end)
+    end,
+    EditBoxOnEscapePressed = function(self)
+        self:GetParent():Hide()
+    end,
+    OnAccept = function() end,
+}
+
+--- Shared helper: opens a URL in the browser, or falls back to the copy-link
+--- popup. Call this from any button in any file instead of duplicating the logic.
+function Addon.OpenSupportLink(url)
+    if not url or url == "" then return end
+    if C_Browser and C_Browser.OpenLink then
+        C_Browser.OpenLink(url)
+    else
+        Addon._pendingCopyUrl = url
+        StaticPopup_Show("LARIAS_COPY_LINK", nil, nil, url)
+    end
+end
 
 -- Creates a small colored swatch button on `parent`.
 -- Call swatch:SetColor(r,g,b) to update the display color.
@@ -562,7 +621,34 @@ local function BuildPanel()
     -- Store reference so OnShow can sync the button text.
     _langDropdownBtn = langDropBtn
 
-    curY = curY - BTN_H - 4
+    curY = curY - BTN_H - 14
+
+    -- ── Divider above link buttons ────────────────────────────────────────────
+    local divSupport = canvas:CreateTexture(nil, "ARTWORK")
+    divSupport:SetColorTexture(0.3, 0.3, 0.3, 0.6)
+    divSupport:SetHeight(1)
+    divSupport:SetPoint("TOPLEFT",  canvas, "TOPLEFT",  PAD,  curY)
+    divSupport:SetPoint("TOPRIGHT", canvas, "TOPRIGHT", -PAD, curY)
+    curY = curY - 8
+
+    local SUPP_BTN_W   = 150
+    local SUPP_BTN_GAP = 8
+
+    -- MakeSuppBtn: create a fixed-width support button at xOff from canvas TOPLEFT.
+    -- Clicking it calls OpenSupportLink, which tries C_Browser first and falls
+    -- back to the LARIAS_COPY_LINK clipboard popup.
+    local function MakeSuppBtn(label, url, xOff)
+        local btn = CreateFrame("Button", nil, canvas, "UIPanelButtonTemplate")
+        btn:SetPoint("TOPLEFT", canvas, "TOPLEFT", xOff, curY)
+        btn:SetSize(SUPP_BTN_W, BTN_H)
+        btn:SetText(label)
+        if Addon._styleActionButton then Addon._styleActionButton(btn) end
+        btn:SetScript("OnClick", function() Addon.OpenSupportLink(url) end)
+    end
+    MakeSuppBtn(L.SUPPORT_BTN_GUIDE_DOC or "Guide Doc",  SUPPORT_URL_DOC,       PAD)
+    MakeSuppBtn(L.SUPPORT_BTN_CHECKLIST  or "Checklist",  SUPPORT_URL_CHECKLIST, PAD + SUPP_BTN_W + SUPP_BTN_GAP)
+    MakeSuppBtn(L.SUPPORT_BTN_DISCORD    or "Discord",    SUPPORT_URL_DISCORD,   PAD + (SUPP_BTN_W + SUPP_BTN_GAP) * 2)
+    curY = curY - BTN_H - PAD
 
     canvas:SetHeight(math.abs(curY) + PAD)
 

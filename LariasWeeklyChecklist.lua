@@ -541,15 +541,10 @@ function Addon:OnAddonLoaded(_, loadedName)
     end
 end
 
+-- Resolve wipe once: use WoW's built-in C wipe when available, otherwise fall back.
+local _wipe = wipe or function(t) for k in pairs(t) do t[k] = nil end end
 local function Wipe(tableToWipe)
-    if not tableToWipe then return end
-    if wipe then
-        wipe(tableToWipe)
-        return
-    end
-    for key in pairs(tableToWipe) do
-        tableToWipe[key] = nil
-    end
+    if tableToWipe then _wipe(tableToWipe) end
 end
 
 Addon._sectionPool = Addon._sectionPool or {}
@@ -563,12 +558,17 @@ Addon._sectionsIndexById = Addon._sectionsIndexById or {}
 
 -- Returns a stable per-character key: always "CharName - RealmName".
 -- Lives in the main file so it is available before any module loads.
+-- Cached after first successful resolution (UnitName/RealmName never change post-login).
+local _cachedProfileKey
 function Addon:GetCurrentProfileKey()
-    local name  = (UnitName    and UnitName("player"))   or ""
-    local realm = (GetRealmName and GetRealmName())      or ""
-    if name ~= "" and realm ~= "" then return name .. " - " .. realm end
-    if name ~= "" then return name end
-    return ""
+    if _cachedProfileKey then return _cachedProfileKey end
+    local name  = UnitName("player") or ""
+    local realm = GetRealmName()      or ""
+    local key = (name ~= "" and realm ~= "") and (name .. " - " .. realm)
+             or (name ~= "" and name)
+             or ""
+    if key ~= "" then _cachedProfileKey = key end
+    return key
 end
 
 function Addon:EnsureDB()
@@ -586,12 +586,13 @@ function Addon:EnsureDB()
         for k, v in pairs(CHAR_DEFAULTS) do
             if cdb[k] == nil then cdb[k] = v end
         end
+        -- Ensure required sub-tables exist; done here so these checks only run once.
+        if cdb.checked           == nil then cdb.checked           = {} end
+        if cdb.collapsedSections == nil then cdb.collapsedSections = {} end
+        if cdb.trackingSnapshot  == nil then cdb.trackingSnapshot  = {} end
+        if cdb.sectionCompleted  == nil then cdb.sectionCompleted  = {} end
         cdb._lariasDefaultsApplied = true
     end
-    if cdb.checked           == nil then cdb.checked           = {} end
-    if cdb.collapsedSections == nil then cdb.collapsedSections = {} end
-    if cdb.trackingSnapshot  == nil then cdb.trackingSnapshot  = {} end
-    if cdb.sectionCompleted  == nil then cdb.sectionCompleted  = {} end
     return cdb
 end
 
@@ -838,6 +839,16 @@ function Addon:UpdateLocalizedUI()
     if self.UpdateStatusBanner then self:UpdateStatusBanner() end
 end
 
+-- Hoisted once: SetBackdrop is called per frame creation and per pool reuse,
+-- so avoiding repeated table allocation here is worthwhile.
+local BACKDROP_DEF = {
+    bgFile   = "Interface\\Buttons\\WHITE8x8",
+    edgeFile = "Interface\\Buttons\\WHITE8x8",
+    tile     = false,
+    edgeSize = 1,
+    insets   = { left = 3, right = 3, top = 3, bottom = 3 },
+}
+
 -- Apply the shared theme backdrop to a frame.
 -- Also mixes in BackdropTemplateMixin when the frame lacks SetBackdrop, so
 -- callers don't need a separate Mixin guard before calling this.
@@ -847,13 +858,7 @@ function Addon:ApplyTheme(frameObj)
         Mixin(frameObj, BackdropTemplateMixin)
     end
     if not frameObj.SetBackdrop then return end
-    frameObj:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = "Interface\\Buttons\\WHITE8x8",
-        tile = false,
-        edgeSize = 1,
-        insets = { left = 3, right = 3, top = 3, bottom = 3 },
-    })
+    frameObj:SetBackdrop(BACKDROP_DEF)
     frameObj:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, Addon.THEME.bg.a)
     frameObj:SetBackdropBorderColor(Addon.THEME.border.r, Addon.THEME.border.g, Addon.THEME.border.b, Addon.THEME.border.a)
 end
@@ -1267,13 +1272,12 @@ local function AcquireCheckbox(parentSectionFrame)
         checkbox = Addon.Controls.NewCheckBox(parentSectionFrame, nil, 32)
     end
 
-    local textLabel = checkbox.text or checkbox.Text
+    -- checkbox.text is always set by NewCheckBox; .Text fallback is dead code.
+    local textLabel = checkbox.text
     if textLabel then
         textLabel:SetJustifyH("LEFT")
-        if textLabel.SetWordWrap then textLabel:SetWordWrap(true) end
-        if textLabel.SetTextColor then
-            textLabel:SetTextColor(Addon.THEME.text.r, Addon.THEME.text.g, Addon.THEME.text.b, Addon.THEME.text.a)
-        end
+        textLabel:SetWordWrap(true)
+        textLabel:SetTextColor(Addon.THEME.text.r, Addon.THEME.text.g, Addon.THEME.text.b, Addon.THEME.text.a)
     end
 
     return checkbox
@@ -1283,28 +1287,28 @@ local UpdateSectionVisuals
 local function ComputeHeaderHeight(sectionFrame, headerTextWidth)
     -- Header height is dynamic based on text wrapping.
     sectionFrame._title:SetWidth(headerTextWidth)
-    local textHeight = 0
-    if sectionFrame._title.GetStringHeight then
-        textHeight = sectionFrame._title:GetStringHeight() or 0
-    end
+    local textHeight = sectionFrame._title:GetStringHeight() or 0
     local headerHeight = max(Addon.UI.headerMinH, textHeight + 6)
     sectionFrame._header:SetHeight(headerHeight)
     sectionFrame._headerBlockHeight = headerHeight + Addon.UI.headerBottomPad
 end
 
-local function LayoutItems(sectionFrame, collapsed)
+local function LayoutItems(sectionFrame, collapsed, hideCompletedTasks)
     -- Stack item rows under the header; hide when collapsed.
     -- When the "hide completed tasks" pref is active, skip checked items from
     -- the layout entirely so the section shrinks to fit only visible rows.
-    local posY       = -(sectionFrame._headerBlockHeight or (Addon.UI.headerMinH + Addon.UI.headerBottomPad))
+    -- hideCompletedTasks is passed as a parameter (rather than read from prefs
+    -- here) so callers can hoist the single EnsurePrefs() call and avoid
+    -- repeating it for every section on each layout pass.
+    local posY        = -(sectionFrame._headerBlockHeight or (Addon.UI.headerMinH + Addon.UI.headerBottomPad))
     local totalHeight = 0
-    local prefs      = Addon:EnsurePrefs()
-    local hideChecked = not collapsed and prefs.hideCompletedTasks
-    local checkboxes = sectionFrame._checkboxes
+    local hideChecked = not collapsed and hideCompletedTasks
+    local checkboxes  = sectionFrame._checkboxes
     for i = 1, #checkboxes do
         local checkbox = checkboxes[i]
         checkbox:ClearAllPoints()
         checkbox:SetPoint("TOPLEFT", sectionFrame, "TOPLEFT", 0, posY)
+        checkbox:SetWidth(32) -- constrain the tick-box click-target; the text label inside is sized separately by UpdateItems
         local rowHeight = checkbox:GetHeight() or Addon.UI.itemMinH
         local show = not collapsed and not (hideChecked and checkbox:GetChecked())
         checkbox:SetShown(show)
@@ -1549,7 +1553,7 @@ local function OnCheckboxClick(selfBtn)
     local collapsed = IsSectionCollapsed(sectionId, database) or false
     if secCompleteNow then collapsed = true end
 
-    LayoutItems(sectionFrame, collapsed)
+    LayoutItems(sectionFrame, collapsed, prefs.hideCompletedTasks)
     UpdateSectionHeight(sectionFrame, collapsed)
 
     if hideDone and secCompleteNow then
@@ -1573,6 +1577,39 @@ local function OnCheckboxClick(selfBtn)
     if Addon.UpdateCompletionEasterEgg then
         Addon:UpdateCompletionEasterEgg(database)
     end
+end
+
+-- ── Guide-link helpers ──────────────────────────────────────────────────────
+-- GUIDE_URL: read from constants (same source as the Settings/GearPopup support buttons).
+local GUIDE_URL  = (Addon.TRACKING and Addon.TRACKING.supportLinks and Addon.TRACKING.supportLinks.doc)
+                   or "https://docs.google.com/document/d/e/2PACX-1vTGkZ2Cjr0jlv90XqW9vy9VXsVucd-yMCgHdyCvX_kQfOrexNDAC7Lf3LifuhqxrcWqJ0W3zIhvK3ii/pub"
+local GUIDE_LINK = "|cffffd700|Hlarias:guide|h[CHECK GUIDE]|h|r"
+
+-- FormatGuideText replaces "see guide" / "check guide" (any capitalisation)
+-- with a gold inline hyperlink and returns the formatted string plus a boolean
+-- indicating whether any replacement was made.  Combining detection and
+-- formatting avoids a separate TextHasGuide pass with its own string allocation.
+local function FormatGuideText(text)
+    local n1, n2, result
+    result, n1 = text:gsub("[Ss]ee [Gg]uide",   GUIDE_LINK)
+    result, n2 = result:gsub("[Cc]heck [Gg]uide", GUIDE_LINK)
+    return result, (n1 + n2) > 0
+end
+
+-- Shared hyperlink handlers — defined once at module level so no new closure
+-- is allocated per row per sync call.
+local function OnGuideHyperlinkClick(_, linkData)
+    if linkData == "larias:guide" then
+        Addon.OpenSupportLink(GUIDE_URL)
+    end
+end
+local function OnGuideHyperlinkEnter(self_)
+    GameTooltip:SetOwner(self_, "ANCHOR_CURSOR")
+    GameTooltip:SetText(L.GUIDE_LINK_HOVER_TOOLTIP or "Click to copy guide link", 1, 1, 1, 1, true)
+    GameTooltip:Show()
+end
+local function OnGuideHyperlinkLeave()
+    GameTooltip:Hide()
 end
 
 local function OnHeaderClick(header)
@@ -1603,7 +1640,14 @@ local function SyncCheckboxesForSection(sectionFrame, sectionId, db)
             checkbox:ClearAllPoints()
             checkbox._sectionId = nil
             checkbox._itemId = nil
-            checkbox:SetScript("OnClick", nil)
+            checkbox._isGuideRow = false  -- explicitly reset so a recycled checkbox doesn't carry stale guide-row state
+            checkbox:SetScript("OnClick",          nil)
+            checkbox:SetScript("OnEnter",          nil)
+            checkbox:SetScript("OnLeave",          nil)
+            checkbox:SetScript("OnHyperlinkClick",  nil)
+            checkbox:SetScript("OnHyperlinkEnter", nil)
+            checkbox:SetScript("OnHyperlinkLeave", nil)
+            if checkbox.SetHyperlinksEnabled then checkbox:SetHyperlinksEnabled(false) end
             tinsert(Addon._checkboxPool, checkbox)
             sectionFrame._checkboxes[i] = nil
         end
@@ -1630,15 +1674,16 @@ local function SyncCheckboxesForSection(sectionFrame, sectionId, db)
         local dbKey = Key(sectionId, item.id)
         checkbox._dbKey = dbKey
 
-        local textLabel = checkbox.text or checkbox.Text
+        local itemText = tostring(item.text or item.id)
+        local formattedText, isGuide = FormatGuideText(itemText)
+        checkbox._isGuideRow = isGuide
+
+        local textLabel = checkbox.text  -- always set by NewCheckBox
         if textLabel then
             textLabel:SetWidth(itemTextWidth)
-            textLabel:SetText(tostring(item.text or item.id))
+            textLabel:SetText(formattedText)
 
-            local textHeight = 0
-            if textLabel.GetStringHeight then
-                textHeight = textLabel:GetStringHeight() or 0
-            end
+            local textHeight = textLabel:GetStringHeight() or 0
             checkbox:SetHeight(max(minRowHeight, textHeight + itemTextPad))
         else
             checkbox:SetHeight(minRowHeight)
@@ -1647,7 +1692,26 @@ local function SyncCheckboxesForSection(sectionFrame, sectionId, db)
         checkbox:SetChecked(checkedMap[dbKey] and true or false)
         RefreshItemTextColor(checkbox)
 
-        checkbox:SetScript("OnClick", OnCheckboxClick)
+        -- Restore cb to normal checkbox behaviour for every row.
+        checkbox:SetScript("OnClick",  OnCheckboxClick)
+        checkbox:SetScript("OnEnter", nil)
+        checkbox:SetScript("OnLeave", nil)
+
+        if isGuide then
+            if checkbox.SetHyperlinksEnabled then
+                checkbox:SetHyperlinksEnabled(true)
+            end
+            checkbox:SetScript("OnHyperlinkClick",  OnGuideHyperlinkClick)
+            checkbox:SetScript("OnHyperlinkEnter", OnGuideHyperlinkEnter)
+            checkbox:SetScript("OnHyperlinkLeave", OnGuideHyperlinkLeave)
+        else
+            if checkbox.SetHyperlinksEnabled then
+                checkbox:SetHyperlinksEnabled(false)
+            end
+            checkbox:SetScript("OnHyperlinkClick",  nil)
+            checkbox:SetScript("OnHyperlinkEnter", nil)
+            checkbox:SetScript("OnHyperlinkLeave", nil)
+        end
     end
 end
 
@@ -1696,7 +1760,7 @@ UpdateSectionVisuals = function(sectionFrame, sectionId)
         end
     end
 
-    LayoutItems(sectionFrame, collapsed)
+    LayoutItems(sectionFrame, collapsed, prefs.hideCompletedTasks)
     UpdateSectionHeight(sectionFrame, collapsed)
 end
 

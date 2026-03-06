@@ -338,6 +338,9 @@ local function GetCrestLines()
     local highestTradeTarget, gained = ComputeCrestTradeup(cache, crestCount, batchLower, batchHigher)
     local crestLabels = BuildCrestLabels(ids, crestCount)
     local tooltipTexts = {}
+    -- Hoist the base tooltip string out of the loop to avoid repeated locale lookups.
+    -- For trade-up rows the convert tooltip is appended as a second line below.
+    local _crestAmountTip = L.TRACKING_CREST_AMOUNT_TOOLTIP or "Accurately tracks how many crests you can hold including overcapped crests"
     for i = 1, crestCount do
         local id = ids[i]
         if id then
@@ -351,6 +354,7 @@ local function GetCrestLines()
                 else
                     xy = tostring(cur); color = COLORS.green
                 end
+                tooltipTexts[i] = _crestAmountTip
                 local tradeUp = ""
                 if highestTradeTarget and i == highestTradeTarget then
                     local n = tonumber(gained[i]) or 0
@@ -358,7 +362,10 @@ local function GetCrestLines()
                         tradeUp = ColorWrap(COLORS.dim, " (")
                             .. ColorWrap("ff4da6ff", "+" .. tostring(n))
                             .. ColorWrap(COLORS.dim, L.TRACKING_TRADE_UP_SUFFIX or "")
-                        tooltipTexts[i] = L.TRACKING_CONVERT_TOOLTIP or ""
+                        local convertTip = L.TRACKING_CONVERT_TOOLTIP or ""
+                        if convertTip ~= "" then
+                            tooltipTexts[i] = tooltipTexts[i] .. "\n" .. convertTip
+                        end
                     end
                 end
                 local lbl = ColorWrap(GetCurrencyQualityColor(id), tostring(name)) .. tradeUp

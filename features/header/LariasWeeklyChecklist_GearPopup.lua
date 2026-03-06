@@ -31,6 +31,17 @@ local LOCALE_NATIVE_NAMES = {
     trTR = "Türkçe",
 }
 
+-- Support resource URLs displayed in the Support section of the gear popup.
+local function GetSupportLinks()
+    local sl = Addon.TRACKING and Addon.TRACKING.supportLinks or {}
+    local _L = Addon.L or {}
+    return {
+        { label = _L.SUPPORT_BTN_GUIDE_DOC or "Guide Doc",  url = sl.doc       or "" },
+        { label = _L.SUPPORT_BTN_CHECKLIST  or "Checklist",  url = sl.checklist or "" },
+        { label = _L.SUPPORT_BTN_DISCORD    or "Discord",    url = sl.discord   or "" },
+    }
+end
+
 -- Creates a small 16×16 colored swatch button.  Call swatch:SetColor(r,g,b).
 local function MakePopupSwatch(parent)
     local btn = CreateFrame("Button", nil, parent)
@@ -156,8 +167,8 @@ function Addon:SyncGearPopup()
         local PAD     = 10
         local TILE_H  = 34
         local cbsY    = 47  -- PAD(10) + reset(22) + 6 + div(1) + 8
-        -- VER_PAD covers slider section + color section + credit/ver + lang btn (30 if visible).
-        local VER_PAD = showLangToggle and 170 or 140
+        -- VER_PAD covers slider section + color section + support links + credit/ver + lang btn (30 if visible).
+        local VER_PAD = showLangToggle and 202 or 172
         local totalH  = cbsY + 5 * TILE_H + PAD + VER_PAD
         p:SetHeight(totalH)
     end
@@ -387,7 +398,7 @@ function Addon:ToggleGearPopup(anchor, growRight)
 
         -- ── Compact color swatches – beside sliders (right column) ──────────
         -- colorSectionDiv divides the slider+color zone from the credit block.
-        local COLOR_DIV_Y = 40   -- divider bottom (px from popup BOTTOMLEFT)
+        local COLOR_DIV_Y = 72   -- divider bottom (px from popup BOTTOMLEFT); accounts for the support link section below
         local colorSectionDiv = p:CreateTexture(nil, "ARTWORK")
         colorSectionDiv:SetColorTexture(0.3, 0.3, 0.3, 0.5)
         colorSectionDiv:SetHeight(1)
@@ -455,18 +466,22 @@ function Addon:ToggleGearPopup(anchor, growRight)
         })
 
         -- ── Right column: 3 compact [swatch] Label rows ──────────────────────
-        -- Zone height = the same 2-slider span; stack rows centered within it.
-        local SW_H      = 16
-        local SW_GAP    = 6
-        local zoneH     = 2 * SROW_H_P + 8            -- matches OPAC_BOT..top of scale
-        local nColors   = #GEAR_COLOR_DEFS
-        local stackH    = nColors * SW_H + (nColors - 1) * SW_GAP
-        local colorBase = OPAC_BOT + math.floor((zoneH - stackH) / 2)
+        -- Pin each swatch to its matching slider rather than centering as a stack:
+        --   si=1 Background → vertically centered on the Scale slider
+        --   si=2 Text       → centered in the gap between the two sliders
+        --   si=3 Header     → vertically centered on the Opacity slider
+        local SW_H = 16
+        local half = math.floor(SW_H / 2)
+        local swatchBotYs = {
+            SCALE_BOT + math.floor(SROW_H_P / 2) - half,          -- Background ↔ Scale
+            OPAC_BOT  + SROW_H_P + 4             - half,          -- Text ↔ gap
+            OPAC_BOT  + math.floor(SROW_H_P / 2) - half,          -- Header ↔ Opacity
+        }
 
         p._gearColorSwatches = {}
         p._gearColorLabels   = {}
         for si, sd in ipairs(GEAR_COLOR_DEFS) do
-            local rowBotY = colorBase + (nColors - si) * (SW_H + SW_GAP)
+            local rowBotY = swatchBotYs[si] or swatchBotYs[#swatchBotYs]
             local _L = Addon.L or {}
 
             local sw = MakePopupSwatch(p)
@@ -508,21 +523,42 @@ function Addon:ToggleGearPopup(anchor, growRight)
         end
         verLabel:SetTextColor(0.45, 0.45, 0.45, 0.6)
 
+        -- ── Support links (Guide Doc / Checklist / Discord) ─────────────────────
+        -- Divider above the buttons.
+        local suppDiv = p:CreateTexture(nil, "ARTWORK")
+        suppDiv:SetColorTexture(0.3, 0.3, 0.3, 0.5)
+        suppDiv:SetHeight(1)
+        suppDiv:SetPoint("BOTTOMLEFT",  p, "BOTTOMLEFT",  PAD,  76)
+        suppDiv:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -PAD, 76)
+
+        -- Divide available width (minus two side-pads and two 4 px inter-button gaps) equally among 3 buttons.
+        local SUPP_BTN_W = math.floor((p:GetWidth() - 2 * PAD - 8) / 3)
+        for si, sl in ipairs(GetSupportLinks()) do
+            local _url = sl.url
+            local sx   = PAD + (si - 1) * (SUPP_BTN_W + 4)
+            local sbtn = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
+            sbtn:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", sx, 48)
+            sbtn:SetSize(SUPP_BTN_W, 22)
+            sbtn:SetText(sl.label)
+            if Addon._styleActionButton then Addon._styleActionButton(sbtn) end
+            sbtn:SetScript("OnClick", function() Addon.OpenSupportLink(_url) end)
+        end
+
         -- ── Language toggle button (non-English clients only) ────────────────────
         -- Sits above the slider section divider when visible.
-        --   SDIV_BOT≈136  ->  lang btn bottom=141, lang divider bottom=167
-        --   VER_PAD grows from 140 to 170 when this button is visible.
+        --   SDIV_BOT≈168  ->  lang btn bottom=173, lang divider bottom=199
+        --   VER_PAD grows from 172 to 202 when this button is visible.
         local langDivider = p:CreateTexture(nil, "ARTWORK")
         langDivider:SetColorTexture(0.3, 0.3, 0.3, 0.5)
         langDivider:SetHeight(1)
-        langDivider:SetPoint("BOTTOMLEFT",  p, "BOTTOMLEFT",  PAD,  167)
-        langDivider:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -PAD, 167)
+        langDivider:SetPoint("BOTTOMLEFT",  p, "BOTTOMLEFT",  PAD,  199)
+        langDivider:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -PAD, 199)
         langDivider:Hide()
         p._gearLangDiv = langDivider
 
         local langBtn = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
-        langBtn:SetPoint("BOTTOMLEFT",  p, "BOTTOMLEFT",  PAD,  141)
-        langBtn:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -PAD, 141)
+        langBtn:SetPoint("BOTTOMLEFT",  p, "BOTTOMLEFT",  PAD,  173)
+        langBtn:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -PAD, 173)
         langBtn:SetHeight(22)
         langBtn:Hide()
         if Addon._styleActionButton then Addon._styleActionButton(langBtn) end
