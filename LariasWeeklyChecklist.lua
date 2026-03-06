@@ -550,6 +550,9 @@ end
 Addon._sectionPool = Addon._sectionPool or {}
 Addon._checkboxPool = Addon._checkboxPool or {}
 Addon._activeSections = Addon._activeSections or {}
+-- Tracks sections the user has explicitly expanded while complete, so
+-- UpdateSectionVisuals does not immediately re-collapse them on click.
+Addon._userExpandedCompleted = Addon._userExpandedCompleted or {}
 
 Addon._dataSig = Addon._dataSig or ""
 Addon._sectionsById = Addon._sectionsById or {}
@@ -1197,10 +1200,15 @@ end
 Addon._HasAnySectionItemChecked = HasAnySectionItemChecked
 
 -- UI pooling: we reuse section frames and checkboxes to avoid allocations during refresh.
+-- Must sit above third-party addon overlays (e.g. NaowhQOL UIWidgetPowerBarContainerFrame
+-- sits at ~121) so header buttons can receive mouse clicks.
+local SECTION_FRAME_LEVEL = 200
+
 local function AcquireSectionFrame()
     local sectionFrame = tremove(Addon._sectionPool)
     if sectionFrame then
         sectionFrame:Show()
+        sectionFrame:SetFrameLevel(SECTION_FRAME_LEVEL)
         -- Re-apply header color in case THEME.header changed since last use.
         if sectionFrame._title then
             local h = Addon.THEME.header
@@ -1210,6 +1218,7 @@ local function AcquireSectionFrame()
     end
 
     sectionFrame = CreateFrame("Frame", nil, scrollChild)
+    sectionFrame:SetFrameLevel(SECTION_FRAME_LEVEL)
     sectionFrame:SetWidth(1)
     sectionFrame._checkboxes = {}
 
@@ -1617,7 +1626,17 @@ local function OnHeaderClick(header)
     local sectionFrame = header and header._sectionFrame
     if not sectionFrame then return end
     local sectionId = sectionFrame._sectionId
-    SetSectionCollapsed(sectionId, not IsSectionCollapsed(sectionId))
+    if not sectionId then return end
+    local collapsed = not IsSectionCollapsed(sectionId)
+    SetSectionCollapsed(sectionId, collapsed)
+    -- Set/clear the explicit-expand flag BEFORE calling UpdateSectionVisuals.
+    -- Without this, UpdateSectionVisuals would see complete==true and immediately
+    -- re-collapse the section the user just opened.
+    if not collapsed then
+        Addon._userExpandedCompleted[sectionId] = true
+    else
+        Addon._userExpandedCompleted[sectionId] = nil
+    end
     if UpdateSectionVisuals then
         UpdateSectionVisuals(sectionFrame, sectionId)
     end
@@ -1740,7 +1759,10 @@ UpdateSectionVisuals = function(sectionFrame, sectionId)
 
     sectionFrame:Show()
 
-    if complete then
+    -- Only auto-collapse a completed section when the user has NOT explicitly
+    -- expanded it (tracked via _userExpandedCompleted set in OnHeaderClick).
+    local userExpanded = Addon._userExpandedCompleted and Addon._userExpandedCompleted[sectionId]
+    if complete and not userExpanded then
         SetSectionCollapsed(sectionId, true, database)
     end
 
@@ -1748,7 +1770,7 @@ UpdateSectionVisuals = function(sectionFrame, sectionId)
     ComputeHeaderHeight(sectionFrame, Addon.UI.itemTextWidth + Addon.UI.headerTextExtraW)
 
     local collapsed = IsSectionCollapsed(sectionId, database) or false
-    if complete then collapsed = true end
+    if complete and not userExpanded then collapsed = true end
 
     local checkedMap = database.checked
     for i = 1, #sectionFrame._checkboxes do
