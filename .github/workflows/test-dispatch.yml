@@ -1,0 +1,22 @@
+name: Test – Fire Dispatch to Locales
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send repository_dispatch to locales repo
+        env:
+          LOCALES_REPO_TOKEN: ${{ secrets.LOCALES_REPO_TOKEN }}
+        run: |
+          curl -s -o /dev/null -w "%{http_code}" \
+            -X POST \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Authorization: Bearer ${LOCALES_REPO_TOKEN}" \
+            https://api.github.com/repos/Devbezos/Larias-Weekly-Midnight-Checklist_Locales/dispatches \
+            -d '{"event_type":"test-dispatch"}' \
+          | grep -qE '^2' && echo "Dispatch sent OK." || { echo "ERROR: dispatch failed — check LOCALES_REPO_TOKEN secret."; exit 1; }
