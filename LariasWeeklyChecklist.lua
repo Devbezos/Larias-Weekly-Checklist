@@ -1297,6 +1297,9 @@ local function LayoutItems(sectionFrame, collapsed, hideCompletedTasks)
     -- Stack item rows under the header; hide when collapsed.
     -- When the "hide completed tasks" pref is active, skip checked items from
     -- the layout entirely so the section shrinks to fit only visible rows.
+    -- hideCompletedTasks is passed as a parameter (rather than read from prefs
+    -- here) so callers can hoist the single EnsurePrefs() call and avoid
+    -- repeating it for every section on each layout pass.
     local posY        = -(sectionFrame._headerBlockHeight or (Addon.UI.headerMinH + Addon.UI.headerBottomPad))
     local totalHeight = 0
     local hideChecked = not collapsed and hideCompletedTasks
@@ -1305,7 +1308,7 @@ local function LayoutItems(sectionFrame, collapsed, hideCompletedTasks)
         local checkbox = checkboxes[i]
         checkbox:ClearAllPoints()
         checkbox:SetPoint("TOPLEFT", sectionFrame, "TOPLEFT", 0, posY)
-        checkbox:SetWidth(32)
+        checkbox:SetWidth(32) -- constrain the tick-box click-target; the text label inside is sized separately by UpdateItems
         local rowHeight = checkbox:GetHeight() or Addon.UI.itemMinH
         local show = not collapsed and not (hideChecked and checkbox:GetChecked())
         checkbox:SetShown(show)
@@ -1637,7 +1640,7 @@ local function SyncCheckboxesForSection(sectionFrame, sectionId, db)
             checkbox:ClearAllPoints()
             checkbox._sectionId = nil
             checkbox._itemId = nil
-            checkbox._isGuideRow = false
+            checkbox._isGuideRow = false  -- explicitly reset so a recycled checkbox doesn't carry stale guide-row state
             checkbox:SetScript("OnClick",          nil)
             checkbox:SetScript("OnEnter",          nil)
             checkbox:SetScript("OnLeave",          nil)

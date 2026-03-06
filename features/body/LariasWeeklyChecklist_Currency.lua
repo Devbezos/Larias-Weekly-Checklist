@@ -338,6 +338,8 @@ local function GetCrestLines()
     local highestTradeTarget, gained = ComputeCrestTradeup(cache, crestCount, batchLower, batchHigher)
     local crestLabels = BuildCrestLabels(ids, crestCount)
     local tooltipTexts = {}
+    -- Hoist the base tooltip string out of the loop to avoid repeated locale lookups.
+    -- For trade-up rows the convert tooltip is appended as a second line below.
     local _crestAmountTip = L.TRACKING_CREST_AMOUNT_TOOLTIP or "Accurately tracks how many crests you can hold including overcapped crests"
     for i = 1, crestCount do
         local id = ids[i]

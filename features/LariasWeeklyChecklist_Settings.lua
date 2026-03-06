@@ -634,6 +634,9 @@ local function BuildPanel()
     local SUPP_BTN_W   = 150
     local SUPP_BTN_GAP = 8
 
+    -- MakeSuppBtn: create a fixed-width support button at xOff from canvas TOPLEFT.
+    -- Clicking it calls OpenSupportLink, which tries C_Browser first and falls
+    -- back to the LARIAS_COPY_LINK clipboard popup.
     local function MakeSuppBtn(label, url, xOff)
         local btn = CreateFrame("Button", nil, canvas, "UIPanelButtonTemplate")
         btn:SetPoint("TOPLEFT", canvas, "TOPLEFT", xOff, curY)

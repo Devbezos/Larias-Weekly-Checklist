@@ -603,6 +603,9 @@ function Addon:CreateTrackingPanel(parentFrame)
         row:SetScript("OnEnter", function(self)
             if self._lariasTooltipText and self._lariasTooltipText ~= "" then
                 GameTooltip:SetOwner(self, "ANCHOR_TOP")
+                -- _lariasTooltipText may contain '\n'-separated lines.
+                -- The first line is the header (white, via SetText); remaining
+                -- non-empty lines are added as subdued AddLine entries.
                 local lines = { strsplit("\n", self._lariasTooltipText) }
                 GameTooltip:SetText(lines[1] or self._lariasTooltipText, 1, 1, 1, 1, true)
                 for j = 2, #lines do

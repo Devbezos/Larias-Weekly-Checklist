@@ -531,6 +531,7 @@ function Addon:ToggleGearPopup(anchor, growRight)
         suppDiv:SetPoint("BOTTOMLEFT",  p, "BOTTOMLEFT",  PAD,  76)
         suppDiv:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -PAD, 76)
 
+        -- Divide available width (minus two side-pads and two 4 px inter-button gaps) equally among 3 buttons.
         local SUPP_BTN_W = math.floor((p:GetWidth() - 2 * PAD - 8) / 3)
         for si, sl in ipairs(GetSupportLinks()) do
             local _url = sl.url
