@@ -5,7 +5,7 @@ NOTE: This is the canonical enUS dataset; other locales must keep IDs identical
 so completion tracking stays consistent across locales.
 ]]
 
--- @sheet-version: 15
+-- @sheet-version: 16
 
 local LOCALE = "enUS"
 
@@ -17,7 +17,7 @@ if type(reg) ~= "table" then
     _G[LOCALE_REGISTRY_KEY] = reg
 end
 if type(reg.data) ~= "table" then reg.data = {} end
-reg.sheet_version = "15"
+reg.sheet_version = "16"
 
 local DATASET = {
 
@@ -29,10 +29,10 @@ local DATASET = {
             { id = "90db618c", text = "Level characters warmode on to 90 - DMF opens Sunday for 10% more exp." },
             { id = "6af1d802", text = "Complete the weekly Stormarion Assault in the Voidstorm. (It is available in Early Access)" },
             { id = "6762e305", text = "(Optional) Kill each rare once in each zone for renown. This is a one time bonus for each rare and does not reset weekly." },
-            { id = "2687fe6c", text = "Hunt down each region's treasures for free Renown. See doc for guide" },
+            { id = "0394cb0d", text = "Hunt down each region's treasures for free Renown. Check guide for more info" },
             { id = "91e7ee6c", text = "Complete 4x Prey on normal difficulty for renown" },
-            { id = "8bf4f442", text = "Complete the Midnight Lore Hunter achievement for renown - see doc for guide" },
-            { id = "c886190c", text = "Complete the Highest Peaks achievement for renown - see doc for guide" },
+            { id = "c699a5d6", text = "Complete the Midnight Lore Hunter achievement for renown - Check guide for more info" },
+            { id = "cfd4a904", text = "Complete the Highest Peaks achievement for renown - Check guide for more info" },
             { id = "f9b8eb01", text = "Complete side quest chains for renown. (can be done on alts to level at same time). DMF buff does not give renown." },
             { id = "4aa4b47d", text = "Note: Only the Singularity AND Eversong champion items are available in early access - the others will become available either Monday after the official launch or after each region's weekly reset." },
             { id = "ba1890e4", text = "Complete the weekly Saltheril's Soiree in Eversong Woods. Don't forget to grab renown quest for the champion helmet if you have the renown" },
@@ -42,13 +42,13 @@ local DATASET = {
         id = "50281d6f",
         title = "Pre-Season Week 1 - March 3 - M0's",
         items = {
-            { id = "727109d8", text = "Do not spend any Crests until told to do so. See guide for why we hold crests." },
+            { id = "2e0fb03d", text = "Do not spend any Crests until told to do so. Check guide for why we hold crests." },
             { id = "5a2e9ede", text = "DO NOT CRAFT" },
             { id = "c06ee1a3", text = "If you are on an alt and don't see some of these quests, go to Soridormi in the Silvermoon City Inn and choose \"I Stopped the Voidstorm\" to skip the campaign." },
-            { id = "44fbfe51", text = "Raise The Singularity renown to rank 7 for 1/6 champion trinket - comes from quest from the renown vendor (not purchased)" },
-            { id = "02ceff50", text = "Raise Hara'ti renown to rank 8 for 1/6 champion belt - comes from quest from the renown vendor (not purchased)" },
-            { id = "cdea3773", text = "Raise Silvermoon renown to rank 9 for 1/6 champion helm - comes from quest from the renown vendor (not purchased)" },
-            { id = "19687ed0", text = "Raise Amani Tribe renown to rank 9 for 1/6 champion necklace - comes from quest from the renown vendor (not purchased)" },
+            { id = "755d27e7", text = "Raise The Singularity renown to rank 7 for 1/6 champion trinket - comes from a quest from the renown vendor" },
+            { id = "f213fee8", text = "Raise Hara'ti renown to rank 8 for 1/6 champion belt - comes from a quest from the renown vendor" },
+            { id = "81fd810d", text = "Raise Silvermoon renown to rank 9 for 1/6 champion helm - comes from a quest from the renown vendor" },
+            { id = "804b15e3", text = "Raise Amani Tribe renown to rank 9 for 1/6 champion necklace - comes from a quest from the renown vendor" },
             { id = "101e78a9", text = "Complete weekly dungeon quest from Halduron Brightwing for 1000 renown" },
             { id = "0c3b8835", text = "Complete weekly world event quest for pinnacle cache from Lady Liadrin - can pick weekly event quest and do it with the events below" },
             { id = "879d3833", text = "Complete weekly world tour quest from Lorthremar for spark by doing the below quests" },
@@ -57,9 +57,9 @@ local DATASET = {
             { id = "dbc8384b", text = "Complete the weekly Legends of the Haranir event in Harandar." },
             { id = "9ad64245", text = "Complete the weekly Stormarion Assault in the Voidstorm." },
             { id = "6762e305", text = "(Optional) Kill each rare once in each zone for renown. This is a one time bonus for each rare and does not reset weekly." },
-            { id = "1b42ce30", text = "If not done, hunt down each region's treasures, lore hunter, and high peaks for free Renown. See doc for guide" },
+            { id = "666a0192", text = "If not done, hunt down each region's treasures, lore hunter, and high peaks for free Renown. Check guide for more info." },
             { id = "a892ac44", text = "Unlock Delves through tier 8" },
-            { id = "636c0b3a", text = "Complete 4x Hard Prey for Veteran gear and Veteran crests on each character" },
+            { id = "d54f7430", text = "Complete 4x Hard Prey. The first 2 will give Veteran gear; all 4 will give Veteran Crests which you need to cap." },
             { id = "efb035ba", text = "(Optional) Complete 2x random Hard Prey for Veteran crests on each character - doing 2x optional per week will cap Veteran crests by the end of week 2" },
             { id = "a7ee4829", text = "Complete a World Tour of M0 dungeons - rewards vet ilvl - do not upgrade yet" },
         },
@@ -68,38 +68,39 @@ local DATASET = {
         id = "ff1f5a67",
         title = "Pre-Season Week 2 - March 10 - M0's",
         items = {
-            { id = "727109d8", text = "Do not spend any Crests until told to do so. See guide for why we hold crests." },
+            { id = "2e0fb03d", text = "Do not spend any Crests until told to do so. Check guide for why we hold crests." },
             { id = "5a2e9ede", text = "DO NOT CRAFT" },
             { id = "75c5fe6e", text = "If not completed, continue to raise renown for Champion Pieces" },
             { id = "101e78a9", text = "Complete weekly dungeon quest from Halduron Brightwing for 1000 renown" },
-            { id = "0c3b8835", text = "Complete weekly world event quest for pinnacle cache from Lady Liadrin - can pick weekly event quest and do it with the events below" },
-            { id = "e326ed96", text = "Complete the weekly Saltheril's Soiree in Eversong Woods." },
-            { id = "da2fa0ef", text = "Complete the weekly Abundance Event in Zul'aman." },
-            { id = "dbc8384b", text = "Complete the weekly Legends of the Haranir event in Harandar." },
-            { id = "9ad64245", text = "Complete the weekly Stormarion Assault in the Voidstorm." },
+            { id = "e0ecce24", text = "Complete weekly world event quest for pinnacle cache and spark from Lady Liadrin" },
+            { id = "8b55f0c7", text = "(Optional) Complete the weekly Saltheril's Soiree in Eversong Woods." },
+            { id = "8e107032", text = "(Optional) Complete the weekly Abundance Event in Zul'aman." },
+            { id = "d5a12c89", text = "(Optional) Complete the weekly Legends of the Haranir event in Harandar." },
+            { id = "514a6926", text = "(Optional) Complete the weekly Stormarion Assault in the Voidstorm." },
             { id = "6762e305", text = "(Optional) Kill each rare once in each zone for renown. This is a one time bonus for each rare and does not reset weekly." },
             { id = "23cb93ed", text = "Unlock Delves through tier 8 if not done yet" },
-            { id = "636c0b3a", text = "Complete 4x Hard Prey for Veteran gear and Veteran crests on each character" },
+            { id = "d54f7430", text = "Complete 4x Hard Prey. The first 2 will give Veteran gear; all 4 will give Veteran Crests which you need to cap." },
             { id = "efb035ba", text = "(Optional) Complete 2x random Hard Prey for Veteran crests on each character - doing 2x optional per week will cap Veteran crests by the end of week 2" },
             { id = "a7ee4829", text = "Complete a World Tour of M0 dungeons - rewards vet ilvl - do not upgrade yet" },
-            { id = "c33e5c84", text = "If you raid Tuesday the 17th, craft. See doc for more info." },
+            { id = "f2af7330", text = "If you raid Tuesday the 17th, craft. Check guide for more info." },
         },
     },
     {
         id = "33a3fcba",
         title = "Season 1 Week 1 - Mar 17 - Heroic Week",
         items = {
-            { id = "727109d8", text = "Do not spend any Crests until told to do so. See guide for why we hold crests." },
-            { id = "5b379666", text = "Do LFR for tier pieces (check guide for why)" },
-            { id = "879d3833", text = "Complete weekly world tour quest from Lorthremar for spark by doing the below quests" },
+            { id = "2e0fb03d", text = "Do not spend any Crests until told to do so. Check guide for why we hold crests." },
+            { id = "e66847d8", text = "Do LFR for tier pieces - obtaining a 4set bonus will allow catalyst charges to drop from all content" },
+            { id = "e0ecce24", text = "Complete weekly world event quest for pinnacle cache and spark from Lady Liadrin" },
             { id = "9686fde4", text = "Complete weekly housing quest from Vaeli for ?hero crests? (will update when it goes live)" },
-            { id = "952916cd", text = "(Optional) Complete a World Tour of M0 dungeons - rewards champ ilvl" },
+            { id = "ca5a8044", text = "If available, complete pvp quest for guaranteed hero neck/ring - can maybe do with the below optional PvP ranking" },
+            { id = "d8d237fa", text = "(Optional) Raise PVP ranking to 1600 for catalyst charge (this is the same catalyst charge shared with 2,000 M+ rating from the next week). If you get 2 pieces of tier from your raid this week, this would allow you to catalyze 2 items and start getting Catalyst charge drops from your m+ next week." },
+            { id = "45c7d35b", text = "(Optional) Complete a World Tour of M0 dungeons - rewards champ ilvl - daily lockout" },
             { id = "22842538", text = "Complete 2x Nightmare Prey for Champion gear on each character" },
             { id = "dc0e2686", text = "Kill World Boss for champ 2/6 250 ilvl item" },
-            { id = "3e0dfde7", text = "If available, complete pvp quest for guaranteed hero neck/ring" },
             { id = "b6846065", text = "Do t8 or higher bountiful delves, use map on t8+ delve - while doing this, unlock t11 delves" },
             { id = "eff76e73", text = "Before raid, craft 2x 246 ilvl pieces, 2x embellishments on weak slots, use 160 Vet Crests" },
-            { id = "2af0bfb5", text = "Before raid, spend all Adventurer, Veteran and Champion Crests upgrading anything" },
+            { id = "679a07b9", text = "Before raid, spend all Adventurer, Veteran and Champion Crests upgrading anything. Do not spend Heroic or Mythic crests." },
             { id = "5768e0fe", text = "Track crests: 0/100 Heroic, 0/100 Mythic" },
         },
     },
@@ -107,11 +108,12 @@ local DATASET = {
         id = "d2de9d43",
         title = "Week 2 - Mar 24 - Mythic Week, M+ Opens, take off work giganerds",
         items = {
-            { id = "727109d8", text = "Do not spend any Crests until told to do so. See guide for why we hold crests." },
-            { id = "7e42a12d", text = "1h crafted note, check guide, check craft path info(VERY IMPORTANT!)" },
-            { id = "5b379666", text = "Do LFR for tier pieces (check guide for why)" },
+            { id = "36d21691", text = "Do not spend any Heroic or Mythic Crests until told to do so. Check guide for why we hold crests." },
+            { id = "e0ecce24", text = "Complete weekly world event quest for pinnacle cache and spark from Lady Liadrin" },
+            { id = "9686fde4", text = "Complete weekly housing quest from Vaeli for ?hero crests? (will update when it goes live)" },
+            { id = "4056a14a", text = "If you don't have 4set, do LFR for tier pieces - obtaining a 4set bonus will allow catalyst charges to drop from all content" },
             { id = "16cf341e", text = "(Optional) Kill World Boss for champ 2/6 250 ilvl item" },
-            { id = "3ccf0a1f", text = "(Optional) Complete 4x Nightmare Prey for Champion gear and renown." },
+            { id = "4aa82ede", text = "(Optional) Complete 2x Nightmare Prey for Champion gear on each character" },
             { id = "26d0b610", text = "Do at least one t11 bountiful delve to get Cracked Keystone Quest" },
             { id = "286f219c", text = "Continue to spend all Adventurer, Veteran and Champion Crests upgrading anything" },
             { id = "74924a7b", text = "Farm +10s for 266 gear in every slot" },
@@ -126,7 +128,6 @@ local DATASET = {
         title = "Week 3 - Mar 31 - Final Raid Opens",
         items = {
             { id = "1fbc825e", text = "Open vault (272+ myth item) - upgrade after crafting" },
-            { id = "fb8255a7", text = "Craft items - see guide for 2 paths to pick" },
             { id = "8226c872", text = "If no 4p, do LFR for tier pieces (check guide for why)" },
             { id = "1db5f946", text = "Farm +10s for vault + crests" },
             { id = "c316485a", text = "Heroic: Upgrade 2 of your 4/6 269 items to 6/6 276 for 80 Heroic Crests" },
