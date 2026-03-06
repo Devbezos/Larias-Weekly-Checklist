@@ -1159,9 +1159,10 @@ local function IsSectionCollapsed(sectionId, db)
 end
 
 local function SetSectionCollapsed(sectionId, collapsed, db)
-    -- Persist collapse state.
+    -- Persist collapse state. Store false explicitly for expanded so callers
+    -- can distinguish "user set expanded" from "never touched" (nil).
     db = db or Addon:EnsureDB()
-    db.collapsedSections[sectionId] = collapsed and true or nil
+    db.collapsedSections[sectionId] = collapsed and true or false
 end
 
 local function IsSectionCompleteById(sectionId, db)
@@ -1827,7 +1828,7 @@ UpdateSectionVisuals = function(sectionFrame, sectionId)
     if complete and not userExpanded then
         collapsed = true
     elseif explicitlySet then
-        collapsed = database.collapsedSections[sectionId]
+        collapsed = database.collapsedSections[sectionId] == true
     else
         -- First open: collapse everything except the current section.
         local currentId = GetCurrentSectionId(database)
