@@ -314,7 +314,7 @@ function Addon:CreateHeader(frame)
                     btn:SetScript("OnEnter", function(self_)
                         GameTooltip:SetOwner(self_, "ANCHOR_RIGHT")
                         GameTooltip:SetText(
-                            (L and L.PICKER_RESET_WEEK_TOOLTIP or "Reset to week:") .. "\n" .. capturedTitle,
+                            (L.PICKER_RESET_WEEK_TOOLTIP or "Reset to week:") .. "\n" .. capturedTitle,
                             1, 1, 1, 1, true)
                         GameTooltip:Show()
                     end)
