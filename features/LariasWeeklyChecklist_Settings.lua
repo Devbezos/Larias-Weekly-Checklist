@@ -32,9 +32,9 @@ local OpenColorPicker = Addon.Controls.OpenColorPicker
 -- Reload-prompt shown after the player picks a different language.
 -- Defined once at load time so StaticPopup_Show can reference it anywhere.
 StaticPopupDialogs["LARIAS_LOCALE_RELOAD"] = StaticPopupDialogs["LARIAS_LOCALE_RELOAD"] or {
-    text      = "Language change saved. Reload UI to apply the new language.",
-    button1   = "Reload Now",
-    button2   = "Later",
+    text      = (Addon.L or {}).LOCALE_RELOAD_TEXT      or "Language change saved. Reload UI to apply the new language.",
+    button1   = (Addon.L or {}).LOCALE_RELOAD_BTN_NOW   or "Reload Now",
+    button2   = (Addon.L or {}).LOCALE_RELOAD_BTN_LATER or "Later",
     OnAccept  = function() ReloadUI() end,
     timeout   = 0,
     whileDead = true,

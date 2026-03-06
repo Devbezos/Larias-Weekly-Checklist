@@ -95,6 +95,10 @@ local STRINGS = {
 
 	TRACKING_CATALYST_LABEL = "Catalyst",
 
+	-- Locale reload popup (shown after changing language)
+	LOCALE_RELOAD_TEXT       = "Language change saved. Reload UI to apply the new language.",
+	LOCALE_RELOAD_BTN_NOW    = "Reload Now",
+	LOCALE_RELOAD_BTN_LATER  = "Later",
 	-- Copy-link popup (shown when C_Browser is unavailable)
 	COPY_LINK_POPUP_TEXT     = "Press |cffffffffCtrl+C|r to copy, then close:",
 	-- Guide hyperlink hover tooltip
