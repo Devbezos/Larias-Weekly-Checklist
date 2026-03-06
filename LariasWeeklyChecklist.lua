@@ -1577,40 +1577,10 @@ local function OnCheckboxClick(selfBtn)
 end
 
 -- ── Guide-link helpers ──────────────────────────────────────────────────────
-local GUIDE_URL  = "https://docs.google.com/document/d/e/2PACX-1vTGkZ2Cjr0jlv90XqW9vy9VXsVucd-yMCgHdyCvX_kQfOrexNDAC7Lf3LifuhqxrcWqJ0W3zIhvK3ii/pub"
+-- GUIDE_URL: read from constants (same source as the Settings/GearPopup support buttons).
+local GUIDE_URL  = (Addon.TRACKING and Addon.TRACKING.supportLinks and Addon.TRACKING.supportLinks.doc)
+                   or "https://docs.google.com/document/d/e/2PACX-1vTGkZ2Cjr0jlv90XqW9vy9VXsVucd-yMCgHdyCvX_kQfOrexNDAC7Lf3LifuhqxrcWqJ0W3zIhvK3ii/pub"
 local GUIDE_LINK = "|cffffd700|Hlarias:guide|h[CHECK GUIDE]|h|r"
-
-StaticPopupDialogs["LARIAS_GUIDE_LINK"] = {
-    text    = L.COPY_LINK_POPUP_TEXT or "Press |cffffffffCtrl+C|r to copy, then close:",
-    button1 = CLOSE or "Close",
-    hasEditBox = true,
-    editBoxWidth = 380,
-    OnShow = function(self)
-        -- Defer one frame: WoW positions the editBox *after* calling OnShow.
-        C_Timer.After(0, function()
-            local eb = self.editBox or _G[self:GetName() and (self:GetName() .. "EditBox")]
-            if not eb then return end
-            eb:SetText(GUIDE_URL)
-            eb:SetFocus()
-            eb:HighlightText()
-            eb:SetScript("OnKeyDown", function(_, key)
-                if key == "C" and IsControlKeyDown() then
-                    C_Timer.After(0.05, function()
-                        StaticPopup_Hide("LARIAS_GUIDE_LINK")
-                    end)
-                end
-            end)
-        end)
-    end,
-    OnAccept = function() end,
-    EditBoxOnEscapePressed = function(self)
-        self:GetParent():Hide()
-    end,
-    timeout = 0,
-    whileDead = true,
-    hideOnEscape = true,
-    preferredIndex = 3,
-}
 
 -- FormatGuideText replaces "see guide" / "check guide" (any capitalisation)
 -- with a gold inline hyperlink and returns the formatted string plus a boolean
@@ -1627,7 +1597,7 @@ end
 -- is allocated per row per sync call.
 local function OnGuideHyperlinkClick(_, linkData)
     if linkData == "larias:guide" then
-        StaticPopup_Show("LARIAS_GUIDE_LINK")
+        Addon.OpenSupportLink(GUIDE_URL)
     end
 end
 local function OnGuideHyperlinkEnter(self_)
