@@ -1844,6 +1844,12 @@ local function ApplySectionVisuals(want, haveBefore, dataChanged, database, chil
         local sectionId    = Addon._order[i]
         local sectionFrame = Addon._activeSections[i]
         sectionFrame:SetParent(child)
+        -- SetParent resets frame level to parent+1; re-apply so section frames
+        -- sit above third-party overlay frames and headers receive mouse clicks.
+        sectionFrame:SetFrameLevel(SECTION_FRAME_LEVEL)
+        if sectionFrame._header then
+            sectionFrame._header:SetFrameLevel(SECTION_FRAME_LEVEL + 1)
+        end
         sectionFrame._sectionId             = sectionId
         sectionFrame._index                 = i
         Addon._sectionsIndexById[sectionId] = i
