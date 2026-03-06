@@ -1783,7 +1783,9 @@ local function SyncCheckboxesForSection(sectionFrame, sectionId, db)
     end
 end
 
-UpdateSectionVisuals = function(sectionFrame, sectionId)
+-- precomputedCurrentId: optional; pass from ApplySectionVisuals to avoid
+-- calling GetCurrentSectionId once per section on first open.
+UpdateSectionVisuals = function(sectionFrame, sectionId, precomputedCurrentId)
     local database = Addon:EnsureDB()
     local prefs    = Addon:EnsurePrefs()
 
@@ -1831,7 +1833,9 @@ UpdateSectionVisuals = function(sectionFrame, sectionId)
         collapsed = database.collapsedSections[sectionId] == true
     else
         -- First open: collapse everything except the current section.
-        local currentId = GetCurrentSectionId(database)
+        -- Use precomputedCurrentId when available to avoid re-walking _order
+        -- once per section (ApplySectionVisuals pre-computes this).
+        local currentId = precomputedCurrentId or GetCurrentSectionId(database)
         collapsed = (tostring(sectionId) ~= tostring(currentId or ""))
         SetSectionCollapsed(sectionId, collapsed, database)
     end
@@ -1909,6 +1913,9 @@ end
 -- child: the scroll child frame, passed explicitly to avoid an implicit upvalue.
 local function ApplySectionVisuals(want, haveBefore, dataChanged, database, child)
     local needCheckboxResync = dataChanged
+    -- Pre-compute once so UpdateSectionVisuals doesn't re-walk _order N times
+    -- on the first open (when all collapsedSections entries are nil).
+    local currentSectionId = GetCurrentSectionId(database)
     for i = 1, want do
         local sectionId    = Addon._order[i]
         local sectionFrame = Addon._activeSections[i]
@@ -1950,7 +1957,7 @@ local function ApplySectionVisuals(want, haveBefore, dataChanged, database, chil
         sectionFrame._header._sectionFrame = sectionFrame
         sectionFrame._header:SetScript("OnClick", OnHeaderClick)
 
-        UpdateSectionVisuals(sectionFrame, sectionId)
+        UpdateSectionVisuals(sectionFrame, sectionId, currentSectionId)
     end
 end
 
@@ -2009,24 +2016,10 @@ function Addon:Refresh()
     -- the change-week button shows the real current week from the very first load.
     if self.LayoutHeaderButtons then self:LayoutHeaderButtons() end
 
-    local posY = -Addon.UI.sectionTopPad
-    local paddingX = Addon.UI.sectionInsetX
-
-    for i = 1, #self._activeSections do
-        local sectionFrame = self._activeSections[i]
-        if sectionFrame:IsShown() then
-            local sectionW = math.max(1, (scrollFrame and scrollFrame:GetWidth() or Addon.UI.frameW) - 2 * Addon.UI.sectionInsetX)
-            sectionFrame:ClearAllPoints()
-            sectionFrame:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", paddingX, posY)
-            sectionFrame:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", -paddingX, posY)
-            sectionFrame:SetWidth(sectionW)
-            posY = posY - sectionFrame:GetHeight() - Addon.UI.sectionGap
-        end
-    end
-
-    scrollChild:SetHeight(max(1, -posY + Addon.UI.sectionGap))
-
-    self:ApplyScrollLayout()
+    -- LayoutFrom(1) re-anchors all visible sections, sets their widths, and
+    -- updates scrollChild:SetHeight — identical to the manual loop that was
+    -- here before, but without the duplicate ApplyScrollLayout call.
+    LayoutFrom(1)
 
     if self.UpdateCompletionEasterEgg then
         self:UpdateCompletionEasterEgg()
