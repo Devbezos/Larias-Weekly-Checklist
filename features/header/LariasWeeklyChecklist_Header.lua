@@ -232,6 +232,14 @@ function Addon:CreateHeader(frame)
         end
 
         db.startAtSectionId = newStart
+        -- Ensure the newly-selected section starts expanded.
+        if db.collapsedSections and newStart and newStart ~= "" then
+            db.collapsedSections[newStart] = false
+        end
+        -- Allow a complete section to stay expanded if the user picked it.
+        if Addon._userExpandedCompleted and newStart and newStart ~= "" then
+            Addon._userExpandedCompleted[newStart] = true
+        end
 
         if picker and picker.Hide then picker:Hide() end
         if sf and sf.SetVerticalScroll then sf:SetVerticalScroll(0) end
