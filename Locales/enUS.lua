@@ -100,7 +100,7 @@ local STRINGS = {
 	LOCALE_RELOAD_BTN_NOW    = "Reload Now",
 	LOCALE_RELOAD_BTN_LATER  = "Later",
 	-- Copy-link popup (shown when C_Browser is unavailable)
-	COPY_LINK_POPUP_TEXT     = "Press |cffffffffCtrl+C|r to copy, then close:",
+	COPY_LINK_POPUP_TEXT     = "Press |cffffffffCtrl+C|r to copy:",
 	-- Guide hyperlink hover tooltip
 	GUIDE_LINK_HOVER_TOOLTIP = "Click to copy guide link",
 	-- Support section button labels (Settings panel + gear popup)
