@@ -1226,6 +1226,10 @@ local function AcquireSectionFrame()
     header:SetPoint("TOPLEFT", sectionFrame, "TOPLEFT", 0, 0)
     header:SetPoint("TOPRIGHT", sectionFrame, "TOPRIGHT", 0, 0)
     header:SetHeight(Addon.UI.headerMinH)
+    -- HIGH strata ensures this button sits above any MEDIUM-strata third-party
+    -- overlay frames regardless of frame level, so clicks always reach it.
+    header:SetFrameStrata("HIGH")
+    header:EnableMouse(true)
     if header.RegisterForClicks then
         header:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     end
@@ -1844,11 +1848,13 @@ local function ApplySectionVisuals(want, haveBefore, dataChanged, database, chil
         local sectionId    = Addon._order[i]
         local sectionFrame = Addon._activeSections[i]
         sectionFrame:SetParent(child)
-        -- SetParent resets frame level to parent+1; re-apply so section frames
-        -- sit above third-party overlay frames and headers receive mouse clicks.
+        -- SetParent resets frame level and can inherit parent strata; re-apply
+        -- both so headers always win input focus over overlapping addon frames.
         sectionFrame:SetFrameLevel(SECTION_FRAME_LEVEL)
         if sectionFrame._header then
             sectionFrame._header:SetFrameLevel(SECTION_FRAME_LEVEL + 1)
+            sectionFrame._header:SetFrameStrata("HIGH")
+            sectionFrame._header:EnableMouse(true)
         end
         sectionFrame._sectionId             = sectionId
         sectionFrame._index                 = i
