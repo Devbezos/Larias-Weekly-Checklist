@@ -5,7 +5,7 @@ NOTE: This is the canonical enUS dataset; other locales must keep IDs identical
 so completion tracking stays consistent across locales.
 ]]
 
--- @sheet-version: 16
+-- @sheet-version: 17
 
 local LOCALE = "enUS"
 
@@ -17,7 +17,7 @@ if type(reg) ~= "table" then
     _G[LOCALE_REGISTRY_KEY] = reg
 end
 if type(reg.data) ~= "table" then reg.data = {} end
-reg.sheet_version = "16"
+reg.sheet_version = "17"
 
 local DATASET = {
 
@@ -42,7 +42,7 @@ local DATASET = {
         id = "50281d6f",
         title = "Pre-Season Week 1 - March 3 - M0's",
         items = {
-            { id = "2e0fb03d", text = "Do not spend any Crests until told to do so. Check guide for why we hold crests." },
+            { id = "ebe944e7", text = "Save 160 Veteran crests for crafting 2x Veteran items with Embellishments" },
             { id = "5a2e9ede", text = "DO NOT CRAFT" },
             { id = "c06ee1a3", text = "If you are on an alt and don't see some of these quests, go to Soridormi in the Silvermoon City Inn and choose \"I Stopped the Voidstorm\" to skip the campaign." },
             { id = "755d27e7", text = "Raise The Singularity renown to rank 7 for 1/6 champion trinket - comes from a quest from the renown vendor" },
@@ -62,13 +62,16 @@ local DATASET = {
             { id = "d54f7430", text = "Complete 4x Hard Prey. The first 2 will give Veteran gear; all 4 will give Veteran Crests which you need to cap." },
             { id = "efb035ba", text = "(Optional) Complete 2x random Hard Prey for Veteran crests on each character - doing 2x optional per week will cap Veteran crests by the end of week 2" },
             { id = "a7ee4829", text = "Complete a World Tour of M0 dungeons - rewards vet ilvl - do not upgrade yet" },
+            { id = "c60d586a", text = "Thursday, March 5th Hotfix Info: Blizzard has hotfixed in the ability to earn an achievement that reduces the cost of upgrading your crests by 50% on your account once one character is 237 in every single slot. Check guide for more info." },
+            { id = "77405dc2", text = "New: If you only have one character, after completing your first world tour of M0 dungeons you can spend Adventurer crests on remaining items." },
+            { id = "95531889", text = "New: If you have multiple characters, once you have earned the new achievement, you can freely upgrade on all other characters." },
         },
     },
     {
         id = "ff1f5a67",
         title = "Pre-Season Week 2 - March 10 - M0's",
         items = {
-            { id = "2e0fb03d", text = "Do not spend any Crests until told to do so. Check guide for why we hold crests." },
+            { id = "ebe944e7", text = "Save 160 Veteran crests for crafting 2x Veteran items with Embellishments" },
             { id = "5a2e9ede", text = "DO NOT CRAFT" },
             { id = "75c5fe6e", text = "If not completed, continue to raise renown for Champion Pieces" },
             { id = "101e78a9", text = "Complete weekly dungeon quest from Halduron Brightwing for 1000 renown" },
@@ -82,6 +85,7 @@ local DATASET = {
             { id = "d54f7430", text = "Complete 4x Hard Prey. The first 2 will give Veteran gear; all 4 will give Veteran Crests which you need to cap." },
             { id = "efb035ba", text = "(Optional) Complete 2x random Hard Prey for Veteran crests on each character - doing 2x optional per week will cap Veteran crests by the end of week 2" },
             { id = "a7ee4829", text = "Complete a World Tour of M0 dungeons - rewards vet ilvl - do not upgrade yet" },
+            { id = "dc01eba9", text = "If you have any adventurer pieces left, you should feel free to upgrade them." },
             { id = "f2af7330", text = "If you raid Tuesday the 17th, craft. Check guide for more info." },
         },
     },
@@ -89,7 +93,7 @@ local DATASET = {
         id = "33a3fcba",
         title = "Season 1 Week 1 - Mar 17 - Heroic Week",
         items = {
-            { id = "2e0fb03d", text = "Do not spend any Crests until told to do so. Check guide for why we hold crests." },
+            { id = "36d21691", text = "Do not spend any Heroic or Mythic Crests until told to do so. Check guide for why we hold crests." },
             { id = "e66847d8", text = "Do LFR for tier pieces - obtaining a 4set bonus will allow catalyst charges to drop from all content" },
             { id = "e0ecce24", text = "Complete weekly world event quest for pinnacle cache and spark from Lady Liadrin" },
             { id = "9686fde4", text = "Complete weekly housing quest from Vaeli for ?hero crests? (will update when it goes live)" },
@@ -99,7 +103,7 @@ local DATASET = {
             { id = "22842538", text = "Complete 2x Nightmare Prey for Champion gear on each character" },
             { id = "dc0e2686", text = "Kill World Boss for champ 2/6 250 ilvl item" },
             { id = "b6846065", text = "Do t8 or higher bountiful delves, use map on t8+ delve - while doing this, unlock t11 delves" },
-            { id = "eff76e73", text = "Before raid, craft 2x 246 ilvl pieces, 2x embellishments on weak slots, use 160 Vet Crests" },
+            { id = "8c700b67", text = "Before raid, craft 2x 246 ilvl pieces, 2x embellishments on weak slots, use 160 Vet Crests. These do not take Sparks." },
             { id = "679a07b9", text = "Before raid, spend all Adventurer, Veteran and Champion Crests upgrading anything. Do not spend Heroic or Mythic crests." },
             { id = "5768e0fe", text = "Track crests: 0/100 Heroic, 0/100 Mythic" },
         },
