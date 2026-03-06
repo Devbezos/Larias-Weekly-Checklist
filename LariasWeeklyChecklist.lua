@@ -1603,6 +1603,9 @@ StaticPopupDialogs["LARIAS_GUIDE_LINK"] = {
         end)
     end,
     OnAccept = function() end,
+    EditBoxOnEscapePressed = function(self)
+        self:GetParent():Hide()
+    end,
     timeout = 0,
     whileDead = true,
     hideOnEscape = true,
