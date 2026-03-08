@@ -232,6 +232,14 @@ function Addon:CreateHeader(frame)
         end
 
         db.startAtSectionId = newStart
+        -- Ensure the newly-selected section starts expanded.
+        if db.collapsedSections and newStart and newStart ~= "" then
+            db.collapsedSections[newStart] = false
+        end
+        -- Allow a complete section to stay expanded if the user picked it.
+        if Addon._userExpandedCompleted and newStart and newStart ~= "" then
+            Addon._userExpandedCompleted[newStart] = true
+        end
 
         if picker and picker.Hide then picker:Hide() end
         if sf and sf.SetVerticalScroll then sf:SetVerticalScroll(0) end
@@ -282,6 +290,19 @@ function Addon:CreateHeader(frame)
             end
         end
 
+        -- Pre-compute index of the current week so tooltips can say
+        -- "Reset to week" (going back) vs "Go to week" (going forward).
+        local currentIdx = 0
+        if type(data) == "table" then
+            for i = 1, #data do
+                local s = data[i]
+                if type(s) == "table" and tostring(s.id or "") == currentId then
+                    currentIdx = i
+                    break
+                end
+            end
+        end
+
         if type(data) == "table" then
             for i = 1, #data do
                 local section = data[i]
@@ -298,9 +319,25 @@ function Addon:CreateHeader(frame)
                     btn:SetHeight(PICKER_ROW_HEIGHT)
                     btn:SetText(label)
                     btn:SetEnabled(true)
-                    local capturedId = id
+                    local capturedId    = id
+                    local capturedTitle = section.title or label
+                    local capturedIdx   = i
                     btn:SetScript("OnClick", function()
                         HandlePick(capturedId, Addon._scrollFrame)
+                    end)
+                    btn:SetScript("OnEnter", function(self_)
+                        local prefix
+                        if currentIdx > 0 and capturedIdx > currentIdx then
+                            prefix = L.PICKER_GO_TO_WEEK_TOOLTIP or "Go to week:"
+                        else
+                            prefix = L.PICKER_RESET_WEEK_TOOLTIP or "Reset to week:"
+                        end
+                        GameTooltip:SetOwner(self_, "ANCHOR_RIGHT")
+                        GameTooltip:SetText(prefix .. "\n" .. capturedTitle, 1, 1, 1, 1, true)
+                        GameTooltip:Show()
+                    end)
+                    btn:SetScript("OnLeave", function()
+                        GameTooltip:Hide()
                     end)
 
                     tinsert(picker._buttons, btn)

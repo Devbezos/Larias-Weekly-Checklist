@@ -125,6 +125,10 @@ local STRINGS = {
 	CHAR_PICKER_BUTTON          = "Swap Profile",
 	CHAR_PICKER_TOOLTIP_REMOVE  = "To remove a character, use the Options menu.",
 
+	-- Week picker
+	PICKER_RESET_WEEK_TOOLTIP   = "Reset to week:",
+	PICKER_GO_TO_WEEK_TOOLTIP   = "Go to week:",
+
 	-- Item level reference popup
 	ILVLREF_WINDOW_TITLE  = "Midnight Season 1 Item Level Reference",
 

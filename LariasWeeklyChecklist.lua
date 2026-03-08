@@ -550,6 +550,9 @@ end
 Addon._sectionPool = Addon._sectionPool or {}
 Addon._checkboxPool = Addon._checkboxPool or {}
 Addon._activeSections = Addon._activeSections or {}
+-- Tracks sections the user has explicitly expanded while complete, so
+-- UpdateSectionVisuals does not immediately re-collapse them on click.
+Addon._userExpandedCompleted = Addon._userExpandedCompleted or {}
 
 Addon._dataSig = Addon._dataSig or ""
 Addon._sectionsById = Addon._sectionsById or {}
@@ -1014,6 +1017,13 @@ function Addon:ApplyScrollLayout()
 
     scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -Addon.UI.scrollRight, Addon.UI.scrollBottom + extra)
 
+    -- Keep the scroll child width in sync with the scroll frame so that
+    -- section frames anchored TOPLEFT+TOPRIGHT to scrollChild get a real width.
+    local scrollW = scrollFrame:GetWidth() or 0
+    if scrollW > 1 then
+        scrollChild:SetWidth(scrollW)
+    end
+
     -- Recompute itemTextWidth from the live frame width so text never over-runs
     -- or wastes space after a resize. Frame and all children share the same
     -- coordinate space (frame:SetScale scales visually without changing logical sizes).
@@ -1149,9 +1159,10 @@ local function IsSectionCollapsed(sectionId, db)
 end
 
 local function SetSectionCollapsed(sectionId, collapsed, db)
-    -- Persist collapse state.
+    -- Persist collapse state. Store false explicitly for expanded so callers
+    -- can distinguish "user set expanded" from "never touched" (nil).
     db = db or Addon:EnsureDB()
-    db.collapsedSections[sectionId] = collapsed and true or nil
+    db.collapsedSections[sectionId] = collapsed and true or false
 end
 
 local function IsSectionCompleteById(sectionId, db)
@@ -1196,11 +1207,41 @@ end
 -- Expose for the Header module so the picker can track the last actively-worked week.
 Addon._HasAnySectionItemChecked = HasAnySectionItemChecked
 
+local function GetCurrentSectionId(db)
+    -- Returns the sectionId that should start expanded. Mirrors Header's currentId:
+    -- 1. startAtSectionId if explicitly set and valid
+    -- 2. First section the user has actively worked (any item checked)
+    -- 3. First incomplete section
+    -- 4. First section in order
+    db = db or Addon:EnsureDB()
+    local stored = db.startAtSectionId and tostring(db.startAtSectionId) or ""
+    if stored ~= "" and Addon._sectionsById and Addon._sectionsById[stored] then
+        return stored
+    end
+    if Addon._order then
+        for i = 1, #Addon._order do
+            local sid = Addon._order[i]
+            if HasAnySectionItemChecked(sid, db) then return sid end
+        end
+        for i = 1, #Addon._order do
+            local sid = Addon._order[i]
+            if not IsSectionCompleteById(sid, db) then return sid end
+        end
+        if Addon._order[1] then return tostring(Addon._order[1]) end
+    end
+    return nil
+end
+
 -- UI pooling: we reuse section frames and checkboxes to avoid allocations during refresh.
+-- Must sit above third-party addon overlays (e.g. NaowhQOL UIWidgetPowerBarContainerFrame
+-- sits at ~121) so header buttons can receive mouse clicks.
+local SECTION_FRAME_LEVEL = 200
+
 local function AcquireSectionFrame()
     local sectionFrame = tremove(Addon._sectionPool)
     if sectionFrame then
         sectionFrame:Show()
+        sectionFrame:SetFrameLevel(SECTION_FRAME_LEVEL)
         -- Re-apply header color in case THEME.header changed since last use.
         if sectionFrame._title then
             local h = Addon.THEME.header
@@ -1210,6 +1251,7 @@ local function AcquireSectionFrame()
     end
 
     sectionFrame = CreateFrame("Frame", nil, scrollChild)
+    sectionFrame:SetFrameLevel(SECTION_FRAME_LEVEL)
     sectionFrame:SetWidth(1)
     sectionFrame._checkboxes = {}
 
@@ -1217,6 +1259,7 @@ local function AcquireSectionFrame()
     header:SetPoint("TOPLEFT", sectionFrame, "TOPLEFT", 0, 0)
     header:SetPoint("TOPRIGHT", sectionFrame, "TOPRIGHT", 0, 0)
     header:SetHeight(Addon.UI.headerMinH)
+    header:EnableMouse(true)
     if header.RegisterForClicks then
         header:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     end
@@ -1228,6 +1271,16 @@ local function AcquireSectionFrame()
     title:SetJustifyH("LEFT")
     if title.SetWordWrap then title:SetWordWrap(true) end
     sectionFrame._title = title
+
+    -- Expand/collapse toggle button anchored to the right of the header.
+    -- Parented to sectionFrame (not the Button header) so it is a sibling
+    -- rather than a nested button, avoiding click-propagation issues.
+    local expandBtn = Addon.Controls.NewExpandButton(
+        sectionFrame, nil, true,
+        L and L.EXPAND_SECTION  or "Expand section",
+        L and L.COLLAPSE_SECTION or "Collapse section")
+    expandBtn:SetPoint("RIGHT", sectionFrame._header, "RIGHT", -4, 0)
+    sectionFrame._expandBtn = expandBtn
 
     return sectionFrame
 end
@@ -1255,6 +1308,9 @@ local function ReleaseSectionFrame(sectionFrame)
     end
 
     sectionFrame._header:SetScript("OnClick", nil)
+    if sectionFrame._expandBtn then
+        sectionFrame._expandBtn:SetScript("OnClick", nil)
+    end
     tinsert(Addon._sectionPool, sectionFrame)
 end
 
@@ -1343,9 +1399,11 @@ local function LayoutFrom(startIndex)
             if i < startIndex then
                 posY = posY - sectionFrame:GetHeight() - sectionGap
             else
+            local sectionW = math.max(1, (scrollFrame and scrollFrame:GetWidth() or Addon.UI.frameW) - 2 * paddingX)
                 sectionFrame:ClearAllPoints()
                 sectionFrame:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", paddingX, posY)
                 sectionFrame:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", -paddingX, posY)
+                sectionFrame:SetWidth(sectionW)
                 posY = posY - sectionFrame:GetHeight() - sectionGap
             end
         end
@@ -1617,7 +1675,17 @@ local function OnHeaderClick(header)
     local sectionFrame = header and header._sectionFrame
     if not sectionFrame then return end
     local sectionId = sectionFrame._sectionId
-    SetSectionCollapsed(sectionId, not IsSectionCollapsed(sectionId))
+    if not sectionId then return end
+    local collapsed = not IsSectionCollapsed(sectionId)
+    SetSectionCollapsed(sectionId, collapsed)
+    -- Set/clear the explicit-expand flag BEFORE calling UpdateSectionVisuals.
+    -- Without this, UpdateSectionVisuals would see complete==true and immediately
+    -- re-collapse the section the user just opened.
+    if not collapsed then
+        Addon._userExpandedCompleted[sectionId] = true
+    else
+        Addon._userExpandedCompleted[sectionId] = nil
+    end
     if UpdateSectionVisuals then
         UpdateSectionVisuals(sectionFrame, sectionId)
     end
@@ -1715,7 +1783,9 @@ local function SyncCheckboxesForSection(sectionFrame, sectionId, db)
     end
 end
 
-UpdateSectionVisuals = function(sectionFrame, sectionId)
+-- precomputedCurrentId: optional; pass from ApplySectionVisuals to avoid
+-- calling GetCurrentSectionId once per section on first open.
+UpdateSectionVisuals = function(sectionFrame, sectionId, precomputedCurrentId)
     local database = Addon:EnsureDB()
     local prefs    = Addon:EnsurePrefs()
 
@@ -1740,15 +1810,35 @@ UpdateSectionVisuals = function(sectionFrame, sectionId)
 
     sectionFrame:Show()
 
-    if complete then
+    -- Only auto-collapse a completed section when the user has NOT explicitly
+    -- expanded it (tracked via _userExpandedCompleted set in OnHeaderClick).
+    local userExpanded = Addon._userExpandedCompleted and Addon._userExpandedCompleted[sectionId]
+    if complete and not userExpanded then
         SetSectionCollapsed(sectionId, true, database)
     end
 
     SetHeaderText(sectionFrame, sectionId, complete)
-    ComputeHeaderHeight(sectionFrame, Addon.UI.itemTextWidth + Addon.UI.headerTextExtraW)
+    -- Reserve space for the expand button on the right side of the header.
+    local headerTextW = Addon.UI.itemTextWidth + Addon.UI.headerTextExtraW
+    if sectionFrame._expandBtn then headerTextW = headerTextW - 26 end
+    ComputeHeaderHeight(sectionFrame, headerTextW)
 
-    local collapsed = IsSectionCollapsed(sectionId, database) or false
-    if complete then collapsed = true end
+    -- Default-collapse sections that have never been explicitly toggled,
+    -- keeping only the current active section expanded.
+    local explicitlySet = (database.collapsedSections[sectionId] ~= nil)
+    local collapsed
+    if complete and not userExpanded then
+        collapsed = true
+    elseif explicitlySet then
+        collapsed = database.collapsedSections[sectionId] == true
+    else
+        -- First open: collapse everything except the current section.
+        -- Use precomputedCurrentId when available to avoid re-walking _order
+        -- once per section (ApplySectionVisuals pre-computes this).
+        local currentId = precomputedCurrentId or GetCurrentSectionId(database)
+        collapsed = (tostring(sectionId) ~= tostring(currentId or ""))
+        SetSectionCollapsed(sectionId, collapsed, database)
+    end
 
     local checkedMap = database.checked
     for i = 1, #sectionFrame._checkboxes do
@@ -1762,6 +1852,11 @@ UpdateSectionVisuals = function(sectionFrame, sectionId)
 
     LayoutItems(sectionFrame, collapsed, prefs.hideCompletedTasks)
     UpdateSectionHeight(sectionFrame, collapsed)
+
+    -- Sync the expand button's visual state.
+    if sectionFrame._expandBtn then
+        sectionFrame._expandBtn:SetExpanded(not collapsed)
+    end
 end
 
 -- Picker constants, ExtractMonthRangeLabel, and SetPickerButtonTextColor were moved
@@ -1818,10 +1913,39 @@ end
 -- child: the scroll child frame, passed explicitly to avoid an implicit upvalue.
 local function ApplySectionVisuals(want, haveBefore, dataChanged, database, child)
     local needCheckboxResync = dataChanged
+    -- Pre-compute once so UpdateSectionVisuals doesn't re-walk _order N times
+    -- on the first open (when all collapsedSections entries are nil).
+    local currentSectionId = GetCurrentSectionId(database)
     for i = 1, want do
         local sectionId    = Addon._order[i]
         local sectionFrame = Addon._activeSections[i]
         sectionFrame:SetParent(child)
+        -- SetParent resets frame level to parent+1; re-apply so section frames
+        -- sit above third-party overlay frames and headers receive mouse clicks.
+        sectionFrame:SetFrameLevel(SECTION_FRAME_LEVEL)
+        if sectionFrame._header then
+            sectionFrame._header:SetFrameLevel(SECTION_FRAME_LEVEL + 1)
+            sectionFrame._header:EnableMouse(true)
+        end
+        if sectionFrame._expandBtn then
+            sectionFrame._expandBtn:SetFrameLevel(SECTION_FRAME_LEVEL + 2)
+            -- Wire OnClick here (not at creation) because sectionId is now known.
+            local capturedFrame   = sectionFrame
+            local capturedSection = Addon._order[i]
+            sectionFrame._expandBtn:SetScript("OnClick", function(self_)
+                local coll = not IsSectionCollapsed(capturedSection)
+                SetSectionCollapsed(capturedSection, coll)
+                if not coll then
+                    Addon._userExpandedCompleted[capturedSection] = true
+                else
+                    Addon._userExpandedCompleted[capturedSection] = nil
+                end
+                if UpdateSectionVisuals then
+                    UpdateSectionVisuals(capturedFrame, capturedSection)
+                end
+                LayoutFrom(capturedFrame._index or 1)
+            end)
+        end
         sectionFrame._sectionId             = sectionId
         sectionFrame._index                 = i
         Addon._sectionsIndexById[sectionId] = i
@@ -1833,7 +1957,7 @@ local function ApplySectionVisuals(want, haveBefore, dataChanged, database, chil
         sectionFrame._header._sectionFrame = sectionFrame
         sectionFrame._header:SetScript("OnClick", OnHeaderClick)
 
-        UpdateSectionVisuals(sectionFrame, sectionId)
+        UpdateSectionVisuals(sectionFrame, sectionId, currentSectionId)
     end
 end
 
@@ -1892,22 +2016,10 @@ function Addon:Refresh()
     -- the change-week button shows the real current week from the very first load.
     if self.LayoutHeaderButtons then self:LayoutHeaderButtons() end
 
-    local posY = -Addon.UI.sectionTopPad
-    local paddingX = Addon.UI.sectionInsetX
-
-    for i = 1, #self._activeSections do
-        local sectionFrame = self._activeSections[i]
-        if sectionFrame:IsShown() then
-            sectionFrame:ClearAllPoints()
-            sectionFrame:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", paddingX, posY)
-            sectionFrame:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", -paddingX, posY)
-            posY = posY - sectionFrame:GetHeight() - Addon.UI.sectionGap
-        end
-    end
-
-    scrollChild:SetHeight(max(1, -posY + Addon.UI.sectionGap))
-
-    self:ApplyScrollLayout()
+    -- LayoutFrom(1) re-anchors all visible sections, sets their widths, and
+    -- updates scrollChild:SetHeight — identical to the manual loop that was
+    -- here before, but without the duplicate ApplyScrollLayout call.
+    LayoutFrom(1)
 
     if self.UpdateCompletionEasterEgg then
         self:UpdateCompletionEasterEgg()
