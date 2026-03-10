@@ -5,7 +5,7 @@ NOTE: This is the canonical enUS dataset; other locales must keep IDs identical
 so completion tracking stays consistent across locales.
 ]]
 
--- @sheet-version: 17
+-- @sheet-version: 18
 
 local LOCALE = "enUS"
 
@@ -17,7 +17,7 @@ if type(reg) ~= "table" then
     _G[LOCALE_REGISTRY_KEY] = reg
 end
 if type(reg.data) ~= "table" then reg.data = {} end
-reg.sheet_version = "17"
+reg.sheet_version = "18"
 
 local DATASET = {
 
@@ -42,8 +42,8 @@ local DATASET = {
         id = "50281d6f",
         title = "Pre-Season Week 1 - March 3 - M0's",
         items = {
-            { id = "ebe944e7", text = "Save 160 Veteran crests for crafting 2x Veteran items with Embellishments" },
-            { id = "5a2e9ede", text = "DO NOT CRAFT" },
+            { id = "18fb09f9", text = "Save 160 Veteran crests for crafting 2x Veteran items with Embellishments (These do not take Sparks)" },
+            { id = "e8cef00e", text = "Check Guide for what and when to craft." },
             { id = "c06ee1a3", text = "If you are on an alt and don't see some of these quests, go to Soridormi in the Silvermoon City Inn and choose \"I Stopped the Voidstorm\" to skip the campaign." },
             { id = "755d27e7", text = "Raise The Singularity renown to rank 7 for 1/6 champion trinket - comes from a quest from the renown vendor" },
             { id = "f213fee8", text = "Raise Hara'ti renown to rank 8 for 1/6 champion belt - comes from a quest from the renown vendor" },
@@ -71,11 +71,11 @@ local DATASET = {
         id = "ff1f5a67",
         title = "Pre-Season Week 2 - March 10 - M0's",
         items = {
-            { id = "ebe944e7", text = "Save 160 Veteran crests for crafting 2x Veteran items with Embellishments" },
-            { id = "5a2e9ede", text = "DO NOT CRAFT" },
+            { id = "18fb09f9", text = "Save 160 Veteran crests for crafting 2x Veteran items with Embellishments (These do not take Sparks)" },
+            { id = "907d099d", text = "Special note for dual wield classes - you can probably craft now. Check Guide for what and went to craft." },
             { id = "75c5fe6e", text = "If not completed, continue to raise renown for Champion Pieces" },
-            { id = "101e78a9", text = "Complete weekly dungeon quest from Halduron Brightwing for 1000 renown" },
             { id = "e0ecce24", text = "Complete weekly world event quest for pinnacle cache and spark from Lady Liadrin" },
+            { id = "9626318e", text = "(Optional) Complete weekly dungeon quest from Halduron Brightwing for 1000 renown" },
             { id = "8b55f0c7", text = "(Optional) Complete the weekly Saltheril's Soiree in Eversong Woods." },
             { id = "8e107032", text = "(Optional) Complete the weekly Abundance Event in Zul'aman." },
             { id = "d5a12c89", text = "(Optional) Complete the weekly Legends of the Haranir event in Harandar." },
@@ -83,29 +83,33 @@ local DATASET = {
             { id = "6762e305", text = "(Optional) Kill each rare once in each zone for renown. This is a one time bonus for each rare and does not reset weekly." },
             { id = "23cb93ed", text = "Unlock Delves through tier 8 if not done yet" },
             { id = "d54f7430", text = "Complete 4x Hard Prey. The first 2 will give Veteran gear; all 4 will give Veteran Crests which you need to cap." },
-            { id = "efb035ba", text = "(Optional) Complete 2x random Hard Prey for Veteran crests on each character - doing 2x optional per week will cap Veteran crests by the end of week 2" },
+            { id = "7b67a15d", text = "(Optional) Complete random Hard Prey to cap Veteran crests on each character" },
             { id = "a7ee4829", text = "Complete a World Tour of M0 dungeons - rewards vet ilvl - do not upgrade yet" },
             { id = "dc01eba9", text = "If you have any adventurer pieces left, you should feel free to upgrade them." },
-            { id = "f2af7330", text = "If you raid Tuesday the 17th, craft. Check guide for more info." },
+            { id = "161febe2", text = "If you raid Tuesday the 17th, craft Veteran pieces with Embellishments which do not take sparks. Check guide for more info." },
         },
     },
     {
-        id = "33a3fcba",
-        title = "Season 1 Week 1 - Mar 17 - Heroic Week",
+        id = "89ba2d2a",
+        title = "Season 1 Week 1 - Mar 17 - Heroic Week, 2nd craft",
         items = {
-            { id = "36d21691", text = "Do not spend any Heroic or Mythic Crests until told to do so. Check guide for why we hold crests." },
+            { id = "791379ba", text = "Do not spend any Heroic or Mythic Crests until told to do so. Check Guide for why we hold crests." },
+            { id = "2f4447eb", text = "Special note for Fury Warriors - you can probably craft now. Check Guide for what and went to craft." },
             { id = "e66847d8", text = "Do LFR for tier pieces - obtaining a 4set bonus will allow catalyst charges to drop from all content" },
             { id = "e0ecce24", text = "Complete weekly world event quest for pinnacle cache and spark from Lady Liadrin" },
             { id = "9686fde4", text = "Complete weekly housing quest from Vaeli for ?hero crests? (will update when it goes live)" },
             { id = "ca5a8044", text = "If available, complete pvp quest for guaranteed hero neck/ring - can maybe do with the below optional PvP ranking" },
             { id = "d8d237fa", text = "(Optional) Raise PVP ranking to 1600 for catalyst charge (this is the same catalyst charge shared with 2,000 M+ rating from the next week). If you get 2 pieces of tier from your raid this week, this would allow you to catalyze 2 items and start getting Catalyst charge drops from your m+ next week." },
-            { id = "45c7d35b", text = "(Optional) Complete a World Tour of M0 dungeons - rewards champ ilvl - daily lockout" },
+            { id = "1104f71c", text = "(Optional) Complete a World Tour of M0 dungeons - rewards champ ilvl - daily lockout - DON'T BURN YOURSELF OUT! M+ opens next week and will replace all of this." },
+            { id = "7828e484", text = "(Optional) If you don't want to do world tours of M0 dungeons every day, consider running a dungeon with a very good trinket each day for a chance at getting it" },
             { id = "22842538", text = "Complete 2x Nightmare Prey for Champion gear on each character" },
+            { id = "b8a280cb", text = "If Nightmare has a weekly quest for a Hero track item, do that as well." },
             { id = "dc0e2686", text = "Kill World Boss for champ 2/6 250 ilvl item" },
             { id = "b6846065", text = "Do t8 or higher bountiful delves, use map on t8+ delve - while doing this, unlock t11 delves" },
-            { id = "8c700b67", text = "Before raid, craft 2x 246 ilvl pieces, 2x embellishments on weak slots, use 160 Vet Crests. These do not take Sparks." },
+            { id = "e796ddb6", text = "Not confirmed yet - fill your vault in every slot for multiple chances at tier items next week." },
+            { id = "a73e9cab", text = "Before raid, craft 2x 246 ilvl pieces, 2x embellishments on weak slots, use 160 Vet Crests. These do not take Sparks. Check Guide for more information." },
             { id = "679a07b9", text = "Before raid, spend all Adventurer, Veteran and Champion Crests upgrading anything. Do not spend Heroic or Mythic crests." },
-            { id = "5768e0fe", text = "Track crests: 0/100 Heroic, 0/100 Mythic" },
+            { id = "8824d048", text = "Track spent crests: 0/100 Heroic, 0/100 Mythic" },
         },
     },
     {
@@ -113,23 +117,24 @@ local DATASET = {
         title = "Week 2 - Mar 24 - Mythic Week, M+ Opens, take off work giganerds",
         items = {
             { id = "36d21691", text = "Do not spend any Heroic or Mythic Crests until told to do so. Check guide for why we hold crests." },
+            { id = "61144e80", text = "Check Guide for what and went to craft." },
+            { id = "4056a14a", text = "If you don't have 4set, do LFR for tier pieces - obtaining a 4set bonus will allow catalyst charges to drop from all content" },
             { id = "e0ecce24", text = "Complete weekly world event quest for pinnacle cache and spark from Lady Liadrin" },
             { id = "9686fde4", text = "Complete weekly housing quest from Vaeli for ?hero crests? (will update when it goes live)" },
-            { id = "4056a14a", text = "If you don't have 4set, do LFR for tier pieces - obtaining a 4set bonus will allow catalyst charges to drop from all content" },
             { id = "16cf341e", text = "(Optional) Kill World Boss for champ 2/6 250 ilvl item" },
             { id = "4aa82ede", text = "(Optional) Complete 2x Nightmare Prey for Champion gear on each character" },
             { id = "26d0b610", text = "Do at least one t11 bountiful delve to get Cracked Keystone Quest" },
             { id = "286f219c", text = "Continue to spend all Adventurer, Veteran and Champion Crests upgrading anything" },
             { id = "74924a7b", text = "Farm +10s for 266 gear in every slot" },
-            { id = "eb45e64d", text = "Before Mythic raid, Upgrade 11x 3/6 hero items once each" },
+            { id = "e4965db1", text = "Before Mythic raid, Upgrade 11x 3/6 hero items once each. If you don't have that many Heroic items, upgrade a ring or trinket more to reduce risk of wasting crests." },
             { id = "cbfb6966", text = "Mythic: If you're lucky and got a Myth track item, skip to next week's upgrade advice for it." },
-            { id = "0e855644", text = "Track crests: 220/220 Heroic, 0/220 Mythic - never hold Mythic crests" },
+            { id = "5bdc8d65", text = "Track spent crests: 220/220 Heroic, 0/220 Mythic - never hold Mythic crests" },
             { id = "721f006f", text = "Ending item level: 4x266, 11x269" },
         },
     },
     {
-        id = "b0abc363",
-        title = "Week 3 - Mar 31 - Final Raid Opens",
+        id = "8f5b5aeb",
+        title = "Week 3 - Mar 31 - Final Raid Opens, 3rd craft",
         items = {
             { id = "1fbc825e", text = "Open vault (272+ myth item) - upgrade after crafting" },
             { id = "8226c872", text = "If no 4p, do LFR for tier pieces (check guide for why)" },
@@ -137,7 +142,7 @@ local DATASET = {
             { id = "c316485a", text = "Heroic: Upgrade 2 of your 4/6 269 items to 6/6 276 for 80 Heroic Crests" },
             { id = "2568bd36", text = "Mythic: If your vault item was 1/6, upgrade its heroic counterpart first to 6/6 heroic for 20 Heroic Crests. Upgrade your 1/6 272 Myth track item to 6/6 289 for 80 Myth crests." },
             { id = "484da4b0", text = "If you got a 2nd myth track item, skip to next week's upgrade advice for it." },
-            { id = "0ecf8e89", text = "Track crests: 320/320 Heroic, 160/320 Mythic - never hold Mythic crests" },
+            { id = "a501f690", text = "Track spent crests: 320/320 Heroic, 160/320 Mythic - never hold Mythic crests" },
             { id = "02884180", text = "Ending item level: 3x266, 8x269, 2x276h, 1x285(crafted), 1x289" },
         },
     },
@@ -150,20 +155,20 @@ local DATASET = {
             { id = "c316485a", text = "Heroic: Upgrade 2 of your 4/6 269 items to 6/6 276 for 80 Heroic Crests" },
             { id = "2568bd36", text = "Mythic: If your vault item was 1/6, upgrade its heroic counterpart first to 6/6 heroic for 20 Heroic Crests. Upgrade your 1/6 272 Myth track item to 6/6 289 for 80 Myth crests." },
             { id = "0ccf5c83", text = "Mythic: Upgrade your raid drop from 2/6 275 Myth track to 6/6 289 for 80 Myth crests." },
-            { id = "299f3284", text = "Track crests: 420/400 Heroic, 320/420 Mythic - never hold Mythic crests" },
+            { id = "bccfe037", text = "Track spent crests: 420/400 Heroic, 320/420 Mythic - never hold Mythic crests" },
             { id = "8b8cde46", text = "Ending item level: 2x266, 5x269, 4x276h, 1x285(crafted), 3x289" },
         },
     },
     {
-        id = "239053b5",
-        title = "Week 5 - Apr 14",
+        id = "71d2703a",
+        title = "Week 5 - Apr 14, 4th craft",
         items = {
             { id = "9375e497", text = "Open vault (272+ myth item)" },
             { id = "1db5f946", text = "Farm +10s for vault + crests" },
             { id = "11e426da", text = "Craft next item (see doc for more info)" },
             { id = "c316485a", text = "Heroic: Upgrade 2 of your 4/6 269 items to 6/6 276 for 80 Heroic Crests" },
             { id = "2568bd36", text = "Mythic: If your vault item was 1/6, upgrade its heroic counterpart first to 6/6 heroic for 20 Heroic Crests. Upgrade your 1/6 272 Myth track item to 6/6 289 for 80 Myth crests." },
-            { id = "8d74c3e1", text = "Track crests: 520/520 Heroic, 480/520 Mythic - never hold Mythic crests" },
+            { id = "92a40a6f", text = "Track spent crests: 520/520 Heroic, 480/520 Mythic - never hold Mythic crests" },
             { id = "4f04ba4e", text = "Ending item level:  1x266, 2x269, 6x276h, 2x285(crafted), 4x289" },
         },
     },
@@ -176,7 +181,7 @@ local DATASET = {
             { id = "c35cf0b6", text = "Heroic: Upgrade your last 4/6 269 item to 6/6 276 for 40 Heroic Crests" },
             { id = "2568bd36", text = "Mythic: If your vault item was 1/6, upgrade its heroic counterpart first to 6/6 heroic for 20 Heroic Crests. Upgrade your 1/6 272 Myth track item to 6/6 289 for 80 Myth crests." },
             { id = "0ccf5c83", text = "Mythic: Upgrade your raid drop from 2/6 275 Myth track to 6/6 289 for 80 Myth crests." },
-            { id = "4510d1aa", text = "Track crests: 560/620 Heroic, 620/620 Mythic - never hold Mythic crests" },
+            { id = "4f11d7d8", text = "Track spent crests: 560/620 Heroic, 620/620 Mythic - never hold Mythic crests" },
             { id = "67f84375", text = "Ending item level:  7x276h, 2x285(crafted), 1x 285, 5x289" },
         },
     },
