@@ -73,8 +73,8 @@ local DATASET = {
         items = {
             { id = "18fb09f9", text = "Save 160 Veteran crests for crafting 2x Veteran items with Embellishments (These do not take Sparks)" },
             { id = "907d099d", text = "Special note for dual wield classes - you can probably craft now. Check Guide for what and went to craft." },
-            { id = "75c5fe6e", text = "If not completed, continue to raise renown for Champion Pieces" },
-            { id = "1f299f34", text = "Complete Sparks of War weekly quest from the PvP quest giver in South silvermoon. it does not show a spark as a reward but it gives one. world quests give 25% completion, treasures give some too. must have war mode on." },
+            { id = "0d50e744", text = "NA: Blizzard hotfixed in a PvE spark quest from Liadrin. If you already did the PvP one, you can skip this as it does not give a fourth spark. If you have not completed any spark quest this week, do the Liadrin one for your third spark." },
+            { id = "ab127896", text = "EU: After your reset, complete the weekly quest from Liadrin for a spark." },
             { id = "5fd1b2ad", text = "DO NOT DO the pvp quest for the heroic ring/amulet. you can't finish the quest line until after m+ opens" },
             { id = "9626318e", text = "(Optional) Complete weekly dungeon quest from Halduron Brightwing for 1000 renown" },
             { id = "8b55f0c7", text = "(Optional) Complete the weekly Saltheril's Soiree in Eversong Woods." },
