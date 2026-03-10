@@ -5,7 +5,7 @@ NOTE: This is the canonical enUS dataset; other locales must keep IDs identical
 so completion tracking stays consistent across locales.
 ]]
 
--- @sheet-version: 18
+-- @sheet-version: 19
 
 local LOCALE = "enUS"
 
@@ -17,7 +17,7 @@ if type(reg) ~= "table" then
     _G[LOCALE_REGISTRY_KEY] = reg
 end
 if type(reg.data) ~= "table" then reg.data = {} end
-reg.sheet_version = "18"
+reg.sheet_version = "19"
 
 local DATASET = {
 
@@ -74,7 +74,8 @@ local DATASET = {
             { id = "18fb09f9", text = "Save 160 Veteran crests for crafting 2x Veteran items with Embellishments (These do not take Sparks)" },
             { id = "907d099d", text = "Special note for dual wield classes - you can probably craft now. Check Guide for what and went to craft." },
             { id = "75c5fe6e", text = "If not completed, continue to raise renown for Champion Pieces" },
-            { id = "e0ecce24", text = "Complete weekly world event quest for pinnacle cache and spark from Lady Liadrin" },
+            { id = "1f299f34", text = "Complete Sparks of War weekly quest from the PvP quest giver in South silvermoon. it does not show a spark as a reward but it gives one. world quests give 25% completion, treasures give some too. must have war mode on." },
+            { id = "5fd1b2ad", text = "DO NOT DO the pvp quest for the heroic ring/amulet. you can't finish the quest line until after m+ opens" },
             { id = "9626318e", text = "(Optional) Complete weekly dungeon quest from Halduron Brightwing for 1000 renown" },
             { id = "8b55f0c7", text = "(Optional) Complete the weekly Saltheril's Soiree in Eversong Woods." },
             { id = "8e107032", text = "(Optional) Complete the weekly Abundance Event in Zul'aman." },
@@ -98,7 +99,6 @@ local DATASET = {
             { id = "e66847d8", text = "Do LFR for tier pieces - obtaining a 4set bonus will allow catalyst charges to drop from all content" },
             { id = "e0ecce24", text = "Complete weekly world event quest for pinnacle cache and spark from Lady Liadrin" },
             { id = "9686fde4", text = "Complete weekly housing quest from Vaeli for ?hero crests? (will update when it goes live)" },
-            { id = "ca5a8044", text = "If available, complete pvp quest for guaranteed hero neck/ring - can maybe do with the below optional PvP ranking" },
             { id = "d8d237fa", text = "(Optional) Raise PVP ranking to 1600 for catalyst charge (this is the same catalyst charge shared with 2,000 M+ rating from the next week). If you get 2 pieces of tier from your raid this week, this would allow you to catalyze 2 items and start getting Catalyst charge drops from your m+ next week." },
             { id = "1104f71c", text = "(Optional) Complete a World Tour of M0 dungeons - rewards champ ilvl - daily lockout - DON'T BURN YOURSELF OUT! M+ opens next week and will replace all of this." },
             { id = "7828e484", text = "(Optional) If you don't want to do world tours of M0 dungeons every day, consider running a dungeon with a very good trinket each day for a chance at getting it" },
@@ -128,8 +128,8 @@ local DATASET = {
             { id = "74924a7b", text = "Farm +10s for 266 gear in every slot" },
             { id = "e4965db1", text = "Before Mythic raid, Upgrade 11x 3/6 hero items once each. If you don't have that many Heroic items, upgrade a ring or trinket more to reduce risk of wasting crests." },
             { id = "cbfb6966", text = "Mythic: If you're lucky and got a Myth track item, skip to next week's upgrade advice for it." },
-            { id = "5bdc8d65", text = "Track spent crests: 220/220 Heroic, 0/220 Mythic - never hold Mythic crests" },
-            { id = "721f006f", text = "Ending item level: 4x266, 11x269" },
+            { id = "00cb43a8", text = "Track spent crests: 220/220 Heroic, 0/220 Mythic - never hold Mythic crests - may vary if you crafted" },
+            { id = "adb492bd", text = "Ending item level: 4x266, 11x269 - may vary if you crafted" },
         },
     },
     {
@@ -142,8 +142,8 @@ local DATASET = {
             { id = "c316485a", text = "Heroic: Upgrade 2 of your 4/6 269 items to 6/6 276 for 80 Heroic Crests" },
             { id = "2568bd36", text = "Mythic: If your vault item was 1/6, upgrade its heroic counterpart first to 6/6 heroic for 20 Heroic Crests. Upgrade your 1/6 272 Myth track item to 6/6 289 for 80 Myth crests." },
             { id = "484da4b0", text = "If you got a 2nd myth track item, skip to next week's upgrade advice for it." },
-            { id = "a501f690", text = "Track spent crests: 320/320 Heroic, 160/320 Mythic - never hold Mythic crests" },
-            { id = "02884180", text = "Ending item level: 3x266, 8x269, 2x276h, 1x285(crafted), 1x289" },
+            { id = "40b01764", text = "Track spent crests: 320/320 Heroic, 160/320 Mythic - never hold Mythic crests - may vary if you crafted" },
+            { id = "c0774809", text = "Ending item level: 2x266, 8x269, 2x276h, 2x285(crafted), 1x289 - may vary if you crafted" },
         },
     },
     {
@@ -156,7 +156,7 @@ local DATASET = {
             { id = "2568bd36", text = "Mythic: If your vault item was 1/6, upgrade its heroic counterpart first to 6/6 heroic for 20 Heroic Crests. Upgrade your 1/6 272 Myth track item to 6/6 289 for 80 Myth crests." },
             { id = "0ccf5c83", text = "Mythic: Upgrade your raid drop from 2/6 275 Myth track to 6/6 289 for 80 Myth crests." },
             { id = "bccfe037", text = "Track spent crests: 420/400 Heroic, 320/420 Mythic - never hold Mythic crests" },
-            { id = "8b8cde46", text = "Ending item level: 2x266, 5x269, 4x276h, 1x285(crafted), 3x289" },
+            { id = "8184483b", text = "Ending item level: 2x266, 4x269, 4x276h, 2x285(crafted), 3x289" },
         },
     },
     {
@@ -182,7 +182,7 @@ local DATASET = {
             { id = "2568bd36", text = "Mythic: If your vault item was 1/6, upgrade its heroic counterpart first to 6/6 heroic for 20 Heroic Crests. Upgrade your 1/6 272 Myth track item to 6/6 289 for 80 Myth crests." },
             { id = "0ccf5c83", text = "Mythic: Upgrade your raid drop from 2/6 275 Myth track to 6/6 289 for 80 Myth crests." },
             { id = "4f11d7d8", text = "Track spent crests: 560/620 Heroic, 620/620 Mythic - never hold Mythic crests" },
-            { id = "67f84375", text = "Ending item level:  7x276h, 2x285(crafted), 1x 285, 5x289" },
+            { id = "37472f94", text = "Ending item level:  7x276h, 2x285(crafted), 1x285, 5x289" },
         },
     },
     {
