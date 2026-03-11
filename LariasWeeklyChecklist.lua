@@ -1393,13 +1393,16 @@ local function LayoutFrom(startIndex)
     local sectionGap = Addon.UI.sectionGap
     local activeSections = Addon._activeSections
 
+    -- Hoist frame width query: scrollFrame:GetWidth() is a C call that returns
+    -- the same value for every section in this pass, so computing it once avoids
+    -- a redundant API call per visible section.
+    local sectionW = math.max(1, (scrollFrame and scrollFrame:GetWidth() or Addon.UI.frameW) - 2 * paddingX)
     for i = 1, #activeSections do
         local sectionFrame = activeSections[i]
         if sectionFrame:IsShown() then
             if i < startIndex then
                 posY = posY - sectionFrame:GetHeight() - sectionGap
             else
-            local sectionW = math.max(1, (scrollFrame and scrollFrame:GetWidth() or Addon.UI.frameW) - 2 * paddingX)
                 sectionFrame:ClearAllPoints()
                 sectionFrame:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", paddingX, posY)
                 sectionFrame:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", -paddingX, posY)

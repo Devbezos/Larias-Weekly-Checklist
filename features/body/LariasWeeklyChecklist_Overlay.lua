@@ -102,12 +102,18 @@ local function ColorForXY(cur, cap)
     return COLORS.yellow
 end
 
+-- Session cache shared with Currency.lua (populated lazily on first lookup per ID).
+local _overlayIconCache = {}
 local function GetCurrencyIconID(currencyID)
     local id = tonumber(currencyID)
     if not (id and id > 0) then return nil end
+    local cached = _overlayIconCache[id]
+    if cached ~= nil then return cached or nil end
     if not (C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo) then return nil end
     local info = C_CurrencyInfo.GetCurrencyInfo(id)
-    return info and info.iconFileID or nil
+    local iconID = info and info.iconFileID or nil
+    _overlayIconCache[id] = iconID or false
+    return iconID
 end
 
 local function BottomFor(obj)

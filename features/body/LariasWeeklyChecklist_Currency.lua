@@ -16,6 +16,16 @@ local tonumber, tostring, type = tonumber, tostring, type
 local floor, max, abs = math.floor, math.max, math.abs
 local tinsert, tconcat = table.insert, table.concat
 
+-- Maximum rows in the right column (must match Overlay's RIGHT_LINE_COUNT).
+local RIGHT_LINE_COUNT = 10
+
+-- Per-session cache for static currency fields (name, iconFileID, quality).
+-- These never change within a session, so we avoid repeated C_CurrencyInfo calls.
+local _currencyStaticCache = {}  -- [id] = { name, iconFileID, quality } or false
+
+-- Cache for BuildCrestLabels output; invalidated only when crest IDs change.
+local _crestLabelsCache = { count = 0, ids = {}, labels = nil }
+
 --  Shared mini-utilities 
 local COLORS = {
     red    = "ffff4040",
@@ -91,37 +101,54 @@ local function FormatCurrencyProgressParts(currencyID)
     return held, 0
 end
 
-local function GetCurrencyIconID(currencyID)
+-- Returns a cached table of static currency fields {name, iconFileID, quality}.
+-- Call this instead of GetCurrencyInfo when you only need data that never
+-- changes within a session.  FormatCurrencyProgressParts must still go direct
+-- because quantity/totalEarned are dynamic.
+local function GetCurrencyStaticInfo(currencyID)
     local id = tonumber(currencyID)
     if not (id and id > 0) then return nil end
+    local cached = _currencyStaticCache[id]
+    if cached ~= nil then return cached or nil end
     if not (C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo) then return nil end
     local info = C_CurrencyInfo.GetCurrencyInfo(id)
-    return info and info.iconFileID or nil
+    if not info then _currencyStaticCache[id] = false; return nil end
+    local s = { name = info.name, iconFileID = info.iconFileID, quality = tonumber(info.quality) }
+    _currencyStaticCache[id] = s
+    return s
+end
+
+local function GetCurrencyIconID(currencyID)
+    local s = GetCurrencyStaticInfo(currencyID)
+    return s and s.iconFileID or nil
 end
 
 local function GetCurrencyName(currencyID)
-    local id = tonumber(currencyID)
-    if not (id and id > 0) then return nil end
-    if not (C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo) then return nil end
-    local info = C_CurrencyInfo.GetCurrencyInfo(id)
-    return info and info.name or nil
+    local s = GetCurrencyStaticInfo(currencyID)
+    return s and s.name or nil
 end
 
 local function GetCurrencyQualityColor(currencyID)
-    local id = tonumber(currencyID)
-    if not (id and id > 0) then return COLORS.dim end
-    if not (C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo) then return COLORS.dim end
-    local info = C_CurrencyInfo.GetCurrencyInfo(id)
-    if not info then return COLORS.dim end
-    local q = tonumber(info.quality)
-    return (q and QUALITY_HEX[q]) or COLORS.dim
+    local s = GetCurrencyStaticInfo(currencyID)
+    if not s then return COLORS.dim end
+    return (s.quality and QUALITY_HEX[s.quality]) or COLORS.dim
 end
 
 -- Builds a table (keyed by currency ID) of the shortest distinguishing label
 -- for each crest tier.  Words shared by every name are stripped; what remains
 -- is the tier-unique portion (e.g. "Adventurer", "Veteran", …).  Falls back
 -- to the first word when nothing distinguishes (e.g. only one crest defined).
+-- Result is cached in _crestLabelsCache; rebuilt only when crest IDs change.
 local function BuildCrestLabels(ids, crestCount)
+    -- Return cached result when the crest IDs haven't changed.
+    if _crestLabelsCache.labels and _crestLabelsCache.count == crestCount then
+        local valid = true
+        for i = 1, crestCount do
+            if _crestLabelsCache.ids[i] ~= ids[i] then valid = false; break end
+        end
+        if valid then return _crestLabelsCache.labels end
+    end
+
     -- Collect per-name word lists and a global word frequency count.
     local wordLists = {}
     local wordCount = {}
@@ -157,6 +184,11 @@ local function BuildCrestLabels(ids, crestCount)
             end
         end
     end
+
+    -- Store result in the cache for subsequent calls this session.
+    _crestLabelsCache.count = crestCount
+    for i = 1, crestCount do _crestLabelsCache.ids[i] = ids[i] end
+    _crestLabelsCache.labels = labels
     return labels
 end
 
@@ -249,11 +281,6 @@ local function GetCrestTradeBatches(profile)
     return lower, higher
 end
 
-local function EnsureCrestIDsDetected(tracking)
-    if tracking._crestIDsDetected then return end
-    tracking._crestIDsDetected = true
-end
-
 local function GetCrestIDsAndCount(tracking)
     local ids = tracking.crestCurrencyIDs or {}
     local crestCount
@@ -328,7 +355,6 @@ end
 local function GetCrestLines()
     local tracking = Addon.TRACKING
     if not tracking then return { "", "", "", "" } end
-    EnsureCrestIDsDetected(tracking)
     local ids, crestCount = GetCrestIDsAndCount(tracking)
     local cache = EnsureCrestCache(tracking, crestCount)
     local out, labelOut, valueOut = ResetCrestOutput(cache, crestCount)
@@ -476,7 +502,6 @@ end
 --- The returned table is reused across calls – do not hold a reference past the
 --- next tracking update.
 function Addon:GetCurrencyPanelRows()
-    local RIGHT_LINE_COUNT = 10
     local n        = 0
     local tracking = self.TRACKING
 
@@ -556,7 +581,6 @@ function Addon:FillCurrencySnapshot(snap)
     if snap.rightRows then Wipe(snap.rightRows) else snap.rightRows = {} end
     local tracking = self.TRACKING
     if tracking then
-        EnsureCrestIDsDetected(tracking)
         local ids, crestCount = GetCrestIDsAndCount(tracking)
         local cache = EnsureCrestCache(tracking, crestCount)
         PopulateCrestCurCap(cache, ids, crestCount)
