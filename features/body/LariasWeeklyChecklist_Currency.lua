@@ -363,9 +363,10 @@ local function GetCrestLines()
     PopulateCrestUnlocked(cache, crestCount)
     local highestTradeTarget, gained = ComputeCrestTradeup(cache, crestCount, batchLower, batchHigher)
     local crestLabels = BuildCrestLabels(ids, crestCount)
-    local tooltipTexts = {}
+    local convertTooltipTexts = {}
+    local amountTooltipTexts  = {}
     -- Hoist the base tooltip string out of the loop to avoid repeated locale lookups.
-    -- For trade-up rows the convert tooltip is appended as a second line below.
+    -- amountTooltipTexts shows on the value (numbers) area; convertTooltipTexts on the label side.
     local _crestAmountTip = L.TRACKING_CREST_AMOUNT_TOOLTIP or "Accurately tracks how many crests you can hold including overcapped crests"
     for i = 1, crestCount do
         local id = ids[i]
@@ -380,7 +381,7 @@ local function GetCrestLines()
                 else
                     xy = tostring(cur); color = COLORS.green
                 end
-                tooltipTexts[i] = _crestAmountTip
+                amountTooltipTexts[i] = _crestAmountTip
                 local tradeUp = ""
                 if highestTradeTarget and i == highestTradeTarget then
                     local n = tonumber(gained[i]) or 0
@@ -390,7 +391,7 @@ local function GetCrestLines()
                             .. ColorWrap(COLORS.dim, L.TRACKING_TRADE_UP_SUFFIX or "")
                         local convertTip = L.TRACKING_CONVERT_TOOLTIP or ""
                         if convertTip ~= "" then
-                            tooltipTexts[i] = tooltipTexts[i] .. "\n" .. convertTip
+                            convertTooltipTexts[i] = convertTip
                         end
                     end
                 end
@@ -404,7 +405,7 @@ local function GetCrestLines()
             labelOut[i] = lbl; valueOut[i] = val; out[i] = lbl .. " " .. val
         end
     end
-    return out, labelOut, valueOut, crestCount, tooltipTexts
+    return out, labelOut, valueOut, crestCount, convertTooltipTexts, amountTooltipTexts
 end
 
 --  Catalyst 
@@ -486,14 +487,15 @@ end
 local _panelRowBuf  = {}  -- result array, returned and reused each call
 local _panelRowPool = {}  -- pool of row sub-tables, one slot per max possible row
 
-local function FillRow(n, lbl, val, iconID, currencyID, tooltipText)
+local function FillRow(n, lbl, val, iconID, currencyID, tooltipText, amountTooltipText)
     if not _panelRowPool[n] then _panelRowPool[n] = {} end
-    local r       = _panelRowPool[n]
-    r.label       = lbl
-    r.value       = val
-    r.iconID      = iconID
-    r.currencyID  = currencyID
-    r.tooltipText = tooltipText or nil
+    local r             = _panelRowPool[n]
+    r.label             = lbl
+    r.value             = val
+    r.iconID            = iconID
+    r.currencyID        = currencyID
+    r.tooltipText       = tooltipText or nil
+    r.amountTooltipText = amountTooltipText or nil
     _panelRowBuf[n] = r
 end
 
@@ -506,7 +508,7 @@ function Addon:GetCurrencyPanelRows()
     local tracking = self.TRACKING
 
     -- Crests
-    local _, labelLines, valueLines, crestCount, crestTooltips = GetCrestLines()
+    local _, labelLines, valueLines, crestCount, crestConvertTooltips, crestAmountTooltips = GetCrestLines()
     crestCount = tonumber(crestCount) or 4
     local crestIDs = tracking and GetCrestIDsAndCount(tracking) or {}
     if type(crestIDs) ~= "table" then crestIDs = {} end
@@ -517,7 +519,9 @@ function Addon:GetCurrencyPanelRows()
         if IsNonEmptyText(lbl) or IsNonEmptyText(val) then
             local id = crestIDs[i]
             n = n + 1
-            FillRow(n, lbl, val, GetCurrencyIconID(id), id, crestTooltips and crestTooltips[i])
+            FillRow(n, lbl, val, GetCurrencyIconID(id), id,
+                crestConvertTooltips and crestConvertTooltips[i],
+                crestAmountTooltips  and crestAmountTooltips[i])
         end
     end
 
