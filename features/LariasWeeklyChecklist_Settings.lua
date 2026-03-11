@@ -43,10 +43,15 @@ StaticPopupDialogs["LARIAS_LOCALE_RELOAD"] = StaticPopupDialogs["LARIAS_LOCALE_R
 }
 
 -- Support resource URLs used by the Support section at the bottom of this panel.
-local _sl = Addon.TRACKING and Addon.TRACKING.supportLinks or {}
-local SUPPORT_URL_DOC       = _sl.doc       or "https://docs.google.com/document/d/e/2PACX-1vTGkZ2Cjr0jlv90XqW9vy9VXsVucd-yMCgHdyCvX_kQfOrexNDAC7Lf3LifuhqxrcWqJ0W3zIhvK3ii/pub"
-local SUPPORT_URL_CHECKLIST = _sl.checklist or "https://docs.google.com/spreadsheets/d/1iK2SZUcz_ljnkdTG7KW6pqfzaUDuSgnlh1HupcLrkus/edit?gid=53744607#gid=53744607"
-local SUPPORT_URL_DISCORD   = _sl.discord   or "https://discord.gg/postnerfclarity"
+-- Resolved lazily at call time so changes to constants.supportLinks take effect
+-- after OnInitialize has populated Addon.TRACKING (not at file-parse time).
+local function GetSupportLinks()
+    local sl = Addon.TRACKING and Addon.TRACKING.supportLinks or {}
+    return
+        sl.doc       or "https://docs.google.com/document/d/e/2PACX-1vTGkZ2Cjr0jlv90XqW9vy9VXsVucd-yMCgHdyCvX_kQfOrexNDAC7Lf3LifuhqxrcWqJ0W3zIhvK3ii/pub",
+        sl.checklist or "https://docs.google.com/spreadsheets/d/1iK2SZUcz_ljnkdTG7KW6pqfzaUDuSgnlh1HupcLrkus/edit?gid=53744607#gid=53744607",
+        sl.discord   or "https://discord.gg/postnerfclarity"
+end
 
 -- Generic "copy link" popup used when C_Browser.OpenLink is unavailable.
 -- Always redefined (no `or` guard) so the OnShow closure always captures
@@ -645,6 +650,7 @@ local function BuildPanel()
         if Addon._styleActionButton then Addon._styleActionButton(btn) end
         btn:SetScript("OnClick", function() Addon.OpenSupportLink(url) end)
     end
+    local SUPPORT_URL_DOC, SUPPORT_URL_CHECKLIST, SUPPORT_URL_DISCORD = GetSupportLinks()
     MakeSuppBtn(L.SUPPORT_BTN_GUIDE_DOC or "Guide Doc",  SUPPORT_URL_DOC,       PAD)
     MakeSuppBtn(L.SUPPORT_BTN_CHECKLIST  or "Checklist",  SUPPORT_URL_CHECKLIST, PAD + SUPP_BTN_W + SUPP_BTN_GAP)
     MakeSuppBtn(L.SUPPORT_BTN_DISCORD    or "Discord",    SUPPORT_URL_DISCORD,   PAD + (SUPP_BTN_W + SUPP_BTN_GAP) * 2)

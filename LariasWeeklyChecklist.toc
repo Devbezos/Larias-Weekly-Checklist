@@ -8,6 +8,9 @@
 ## SavedVariables: LariasWeeklyChecklistDB
 ## OptionalDeps: LariasWeeklyChecklist_Localization
 ## IconTexture: Interface\AddOns\LariasWeeklyChecklist\assets\icon
+## AddonCompartmentFunc: LariasWeeklyChecklist_CompartmentClick
+## AddonCompartmentFuncOnEnter: LariasWeeklyChecklist_CompartmentOnEnter
+## AddonCompartmentFuncOnLeave: LariasWeeklyChecklist_CompartmentOnLeave
 ## X-Wago-ID: mKOD5RGx
 ## X-Curse-Project-ID: 1448023
 
