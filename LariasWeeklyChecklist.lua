@@ -435,6 +435,49 @@ local function SetupMinimapIcon()
     icon:Register(addonName, dataObject, minimapCfg)
 end
 
+-- Addon Compartment callbacks (registered via TOC AddonCompartmentFunc metadata).
+-- Mirrors the minimap OnClick / OnTooltipShow behaviour so all three mouse
+-- buttons work from the compartment the same way they do on the minimap icon.
+local _compartmentFrame  -- cached from OnEnter so the click handler can anchor to it
+-- Debounce table: defensive guard in case a future client version restores
+-- dual down+up firing.  Process only the first event within 300 ms per button.
+local _compartmentLastClick = {}
+function LariasWeeklyChecklist_CompartmentClick(_, button, down)  -- luacheck: ignore 212
+    local now = GetTime()
+    if (now - (_compartmentLastClick[button] or 0)) < 0.30 then return end
+    _compartmentLastClick[button] = now
+    if button == "LeftButton" then
+        if Addon.CreateFrame then Addon:CreateFrame() end
+        Addon:Toggle()
+    elseif button == "RightButton" then
+        if GameTooltip then GameTooltip:Hide() end
+        if Addon.ToggleGearPopup then
+            -- Anchor to the persistent AddonCompartmentFrame minimap button rather
+            -- than _compartmentFrame (the menu-item button), which is pooled and
+            -- moves when the dropdown closes, dragging the popup with it via the
+            -- live SetPoint anchor relationship.
+            Addon:ToggleGearPopup(AddonCompartmentFrame or _compartmentFrame)
+        end
+    elseif button == "MiddleButton" then
+        if Addon.ToggleIlvlRefWindow then Addon:ToggleIlvlRefWindow() end
+    end
+end
+
+function LariasWeeklyChecklist_CompartmentOnEnter(_, frame)
+    _compartmentFrame = frame
+    local L = Addon.L or {}
+    GameTooltip:SetOwner(frame, "ANCHOR_TOP")
+    GameTooltip:AddLine(L.DISPLAY_NAME or addonName, 1, 0.82, 0)
+    GameTooltip:AddLine(L.MINIMAP_TOOLTIP_LEFT_CLICK_TOGGLE  or "Left-click: Toggle checklist",   1, 1, 1)
+    GameTooltip:AddLine(L.MINIMAP_TOOLTIP_RIGHT_CLICK_OPTIONS or "Right-click: Options",           1, 1, 1)
+    GameTooltip:AddLine(L.MINIMAP_TOOLTIP_MIDDLE_CLICK_ILVL  or "Middle-click: Ilvl Refs",        1, 1, 1)
+    GameTooltip:Show()
+end
+
+function LariasWeeklyChecklist_CompartmentOnLeave()
+    GameTooltip:Hide()
+end
+
 -- Initialize AceDB and minimap icon on addon load
 function Addon:OnInitialize()
     SetupAddonDB()
@@ -1393,13 +1436,16 @@ local function LayoutFrom(startIndex)
     local sectionGap = Addon.UI.sectionGap
     local activeSections = Addon._activeSections
 
+    -- Hoist frame width query: scrollFrame:GetWidth() is a C call that returns
+    -- the same value for every section in this pass, so computing it once avoids
+    -- a redundant API call per visible section.
+    local sectionW = math.max(1, (scrollFrame and scrollFrame:GetWidth() or Addon.UI.frameW) - 2 * paddingX)
     for i = 1, #activeSections do
         local sectionFrame = activeSections[i]
         if sectionFrame:IsShown() then
             if i < startIndex then
                 posY = posY - sectionFrame:GetHeight() - sectionGap
             else
-            local sectionW = math.max(1, (scrollFrame and scrollFrame:GetWidth() or Addon.UI.frameW) - 2 * paddingX)
                 sectionFrame:ClearAllPoints()
                 sectionFrame:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", paddingX, posY)
                 sectionFrame:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", -paddingX, posY)
@@ -1639,8 +1685,13 @@ end
 
 -- ── Guide-link helpers ──────────────────────────────────────────────────────
 -- GUIDE_URL: read from constants (same source as the Settings/GearPopup support buttons).
-local GUIDE_URL  = (Addon.TRACKING and Addon.TRACKING.supportLinks and Addon.TRACKING.supportLinks.doc)
-                   or "https://docs.google.com/document/d/e/2PACX-1vTGkZ2Cjr0jlv90XqW9vy9VXsVucd-yMCgHdyCvX_kQfOrexNDAC7Lf3LifuhqxrcWqJ0W3zIhvK3ii/pub"
+-- Resolved lazily at call time so it picks up Addon.TRACKING.supportLinks.doc after
+-- OnInitialize has populated TRACKING from the constants file.
+local GUIDE_URL_FALLBACK = "https://docs.google.com/document/d/e/2PACX-1vTGkZ2Cjr0jlv90XqW9vy9VXsVucd-yMCgHdyCvX_kQfOrexNDAC7Lf3LifuhqxrcWqJ0W3zIhvK3ii/pub"
+local function GetGuideURL()
+    return (Addon.TRACKING and Addon.TRACKING.supportLinks and Addon.TRACKING.supportLinks.doc)
+           or GUIDE_URL_FALLBACK
+end
 local GUIDE_LINK = "|cffffd700|Hlarias:guide|h[CHECK GUIDE]|h|r"
 
 -- FormatGuideText replaces "see guide" / "check guide" (any capitalisation)
@@ -1658,7 +1709,7 @@ end
 -- is allocated per row per sync call.
 local function OnGuideHyperlinkClick(_, linkData)
     if linkData == "larias:guide" then
-        Addon.OpenSupportLink(GUIDE_URL)
+        Addon.OpenSupportLink(GetGuideURL())
     end
 end
 local function OnGuideHyperlinkEnter(self_)

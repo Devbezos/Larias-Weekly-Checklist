@@ -102,12 +102,18 @@ local function ColorForXY(cur, cap)
     return COLORS.yellow
 end
 
+-- Session cache shared with Currency.lua (populated lazily on first lookup per ID).
+local _overlayIconCache = {}
 local function GetCurrencyIconID(currencyID)
     local id = tonumber(currencyID)
     if not (id and id > 0) then return nil end
+    local cached = _overlayIconCache[id]
+    if cached ~= nil then return cached or nil end
     if not (C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo) then return nil end
     local info = C_CurrencyInfo.GetCurrencyInfo(id)
-    return info and info.iconFileID or nil
+    local iconID = info and info.iconFileID or nil
+    _overlayIconCache[id] = iconID or false
+    return iconID
 end
 
 local function BottomFor(obj)
@@ -253,7 +259,7 @@ local function ApplyGreatVaultGrid(gridBlocks)
     end
 end
 
-local function SetRightRowPair(i, rowLabel, rowValue, iconFileID, currencyID, tooltipText)
+local function SetRightRowPair(i, rowLabel, rowValue, iconFileID, currencyID, tooltipText, amountTooltipText)
     local row = TrackingUI.right[RIGHT_ROW_KEYS[i]]
     if not (row and row.label and row.value) then return end
     rowLabel = rowLabel or ""; rowValue = rowValue or ""
@@ -261,7 +267,10 @@ local function SetRightRowPair(i, rowLabel, rowValue, iconFileID, currencyID, to
     SetTextIfChanged(row.value, rowValue)
     local showRow = IsNonEmptyText(rowLabel) or IsNonEmptyText(rowValue)
     SetShownIfChanged(row.frame or row.label, showRow)
-    if row.frame then row.frame._lariasTooltipText = tooltipText or nil end
+    if row.frame then
+        row.frame._lariasTooltipText       = tooltipText or nil
+        row.frame._lariasAmountTooltipText = amountTooltipText or nil
+    end
     if row.icon then
         if showRow and iconFileID and iconFileID ~= 0 then
             if row.icon._tex then row.icon._tex:SetTexture(iconFileID) end
@@ -279,7 +288,7 @@ local function ApplyRightColumnAsPairs()
     local panelRows = Addon:GetCurrencyPanelRows()
     for i, row in ipairs(panelRows) do
         if i > RIGHT_LINE_COUNT then break end
-        SetRightRowPair(i, row.label, row.value, row.iconID, row.currencyID, row.tooltipText)
+        SetRightRowPair(i, row.label, row.value, row.iconID, row.currencyID, row.tooltipText, row.amountTooltipText)
     end
     for i = #panelRows + 1, RIGHT_LINE_COUNT do
         SetRightRowPair(i, "", "")
@@ -599,20 +608,31 @@ function Addon:CreateTrackingPanel(parentFrame)
         end)
         icon:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
+        -- Right-side hit area: shows "Accurately tracks" tooltip over the quantity numbers.
+        local valueHit = CreateFrame("Frame", nil, row)
+        valueHit:SetPoint("TOPRIGHT",    row, "TOPRIGHT",    0,  0)
+        valueHit:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", 0,  0)
+        valueHit:SetWidth(80)
+        valueHit:EnableMouse(true)
+        valueHit:SetScript("OnEnter", function(self)
+            local tip = row._lariasAmountTooltipText
+            if tip and tip ~= "" then
+                GameTooltip:SetOwner(self, "ANCHOR_TOP")
+                GameTooltip:SetText(tip, 1, 1, 1, 1, true)
+                GameTooltip:Show()
+            end
+        end)
+        valueHit:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        row._lariasValueHit = valueHit
+
+        -- Full row: shows the convert tooltip when hovering over the label side.
+        -- (valueHit captures mouse on the right, so OnEnter here fires on the label area only.)
         row:EnableMouse(true)
         row:SetScript("OnEnter", function(self)
-            if self._lariasTooltipText and self._lariasTooltipText ~= "" then
+            local tip = self._lariasTooltipText
+            if tip and tip ~= "" then
                 GameTooltip:SetOwner(self, "ANCHOR_TOP")
-                -- _lariasTooltipText may contain '\n'-separated lines.
-                -- The first line is the header (white, via SetText); remaining
-                -- non-empty lines are added as subdued AddLine entries.
-                local lines = { strsplit("\n", self._lariasTooltipText) }
-                GameTooltip:SetText(lines[1] or self._lariasTooltipText, 1, 1, 1, 1, true)
-                for j = 2, #lines do
-                    if lines[j] ~= "" then
-                        GameTooltip:AddLine(lines[j], 0.8, 0.8, 0.8, true)
-                    end
-                end
+                GameTooltip:SetText(tip, 1, 1, 1, 1, true)
                 GameTooltip:Show()
             end
         end)
