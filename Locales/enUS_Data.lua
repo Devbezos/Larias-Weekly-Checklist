@@ -5,7 +5,7 @@ NOTE: This is the canonical enUS dataset; other locales must keep IDs identical
 so completion tracking stays consistent across locales.
 ]]
 
--- @sheet-version: 21
+-- @sheet-version: 22
 
 local LOCALE = "enUS"
 
@@ -17,7 +17,7 @@ if type(reg) ~= "table" then
     _G[LOCALE_REGISTRY_KEY] = reg
 end
 if type(reg.data) ~= "table" then reg.data = {} end
-reg.sheet_version = "21"
+reg.sheet_version = "22"
 
 local DATASET = {
 
@@ -76,7 +76,7 @@ local DATASET = {
             { id = "0d50e744", text = "NA: Blizzard hotfixed in a PvE spark quest from Liadrin. If you already did the PvP one, you can skip this as it does not give a fourth spark. If you have not completed any spark quest this week, do the Liadrin one for your third spark." },
             { id = "ab127896", text = "EU: After your reset, complete the weekly quest from Liadrin for a spark." },
             { id = "5fd1b2ad", text = "DO NOT DO the pvp quest for the heroic ring/amulet. you can't finish the quest line until after m+ opens" },
-            { id = "690364cc", text = "New: Farm 10,000 honor and either purchase on the AH or farm 6 Infused Heliotrope for next week. See next week for info.  Note: this is very min-maxy. While it will provide a nice boost for a couple weeks, it does require PvP. The item level of the crafted item is an assumption based on previous tiers and hasn't been confirmed." },
+            { id = "ed534745", text = "(Optional) New: Farm 10,000 honor and either purchase on the AH or farm 6 Infused Heliotrope for next week. See next week for info.  Note: this is very min-maxy.  It's for 2 extra sockets going into first two weeks." },
             { id = "9626318e", text = "(Optional) Complete weekly dungeon quest from Halduron Brightwing for 1000 renown" },
             { id = "8b55f0c7", text = "(Optional) Complete the weekly Saltheril's Soiree in Eversong Woods." },
             { id = "8e107032", text = "(Optional) Complete the weekly Abundance Event in Zul'aman." },
@@ -100,9 +100,9 @@ local DATASET = {
             { id = "e66847d8", text = "Do LFR for tier pieces - obtaining a 4set bonus will allow catalyst charges to drop from all content" },
             { id = "e0ecce24", text = "Complete weekly world event quest for pinnacle cache and spark from Lady Liadrin" },
             { id = "9686fde4", text = "Complete weekly housing quest from Vaeli for ?hero crests? (will update when it goes live)" },
-            { id = "f1203f87", text = "Note: the next two things are tied together - they are a decent upgrade for the first couple of weeks but it does require you to PvP.  This is extremely min-maxy." },
-            { id = "796f17c3", text = "New: Complete PvP matches to obtain a quest item that rewards 9x Galactic Gladiator's Heraldry. You will use these to craft items below. Only do this if you have or are going to farm the honor for the sockets below." },
-            { id = "0dfd45a9", text = "New: Purchase 2 Galactic Jeweler's Settings from the vendor for 5000 Honor and 3 Infused Heliotrope each. You will use these to socket the crafted items below. These items will not appear on the vendor until this week." },
+            { id = "1e1d846c", text = "Note: the next two things are tied together - they are for a small upgrade - two additional sockets going into the first two weeks." },
+            { id = "a5b8839d", text = "(Optional) New: Complete PvP matches to obtain a quest item that rewards 9x Galactic Gladiator's Heraldry. You will use these to craft items below. Only do this if you have or are going to farm the honor for the sockets below. Note: this is very min-maxy, it is for 2 additonal sockets essentially." },
+            { id = "a1884373", text = "(Optional) New: Purchase 2 Galactic Jeweler's Settings from the vendor for 5000 Honor and 3 Infused Heliotrope each. You will use these to socket the crafted items below. These items will not appear on the vendor until this week. This is very min-maxy, it's for 2 additional sockets essentially." },
             { id = "d8d237fa", text = "(Optional) Raise PVP ranking to 1600 for catalyst charge (this is the same catalyst charge shared with 2,000 M+ rating from the next week). If you get 2 pieces of tier from your raid this week, this would allow you to catalyze 2 items and start getting Catalyst charge drops from your m+ next week." },
             { id = "ef789b0b", text = "(Optional) Complete a World Tour of M0 dungeons. These will reward champ ilvl on a daily lockout - DON'T BURN YOURSELF OUT! M+ opens next week and will replace all of this." },
             { id = "d78939c6", text = "Daily Task: consider running a specific m0 that drops a great trinket for you each day. The item will be champion ilvl (normal raid) and could be a nice boost going into raid next week if you don't manage to farm it on Heroic yet." },
@@ -111,9 +111,8 @@ local DATASET = {
             { id = "dc0e2686", text = "Kill World Boss for champ 2/6 250 ilvl item" },
             { id = "b6846065", text = "Do t8 or higher bountiful delves, use map on t8+ delve - while doing this, unlock t11 delves" },
             { id = "e796ddb6", text = "Not confirmed yet - fill your vault in every slot for multiple chances at tier items next week." },
-            { id = "0c413dc3", text = "New: If you did farm honor and have obtained your Galactic Gladiator's Heraldry and Galactic Jeweler's Sockets(see above), craft Bracers and Belt at 259 ilvl and add a socket to them. These items can take embellishments - if you crafted a weapon with an embellishment, only put one embellishment on these. If you did not craft a weapon, put 2x embellishments on them. These items are the equivalent of 1/6 Hero track with a socket and you can use these for a couple weeks into the season. The item level of the crafted item is an assumption based on previous tiers and hasn't been confirmed." },
+            { id = "4820451a", text = "(Optional) New: If you did farm honor and have obtained your Galactic Gladiator's Heraldry and Galactic Jeweler's Sockets(see above), craft Bracers and Belt at 246 ilvl and add a socket to them. These items can take embellishments - if you crafted a weapon with an embellishment, only put one embellishment on these. If you did not craft a weapon, put 2x embellishments on them. These items are the equivalent of 1/6 Champion track with a socket and you can use these for a couple weeks into the season. Item level confirmed to be 1/6 champion." },
             { id = "3fb16dbb", text = "If you did not farm honor for PvP items or you raid Tuesday and don't have enough time to craft the PvP items, then BEFORE RAID, craft 2x 246 ilvl pieces with embellishments on weak slots, using 160 Vet Crests. THESE DO NOT TAKE SPARKS. The items you are crafting are the blue quality items at the crafting bench that you insert 80x Veteran crests in to increase their ilvl.  Check Guide for more information. Can also ask in the Discord for help if you need it." },
-            { id = "2676812b", text = "New: If you already crafted Veteran items and you want to swap to the honor items, you can do that. You don't lose much if you already crafted Vet pieces (a couple upgrades for this week only)." },
             { id = "146b7d62", text = "After doing as much above as you can, but BEFORE raid, spend all Adventurer, Veteran and Champion Crests upgrading anything. Do not spend Heroic or Mythic crests." },
             { id = "8824d048", text = "Track spent crests: 0/100 Heroic, 0/100 Mythic" },
         },
