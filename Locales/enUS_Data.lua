@@ -5,7 +5,7 @@ NOTE: This is the canonical enUS dataset; other locales must keep IDs identical
 so completion tracking stays consistent across locales.
 ]]
 
--- @sheet-version: 22
+-- @sheet-version: 23
 
 local LOCALE = "enUS"
 
@@ -17,7 +17,7 @@ if type(reg) ~= "table" then
     _G[LOCALE_REGISTRY_KEY] = reg
 end
 if type(reg.data) ~= "table" then reg.data = {} end
-reg.sheet_version = "22"
+reg.sheet_version = "23"
 
 local DATASET = {
 
@@ -73,6 +73,7 @@ local DATASET = {
         items = {
             { id = "79c35167", text = "Save 160 Veteran crests for crafting - see further down for instructions (These do not take Sparks)" },
             { id = "b4de098c", text = "Special note for dual wield classes - you can probably craft your spark item now. Check Guide for what and went to craft." },
+            { id = "d8f307f2", text = "Text guide update alert: I have updated Spark crafting advice for every single class. Highly recommend you Check Guide with the new information." },
             { id = "0d50e744", text = "NA: Blizzard hotfixed in a PvE spark quest from Liadrin. If you already did the PvP one, you can skip this as it does not give a fourth spark. If you have not completed any spark quest this week, do the Liadrin one for your third spark." },
             { id = "ab127896", text = "EU: After your reset, complete the weekly quest from Liadrin for a spark." },
             { id = "5fd1b2ad", text = "DO NOT DO the pvp quest for the heroic ring/amulet. you can't finish the quest line until after m+ opens" },
@@ -96,7 +97,7 @@ local DATASET = {
         title = "Season 1 Week 1 - Mar 17 - Heroic Week, 2nd craft",
         items = {
             { id = "791379ba", text = "Do not spend any Heroic or Mythic Crests until told to do so. Check Guide for why we hold crests." },
-            { id = "128e2f0b", text = "Special note for Fury Warriors - you can probably craft your spark item now. Check Guide for what and went to craft." },
+            { id = "9767aed2", text = "Almost everyone can probably craft your spark item now. Check Guide for what and went to craft." },
             { id = "e66847d8", text = "Do LFR for tier pieces - obtaining a 4set bonus will allow catalyst charges to drop from all content" },
             { id = "e0ecce24", text = "Complete weekly world event quest for pinnacle cache and spark from Lady Liadrin" },
             { id = "9686fde4", text = "Complete weekly housing quest from Vaeli for ?hero crests? (will update when it goes live)" },
@@ -110,9 +111,9 @@ local DATASET = {
             { id = "f3eb6555", text = "If Nightmare Prey has a weekly quest for a Hero track item, do that as well." },
             { id = "dc0e2686", text = "Kill World Boss for champ 2/6 250 ilvl item" },
             { id = "b6846065", text = "Do t8 or higher bountiful delves, use map on t8+ delve - while doing this, unlock t11 delves" },
-            { id = "e796ddb6", text = "Not confirmed yet - fill your vault in every slot for multiple chances at tier items next week." },
+            { id = "bf5d2e12", text = "Fill your vault in every slot for multiple chances at hero tier items next week." },
             { id = "4820451a", text = "(Optional) New: If you did farm honor and have obtained your Galactic Gladiator's Heraldry and Galactic Jeweler's Sockets(see above), craft Bracers and Belt at 246 ilvl and add a socket to them. These items can take embellishments - if you crafted a weapon with an embellishment, only put one embellishment on these. If you did not craft a weapon, put 2x embellishments on them. These items are the equivalent of 1/6 Champion track with a socket and you can use these for a couple weeks into the season. Item level confirmed to be 1/6 champion." },
-            { id = "3fb16dbb", text = "If you did not farm honor for PvP items or you raid Tuesday and don't have enough time to craft the PvP items, then BEFORE RAID, craft 2x 246 ilvl pieces with embellishments on weak slots, using 160 Vet Crests. THESE DO NOT TAKE SPARKS. The items you are crafting are the blue quality items at the crafting bench that you insert 80x Veteran crests in to increase their ilvl.  Check Guide for more information. Can also ask in the Discord for help if you need it." },
+            { id = "2e0ae86e", text = "If you did not farm honor for PvP items, then BEFORE RAID, craft 1x-2x 246 ilvl pieces with embellishments on weak slots, using 80-160 Vet Crests. THESE DO NOT TAKE SPARKS. The items you are crafting are the blue quality items at the crafting bench that you insert 80x Veteran crests in to increase their ilvl.  Check Guide for more information. Can also ask in the Discord for help if you need it." },
             { id = "146b7d62", text = "After doing as much above as you can, but BEFORE raid, spend all Adventurer, Veteran and Champion Crests upgrading anything. Do not spend Heroic or Mythic crests." },
             { id = "8824d048", text = "Track spent crests: 0/100 Heroic, 0/100 Mythic" },
         },
