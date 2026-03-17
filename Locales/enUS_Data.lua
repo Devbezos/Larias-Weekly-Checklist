@@ -5,7 +5,7 @@ NOTE: This is the canonical enUS dataset; other locales must keep IDs identical
 so completion tracking stays consistent across locales.
 ]]
 
--- @sheet-version: 23
+-- @sheet-version: 24
 
 local LOCALE = "enUS"
 
@@ -17,7 +17,7 @@ if type(reg) ~= "table" then
     _G[LOCALE_REGISTRY_KEY] = reg
 end
 if type(reg.data) ~= "table" then reg.data = {} end
-reg.sheet_version = "23"
+reg.sheet_version = "24"
 
 local DATASET = {
 
@@ -97,20 +97,23 @@ local DATASET = {
         title = "Season 1 Week 1 - Mar 17 - Heroic Week, 2nd craft",
         items = {
             { id = "791379ba", text = "Do not spend any Heroic or Mythic Crests until told to do so. Check Guide for why we hold crests." },
-            { id = "9767aed2", text = "Almost everyone can probably craft your spark item now. Check Guide for what and went to craft." },
+            { id = "fab7aef9", text = "Almost everyone can probably craft your spark item now. Check Guide for what and when to craft." },
             { id = "e66847d8", text = "Do LFR for tier pieces - obtaining a 4set bonus will allow catalyst charges to drop from all content" },
-            { id = "e0ecce24", text = "Complete weekly world event quest for pinnacle cache and spark from Lady Liadrin" },
-            { id = "9686fde4", text = "Complete weekly housing quest from Vaeli for ?hero crests? (will update when it goes live)" },
+            { id = "b5539926", text = "Complete weekly world event quest for pinnacle cache and spark from Lady Liadrin - Do the Arcantina takes 3 minutes" },
+            { id = "091a44e6", text = "Complete weekly housing quest from Vaeli - reward is capped crests, doesn't matter what you pick." },
             { id = "1e1d846c", text = "Note: the next two things are tied together - they are for a small upgrade - two additional sockets going into the first two weeks." },
-            { id = "a5b8839d", text = "(Optional) New: Complete PvP matches to obtain a quest item that rewards 9x Galactic Gladiator's Heraldry. You will use these to craft items below. Only do this if you have or are going to farm the honor for the sockets below. Note: this is very min-maxy, it is for 2 additonal sockets essentially." },
+            { id = "14637ac8", text = "(Optional) New: Complete PvP matches to obtain a quest item that rewards 9x Galactic Gladiator's Heraldry. You will use these to craft items below. Only do this if you have or are going to farm the honor for the sockets below. Note: this is very min-maxy, it is for 2 additonal sockets essentially.
+Arena is fastest" },
             { id = "a1884373", text = "(Optional) New: Purchase 2 Galactic Jeweler's Settings from the vendor for 5000 Honor and 3 Infused Heliotrope each. You will use these to socket the crafted items below. These items will not appear on the vendor until this week. This is very min-maxy, it's for 2 additional sockets essentially." },
             { id = "d8d237fa", text = "(Optional) Raise PVP ranking to 1600 for catalyst charge (this is the same catalyst charge shared with 2,000 M+ rating from the next week). If you get 2 pieces of tier from your raid this week, this would allow you to catalyze 2 items and start getting Catalyst charge drops from your m+ next week." },
             { id = "ef789b0b", text = "(Optional) Complete a World Tour of M0 dungeons. These will reward champ ilvl on a daily lockout - DON'T BURN YOURSELF OUT! M+ opens next week and will replace all of this." },
             { id = "d78939c6", text = "Daily Task: consider running a specific m0 that drops a great trinket for you each day. The item will be champion ilvl (normal raid) and could be a nice boost going into raid next week if you don't manage to farm it on Heroic yet." },
-            { id = "22842538", text = "Complete 2x Nightmare Prey for Champion gear on each character" },
-            { id = "f3eb6555", text = "If Nightmare Prey has a weekly quest for a Hero track item, do that as well." },
-            { id = "dc0e2686", text = "Kill World Boss for champ 2/6 250 ilvl item" },
+            { id = "05b7e462", text = "Complete 4x Hard Prey to unlock Nightmare Prey." },
+            { id = "099df4fa", text = "Complete 3x Nightmare Prey for Champion gear on each character and to complete the weekly quest for a map" },
+            { id = "cc5a28dd", text = "Complete Nullaeus on ? difficulty for 30 uncapped Hero crests. Remember don't spend these." },
             { id = "b6846065", text = "Do t8 or higher bountiful delves, use map on t8+ delve - while doing this, unlock t11 delves" },
+            { id = "2f9c0f4f", text = "Use your boss summoning item from Nightmare Prey weekly quest in a tier 8 Delve to get a map and then use it for a Hero track item." },
+            { id = "5ccc7694", text = "Kill World Boss for champ 3/6 253 ilvl item" },
             { id = "bf5d2e12", text = "Fill your vault in every slot for multiple chances at hero tier items next week." },
             { id = "4820451a", text = "(Optional) New: If you did farm honor and have obtained your Galactic Gladiator's Heraldry and Galactic Jeweler's Sockets(see above), craft Bracers and Belt at 246 ilvl and add a socket to them. These items can take embellishments - if you crafted a weapon with an embellishment, only put one embellishment on these. If you did not craft a weapon, put 2x embellishments on them. These items are the equivalent of 1/6 Champion track with a socket and you can use these for a couple weeks into the season. Item level confirmed to be 1/6 champion." },
             { id = "2e0ae86e", text = "If you did not farm honor for PvP items, then BEFORE RAID, craft 1x-2x 246 ilvl pieces with embellishments on weak slots, using 80-160 Vet Crests. THESE DO NOT TAKE SPARKS. The items you are crafting are the blue quality items at the crafting bench that you insert 80x Veteran crests in to increase their ilvl.  Check Guide for more information. Can also ask in the Discord for help if you need it." },
@@ -123,7 +126,7 @@ local DATASET = {
         title = "Week 2 - Mar 24 - Mythic Week, M+ Opens, take off work giganerds",
         items = {
             { id = "36d21691", text = "Do not spend any Heroic or Mythic Crests until told to do so. Check guide for why we hold crests." },
-            { id = "61144e80", text = "Check Guide for what and went to craft." },
+            { id = "e8cef00e", text = "Check Guide for what and when to craft." },
             { id = "4056a14a", text = "If you don't have 4set, do LFR for tier pieces - obtaining a 4set bonus will allow catalyst charges to drop from all content" },
             { id = "e0ecce24", text = "Complete weekly world event quest for pinnacle cache and spark from Lady Liadrin" },
             { id = "9686fde4", text = "Complete weekly housing quest from Vaeli for ?hero crests? (will update when it goes live)" },
