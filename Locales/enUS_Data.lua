@@ -5,7 +5,7 @@ NOTE: This is the canonical enUS dataset; other locales must keep IDs identical
 so completion tracking stays consistent across locales.
 ]]
 
--- @sheet-version: 24
+-- @sheet-version: 26
 
 local LOCALE = "enUS"
 
@@ -17,7 +17,7 @@ if type(reg) ~= "table" then
     _G[LOCALE_REGISTRY_KEY] = reg
 end
 if type(reg.data) ~= "table" then reg.data = {} end
-reg.sheet_version = "24"
+reg.sheet_version = "26"
 
 local DATASET = {
 
@@ -99,8 +99,8 @@ local DATASET = {
             { id = "791379ba", text = "Do not spend any Heroic or Mythic Crests until told to do so. Check Guide for why we hold crests." },
             { id = "fab7aef9", text = "Almost everyone can probably craft your spark item now. Check Guide for what and when to craft." },
             { id = "e66847d8", text = "Do LFR for tier pieces - obtaining a 4set bonus will allow catalyst charges to drop from all content" },
-            { id = "b5539926", text = "Complete weekly world event quest for pinnacle cache and spark from Lady Liadrin - Do the Arcantina takes 3 minutes" },
-            { id = "e5b5fb8c", text = "Complete weekly housing quest f rom Vaeli - reward is capped crests, doesn't matter what you pick." },
+            { id = "b1a6f7eb", text = "Complete weekly world event quest for pinnacle cache and spark from Lady Liadrin - Doing the Arcantina takes 3 minutes" },
+            { id = "c17e68f1", text = "Complete weekly housing quest from Vaeli - reward is capped crests, doesn't matter what you pick but the biggest short term boost is to select Champion Crests" },
             { id = "1e1d846c", text = "Note: the next two things are tied together - they are for a small upgrade - two additional sockets going into the first two weeks." },
             { id = "50eaf609", text = "(Optional) New: Complete PvP matches to obtain a quest item that rewards 9x Galactic Gladiator's Heraldry. You will use these to craft items below. Only do this if you have or are going to farm the honor for the sockets below. Note: this is very min-maxy, it is for 2 additional sockets essentially. Arena is fastest" },
             { id = "a1884373", text = "(Optional) New: Purchase 2 Galactic Jeweler's Settings from the vendor for 5000 Honor and 3 Infused Heliotrope each. You will use these to socket the crafted items below. These items will not appear on the vendor until this week. This is very min-maxy, it's for 2 additional sockets essentially." },
@@ -110,6 +110,8 @@ local DATASET = {
             { id = "05b7e462", text = "Complete 4x Hard Prey to unlock Nightmare Prey." },
             { id = "78aea6fe", text = "Complete 3x Nightmare Prey for Champion gear on each character and to complete the weekly quest for boss summoning item and 20 uncapped hero crests" },
             { id = "cc5a28dd", text = "Complete Nullaeus on ? difficulty for 30 uncapped Hero crests. Remember don't spend these." },
+            { id = "5c891668", text = "Complete Nullaeus on ?? difficulty for 30 MORE uncapped Hero crests and 30 uncapped Myth crests. NOTE: While the Hall of Fame achievement requires you to do this solo, you can do this more easily in a group. With a tank + healer delve companion, just keep adding more DPS to your group." },
+            { id = "f7a876a0", text = "The vendor in the delve area has a bag with 2 free keys that go over cap. This is once per warband - make sure to purchase it on your main." },
             { id = "b6846065", text = "Do t8 or higher bountiful delves, use map on t8+ delve - while doing this, unlock t11 delves" },
             { id = "2f9c0f4f", text = "Use your boss summoning item from Nightmare Prey weekly quest in a tier 8 Delve to get a map and then use it for a Hero track item." },
             { id = "5ccc7694", text = "Kill World Boss for champ 3/6 253 ilvl item" },
@@ -128,8 +130,8 @@ local DATASET = {
             { id = "e8cef00e", text = "Check Guide for what and when to craft." },
             { id = "4056a14a", text = "If you don't have 4set, do LFR for tier pieces - obtaining a 4set bonus will allow catalyst charges to drop from all content" },
             { id = "e0ecce24", text = "Complete weekly world event quest for pinnacle cache and spark from Lady Liadrin" },
-            { id = "9686fde4", text = "Complete weekly housing quest from Vaeli for ?hero crests? (will update when it goes live)" },
-            { id = "16cf341e", text = "(Optional) Kill World Boss for champ 2/6 250 ilvl item" },
+            { id = "4c264b7f", text = "Complete weekly housing quest from Vaeli for quick hero crests" },
+            { id = "0c60ad29", text = "(Optional) Kill World Boss for champ 3/6 253 ilvl item" },
             { id = "4aa82ede", text = "(Optional) Complete 2x Nightmare Prey for Champion gear on each character" },
             { id = "26d0b610", text = "Do at least one t11 bountiful delve to get Cracked Keystone Quest" },
             { id = "286f219c", text = "Continue to spend all Adventurer, Veteran and Champion Crests upgrading anything" },
