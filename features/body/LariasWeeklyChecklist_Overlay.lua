@@ -70,25 +70,7 @@ local function SetShownIfChanged(region, shown)
     if region:IsShown() ~= want then region:SetShown(want) end
 end
 
-local function IsFrameShown(frameObj)
-    return frameObj and frameObj.IsShown and frameObj:IsShown()
-end
-
-
-
--- Session cache shared with Currency.lua (populated lazily on first lookup per ID).
-local _overlayIconCache = {}
-local function GetCurrencyIconID(currencyID)
-    local id = tonumber(currencyID)
-    if not (id and id > 0) then return nil end
-    local cached = _overlayIconCache[id]
-    if cached ~= nil then return cached or nil end
-    if not (C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo) then return nil end
-    local info = C_CurrencyInfo.GetCurrencyInfo(id)
-    local iconID = info and info.iconFileID or nil
-    _overlayIconCache[id] = iconID or false
-    return iconID
-end
+local IsFrameShown = AU.IsFrameShown
 
 local function BottomFor(obj)
     if not obj then return 0 end
@@ -803,7 +785,7 @@ local function RenderSnapshotIntoPanel(snap)
                     local qty = storedCrestQty[id] or 0
                     local lbl, val = Addon:RenderCurrencySnapshotRow({ type = "crest", id = id, qty = qty })
                     if IsNonEmptyText(lbl) or IsNonEmptyText(val) then
-                        SetRightRowPair(idx, lbl, val, GetCurrencyIconID(id))
+                        SetRightRowPair(idx, lbl, val, Addon:GetCurrencyIcon(id))
                         idx = idx + 1
                     end
                 end
@@ -822,9 +804,9 @@ local function RenderSnapshotIntoPanel(snap)
             if IsNonEmptyText(lbl) or IsNonEmptyText(val) then
                 local iconID = nil
                 if row.type == "sparks" or row.type == "cofferkeys" then
-                    iconID = GetCurrencyIconID(row.id)
+                    iconID = Addon:GetCurrencyIcon(row.id)
                 elseif row.type == "catalyst" then
-                    iconID = GetCurrencyIconID(tracking and tracking.catalystCurrencyID)
+                    iconID = Addon:GetCurrencyIcon(tracking and tracking.catalystCurrencyID)
                 end
                 SetRightRowPair(idx, lbl, val, iconID)
                 idx = idx + 1

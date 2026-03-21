@@ -68,6 +68,11 @@ function AddonUtils.HideTooltip()
     GameTooltip:Hide()
 end
 
+-- Safe frame visibility check.  Works on any object shape (frames, regions, etc).
+function AddonUtils.IsFrameShown(f)
+    return f and f.IsShown and f:IsShown()
+end
+
 -- Multi-line tooltip.  lines = array of strings or {text, r, g, b} tables.
 -- First entry uses SetText; subsequent entries use AddLine.
 function AddonUtils.SetTooltipLines(frame, lines, anchor)

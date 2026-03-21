@@ -479,6 +479,99 @@ function LariasWeeklyChecklist_CompartmentOnLeave()
     GameTooltip:Hide()
 end
 
+-- ── Shared theme-color definitions ───────────────────────────────────────────
+-- Single source of truth for background / text / header color entries.
+-- Used by both GearPopup (compact swatches) and Settings (full-size swatches).
+-- Each entry exposes :get() → r,g,b; :save(r,g,b); :reset() so callers
+-- don't need to duplicate db-access logic.
+Addon.THEME_COLOR_DEFS = {
+    { labelKey = "COLOR_PICKER_BG",   label = "Background", rk = "bgR",     gk = "bgG",     bk = "bgB",     dr = 0.10, dg = 0.10, db = 0.10 },
+    { labelKey = "COLOR_PICKER_TEXT", label = "Text",       rk = "textR",   gk = "textG",   bk = "textB",   dr = 1.00, dg = 1.00, db = 1.00 },
+    { labelKey = "COLOR_PICKER_HDR",  label = "Header",     rk = "headerR", gk = "headerG", bk = "headerB", dr = 1.00, dg = 0.82, db = 0.00 },
+}
+for _, d in ipairs(Addon.THEME_COLOR_DEFS) do
+    function d:get()
+        local tc = (Addon.db and Addon.db.global and Addon.db.global.themeColors) or {}
+        local r = (tc[self.rk] ~= nil) and tc[self.rk] or self.dr
+        local g = (tc[self.gk] ~= nil) and tc[self.gk] or self.dg
+        local b = (tc[self.bk] ~= nil) and tc[self.bk] or self.db
+        return r, g, b
+    end
+    function d:save(r, g, b)
+        local gdb = Addon.db and Addon.db.global
+        if not gdb then return end
+        gdb.themeColors = gdb.themeColors or {}
+        gdb.themeColors[self.rk] = r; gdb.themeColors[self.gk] = g; gdb.themeColors[self.bk] = b
+        if Addon.ApplyThemeColors then Addon:ApplyThemeColors() end
+    end
+    function d:reset()
+        local gdb = Addon.db and Addon.db.global
+        if gdb and gdb.themeColors then
+            gdb.themeColors[self.rk] = nil; gdb.themeColors[self.gk] = nil; gdb.themeColors[self.bk] = nil
+        end
+        if Addon.ApplyThemeColors then Addon:ApplyThemeColors() end
+    end
+end
+
+-- ── Shared support links ──────────────────────────────────────────────────────
+-- Returns the three support resource entries as a table-of-tables so callers
+-- can iterate without duplicating URL resolution.  Resolved lazily at call
+-- time so changes to TRACKING.supportLinks (set during OnInitialize) are
+-- reflected correctly.
+function Addon:GetSupportLinks()
+    local sl = self.TRACKING and self.TRACKING.supportLinks or {}
+    local _L = self.L or {}
+    return {
+        { label = _L.SUPPORT_BTN_GUIDE_DOC or "Guide Doc",  url = sl.doc       or "" },
+        { label = _L.SUPPORT_BTN_CHECKLIST  or "Checklist",  url = sl.checklist or "" },
+        { label = _L.SUPPORT_BTN_DISCORD    or "Discord",    url = sl.discord   or "" },
+    }
+end
+
+-- ── Full addon reset ──────────────────────────────────────────────────────────
+-- Resets the current character's list data (checked items, collapsed sections,
+-- week pointer) AND all UI display settings (position, scale, opacity, theme
+-- colors) back to their defaults. Called by both the GearPopup and Settings
+-- panel reset buttons so the logic lives in one place.
+function Addon:PerformFullReset()
+    local currentKey = self.GetCurrentProfileKey and self:GetCurrentProfileKey()
+    if currentKey then
+        local chars = self.db and self.db.global and self.db.global.chars
+        if chars and chars[currentKey] then
+            local cdb = chars[currentKey]
+            if wipe then
+                wipe(cdb.checked           or {})
+                wipe(cdb.collapsedSections or {})
+            else
+                cdb.checked           = {}
+                cdb.collapsedSections = {}
+            end
+            cdb.startAtSectionId = ""
+        end
+    end
+    local gdb = self.db and self.db.global
+    if gdb then
+        gdb.mainFramePos  = nil
+        gdb.mainFrameSize = nil
+        gdb.uiScalePct    = 100
+        gdb.uiOpacityPct  = 65
+        if gdb.themeColors then wipe(gdb.themeColors) end
+    end
+    if self.ApplyThemeColors then self:ApplyThemeColors() end
+    if self.ApplyUIScale     then self:ApplyUIScale()     end
+    if self.ApplyOpacity     then self:ApplyOpacity()     end
+    local mf = self._mainFrame
+    if mf then
+        mf:ClearAllPoints()
+        mf:SetPoint("CENTER")
+        mf:SetSize(self.UI.frameW, self.UI.frameH)
+        if self.ApplyScrollLayout then self:ApplyScrollLayout() end
+    end
+    if self.LayoutHeaderButtons then self:LayoutHeaderButtons() end
+    if self.SyncGearPopup       then self:SyncGearPopup()       end
+    if self.RequestRefresh then self:RequestRefresh() else self:Refresh() end
+end
+
 -- Initialize AceDB and minimap icon on addon load
 function Addon:OnInitialize()
     SetupAddonDB()

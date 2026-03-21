@@ -112,10 +112,12 @@ end
 
 -- ── Divider ───────────────────────────────────────────────────────────────────
 -- Creates a 1 px horizontal rule textured in the border theme color.
--- y (negative) sets TOPLEFT Y offset from parent; omit to position manually.
-function C.NewDivider(parent, y, leftPad, rightPad)
-    local lp = leftPad  or 0
-    local rp = rightPad or 0
+-- y sets the Y offset from the anchor corner; omit to position manually.
+-- anchorSide: "TOP" (default, TOPLEFT/TOPRIGHT) or "BOTTOM" (BOTTOMLEFT/BOTTOMRIGHT).
+function C.NewDivider(parent, y, leftPad, rightPad, anchorSide)
+    local lp   = leftPad    or 0
+    local rp   = rightPad   or 0
+    local side = anchorSide or "TOP"
     local div = parent:CreateTexture(nil, "OVERLAY")
     div:SetHeight(1)
     if Addon.THEME then
@@ -123,8 +125,8 @@ function C.NewDivider(parent, y, leftPad, rightPad)
         div:SetColorTexture(bdr.r, bdr.g, bdr.b, 0.5)
     end
     if y then
-        div:SetPoint("TOPLEFT",  parent, "TOPLEFT",  lp,  y)
-        div:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -rp, y)
+        div:SetPoint(side .. "LEFT",  parent, side .. "LEFT",  lp,  y)
+        div:SetPoint(side .. "RIGHT", parent, side .. "RIGHT", -rp, y)
     end
     return div
 end

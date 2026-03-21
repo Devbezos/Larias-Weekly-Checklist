@@ -128,11 +128,8 @@ function Addon:InitCharPickerUI(frame, styleFunc)
             and "|TInterface\\Buttons\\UI-ScrollBar-ScrollUpButton-Up:10:10|t"
             or  "|TInterface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up:10:10|t"
         btn:SetText(lbl .. " " .. arrowTex)
-        local tr = btn.Text or (btn.GetFontString and btn:GetFontString())
-        if tr and Addon.THEME and Addon.THEME.text then
-            local t = Addon.THEME.text
-            tr:SetTextColor(t.r, t.g, t.b, 1)
-        end
+        local tr = Addon.Controls.GetButtonFontString(btn)
+        Addon.Controls.ApplyThemeTextColor(tr)
     end
 
     -- ── Panel ─────────────────────────────────────────────────────────────────
@@ -174,7 +171,7 @@ function Addon:InitCharPickerUI(frame, styleFunc)
             if styleFunc then styleFunc(btn) end
             -- StyleMainTabButton resets backdrop colors; re-apply theme after it runs.
             Addon:ApplyTheme(btn)
-            local tr = btn.Text or (btn.GetFontString and btn:GetFontString())
+            local tr = Addon.Controls.GetButtonFontString(btn)
             if tr then
                 if tr.SetJustifyH then tr:SetJustifyH("LEFT") end
                 if tr.SetJustifyV then tr:SetJustifyV("MIDDLE") end
@@ -238,15 +235,15 @@ function Addon:InitCharPickerUI(frame, styleFunc)
             btn:SetPoint("TOPRIGHT", p, "TOPRIGHT", 0, posY)
             btn:SetHeight(CPICK_ROW_H)
             btn:SetText("<< " .. myName)  -- back to own char
-            local tr = btn.Text or (btn.GetFontString and btn:GetFontString())
+            local tr = Addon.Controls.GetButtonFontString(btn)
             local th = Addon.THEME.text
             if tr then tr:SetTextColor(th.r, th.g, th.b, 0.7) end
             btn:SetScript("OnEnter", function(self_)
-                local fs = self_.Text or (self_.GetFontString and self_:GetFontString())
+                local fs = Addon.Controls.GetButtonFontString(self_)
                 if fs then fs:SetTextColor(1, 1, 0, 1) end
             end)
             btn:SetScript("OnLeave", function(self_)
-                local fs = self_.Text or (self_.GetFontString and self_:GetFontString())
+                local fs = Addon.Controls.GetButtonFontString(self_)
                 if fs then fs:SetTextColor(th.r, th.g, th.b, 0.7) end
             end)
             btn:SetScript("OnClick", function()
@@ -288,7 +285,7 @@ function Addon:InitCharPickerUI(frame, styleFunc)
                     -- Currently viewed: show ✔ prefix, disable clicking; no X.
                     btn:SetText(CHECK .. " " .. charName)
                     btn:SetEnabled(false)
-                    local tr = btn.Text or (btn.GetFontString and btn:GetFontString())
+                    local tr = Addon.Controls.GetButtonFontString(btn)
                     if tr then tr:SetTextColor(0, 1, 0, 0.9) end
                     btn:SetScript("OnClick", nil)
                     btn:SetScript("OnEnter", nil)
@@ -296,16 +293,16 @@ function Addon:InitCharPickerUI(frame, styleFunc)
                 else
                     btn:SetText(charName)
                     btn:SetEnabled(true)
-                    local tr = btn.Text or (btn.GetFontString and btn:GetFontString())
+                    local tr = Addon.Controls.GetButtonFontString(btn)
                     if tr then tr:SetTextColor(r, g, b, 1) end
 
                     local _r, _g, _b, _pk = r, g, b, profileKey
                     btn:SetScript("OnEnter", function(self_)
-                        local fs = self_.Text or (self_.GetFontString and self_:GetFontString())
+                        local fs = Addon.Controls.GetButtonFontString(self_)
                         if fs then fs:SetTextColor(1, 1, 0, 1) end
                     end)
                     btn:SetScript("OnLeave", function(self_)
-                        local fs = self_.Text or (self_.GetFontString and self_:GetFontString())
+                        local fs = Addon.Controls.GetButtonFontString(self_)
                         if fs then fs:SetTextColor(_r, _g, _b, 1) end
                     end)
                     btn:SetScript("OnClick", function()

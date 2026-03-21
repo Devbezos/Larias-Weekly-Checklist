@@ -43,16 +43,7 @@ StaticPopupDialogs["LARIAS_LOCALE_RELOAD"] = StaticPopupDialogs["LARIAS_LOCALE_R
     preferredIndex = 3,
 }
 
--- Support resource URLs used by the Support section at the bottom of this panel.
--- Resolved lazily at call time so changes to constants.supportLinks take effect
--- after OnInitialize has populated Addon.TRACKING (not at file-parse time).
-local function GetSupportLinks()
-    local sl = Addon.TRACKING and Addon.TRACKING.supportLinks or {}
-    return
-        sl.doc       or "https://docs.google.com/document/d/e/2PACX-1vTGkZ2Cjr0jlv90XqW9vy9VXsVucd-yMCgHdyCvX_kQfOrexNDAC7Lf3LifuhqxrcWqJ0W3zIhvK3ii/pub",
-        sl.checklist or "https://docs.google.com/spreadsheets/d/1iK2SZUcz_ljnkdTG7KW6pqfzaUDuSgnlh1HupcLrkus/edit?gid=53744607#gid=53744607",
-        sl.discord   or "https://discord.gg/postnerfclarity"
-end
+-- (GetSupportLinks removed; use Addon:GetSupportLinks() instead.)
 
 -- Generic "copy link" popup used when C_Browser.OpenLink is unavailable.
 -- Always redefined (no `or` guard) so the OnShow closure always captures
@@ -101,39 +92,13 @@ function Addon.OpenSupportLink(url)
     end
 end
 
--- Creates a small colored swatch button on `parent`.
--- Call swatch:SetColor(r,g,b) to update the display color.
-local function MakeSwatch(parent)
-    local btn = CreateFrame("Button", nil, parent)
-    btn:SetSize(22, 22)
-    -- Thin border layer (below the color fill)
-    local border = btn:CreateTexture(nil, "ARTWORK", nil, 0)
-    border:SetPoint("TOPLEFT",     btn, "TOPLEFT",     -1,  1)
-    border:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT",  1, -1)
-    border:SetColorTexture(0.55, 0.55, 0.55, 1)
-    -- Colored fill
-    local fill = btn:CreateTexture(nil, "ARTWORK", nil, 1)
-    fill:SetAllPoints(btn)
-    fill:SetColorTexture(1, 1, 1, 1)
-    btn._fill = fill
-    function btn:SetColor(r, g, b)
-        self._fill:SetColorTexture(r, g, b, 1)
-    end
-    return btn
-end
+-- (MakeSwatch removed; use Addon.Controls.NewSwatch(parent, 22) instead.)
 
 -- ── Interaction helpers ──────────────────────────────────────────────────────
 local _finishedWeeksEntry  -- cached after building checkboxes; used by "hide completed tasks"
 
 local function SetRowEnabled(entry, enabled)
-    if not (entry and entry.cb) then return end
-    local cb = entry.cb
-    local a  = enabled and 1.00 or 0.40
-    if cb._label then cb._label:SetAlpha(a) end
-    if cb._box   then cb._box:SetAlpha(a)   end
-    if cb._tick  then cb._tick:SetAlpha(a)  end
-    if cb.EnableMouse then cb:EnableMouse(enabled) end
-    if cb._hit and cb._hit.EnableMouse then cb._hit:EnableMouse(enabled) end
+    Addon.Controls.SetCheckEnabled(entry and entry.cb, enabled)
 end
 
 -- ── Build the panel (lazy, called once) ───────────────────────────────────────
@@ -164,62 +129,14 @@ local function BuildPanel()
     secActions:SetText(L.SETTINGS_SECTION_ACTIONS or "Actions")
     curY = curY - 20 - 4
 
-    local resetBtn = CreateFrame("Button", nil, canvas, "UIPanelButtonTemplate")
+    local resetBtn = Addon.Controls.NewActionButton(canvas, 160, BTN_H)
     resetBtn:SetPoint("TOPLEFT", canvas, "TOPLEFT", PAD, curY)
-    resetBtn:SetSize(160, BTN_H)
     resetBtn:SetText(L.RESET_BUTTON or "Reset List")
-    if Addon._styleActionButton then Addon._styleActionButton(resetBtn) end
-    resetBtn:SetScript("OnClick", function()
-        local currentKey = Addon.GetCurrentProfileKey and Addon:GetCurrentProfileKey()
-        if currentKey then
-            local chars = Addon.db and Addon.db.global and Addon.db.global.chars
-            if chars and chars[currentKey] then
-                local cdb = chars[currentKey]
-                if wipe then
-                    wipe(cdb.checked           or {})
-                    wipe(cdb.collapsedSections or {})
-                else
-                    cdb.checked           = {}
-                    cdb.collapsedSections = {}
-                end
-                cdb.startAtSectionId = ""
-            end
-        end
-        local gdb = Addon.db and Addon.db.global
-        if gdb then
-            gdb.mainFramePos  = nil
-            gdb.mainFrameSize = nil
-            gdb.uiScalePct    = 100
-            gdb.uiOpacityPct  = 65
-            gdb.themeColors   = {}   -- clear all color overrides → revert to defaults
-        end
-        if Addon.ApplyUIScale      then Addon:ApplyUIScale()      end
-        if Addon.ApplyOpacity      then Addon:ApplyOpacity()      end
-        if Addon.ApplyThemeColors  then Addon:ApplyThemeColors()  end
-        -- Refresh swatch colors to reflect restored defaults.
-        for _, entry in ipairs(_colorSwatches) do
-            local r, g, b = entry.def.getColor()
-            entry.swatch:SetColor(r, g, b)
-        end
-        local mf = Addon._mainFrame
-        if mf then
-            mf:ClearAllPoints()
-            mf:SetPoint("CENTER")
-            mf:SetSize(Addon.UI.frameW, Addon.UI.frameH)
-            if Addon.ApplyScrollLayout then Addon:ApplyScrollLayout() end
-        end
-        if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
-        if Addon.SyncGearPopup       then Addon:SyncGearPopup()       end
-        if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
-    end)
+    resetBtn:SetScript("OnClick", function() Addon:PerformFullReset() end)
     curY = curY - BTN_H - 14
 
     -- ── Divider ───────────────────────────────────────────────────────────────
-    local div = canvas:CreateTexture(nil, "ARTWORK")
-    div:SetColorTexture(0.3, 0.3, 0.3, 0.6)
-    div:SetHeight(1)
-    div:SetPoint("TOPLEFT",  canvas, "TOPLEFT",  PAD,  curY)
-    div:SetPoint("TOPRIGHT", canvas, "TOPRIGHT", -PAD, curY)
+    Addon.Controls.NewDivider(canvas, curY, PAD, PAD)
     curY = curY - 8
 
     -- ── "Display" section ─────────────────────────────────────────────────────
@@ -378,11 +295,7 @@ local function BuildPanel()
     curY = curY - 5 * STEP   -- 5 rows per column
 
     -- ── Divider ───────────────────────────────────────────────────────────────
-    local div2 = canvas:CreateTexture(nil, "ARTWORK")
-    div2:SetColorTexture(0.3, 0.3, 0.3, 0.6)
-    div2:SetHeight(1)
-    div2:SetPoint("TOPLEFT",  canvas, "TOPLEFT",  PAD,  curY)
-    div2:SetPoint("TOPRIGHT", canvas, "TOPRIGHT", -PAD, curY)
+    Addon.Controls.NewDivider(canvas, curY, PAD, PAD)
     curY = curY - 8
 
     -- ── Scale & Opacity (left) + Colors (right) ──────────────────────────────
@@ -450,68 +363,32 @@ local function BuildPanel()
     local COLOR_ROW_H   = 24
     local COLOR_ROW_GAP = 6
 
-    local function makeColorDef(label, rk, gk, bk, dr, dg, db_)
-        return {
-            label = label,
-            getColor = function()
-                local gdb = Addon.db and Addon.db.global
-                local tc  = gdb and gdb.themeColors
-                if tc and tc[rk] ~= nil then return tc[rk], tc[gk], tc[bk] end
-                return dr, dg, db_
-            end,
-            saveColor = function(r, g, b)
-                local gdb = Addon.db and Addon.db.global
-                if not gdb then return end
-                gdb.themeColors = gdb.themeColors or {}
-                gdb.themeColors[rk] = r
-                gdb.themeColors[gk] = g
-                gdb.themeColors[bk] = b
-                if Addon.ApplyThemeColors then Addon:ApplyThemeColors() end
-            end,
-            resetColor = function()
-                local gdb = Addon.db and Addon.db.global
-                if gdb and gdb.themeColors then
-                    gdb.themeColors[rk] = nil
-                    gdb.themeColors[gk] = nil
-                    gdb.themeColors[bk] = nil
-                end
-                if Addon.ApplyThemeColors then Addon:ApplyThemeColors() end
-            end,
-        }
-    end
-
-    local colorDefs = {
-        makeColorDef(L.SETTINGS_COLOR_BACKGROUND  or "Background",  "bgR",     "bgG",     "bgB",     0.10, 0.10, 0.10),
-        makeColorDef(L.SETTINGS_COLOR_LIST_TEXT   or "List Text",   "textR",   "textG",   "textB",   1.00, 1.00, 1.00),
-        makeColorDef(L.SETTINGS_COLOR_HEADER_TEXT or "Header Text", "headerR", "headerG", "headerB", 1.00, 0.82, 0.00),
-    }
+    -- Shared color definitions (owned by the main file).
+    local colorDefs = Addon.THEME_COLOR_DEFS
 
     _colorSwatches = {}
     for i, def in ipairs(colorDefs) do
         local _def = def
         local rowY = curY - (i - 1) * (COLOR_ROW_H + COLOR_ROW_GAP)
 
-        local swatch = MakeSwatch(canvas)
-        swatch:SetSize(22, 22)
+        local swatch = Addon.Controls.NewSwatch(canvas, 22)
         swatch:SetPoint("TOPLEFT", canvas, "TOPLEFT", COLOR_COL_X, rowY - 1)
-        local cr, cg, cb = _def.getColor()
+        local cr, cg, cb = _def:get()
         swatch:SetColor(cr, cg, cb)
         swatch:SetScript("OnClick", function()
-            local r, g, b = _def.getColor()
+            local r, g, b = _def:get()
             OpenColorPicker(r, g, b,
-                function(nr, ng, nb) _def.saveColor(nr, ng, nb); swatch:SetColor(nr, ng, nb) end,
-                function(pr, pg, pb) _def.saveColor(pr, pg, pb); swatch:SetColor(pr, pg, pb) end
+                function(nr, ng, nb) _def:save(nr, ng, nb); swatch:SetColor(nr, ng, nb) end,
+                function(pr, pg, pb) _def:save(pr, pg, pb); swatch:SetColor(pr, pg, pb) end
             )
         end)
 
-        local resetColorBtn = CreateFrame("Button", nil, canvas, "UIPanelButtonTemplate")
-        resetColorBtn:SetSize(60, COLOR_ROW_H)
+        local resetColorBtn = Addon.Controls.NewActionButton(canvas, 60, COLOR_ROW_H)
         resetColorBtn:SetPoint("TOPRIGHT", canvas, "TOPRIGHT", -PAD, rowY)
         resetColorBtn:SetText(L.SETTINGS_COLOR_RESET or "Reset")
-        if Addon._styleActionButton then Addon._styleActionButton(resetColorBtn) end
         resetColorBtn:SetScript("OnClick", function()
-            _def.resetColor()
-            local dr, dg, db = _def.getColor()
+            _def:reset()
+            local dr, dg, db = _def:get()
             swatch:SetColor(dr, dg, db)
         end)
 
@@ -519,7 +396,7 @@ local function BuildPanel()
         lbl:SetPoint("TOPLEFT",  swatch,        "TOPRIGHT", 6,  0)
         lbl:SetPoint("TOPRIGHT", resetColorBtn, "TOPLEFT",  -4, 0)
         lbl:SetJustifyH("LEFT")
-        lbl:SetText(_def.label)
+        lbl:SetText(L[_def.labelKey] or _def.label)
 
         _colorSwatches[#_colorSwatches + 1] = { swatch = swatch, def = _def }
     end
@@ -530,11 +407,7 @@ local function BuildPanel()
     curY = curY - math.max(sliderBodyH, colorBodyH) - 14
 
     -- ── Divider ─────────────────────────────────────────────────────────────────────────────
-    local divLang = canvas:CreateTexture(nil, "ARTWORK")
-    divLang:SetColorTexture(0.3, 0.3, 0.3, 0.6)
-    divLang:SetHeight(1)
-    divLang:SetPoint("TOPLEFT",  canvas, "TOPLEFT",  PAD,  curY)
-    divLang:SetPoint("TOPRIGHT", canvas, "TOPRIGHT", -PAD, curY)
+    Addon.Controls.NewDivider(canvas, curY, PAD, PAD)
     curY = curY - 8
 
     -- ── "Language" section ───────────────────────────────────────────────────────────────
@@ -566,10 +439,8 @@ local function BuildPanel()
     end
 
     -- Dropdown-style button showing the current selection.
-    local langDropBtn = CreateFrame("Button", nil, canvas, "UIPanelButtonTemplate")
+    local langDropBtn = Addon.Controls.NewActionButton(canvas, 220, BTN_H)
     langDropBtn:SetPoint("TOPLEFT", canvas, "TOPLEFT", PAD, curY)
-    langDropBtn:SetSize(220, BTN_H)
-    if Addon._styleActionButton then Addon._styleActionButton(langDropBtn) end
 
     -- Floating option-list popup (created lazily on first click).
     local langPopup
@@ -624,11 +495,7 @@ local function BuildPanel()
     curY = curY - BTN_H - 14
 
     -- ── Divider above link buttons ────────────────────────────────────────────
-    local divSupport = canvas:CreateTexture(nil, "ARTWORK")
-    divSupport:SetColorTexture(0.3, 0.3, 0.3, 0.6)
-    divSupport:SetHeight(1)
-    divSupport:SetPoint("TOPLEFT",  canvas, "TOPLEFT",  PAD,  curY)
-    divSupport:SetPoint("TOPRIGHT", canvas, "TOPRIGHT", -PAD, curY)
+    Addon.Controls.NewDivider(canvas, curY, PAD, PAD)
     curY = curY - 8
 
     local SUPP_BTN_W   = 150
@@ -638,17 +505,14 @@ local function BuildPanel()
     -- Clicking it calls OpenSupportLink, which tries C_Browser first and falls
     -- back to the LARIAS_COPY_LINK clipboard popup.
     local function MakeSuppBtn(label, url, xOff)
-        local btn = CreateFrame("Button", nil, canvas, "UIPanelButtonTemplate")
+        local btn = Addon.Controls.NewActionButton(canvas, SUPP_BTN_W, BTN_H)
         btn:SetPoint("TOPLEFT", canvas, "TOPLEFT", xOff, curY)
-        btn:SetSize(SUPP_BTN_W, BTN_H)
         btn:SetText(label)
-        if Addon._styleActionButton then Addon._styleActionButton(btn) end
         btn:SetScript("OnClick", function() Addon.OpenSupportLink(url) end)
     end
-    local SUPPORT_URL_DOC, SUPPORT_URL_CHECKLIST, SUPPORT_URL_DISCORD = GetSupportLinks()
-    MakeSuppBtn(L.SUPPORT_BTN_GUIDE_DOC or "Guide Doc",  SUPPORT_URL_DOC,       PAD)
-    MakeSuppBtn(L.SUPPORT_BTN_CHECKLIST  or "Checklist",  SUPPORT_URL_CHECKLIST, PAD + SUPP_BTN_W + SUPP_BTN_GAP)
-    MakeSuppBtn(L.SUPPORT_BTN_DISCORD    or "Discord",    SUPPORT_URL_DISCORD,   PAD + (SUPP_BTN_W + SUPP_BTN_GAP) * 2)
+    for si, sl in ipairs(Addon:GetSupportLinks()) do
+        MakeSuppBtn(sl.label, sl.url, PAD + (si - 1) * (SUPP_BTN_W + SUPP_BTN_GAP))
+    end
     curY = curY - BTN_H - PAD
 
     canvas:SetHeight(math.abs(curY) + PAD)
@@ -661,7 +525,7 @@ local function BuildPanel()
         end
         SetRowEnabled(_finishedWeeksEntry, not d.hideCompletedTasks)
         for _, entry in ipairs(_colorSwatches) do
-            local r, g, b = entry.def.getColor()
+            local r, g, b = entry.def:get()
             entry.swatch:SetColor(r, g, b)
         end
         -- Sync slider thumbs to current saved values.
@@ -686,7 +550,7 @@ end
 --- no-op if the panel hasn't been built yet.
 function Addon:RefreshSettingsSwatches()
     for _, entry in ipairs(_colorSwatches) do
-        local r, g, b = entry.def.getColor()
+        local r, g, b = entry.def:get()
         entry.swatch:SetColor(r, g, b)
     end
 end
