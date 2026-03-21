@@ -144,7 +144,7 @@ local function GetAddonVersion(name)
     return ""
 end
 
-local LOCALE_REGISTRY_KEY_COMMS = "LARIASWEEKLYCHECKLIST_LOCALE_REGISTRY"
+local LOCALE_REGISTRY_KEY_COMMS = Addon.LOCALE_REGISTRY_KEY
 
 local function GetMySheetVersion()
     local reg = _G[LOCALE_REGISTRY_KEY_COMMS]

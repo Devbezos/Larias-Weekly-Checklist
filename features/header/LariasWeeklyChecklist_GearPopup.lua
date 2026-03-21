@@ -373,15 +373,9 @@ function Addon:ToggleGearPopup(anchor, growRight)
             if _tooltipKey then
                 cb:SetScript("OnEnter", function(self_)
                     local tip = Addon.L and Addon.L[_tooltipKey]
-                    if tip then
-                        GameTooltip:SetOwner(self_, "ANCHOR_RIGHT")
-                        GameTooltip:SetText(tip, nil, nil, nil, nil, true)
-                        GameTooltip:Show()
-                    end
+                    if tip then Addon.AddonUtils.SetTooltip(self_, tip) end
                 end)
-                cb:SetScript("OnLeave", function()
-                    GameTooltip:Hide()
-                end)
+                cb:SetScript("OnLeave", Addon.AddonUtils.HideTooltip)
             end
 
             local hit = cb._hit

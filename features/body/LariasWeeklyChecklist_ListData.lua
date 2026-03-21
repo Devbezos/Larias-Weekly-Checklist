@@ -14,7 +14,7 @@ if not Addon then return end
 -- ── GetLocaleRegistry ─────────────────────────────────────────────────────────
 -- Returns the shared locale registry table written by enUS_Data.lua and the
 -- localization companion addon. Kept local so it doesn't pollute globals.
-local LOCALE_REGISTRY_KEY = "LARIASWEEKLYCHECKLIST_LOCALE_REGISTRY"
+local LOCALE_REGISTRY_KEY = Addon.LOCALE_REGISTRY_KEY
 local function GetLocaleRegistry()
     return _G[LOCALE_REGISTRY_KEY]
 end

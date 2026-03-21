@@ -332,13 +332,9 @@ function Addon:CreateHeader(frame)
                         else
                             prefix = L.PICKER_RESET_WEEK_TOOLTIP or "Reset to week:"
                         end
-                        GameTooltip:SetOwner(self_, "ANCHOR_RIGHT")
-                        GameTooltip:SetText(prefix .. "\n" .. capturedTitle, 1, 1, 1, 1, true)
-                        GameTooltip:Show()
+                        Addon.AddonUtils.SetTooltip(self_, prefix .. "\n" .. capturedTitle)
                     end)
-                    btn:SetScript("OnLeave", function()
-                        GameTooltip:Hide()
-                    end)
+                    btn:SetScript("OnLeave", Addon.AddonUtils.HideTooltip)
 
                     tinsert(picker._buttons, btn)
                     posY = posY - PICKER_ROW_HEIGHT
@@ -449,12 +445,8 @@ function Addon:CreateHeader(frame)
             btn._lariasSelectedLabel = cwWeekLabel
             btn:SetText(cwWeekLabel)
             local cwTip = L.CHANGE_WEEK_BUTTON or "Change Week"
-            btn:SetScript("OnEnter", function(self_)
-                GameTooltip:SetOwner(self_, "ANCHOR_BOTTOMLEFT")
-                GameTooltip:SetText(cwTip, 1, 1, 1, 1, true)
-                GameTooltip:Show()
-            end)
-            btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            btn:SetScript("OnEnter", function(self_) Addon.AddonUtils.SetTooltip(self_, cwTip, "ANCHOR_BOTTOMLEFT") end)
+            btn:SetScript("OnLeave", Addon.AddonUtils.HideTooltip)
             btn:SetScript("OnClick", function()
                 local p = EnsureHeaderPicker()
                 if p and p._lariasClosedAt and (GetTime() - p._lariasClosedAt) < 0.20 then p._lariasClosedAt = nil; return end

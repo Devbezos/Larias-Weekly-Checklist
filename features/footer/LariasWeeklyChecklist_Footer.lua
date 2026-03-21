@@ -4,8 +4,7 @@ local addonName = ...
 local Addon = _G[addonName]
 if not Addon then return end
 
--- The shared registry key must match the literal string used in the main file.
-local LOCALE_REGISTRY_KEY = "LARIASWEEKLYCHECKLIST_LOCALE_REGISTRY"
+local LOCALE_REGISTRY_KEY = Addon.LOCALE_REGISTRY_KEY
 
 -- Banner sizing constants (kept here close to the functions that use them).
 local BANNER_H   = 14  -- banner height in scaled frame pixels

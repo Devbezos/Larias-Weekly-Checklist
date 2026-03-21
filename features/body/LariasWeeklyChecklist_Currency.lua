@@ -16,8 +16,8 @@ local tonumber, tostring, type = tonumber, tostring, type
 local floor, max, abs = math.floor, math.max, math.abs
 local tinsert, tconcat = table.insert, table.concat
 
--- Maximum rows in the right column (must match Overlay's RIGHT_LINE_COUNT).
-local RIGHT_LINE_COUNT = 10
+-- Maximum rows in the right column (defined in AddonUtils, shared with Overlay).
+local RIGHT_LINE_COUNT = Addon.RIGHT_LINE_COUNT
 
 -- Per-session cache for static currency fields (name, iconFileID, quality).
 -- These never change within a session, so we avoid repeated C_CurrencyInfo calls.
@@ -26,46 +26,14 @@ local _currencyStaticCache = {}  -- [id] = { name, iconFileID, quality } or fals
 -- Cache for BuildCrestLabels output; invalidated only when crest IDs change.
 local _crestLabelsCache = { count = 0, ids = {}, labels = nil }
 
---  Shared mini-utilities 
-local COLORS = {
-    red    = "ffff4040",
-    yellow = "ffffd34d",
-    green  = "ff40ff40",
-    white  = "ffffffff",
-    dim    = "ff808080",
-}
-
-local function ColorWrap(hex, txt)
-    return "|c" .. hex .. tostring(txt or "") .. "|r"
-end
-
-local function Wipe(t)
-    if not t then return end
-    if wipe then wipe(t); return end
-    for k in pairs(t) do t[k] = nil end
-end
-
-local function IsNonEmptyText(text)
-    if type(text) ~= "string" then return false end
-    text = text:gsub("|[cr][%x]*", "")
-    return text:match("%S") ~= nil
-end
-
---  Format helpers 
-local function FormatXY(cur, cap)
-    cur = tonumber(cur) or 0
-    cap = tonumber(cap) or 0
-    if cap > 0 then return ("%d/%d"):format(cur, cap) end
-    return tostring(cur)
-end
-
-local function ColorForXY(cur, cap)
-    cur = tonumber(cur) or 0
-    cap = tonumber(cap) or 0
-    if cur <= 0 then return COLORS.red end
-    if cap > 0 and cur >= cap then return COLORS.green end
-    return COLORS.yellow
-end
+--  Shared mini-utilities (from Addon.AddonUtils) 
+local AU             = Addon.AddonUtils
+local COLORS         = AU.COLORS
+local ColorWrap      = AU.ColorWrap
+local Wipe           = AU.Wipe
+local IsNonEmptyText = AU.IsNonEmptyText
+local FormatXY       = AU.FormatXY
+local ColorForXY     = AU.ColorForXY
 
 local function IsAchievementCompleteSafe(achievementID)
     if not achievementID then return false end
@@ -249,6 +217,11 @@ local function GetWeeklyPreyParts()
     return GetQuestDoneParts(L.TRACKING_QUEST_WEEKLY_PREY or "", "weeklyPrey", { as01 = true })
 end
 
+local function GetNullaeusSpoilsParts()
+    if not GetTrackedQuestID("nullaeusSpoils") then return "", "" end
+    return GetQuestDoneParts(L.TRACKING_QUEST_NULLAEUS_SPOILS or "", "nullaeusSpoils", { as01 = true })
+end
+
 --  Sparks 
 local function GetSparksParts()
     local id = Addon.TRACKING and Addon.TRACKING.sparkCurrencyID
@@ -301,6 +274,7 @@ local function EnsureCrestCache(tracking, crestCount)
             out       = {}, label     = {}, value   = {},
             name      = {}, cur       = {}, cap     = {},
             unlocked  = {}, effective = {}, gained  = {},
+            earned    = {}, weeklyMax = {},
         }
         tracking._crestCache = cache
     end
@@ -314,14 +288,25 @@ local function ResetCrestOutput(cache, crestCount)
 end
 
 local function PopulateCrestCurCap(cache, ids, crestCount)
+    local getCurrency = C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo
     for i = 1, crestCount do
         local id = ids[i]
         if id then
-            local cur, cap = FormatCurrencyProgressParts(id)
-            cache.cur[i] = tonumber(cur) or 0
-            cache.cap[i] = tonumber(cap) or 0
+            local info        = getCurrency and getCurrency(id)
+            local held        = info and tonumber(info.quantity)    or 0
+            local earnedSoFar = info and tonumber(info.totalEarned) or 0
+            local weeklyMax   = info and tonumber(info.maxQuantity) or 0
+            cache.cur[i]       = held
+            cache.earned[i]    = earnedSoFar
+            cache.weeklyMax[i] = weeklyMax
+            if weeklyMax > 0 then
+                cache.cap[i] = held + math.max(0, weeklyMax - earnedSoFar)
+            else
+                cache.cap[i] = 0
+            end
         else
             cache.cur[i] = 0; cache.cap[i] = 0
+            cache.earned[i] = 0; cache.weeklyMax[i] = 0
         end
     end
 end
@@ -365,9 +350,6 @@ local function GetCrestLines()
     local crestLabels = BuildCrestLabels(ids, crestCount)
     local convertTooltipTexts = {}
     local amountTooltipTexts  = {}
-    -- Hoist the base tooltip string out of the loop to avoid repeated locale lookups.
-    -- amountTooltipTexts shows on the value (numbers) area; convertTooltipTexts on the label side.
-    local _crestAmountTip = L.TRACKING_CREST_AMOUNT_TOOLTIP or "Accurately tracks how many crests you can hold including overcapped crests"
     for i = 1, crestCount do
         local id = ids[i]
         if id then
@@ -381,14 +363,29 @@ local function GetCrestLines()
                 else
                     xy = tostring(cur); color = COLORS.green
                 end
-                amountTooltipTexts[i] = _crestAmountTip
+                local tipHeld      = cache.cur[i]      or 0
+                local tipEarned    = cache.earned[i]   or 0
+                local tipWeekly    = cache.weeklyMax[i] or 0
+                local tipRemaining = math.max(0, tipWeekly - tipEarned)
+                local tipOvercap   = math.max(0, tipHeld - tipEarned)
+                local tipTbl = {
+                    { text = "Current: " .. tipHeld,
+                      r = tipRemaining == 0 and 0.25 or 1,
+                      g = 1,
+                      b = tipRemaining == 0 and 0.25 or 1 },
+                }
+                if tipRemaining > 0 then
+                    tinsert(tipTbl, { text = "Remaining: " .. tipRemaining, r = 1, g = 1, b = 0.3 })
+                end
+                if tipOvercap > 0 then
+                    tinsert(tipTbl, { text = "Overcap: " .. tipOvercap, r = 0.25, g = 1, b = 0.25 })
+                end
+                amountTooltipTexts[i] = tipTbl
                 local tradeUp = ""
                 if highestTradeTarget and i == highestTradeTarget then
                     local n = tonumber(gained[i]) or 0
                     if n > 0 then
-                        tradeUp = ColorWrap(COLORS.dim, " (")
-                            .. ColorWrap("ff4da6ff", "+" .. tostring(n))
-                            .. ColorWrap(COLORS.dim, L.TRACKING_TRADE_UP_SUFFIX or "")
+                        tradeUp = " " .. ColorWrap("ff4da6ff", "+" .. tostring(n))
                         local convertTip = L.TRACKING_CONVERT_TOOLTIP or ""
                         if convertTip ~= "" then
                             convertTooltipTexts[i] = convertTip
@@ -467,17 +464,38 @@ end
 
 --  Coffer Keys 
 local function GetCofferKeysParts()
-    local id = Addon.TRACKING and Addon.TRACKING.cofferKeysCurrencyID
-    if not (id and tonumber(id) and tonumber(id) > 0) then return "", "" end
-    id = tonumber(id)
-    local name  = GetCurrencyName(id) or "Restored Coffer Keys"
-    local label = ColorWrap(GetCurrencyQualityColor(id), name)
-    local cur, cap = FormatCurrencyProgressParts(id)
-    cur = tonumber(cur) or 0; cap = tonumber(cap) or 0
-    if cap > 0 then
-        return label, ColorWrap(ColorForXY(cur, cap), FormatXY(cur, cap))
+    local tracking  = Addon.TRACKING
+    local shardsID  = tracking and tonumber(tracking.cofferKeysCurrencyID)
+    local displayID = tracking and tonumber(tracking.cofferKeysDisplayCurrencyID)
+    if not (shardsID and shardsID > 0) then return "", "" end
+    -- Icon and name come from the key currency (3028)
+    local name  = (displayID and displayID > 0 and GetCurrencyName(displayID)) or "Coffer Keys"
+    local label = ColorWrap(GetCurrencyQualityColor(displayID or shardsID), name)
+    -- Progress: keys earned+used this week vs total possible keys this week
+    local getCurrency = C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo
+    local shardInfo   = getCurrency and getCurrency(shardsID)
+    local earned    = (shardInfo and tonumber(shardInfo.quantityEarnedThisWeek)) or 0
+    local weeklyCap = (shardInfo and tonumber(shardInfo.maxWeeklyQuantity))      or 0
+    local current   = math.floor(earned    / 100)
+    local total     = math.floor(weeklyCap / 100)
+    local remainingKeys = math.max(0, total - current)
+    local overcapKeys   = math.max(0, current - total)
+    local tipLines = {
+        { text = "Current: " .. current,
+          r = remainingKeys == 0 and 0.25 or 1,
+          g = 1,
+          b = remainingKeys == 0 and 0.25 or 1 },
+    }
+    if remainingKeys > 0 then
+        tinsert(tipLines, { text = "Remaining: " .. remainingKeys, r = 1, g = 1, b = 0.3 })
     end
-    return label, ColorWrap((cur <= 0) and COLORS.red or COLORS.green, tostring(cur))
+    if overcapKeys > 0 then
+        tinsert(tipLines, { text = "Overcap: " .. overcapKeys, r = 0.25, g = 1, b = 0.25 })
+    end
+    if total > 0 then
+        return label, ColorWrap(ColorForXY(current, total), FormatXY(current, total)), tipLines
+    end
+    return label, ColorWrap((current <= 0) and COLORS.red or COLORS.green, tostring(current)), tipLines
 end
 
 --  Public API 
@@ -487,7 +505,7 @@ end
 local _panelRowBuf  = {}  -- result array, returned and reused each call
 local _panelRowPool = {}  -- pool of row sub-tables, one slot per max possible row
 
-local function FillRow(n, lbl, val, iconID, currencyID, tooltipText, amountTooltipText)
+local function FillRow(n, lbl, val, iconID, currencyID, tooltipText, amountTooltipText, itemID)
     if not _panelRowPool[n] then _panelRowPool[n] = {} end
     local r             = _panelRowPool[n]
     r.label             = lbl
@@ -496,6 +514,7 @@ local function FillRow(n, lbl, val, iconID, currencyID, tooltipText, amountToolt
     r.currencyID        = currencyID
     r.tooltipText       = tooltipText or nil
     r.amountTooltipText = amountTooltipText or nil
+    r.itemID            = itemID or nil
     _panelRowBuf[n] = r
 end
 
@@ -547,11 +566,11 @@ function Addon:GetCurrencyPanelRows()
 
     -- Coffer Keys
     if n < RIGHT_LINE_COUNT then
-        local kLbl, kVal = GetCofferKeysParts()
+        local kLbl, kVal, kTip = GetCofferKeysParts()
         if IsNonEmptyText(kLbl) or IsNonEmptyText(kVal) then
-            local kID = tracking and tracking.cofferKeysCurrencyID
+            local kDisplayID = tracking and tracking.cofferKeysDisplayCurrencyID
             n = n + 1
-            FillRow(n, kLbl, kVal, GetCurrencyIconID(kID), kID)
+            FillRow(n, kLbl, kVal, GetCurrencyIconID(kDisplayID), kDisplayID, nil, kTip)
         end
     end
 
@@ -560,7 +579,36 @@ function Addon:GetCurrencyPanelRows()
         local bLbl, bVal = GetDelversBountyParts()
         if IsNonEmptyText(bLbl) or IsNonEmptyText(bVal) then
             n = n + 1
-            FillRow(n, bLbl, bVal, nil, nil)
+            local bItemID = tracking and tracking.questItemIDs and tonumber(tracking.questItemIDs.delversBounty) or 0
+            local bIcon, bLblFinal = nil, bLbl
+            if bItemID > 0 then
+                local itemName, _, itemQuality, _, _, _, _, _, _, itemTexture = GetItemInfo(bItemID)
+                if itemTexture then bIcon = itemTexture end
+                if itemName then
+                    local qhex = QUALITY_HEX[itemQuality] or COLORS.white
+                    bLblFinal = ColorWrap(qhex, itemName)
+                end
+            end
+            FillRow(n, bLblFinal, bVal, bIcon, nil, nil, nil, bItemID > 0 and bItemID or nil)
+        end
+    end
+
+    -- Spoils of Nullaeus (quest)
+    if n < RIGHT_LINE_COUNT then
+        local sLbl, sVal = GetNullaeusSpoilsParts()
+        if IsNonEmptyText(sLbl) or IsNonEmptyText(sVal) then
+            n = n + 1
+            local sItemID = tracking and tracking.questItemIDs and tonumber(tracking.questItemIDs.nullaeusSpoils) or 0
+            local sIcon, sLblFinal = nil, sLbl
+            if sItemID > 0 then
+                local itemName, _, itemQuality, _, _, _, _, _, _, itemTexture = GetItemInfo(sItemID)
+                if itemTexture then sIcon = itemTexture end
+                if itemName then
+                    local qhex = QUALITY_HEX[itemQuality] or COLORS.white
+                    sLblFinal = ColorWrap(qhex, itemName)
+                end
+            end
+            FillRow(n, sLblFinal, sVal, sIcon, nil, nil, nil, sItemID > 0 and sItemID or nil)
         end
     end
 
@@ -604,14 +652,22 @@ function Addon:FillCurrencySnapshot(snap)
         local sQty, _ = FormatCurrencyProgressParts(sparkID)
         snap.rightRows[#snap.rightRows + 1] = { type = "sparks", id = sparkID, qty = tonumber(sQty) or 0 }
     end
-    local cofferID = tracking and tonumber(tracking.cofferKeysCurrencyID)
-    if cofferID and cofferID > 0 then
-        local kQty, _ = FormatCurrencyProgressParts(cofferID)
-        snap.rightRows[#snap.rightRows + 1] = { type = "cofferkeys", id = cofferID, qty = tonumber(kQty) or 0 }
+    local cofferShardsID  = tracking and tonumber(tracking.cofferKeysCurrencyID)
+    local cofferDisplayID = tracking and tonumber(tracking.cofferKeysDisplayCurrencyID)
+    if cofferShardsID and cofferShardsID > 0 then
+        local getCurrency  = C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo
+        local shardInfo    = getCurrency and getCurrency(cofferShardsID)
+        local kEarned    = (shardInfo and tonumber(shardInfo.quantityEarnedThisWeek)) or 0
+        local kWeeklyCap = (shardInfo and tonumber(shardInfo.maxWeeklyQuantity))      or 0
+        snap.rightRows[#snap.rightRows + 1] = { type = "cofferkeys", id = cofferDisplayID or cofferShardsID, qty = kEarned, cap = kWeeklyCap }
     end
     local bDone = GetQuestDoneRaw("delversBounty")
     if bDone ~= nil then
         snap.rightRows[#snap.rightRows + 1] = { type = "quest", key = "delversBounty", done = bDone }
+    end
+    local sDone = GetQuestDoneRaw("nullaeusSpoils")
+    if sDone ~= nil then
+        snap.rightRows[#snap.rightRows + 1] = { type = "quest", key = "nullaeusSpoils", done = sDone }
     end
     local pDone = GetQuestDoneRaw("weeklyPrey")
     if pDone ~= nil then
@@ -668,19 +724,22 @@ function Addon:RenderCurrencySnapshotRow(row)
         if cap > 0 then return lbl, ColorWrap(ColorForXY(qty, cap), FormatXY(qty, cap)) end
         return lbl, ColorWrap((qty <= 0) and COLORS.red or COLORS.green, tostring(qty))
     elseif t == "cofferkeys" then
-        local qty = tonumber(row.qty) or 0
-        local id  = tonumber(row.id) or (self.TRACKING and tonumber(self.TRACKING.cofferKeysCurrencyID))
-        local name  = (id and id > 0 and GetCurrencyName(id)) or "Restored Coffer Keys"
-        local lbl   = ColorWrap(GetCurrencyQualityColor(id), name)
-        local cap = 0
-        if id and id > 0 then local _, c = FormatCurrencyProgressParts(id); cap = tonumber(c) or 0 end
-        if cap > 0 then return lbl, ColorWrap(ColorForXY(qty, cap), FormatXY(qty, cap)) end
-        return lbl, ColorWrap((qty <= 0) and COLORS.red or COLORS.green, tostring(qty))
+        local earned = tonumber(row.qty) or 0
+        local cap    = tonumber(row.cap) or 0
+        local id     = tonumber(row.id) or (self.TRACKING and tonumber(self.TRACKING.cofferKeysDisplayCurrencyID))
+            or (self.TRACKING and tonumber(self.TRACKING.cofferKeysCurrencyID))
+        local name = (id and id > 0 and GetCurrencyName(id)) or "Coffer Keys"
+        local lbl  = ColorWrap(GetCurrencyQualityColor(id), name)
+        local current = math.floor(earned / 100)
+        local total   = math.floor(cap    / 100)
+        if total > 0 then return lbl, ColorWrap(ColorForXY(current, total), FormatXY(current, total)) end
+        return lbl, ColorWrap((current <= 0) and COLORS.red or COLORS.green, tostring(current))
     elseif t == "quest" then
         local key  = row.key
         local done = row.done
         local labelText = ""
         if key == "delversBounty" then labelText = L.TRACKING_QUEST_DELVERS_BOUNTY or ""
+        elseif key == "nullaeusSpoils" then labelText = L.TRACKING_QUEST_NULLAEUS_SPOILS or ""
         elseif key == "weeklyPrey" then labelText = L.TRACKING_QUEST_WEEKLY_PREY or "" end
         if not IsNonEmptyText(labelText) then return "", "" end
         local lbl = ColorWrap(COLORS.dim, labelText)

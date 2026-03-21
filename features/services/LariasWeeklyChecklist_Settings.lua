@@ -27,6 +27,7 @@ local _settingsOpacSync   -- Sync() closure for the settings-panel Opacity slide
 -- Initialise only if not already set (file may reload).
 Addon._pendingCopyUrl = Addon._pendingCopyUrl or ""
 
+local AU = Addon.AddonUtils
 local OpenColorPicker = Addon.Controls.OpenColorPicker
 
 -- Reload-prompt shown after the player picks a different language.
@@ -357,14 +358,8 @@ local function BuildPanel()
         end
         if _row.tooltip then
             local _tip = _row.tooltip
-            cb:SetScript("OnEnter", function(self_)
-                GameTooltip:SetOwner(self_, "ANCHOR_RIGHT")
-                GameTooltip:SetText(_tip, nil, nil, nil, nil, true)
-                GameTooltip:Show()
-            end)
-            cb:SetScript("OnLeave", function()
-                GameTooltip:Hide()
-            end)
+            cb:SetScript("OnEnter", function(self_) AU.SetTooltip(self_, _tip) end)
+            cb:SetScript("OnLeave", AU.HideTooltip)
         end
         if cb._hit then
             cb._hit:SetPoint("TOPLEFT",  canvas, "TOPLEFT", colX,           rowY)

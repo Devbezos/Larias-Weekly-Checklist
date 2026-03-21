@@ -18,6 +18,7 @@ _G[addonName] = Addon
 -- Shared global registry used by both the main addon and the optional
 -- localization companion addon. Locale files register into this table.
 local LOCALE_REGISTRY_KEY = "LARIASWEEKLYCHECKLIST_LOCALE_REGISTRY"
+Addon.LOCALE_REGISTRY_KEY = LOCALE_REGISTRY_KEY
 
 -- Ensure the global locale registry exists and has the expected shape.
 -- reg.strings[locale] = localized UI strings

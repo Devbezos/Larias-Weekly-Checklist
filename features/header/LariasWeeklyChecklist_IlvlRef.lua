@@ -17,11 +17,11 @@ local HDR_H    = 22    -- section heading height
 local SUBHDR_H = 18    -- column sub-header height
 local SCROLLTOP = 32   -- pixels from win top to scroll frame
 
-local ADV   = "|cFF" .. (Addon.TRACKING and Addon.TRACKING.crestColors and Addon.TRACKING.crestColors[1] or "1EFF00")  -- Adventurer  (green)
-local VET   = "|cFF" .. (Addon.TRACKING and Addon.TRACKING.crestColors and Addon.TRACKING.crestColors[2] or "0070DD")  -- Veteran     (blue)
-local CHAMP = "|cFF" .. (Addon.TRACKING and Addon.TRACKING.crestColors and Addon.TRACKING.crestColors[3] or "A335EE")  -- Champion    (purple)
-local HERO  = "|cFF" .. (Addon.TRACKING and Addon.TRACKING.crestColors and Addon.TRACKING.crestColors[4] or "FF8000")  -- Hero        (orange)
-local MYTH  = "|cFF" .. (Addon.TRACKING and Addon.TRACKING.crestColors and Addon.TRACKING.crestColors[5] or "FFD100")  -- Myth/Gilded (gold)
+local ADV   = Addon.IlvlUtils.GetEscapePrefix(1)  -- Adventurer  (green)
+local VET   = Addon.IlvlUtils.GetEscapePrefix(2)  -- Veteran     (blue)
+local CHAMP = Addon.IlvlUtils.GetEscapePrefix(3)  -- Champion    (purple)
+local HERO  = Addon.IlvlUtils.GetEscapePrefix(4)  -- Hero        (orange)
+local MYTH  = Addon.IlvlUtils.GetEscapePrefix(5)  -- Myth/Gilded (gold)
 local COLOR_RESET = "|r"
 
 -- Create a FontString anchored at (x, posY) from parent's TOPLEFT.
