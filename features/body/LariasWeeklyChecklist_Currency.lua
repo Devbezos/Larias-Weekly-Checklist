@@ -292,18 +292,14 @@ local function PopulateCrestCurCap(cache, ids, crestCount)
     for i = 1, crestCount do
         local id = ids[i]
         if id then
-            local info        = getCurrency and getCurrency(id)
-            local held        = info and tonumber(info.quantity)    or 0
-            local earnedSoFar = info and tonumber(info.totalEarned) or 0
-            local weeklyMax   = info and tonumber(info.maxQuantity) or 0
+            local info      = getCurrency and getCurrency(id)
+            local held      = info and tonumber(info.quantity)    or 0
+            local weeklyCap = info and tonumber(info.maxQuantity) or 0  -- weekly soft cap for crests
+            local earned    = info and tonumber(info.totalEarned) or 0  -- earned toward weekly cap
             cache.cur[i]       = held
-            cache.earned[i]    = earnedSoFar
-            cache.weeklyMax[i] = weeklyMax
-            if weeklyMax > 0 then
-                cache.cap[i] = held + math.max(0, weeklyMax - earnedSoFar)
-            else
-                cache.cap[i] = 0
-            end
+            cache.cap[i]       = weeklyCap
+            cache.earned[i]    = earned
+            cache.weeklyMax[i] = weeklyCap
         else
             cache.cur[i] = 0; cache.cap[i] = 0
             cache.earned[i] = 0; cache.weeklyMax[i] = 0
@@ -355,26 +351,29 @@ local function GetCrestLines()
         if id then
             local name = crestLabels[id] or GetCurrencyName(id) or tostring(id)
             if name then
-                local cur, cap = cache.cur[i], cache.cap[i]
+                local earned = cache.earned[i]    or 0  -- totalEarned toward weekly cap
+                local wkMax  = cache.weeklyMax[i] or 0  -- weekly soft cap
+                local held   = cache.cur[i]       or 0  -- wallet balance
                 local xy, color
-                if cap > 0 then
-                    xy = FormatXY(cur, cap)
-                    color = (cur >= cap) and COLORS.green or (cache.unlocked[i] and COLORS.yellow or COLORS.red)
+                if wkMax > 0 then
+                    xy = FormatXY(earned, wkMax)
+                    color = (earned >= wkMax) and COLORS.green or (cache.unlocked[i] and COLORS.yellow or COLORS.red)
                 else
-                    xy = tostring(cur); color = COLORS.green
+                    xy = tostring(earned); color = COLORS.green
                 end
-                local tipHeld      = cache.cur[i]      or 0
-                local tipEarned    = cache.earned[i]   or 0
-                local tipWeekly    = cache.weeklyMax[i] or 0
-                local tipOvercap    = math.max(0, tipHeld - tipEarned)
-                local tipCapped     = tipHeld - tipOvercap
-                local tipTbl = {
-                    { text = "Capped Crests: " .. tipCapped },
-                }
-                if tipOvercap > 0 then
-                    tinsert(tipTbl, { text = "Bonus Crests: " .. tipOvercap })
+                local tipBonus = math.max(0, held - earned)
+                local tipTbl
+                if tipBonus > 0 then
+                    tipTbl = {
+                        { text = "Capped Crests: " .. earned   },
+                        { text = "Bonus Crests: "  .. tipBonus },
+                        { text = "Total Crests: "  .. held     },
+                    }
+                else
+                    tipTbl = {
+                        { text = "Total Crests: " .. held },
+                    }
                 end
-                tinsert(tipTbl, { text = "Total Crests: " .. tipHeld })
                 amountTooltipTexts[i] = tipTbl
                 local tradeUp = ""
                 if highestTradeTarget and i == highestTradeTarget then
@@ -480,16 +479,18 @@ local function GetCofferKeysParts()
     local wholeKeys = (keyInfo  and tonumber(keyInfo.quantity))  or 0
     local rawShards = (shardInfo and tonumber(shardInfo.quantity)) or 0
     local balance   = wholeKeys + math.floor(rawShards / 100)
-    local remainingKeys = math.max(0, total - current)
-    local overcapKeys   = math.max(0, current - total)
-    local tipLines = {
-        { text = "Current: " .. balance },
-    }
-    if remainingKeys > 0 then
-        tinsert(tipLines, { text = "Remaining: " .. remainingKeys })
-    end
-    if overcapKeys > 0 then
-        tinsert(tipLines, { text = "Overcap: " .. overcapKeys })
+    local bonus = math.max(0, balance - current)
+    local tipLines
+    if bonus > 0 then
+        tipLines = {
+            { text = "Capped Keys: " .. (balance - bonus) },
+            { text = "Bonus Keys: "  .. bonus             },
+            { text = "Total Keys: "  .. balance           },
+        }
+    else
+        tipLines = {
+            { text = "Total Keys: " .. balance },
+        }
     end
     if total > 0 then
         return label, ColorWrap(ColorForXY(current, total), FormatXY(current, total)), tipLines
