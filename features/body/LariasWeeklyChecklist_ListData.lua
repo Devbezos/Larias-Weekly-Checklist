@@ -98,7 +98,7 @@ function Addon:PruneObsoleteSavedState()
     --       from a deleted section) → checkedCount < currentCount but the ratio
     --       is still high; the 90% threshold catches this.
     local currentSheetVer = (function()
-        local r = GetLocaleRegistry()
+        local r = Addon.GetLocaleRegistry and Addon.GetLocaleRegistry()
         return r and tostring(r.sheet_version or "") or ""
     end)()
     -- v2 sentinel: forces one extra run for saves that already had the v1

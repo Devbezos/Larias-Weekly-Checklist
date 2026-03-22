@@ -567,7 +567,14 @@ end
 
 --- Called from OnEnable to register the panel with the WoW UI.
 function Addon:RegisterSettingsPanel()
-    local frame = BuildPanel()
+    local ok, result = pcall(BuildPanel)
+    if not ok then
+        -- Print the error so it surfaces in the WoW chat frame for diagnosis.
+        -- (panelFrame is left nil so we skip registration gracefully.)
+        print("|cffff4444Laria's Checklist|r Settings panel error: " .. tostring(result))
+        return
+    end
+    local frame = result
     if not frame then return end
 
     if Settings and Settings.RegisterCanvasLayoutCategory then
