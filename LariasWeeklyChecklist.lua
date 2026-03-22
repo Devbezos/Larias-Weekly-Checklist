@@ -33,6 +33,7 @@ local function GetLocaleRegistry()
     if type(reg.data) ~= "table" then reg.data = {} end
     return reg
 end
+Addon.GetLocaleRegistry = GetLocaleRegistry
 
 -- Safe frame visibility check (works across different object shapes).
 local function IsFrameShown(frameObj)
@@ -883,11 +884,10 @@ end
 
 -- Opens the Blizzard Interface Options panel to the addon's category.
 function Addon:OpenOptions()
-    if self.CreateBlizzOptionsPanel then
-        self:CreateBlizzOptionsPanel()
-    end
-    if self._blizzOptCategory and Settings and Settings.OpenToCategory then
-        local catId = self._blizzOptCategory.GetID and self._blizzOptCategory:GetID() or self._blizzOptCategory
+    if self.RegisterSettingsPanel then self:RegisterSettingsPanel() end
+    local cat = self._settingsCategory
+    if cat and Settings and Settings.OpenToCategory then
+        local catId = cat.GetID and cat:GetID() or cat
         Settings.OpenToCategory(catId)
     end
 end

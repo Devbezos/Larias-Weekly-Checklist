@@ -264,9 +264,7 @@ local function BuildIlvlRefWindow()
 
     -- Dungeon item levels
     local DUNGEONS = {
-        { Locale.ILVLREF_DUNGEON_PRE_HEROIC, IC(1,2), "?"      },
         { Locale.ILVLREF_DUNGEON_HEROIC,     IC(1,4), IC(2,4)  },
-        { Locale.ILVLREF_DUNGEON_PRE_MYTHIC, IC(2,3), "?"      },
         { Locale.ILVLREF_DUNGEON_MYTHIC,     IC(3,1), IC(3,4)  },
         { "M2",  IC(3,2), IC(4,1) },
         { "M3",  IC(3,2), IC(4,1) },
