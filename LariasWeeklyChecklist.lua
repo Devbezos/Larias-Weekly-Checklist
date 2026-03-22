@@ -572,16 +572,22 @@ function Addon:PerformFullReset()
     if self.RequestRefresh then self:RequestRefresh() else self:Refresh() end
 end
 
+-- Restores _sessionLocaleOverride from SavedVariables if a valid override is saved.
+-- Called on init (when companion is already loaded) and when companion loads late.
+local function RestoreSavedLocaleOverride(self)
+    local savedLocale = self.db and self.db.global and self.db.global.localeOverride
+    if type(savedLocale) == "string" and savedLocale ~= "" and savedLocale ~= "auto" then
+        self._sessionLocaleOverride = savedLocale
+    end
+end
+
 -- Initialize AceDB and minimap icon on addon load
 function Addon:OnInitialize()
     SetupAddonDB()
     -- Restore persisted locale override only if the localization companion is
     -- already loaded at this point. If it loads later, OnAddonLoaded handles it.
     if self.IsLocalizationCompanionLoaded and self:IsLocalizationCompanionLoaded() then
-        local savedLocale = Addon.db and Addon.db.global and Addon.db.global.localeOverride
-        if type(savedLocale) == "string" and savedLocale ~= "" and savedLocale ~= "auto" then
-            self._sessionLocaleOverride = savedLocale
-        end
+        RestoreSavedLocaleOverride(self)
     end
     if self.ApplyLocaleOverride then
         self:ApplyLocaleOverride()
@@ -634,15 +640,15 @@ function Addon:OnEnable()
         self:ConfigureTrackingEvents(nil, true, true)
     end
 
+    -- Apply saved theme-color overrides before anything else that uses THEME
+    -- (e.g. RegisterSettingsPanel calls StyleButton during panel construction).
+    if self.ApplyThemeColors then
+        self:ApplyThemeColors()
+    end
+
     -- Register the Interface → AddOns settings panel.
     if self.RegisterSettingsPanel then
         self:RegisterSettingsPanel()
-    end
-
-    -- Apply any saved theme-color overrides so THEME is correct before
-    -- the first frame is created.
-    if self.ApplyThemeColors then
-        self:ApplyThemeColors()
     end
 
     -- Version announce happens in CommsOnEnable.
@@ -653,12 +659,7 @@ function Addon:OnAddonLoaded(_, loadedName)
     if loadedName ~= LOCALIZATION_ADDON_NAME then return end
 
     -- Companion just loaded: restore any saved locale override now that it is available.
-    do
-        local savedLocale = self.db and self.db.global and self.db.global.localeOverride
-        if type(savedLocale) == "string" and savedLocale ~= "" and savedLocale ~= "auto" then
-            self._sessionLocaleOverride = savedLocale
-        end
-    end
+    RestoreSavedLocaleOverride(self)
 
     -- Refresh strings/data now that locale addon is in memory.
     if self.ApplyLocaleOverride then
@@ -2347,6 +2348,13 @@ function Addon:CreateFrame()
     -- on first open after a reload before the slider is touched.
     if self.ApplyUIScale  then self:ApplyUIScale()  end
     if self.ApplyOpacity  then self:ApplyOpacity()  end
+
+    -- Re-apply saved theme colors to all just-created frame elements.
+    -- ApplyThemeColors in OnEnable only updates Addon.THEME in memory because
+    -- the frame doesn't exist yet; this call runs with _mainFrame set so the
+    -- background texture, tracking-panel labels, and header buttons all receive
+    -- the correct saved colors immediately on first open after a reload.
+    if self.ApplyThemeColors then self:ApplyThemeColors() end
 
     if scrollFrame then scrollFrame:Show() end
 end

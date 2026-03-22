@@ -375,7 +375,7 @@ function Addon:CreateTrackingPanel(parentFrame)
     colSep:Hide()
     trackingFrame._lariasColSep = colSep
 
-    MakeTitleButton(leftCol,
+    trackingFrame._lariasLeftTitleBtn = MakeTitleButton(leftCol,
         L.TOOLTIP_OPEN_GREAT_VAULT or "Click to open the Great Vault",
         function()
             if not WeeklyRewardsFrame then C_AddOns.LoadAddOn("Blizzard_WeeklyRewards") end
@@ -385,7 +385,7 @@ function Addon:CreateTrackingPanel(parentFrame)
             end
         end)
 
-    MakeTitleButton(rightCol,
+    trackingFrame._lariasRightTitleBtn = MakeTitleButton(rightCol,
         L.TOOLTIP_OPEN_CURRENCIES or "Click to open the Currency panel",
         function() ToggleCharacter("TokenFrame") end)
 

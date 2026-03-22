@@ -473,7 +473,7 @@ local function BuildPanel()
                     gdb.localeOverride = (_code == "auto") and "" or _code
                 end
                 langDropBtn:SetText(GetLocaleFriendlyName(_code))
-                if Addon._styleActionButton then Addon._styleActionButton(langDropBtn) end
+                Addon.Controls.StyleButton(langDropBtn)
                 StaticPopup_Show("LARIAS_LOCALE_RELOAD")
             end)
         end

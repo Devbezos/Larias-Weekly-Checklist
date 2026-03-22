@@ -120,6 +120,8 @@ local STRINGS = {
 	CLOSE               = "Close",
 	CHANGE_WEEK_BUTTON  = "Change Week",
 	ALL_WEEKS_COMPLETE  = "Finished!",
+	EXPAND_SECTION      = "Expand section",
+	COLLAPSE_SECTION    = "Collapse section",
 	DONE_PREFIX         = "",
 	ILVLREF_BUTTON = "View Item Levels",
 

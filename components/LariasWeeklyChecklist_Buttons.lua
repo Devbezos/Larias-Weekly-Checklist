@@ -80,10 +80,6 @@ function C.StyleButton(btn)
     btn._lariasTabStyled = true
 end
 
--- Expose as the legacy global reference so all existing code that calls
--- Addon._styleActionButton(btn) continues to work without any changes.
-Addon._styleActionButton = C.StyleButton
-
 -- Applies a fixed dark backdrop (not theme-driven) to header icon buttons so
 -- they never change color when the user adjusts the background theme.
 local function ApplyFixedBackdrop(btn)

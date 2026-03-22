@@ -366,20 +366,15 @@ local function GetCrestLines()
                 local tipHeld      = cache.cur[i]      or 0
                 local tipEarned    = cache.earned[i]   or 0
                 local tipWeekly    = cache.weeklyMax[i] or 0
-                local tipRemaining = math.max(0, tipWeekly - tipEarned)
-                local tipOvercap   = math.max(0, tipHeld - tipEarned)
+                local tipOvercap    = math.max(0, tipHeld - tipEarned)
+                local tipCapped     = tipHeld - tipOvercap
                 local tipTbl = {
-                    { text = "Current: " .. tipHeld,
-                      r = tipRemaining == 0 and 0.25 or 1,
-                      g = 1,
-                      b = tipRemaining == 0 and 0.25 or 1 },
+                    { text = "Capped Crests: " .. tipCapped },
                 }
-                if tipRemaining > 0 then
-                    tinsert(tipTbl, { text = "Remaining: " .. tipRemaining, r = 1, g = 1, b = 0.3 })
-                end
                 if tipOvercap > 0 then
-                    tinsert(tipTbl, { text = "Overcap: " .. tipOvercap, r = 0.25, g = 1, b = 0.25 })
+                    tinsert(tipTbl, { text = "Bonus Crests: " .. tipOvercap })
                 end
+                tinsert(tipTbl, { text = "Total Crests: " .. tipHeld })
                 amountTooltipTexts[i] = tipTbl
                 local tradeUp = ""
                 if highestTradeTarget and i == highestTradeTarget then
@@ -474,23 +469,27 @@ local function GetCofferKeysParts()
     -- Progress: keys earned+used this week vs total possible keys this week
     local getCurrency = C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo
     local shardInfo   = getCurrency and getCurrency(shardsID)
+    local keyInfo     = (getCurrency and displayID and displayID > 0) and getCurrency(displayID) or nil
     local earned    = (shardInfo and tonumber(shardInfo.quantityEarnedThisWeek)) or 0
     local weeklyCap = (shardInfo and tonumber(shardInfo.maxWeeklyQuantity))      or 0
     local current   = math.floor(earned    / 100)
     local total     = math.floor(weeklyCap / 100)
+    -- Whole keys already held (display currency 3028) + any unconverted shards (÷100).
+    -- Shards auto-convert to keys so the shard balance alone would show 0 when you
+    -- hold a converted key; we need to add both together.
+    local wholeKeys = (keyInfo  and tonumber(keyInfo.quantity))  or 0
+    local rawShards = (shardInfo and tonumber(shardInfo.quantity)) or 0
+    local balance   = wholeKeys + math.floor(rawShards / 100)
     local remainingKeys = math.max(0, total - current)
     local overcapKeys   = math.max(0, current - total)
     local tipLines = {
-        { text = "Current: " .. current,
-          r = remainingKeys == 0 and 0.25 or 1,
-          g = 1,
-          b = remainingKeys == 0 and 0.25 or 1 },
+        { text = "Current: " .. balance },
     }
     if remainingKeys > 0 then
-        tinsert(tipLines, { text = "Remaining: " .. remainingKeys, r = 1, g = 1, b = 0.3 })
+        tinsert(tipLines, { text = "Remaining: " .. remainingKeys })
     end
     if overcapKeys > 0 then
-        tinsert(tipLines, { text = "Overcap: " .. overcapKeys, r = 0.25, g = 1, b = 0.25 })
+        tinsert(tipLines, { text = "Overcap: " .. overcapKeys })
     end
     if total > 0 then
         return label, ColorWrap(ColorForXY(current, total), FormatXY(current, total)), tipLines
