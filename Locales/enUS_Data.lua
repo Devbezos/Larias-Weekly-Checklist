@@ -51,7 +51,6 @@ local DATASET = {
         id = "d2de9d43",
         title = "Week 2 - Mar 24 - Mythic Week, M+ Opens, take off work giganerds",
         items = {
-            { id = "36d21691", text = "Do not spend any Heroic or Mythic Crests until told to do so. Check guide for why we hold crests." },
             { id = "e8cef00e", text = "Check Guide for what and when to craft." },
             { id = "4056a14a", text = "If you don't have 4set, do LFR for tier pieces - obtaining a 4set bonus will allow catalyst charges to drop from all content" },
             { id = "83fd4310", text = "Complete weekly world event quest for spark from Lady Liadrin" },
@@ -109,7 +108,6 @@ local DATASET = {
             { id = "13957611", text = "Heroic: Upgrade the last of your heroic items to 6/6 276. Save 20 Heroic Crests for the next step." },
             { id = "2568bd36", text = "Mythic: If your vault item was 1/6, upgrade its heroic counterpart first to 6/6 heroic for 20 Heroic Crests. Upgrade your 1/6 272 Myth track item to 6/6 289 for 80 Myth crests." },
             { id = "c581850d", text = "Track spent crests: 680/680 Heroic, 480/550 Mythic - never hold Mythic crests" },
-            { id = "4f04ba4e", text = "Ending item level:  1x266, 2x269, 6x276h, 2x285(crafted), 4x289" },
         },
     },
     {
