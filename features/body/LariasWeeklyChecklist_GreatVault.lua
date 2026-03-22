@@ -13,24 +13,11 @@ local tonumber, type = tonumber, type
 local floor, max = math.floor, math.max
 local tinsert, tconcat = table.insert, table.concat
 
--- ── Shared mini-utilities (re-declared; Overlay owns the canonical copy) ──────
-local COLORS = {
-    red    = "ffff4040",
-    yellow = "ffffd34d",
-    green  = "ff40ff40",
-    white  = "ffffffff",
-    dim    = "ff808080",
-}
-
-local function ColorWrap(hex, txt)
-    return "|c" .. hex .. tostring(txt or "") .. "|r"
-end
-
-local function Wipe(t)
-    if not t then return end
-    if wipe then wipe(t); return end
-    for k in pairs(t) do t[k] = nil end
-end
+-- ── Shared mini-utilities (from Addon.AddonUtils) ────────────────────────────
+local AU        = Addon.AddonUtils
+local COLORS    = AU.COLORS
+local ColorWrap = AU.ColorWrap
+local Wipe      = AU.Wipe
 
 -- ── Great Vault layout constants ──────────────────────────────────────────────
 local GV_LABEL_W     = 60
@@ -58,9 +45,13 @@ Addon.GV_LAYOUT = {
 }
 
 -- ── Enum shims ────────────────────────────────────────────────────────────────
-local GV_TYPE_MPLUS = (Enum and Enum.WeeklyRewardChestActivityType and Enum.WeeklyRewardChestActivityType.MythicPlus) or 1
-local GV_TYPE_WORLD = (Enum and Enum.WeeklyRewardChestActivityType and Enum.WeeklyRewardChestActivityType.World)     or 2
-local GV_TYPE_RAID  = (Enum and Enum.WeeklyRewardChestActivityType and Enum.WeeklyRewardChestActivityType.Raid)      or 3
+-- Midnight Season 1: C_WeeklyRewards.GetActivities() returns type 6 for World
+-- activities.  Enum.WeeklyRewardChestActivityType.World is stale (still = 2)
+-- so we bypass it entirely for World and hardcode the confirmed runtime value.
+local _gvEnum       = Enum and Enum.WeeklyRewardChestActivityType
+local GV_TYPE_MPLUS = (_gvEnum and _gvEnum.MythicPlus) or 1
+local GV_TYPE_RAID  = (_gvEnum and _gvEnum.Raid)       or 3
+local GV_TYPE_WORLD = 6  -- confirmed via /run print in Midnight S1
 
 -- ── Item-level helpers ────────────────────────────────────────────────────────
 local function GetIlvlFromItemLink(itemLink)
@@ -84,30 +75,79 @@ local function EnsureItemDataLoaded(itemLink)
     end
 end
 
+local function GetRewardIlvlFromTable(activityInfo)
+    local rewards = activityInfo and activityInfo.rewards
+    if type(rewards) ~= "table" then return 0 end
+    -- Try both numeric (array) and hash iteration since the table structure varies.
+    local function tryLink(link)
+        if not link then return 0 end
+        local ilvl = GetIlvlFromItemLink(link)
+        if ilvl > 0 then return ilvl end
+        EnsureItemDataLoaded(link)
+        return 0
+    end
+    for i = 1, #rewards do
+        local r = rewards[i]
+        if r then
+            local ilvl = tryLink(r.itemLink) or tryLink(r.levelItemLink) or 0
+            if ilvl > 0 then return ilvl end
+        end
+    end
+    for _, r in pairs(rewards) do
+        if type(r) == "table" then
+            local ilvl = tryLink(r.itemLink) or tryLink(r.levelItemLink) or 0
+            if ilvl > 0 then return ilvl end
+        end
+    end
+    return 0
+end
+
+-- Uses the same approach as AlterEgo: C_WeeklyRewards.GetExampleRewardItemHyperlinks(activity.id)
+-- NOTE: activity.exampleRewardLink is NOT a native API field — AlterEgo sets it themselves.
+local function GetIlvlFromExampleRewardHyperlink(activityInfo)
+    if not activityInfo or not activityInfo.id then return 0 end
+    if not (C_WeeklyRewards and C_WeeklyRewards.GetExampleRewardItemHyperlinks) then return 0 end
+    local itemLink = C_WeeklyRewards.GetExampleRewardItemHyperlinks(activityInfo.id)
+    if not itemLink or itemLink == "" then return 0 end
+    if C_Item and C_Item.GetDetailedItemLevelInfo then
+        local ilvl = C_Item.GetDetailedItemLevelInfo(itemLink)
+        if ilvl and ilvl > 0 then return ilvl end
+    end
+    return GetIlvlFromItemLink(itemLink)
+end
+
 local function GetExampleRewardIlvlForActivity(activityInfo)
     if not activityInfo then return 0 end
+    -- Primary: GetExampleRewardItemHyperlinks (same as AlterEgo's approach)
+    local ilvl = GetIlvlFromExampleRewardHyperlink(activityInfo)
+    if ilvl > 0 then return ilvl end
+    -- Fallbacks for older fields
     if activityInfo.levelItemLink then
-        local ilvl = GetIlvlFromItemLink(activityInfo.levelItemLink)
+        ilvl = GetIlvlFromItemLink(activityInfo.levelItemLink)
         if ilvl > 0 then return ilvl end
     end
-    if activityInfo.level then return tonumber(activityInfo.level) or 0 end
+    ilvl = GetRewardIlvlFromTable(activityInfo)
+    if ilvl > 0 then return ilvl end
+    -- activity.level is a tier/difficulty number, not an ilvl — skip it.
     return 0
 end
 
 local function GetActivityRewardIlvl(activityInfo)
     if not activityInfo then return 0 end
-    -- Try the item link attached to the specific slot.
+    -- Primary: GetExampleRewardItemHyperlinks (same as AlterEgo's approach)
+    local ilvl = GetIlvlFromExampleRewardHyperlink(activityInfo)
+    if ilvl > 0 then return ilvl end
     if activityInfo.itemLink then
-        local ilvl = GetIlvlFromItemLink(activityInfo.itemLink)
+        ilvl = GetIlvlFromItemLink(activityInfo.itemLink)
         if ilvl > 0 then return ilvl end
         EnsureItemDataLoaded(activityInfo.itemLink)
     end
     if activityInfo.levelItemLink then
-        local ilvl = GetIlvlFromItemLink(activityInfo.levelItemLink)
+        ilvl = GetIlvlFromItemLink(activityInfo.levelItemLink)
         if ilvl > 0 then return ilvl end
         EnsureItemDataLoaded(activityInfo.levelItemLink)
     end
-    return 0
+    return GetRewardIlvlFromTable(activityInfo)
 end
 
 local function IsActivityComplete(activity)
@@ -128,8 +168,13 @@ local function IsActivityComplete(activity)
 end
 
 -- ── GV string builders ────────────────────────────────────────────────────────
-local function MakeGVHeader(label)
-    return ColorWrap(COLORS.dim, label)
+
+-- Colors the section header using the same 5-tier palette as the ilvl popup.
+--   not available / nothing earned  → dim
+--   otherwise                       → crest tier color matching maxIlvl
+local function MakeGVHeaderColored(label, complete, maxIlvl, available)
+    if not available or complete <= 0 then return ColorWrap(COLORS.dim, label) end
+    return ColorWrap(COLORS.white, label)
 end
 
 local function MakeGVThresholdsString(complete, total, thresholds, parts)
@@ -155,8 +200,7 @@ local function MakeGVIlvlsRow(ilvls, maxPossible, parts)
     for i = 1, #ilvls do
         local value = tonumber(ilvls[i]) or 0
         if value > 0 then
-            local c = (maxPossible > 0 and value == maxPossible) and COLORS.green or COLORS.red
-            parts[#parts + 1] = ColorWrap(c, tostring(value))
+            parts[#parts + 1] = ColorWrap(Addon.IlvlUtils.GetColorHex(value), tostring(value))
         else
             parts[#parts + 1] = ColorWrap(COLORS.dim, L.TRACKING_NA or "")
         end
@@ -185,11 +229,11 @@ local function GetGreatVaultBlockLines()
 
     local activities = C_WeeklyRewards and C_WeeklyRewards.GetActivities and C_WeeklyRewards.GetActivities()
     if type(activities) ~= "table" then
-        out[1] = MakeGVHeader(L.TRACKING_GV_RAID      or "Raid")
+        out[1] = ColorWrap(COLORS.dim, L.TRACKING_GV_RAID     or "Raid")
         out[2] = ColorWrap(COLORS.red, L.TRACKING_NA  or "")
-        out[4] = MakeGVHeader(L.TRACKING_GV_DUNGEONS  or "Dungeons")
+        out[4] = ColorWrap(COLORS.dim, L.TRACKING_GV_DUNGEONS or "Dungeons")
         out[5] = ColorWrap(COLORS.red, L.TRACKING_NA  or "")
-        out[7] = MakeGVHeader(L.TRACKING_GV_WORLD     or "World")
+        out[7] = ColorWrap(COLORS.dim, L.TRACKING_GV_WORLD    or "World")
         out[8] = ColorWrap(COLORS.red, L.TRACKING_NA  or "")
         cache.gridBlocks = nil
         return out
@@ -253,13 +297,13 @@ local function GetGreatVaultBlockLines()
     local dungeonMax = (dungeonExampleMax > 0) and dungeonExampleMax or mythicMaxIlvl
     local worldMax   = (worldExampleMax   > 0) and worldExampleMax   or worldMaxIlvl
 
-    out[1] = MakeGVHeader(L.TRACKING_GV_RAID     or "Raid")
+    out[1] = MakeGVHeaderColored(L.TRACKING_GV_RAID     or "Raid",     raidComplete,   raidMax,    raidTotal   > 0)
     out[2] = (raidTotal   > 0) and MakeGVThresholdsString(raidComplete,   raidTotal,   {2,4,6}, cache.parts) or ColorWrap(COLORS.red, L.TRACKING_NA or "")
     out[3] = (raidTotal   > 0) and MakeGVIlvlsRow(cache.rIlvls, raidMax,    cache.parts) or ""
-    out[4] = MakeGVHeader(L.TRACKING_GV_DUNGEONS or "Dungeons")
+    out[4] = MakeGVHeaderColored(L.TRACKING_GV_DUNGEONS or "Dungeons",  mythicComplete, dungeonMax, mythicTotal > 0)
     out[5] = (mythicTotal > 0) and MakeGVThresholdsString(mythicComplete, mythicTotal, {1,4,8}, cache.parts) or ColorWrap(COLORS.red, L.TRACKING_NA or "")
     out[6] = (mythicTotal > 0) and MakeGVIlvlsRow(cache.mIlvls, dungeonMax, cache.parts) or ""
-    out[7] = MakeGVHeader(L.TRACKING_GV_WORLD    or "World")
+    out[7] = MakeGVHeaderColored(L.TRACKING_GV_WORLD    or "World",     worldComplete,  worldMax,   worldTotal  > 0)
     out[8] = (worldTotal  > 0) and MakeGVThresholdsString(worldComplete,  worldTotal,  {2,4,8}, cache.parts) or ColorWrap(COLORS.red, L.TRACKING_NA or "")
     out[9] = (worldTotal  > 0) and MakeGVIlvlsRow(cache.wIlvls, worldMax,  cache.parts) or ""
 

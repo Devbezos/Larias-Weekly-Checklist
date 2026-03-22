@@ -30,10 +30,17 @@ local tracking = {
     sparkCurrencyID = 3212,
     catalystCurrencyID = 3378,
     cofferKeysCurrencyID = 3310,
+    cofferKeysDisplayCurrencyID = 3028,  -- Nightfall Key (icon/name source)
     crestTradeBatch = { 30, 10 },
     questIDs = {
-        delversBounty = 0,
+        delversBounty = 86371,
         weeklyPrey = 0,
+        nullaeusSpoils = 0,  -- TODO: fill in quest ID for Spoils of Nullaeus
+    },
+    questItemIDs = {
+        delversBounty = 252415,  -- Trovehunter's Bounty item
+        weeklyPrey = 0,
+        nullaeusSpoils = 254253,  -- Spoils of Nullaeus
     },
     -- Item level reference data (index-matched to crestCurrencyIDs tier order).
     -- ilvlBases: the rank-1 ilvl for each crest tier (Adv, Vet, Champ, Hero, Myth).
@@ -49,6 +56,8 @@ local tracking = {
         "FF8000",  -- Hero        (orange)
         "FFD100",  -- Myth/Gilded (gold)
     },
+    -- Full track names, index-matched to crest tier order.
+    crestTrackNames = { "Adventurer", "Veteran", "Champion", "Hero", "Myth" },
     -- Atlas names for the crafting quality tier icons (Tier1 = lowest, Tier5 = highest).
     -- IlvlRef wraps these in |A:name:14:14|a when rendering the crafted ilvl table.
     craftingQualityIcons = {

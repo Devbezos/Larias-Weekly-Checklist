@@ -85,8 +85,10 @@ local STRINGS = {
 	TRACKING_CREST_LABEL  = "Crests",
 	TRACKING_DONE = "Done",
 
-	TRACKING_QUEST_DELVERS_BOUNTY = "Delver's Bounty",
+	TRACKING_QUEST_DELVERS_BOUNTY = "Trovehunter's Bounty",
+	TRACKING_QUEST_DELVERS_BOUNTY_TOOLTIP = "Complete a Tier 8 Delve to earn this weekly bounty item, which guarantees a Hidden Trove at the end of your next Tier 4+ Delve.",
 	TRACKING_QUEST_WEEKLY_PREY = "Weekly Prey",
+	TRACKING_QUEST_NULLAEUS_SPOILS = "Spoils of Nullaeus",
 
 	TRACKING_NO_ID = "No ID",
 	TRACKING_TRADE_UP_SUFFIX = " Convert)",
@@ -118,6 +120,8 @@ local STRINGS = {
 	CLOSE               = "Close",
 	CHANGE_WEEK_BUTTON  = "Change Week",
 	ALL_WEEKS_COMPLETE  = "Finished!",
+	EXPAND_SECTION      = "Expand section",
+	COLLAPSE_SECTION    = "Collapse section",
 	DONE_PREFIX         = "",
 	ILVLREF_BUTTON = "View Item Levels",
 

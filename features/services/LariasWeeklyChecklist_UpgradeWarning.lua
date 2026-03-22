@@ -35,13 +35,10 @@ local CREST_LOCALE_KEYS = {
 }
 
 local function GetCrestShort(tierIdx)
-    local tracking    = Addon.TRACKING
-    local crestColors = tracking and tracking.crestColors or {}
     local name = L[CREST_LOCALE_KEYS[tierIdx]] or CREST_LOCALE_KEYS[tierIdx]
-    local hex  = crestColors[tierIdx]
     -- strip any trailing period WoW may append to the global string
     name = name:gsub("%.$", "")
-    return hex and ("|cFF" .. hex .. name .. "|r") or name
+    return Addon.IlvlUtils.GetEscapePrefix(tierIdx) .. name .. "|r"
 end
 
 -- ── Guild check ─────────────────────────────────────────────────────────────
@@ -160,14 +157,10 @@ local function SetupHooks()
         disableBtn:SetSize(160, BTN_H)
         disableBtn:SetPoint("TOP", label, "BOTTOM", 0, -6)
         disableBtn:SetText(L.UPGRADE_WARN_DISABLE_BTN or "Hide Upgrade Warning")
-        disableBtn:SetScript("OnEnter", function()
-            GameTooltip:SetOwner(disableBtn, "ANCHOR_BOTTOM")
-            GameTooltip:SetText(L.UPGRADE_WARN_DISABLE_TOOLTIP or "Check Larias's guide for more information.", 1, 1, 1, 1, true)
-            GameTooltip:Show()
+        disableBtn:SetScript("OnEnter", function(self)
+            Addon.AddonUtils.SetTooltip(self, L.UPGRADE_WARN_DISABLE_TOOLTIP or "Check Larias's guide for more information.", "ANCHOR_BOTTOM")
         end)
-        disableBtn:SetScript("OnLeave", function()
-            GameTooltip:Hide()
-        end)
+        disableBtn:SetScript("OnLeave", Addon.AddonUtils.HideTooltip)
         disableBtn:SetScript("OnClick", function()
             Addon:EnsurePrefs().upgradeWarnDisabled = true
             holder:Hide()

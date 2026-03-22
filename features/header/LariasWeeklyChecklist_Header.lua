@@ -25,7 +25,8 @@ end
 -- Sets the text colour on a picker row button. Defined once at module scope
 -- rather than as an anonymous closure per button to avoid extra allocations.
 local function SetPickerButtonTextColor(btn, color)
-    local tr = btn.Text or (btn.GetFontString and btn:GetFontString())
+    local tr = Addon.Controls and Addon.Controls.GetButtonFontString(btn)
+              or btn.Text or (btn.GetFontString and btn:GetFontString())
     if tr and tr.SetTextColor and color then
         tr:SetTextColor(color.r, color.g, color.b, color.a or 1)
     end
@@ -67,9 +68,7 @@ function Addon:CreateHeader(frame)
     -- ── EnsureChangeWeekBtn_ ──────────────────────────────────────────────────
     local function EnsureChangeWeekBtn_()
         if changeWeekBtn then return changeWeekBtn end
-        local btn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        btn:SetSize(108, 22)
-        StyleMainTabButton(btn)
+        local btn = Addon.Controls.NewActionButton(frame, 108, 22)
         local _fs = btn.GetFontString and btn:GetFontString()
         if _fs and _fs.SetJustifyH then _fs:SetJustifyH("CENTER") end
         if btn.SetTextInsets then btn:SetTextInsets(12, 22, 4, 4) end
@@ -87,9 +86,7 @@ function Addon:CreateHeader(frame)
     -- ── EnsureIlvlRefBtn_ ────────────────────────────────────────────────────
     local function EnsureIlvlRefBtn_()
         if ilvlRefBtn then return ilvlRefBtn end
-        local btn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        btn:SetSize(140, 22)
-        StyleMainTabButton(btn)
+        local btn = Addon.Controls.NewActionButton(frame, 140, 22)
         btn:SetText(L.ILVLREF_BUTTON or "View Item Levels")
         btn:SetScript("OnClick", function() Addon:ToggleIlvlRefWindow() end)
         ilvlRefBtn              = btn
@@ -137,11 +134,10 @@ function Addon:CreateHeader(frame)
     local function AcquirePickerButton(picker)
         local btn = tremove(picker._buttonPool)
         if not btn then
-            btn = CreateFrame("Button", nil, picker, "UIPanelButtonTemplate")
+            btn = Addon.Controls.NewActionButton(picker, nil, nil)
             btn:SetFrameStrata("HIGH")
-            StyleMainTabButton(btn)
             if btn.SetTextInsets then btn:SetTextInsets(10, 10, 0, 0) end
-            local tr = btn.Text or (btn.GetFontString and btn:GetFontString())
+            local tr = Addon.Controls.GetButtonFontString(btn)
             if tr then
                 if tr.SetJustifyH then tr:SetJustifyH("LEFT") end
                 if tr.SetJustifyV then tr:SetJustifyV("MIDDLE") end
@@ -332,13 +328,9 @@ function Addon:CreateHeader(frame)
                         else
                             prefix = L.PICKER_RESET_WEEK_TOOLTIP or "Reset to week:"
                         end
-                        GameTooltip:SetOwner(self_, "ANCHOR_RIGHT")
-                        GameTooltip:SetText(prefix .. "\n" .. capturedTitle, 1, 1, 1, 1, true)
-                        GameTooltip:Show()
+                        Addon.AddonUtils.SetTooltip(self_, prefix .. "\n" .. capturedTitle)
                     end)
-                    btn:SetScript("OnLeave", function()
-                        GameTooltip:Hide()
-                    end)
+                    btn:SetScript("OnLeave", Addon.AddonUtils.HideTooltip)
 
                     tinsert(picker._buttons, btn)
                     posY = posY - PICKER_ROW_HEIGHT
@@ -354,7 +346,7 @@ function Addon:CreateHeader(frame)
                 if not (picker and picker.IsShown and picker:IsShown()) then return end
                 local bestW = 120
                 for _, b in ipairs(picker._buttons) do
-                    local tr = b.Text or (b.GetFontString and b:GetFontString())
+                    local tr = Addon.Controls.GetButtonFontString(b)
                     local w
                     if tr then
                         if tr.GetUnboundedStringWidth then
@@ -449,12 +441,8 @@ function Addon:CreateHeader(frame)
             btn._lariasSelectedLabel = cwWeekLabel
             btn:SetText(cwWeekLabel)
             local cwTip = L.CHANGE_WEEK_BUTTON or "Change Week"
-            btn:SetScript("OnEnter", function(self_)
-                GameTooltip:SetOwner(self_, "ANCHOR_BOTTOMLEFT")
-                GameTooltip:SetText(cwTip, 1, 1, 1, 1, true)
-                GameTooltip:Show()
-            end)
-            btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            btn:SetScript("OnEnter", function(self_) Addon.AddonUtils.SetTooltip(self_, cwTip, "ANCHOR_BOTTOMLEFT") end)
+            btn:SetScript("OnLeave", Addon.AddonUtils.HideTooltip)
             btn:SetScript("OnClick", function()
                 local p = EnsureHeaderPicker()
                 if p and p._lariasClosedAt and (GetTime() - p._lariasClosedAt) < 0.20 then p._lariasClosedAt = nil; return end

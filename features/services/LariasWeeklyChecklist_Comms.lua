@@ -144,7 +144,7 @@ local function GetAddonVersion(name)
     return ""
 end
 
-local LOCALE_REGISTRY_KEY_COMMS = "LARIASWEEKLYCHECKLIST_LOCALE_REGISTRY"
+local LOCALE_REGISTRY_KEY_COMMS = Addon.LOCALE_REGISTRY_KEY
 
 local function GetMySheetVersion()
     local reg = _G[LOCALE_REGISTRY_KEY_COMMS]
@@ -162,10 +162,6 @@ end
 function Addon:GetMyVersion()
     -- Cached in CommsOnEnable.
     return self._myVersion or ""
-end
-
-local function IsVersionNewer(versionA, versionB)
-    return CompareVersions(versionA, versionB) > 0
 end
 
 function Addon:ShouldShowSheetUpdateNotice()
@@ -186,7 +182,7 @@ function Addon:ShouldShowUpdateNotice()
     if myVersion == "" or not IsLiveVersion(myVersion) then return false end
     local newestSeenVersion = tostring(database._newestSeenRemoteVersion or "")
     if newestSeenVersion == "" or myVersion == "" then return false end
-    if not IsVersionNewer(newestSeenVersion, myVersion) then return false end
+    if CompareVersions(newestSeenVersion, myVersion) <= 0 then return false end
     return true
 end
 
@@ -299,10 +295,10 @@ function Addon:OnAddonMessage(prefix, message, sender)
         end
     end
 
-    if IsVersionNewer(remoteVersion, myVersion) then
+    if CompareVersions(remoteVersion, myVersion) > 0 then
         local database = self:EnsureDB()
         local newestSeenVersion = tostring(database._newestSeenRemoteVersion or "")
-        if newestSeenVersion == "" or IsVersionNewer(remoteVersion, newestSeenVersion) then
+        if newestSeenVersion == "" or CompareVersions(remoteVersion, newestSeenVersion) > 0 then
             database._newestSeenRemoteVersion = remoteVersion
             database._newestSeenRemoteSender = tostring(sender or "")
             -- Immediately refresh the status banner so the update notice appears.
@@ -341,7 +337,7 @@ function Addon:CommsOnEnable()
     local myVer    = self._myVersion
     if myVer ~= "" and IsLiveVersion(myVer) then
         local stored = tostring(database._newestSeenRemoteVersion or "")
-        if stored ~= "" and not IsVersionNewer(stored, myVer) then
+        if stored ~= "" and CompareVersions(stored, myVer) <= 0 then
             database._newestSeenRemoteVersion = ""
             database._newestSeenRemoteSender  = ""
         end

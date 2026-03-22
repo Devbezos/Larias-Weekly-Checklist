@@ -46,8 +46,10 @@ components\LariasWeeklyChecklist_ScaleSlider.lua
 components\LariasWeeklyChecklist_Options.lua
 
 # Feature modules
-features\LariasWeeklyChecklist_Comms.lua
-features\LariasWeeklyChecklist_Settings.lua
+features\utils\LariasWeeklyChecklist_AddonUtils.lua
+features\utils\LariasWeeklyChecklist_IlvlUtils.lua
+features\services\LariasWeeklyChecklist_Comms.lua
+features\services\LariasWeeklyChecklist_Settings.lua
 features\header\LariasWeeklyChecklist_GearPopup.lua
 features\header\LariasWeeklyChecklist_IlvlRef.lua
 features\header\LariasWeeklyChecklist_Header.lua
@@ -55,5 +57,5 @@ features\body\LariasWeeklyChecklist_ListData.lua
 features\body\LariasWeeklyChecklist_GreatVault.lua
 features\body\LariasWeeklyChecklist_Currency.lua
 features\body\LariasWeeklyChecklist_Overlay.lua
-features\LariasWeeklyChecklist_UpgradeWarning.lua
+features\services\LariasWeeklyChecklist_UpgradeWarning.lua
 features\footer\LariasWeeklyChecklist_Footer.lua

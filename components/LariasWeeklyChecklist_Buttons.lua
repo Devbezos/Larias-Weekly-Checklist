@@ -80,10 +80,6 @@ function C.StyleButton(btn)
     btn._lariasTabStyled = true
 end
 
--- Expose as the legacy global reference so all existing code that calls
--- Addon._styleActionButton(btn) continues to work without any changes.
-Addon._styleActionButton = C.StyleButton
-
 -- Applies a fixed dark backdrop (not theme-driven) to header icon buttons so
 -- they never change color when the user adjusts the background theme.
 local function ApplyFixedBackdrop(btn)
@@ -306,4 +302,68 @@ function C.NewExpandButton(parent, onToggle, initialExpanded, expandTip, shrinkT
     end)
 
     return btn
+end
+
+-- ── Shared swatch button ──────────────────────────────────────────────────────
+-- Creates a small colored swatch button on `parent`.  Defaults to 22×22;
+-- pass a different `size` for the 16×16 GearPopup variant.
+-- Call swatch:SetColor(r, g, b) to update the display color.
+function C.NewSwatch(parent, size)
+    size = size or 22
+    local btn = CreateFrame("Button", nil, parent)
+    btn:SetSize(size, size)
+    local border = btn:CreateTexture(nil, "ARTWORK", nil, 0)
+    border:SetPoint("TOPLEFT",     btn, "TOPLEFT",     -1,  1)
+    border:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT",  1, -1)
+    border:SetColorTexture(0.55, 0.55, 0.55, 1)
+    local fill = btn:CreateTexture(nil, "ARTWORK", nil, 1)
+    fill:SetAllPoints(btn)
+    fill:SetColorTexture(1, 1, 1, 1)
+    btn._fill = fill
+    function btn:SetColor(r, g, b) self._fill:SetColorTexture(r, g, b, 1) end
+    return btn
+end
+
+-- ── Checkbox enable/disable helper ───────────────────────────────────────────
+-- Dims or restores a custom checkbox (as created by Checkbox.lua) and toggles
+-- its mouse interaction.  Pass enabled=true to restore, enabled=false to dim.
+function C.SetCheckEnabled(cb, enabled)
+    if not cb then return end
+    local a = enabled and 1.00 or 0.40
+    if cb._label then cb._label:SetAlpha(a) end
+    if cb._box   then cb._box:SetAlpha(a)   end
+    if cb._tick  then cb._tick:SetAlpha(a)  end
+    if cb.EnableMouse then cb:EnableMouse(enabled) end
+    if cb._hit and cb._hit.EnableMouse then cb._hit:EnableMouse(enabled) end
+end
+
+-- ── Button font-string accessor ───────────────────────────────────────────────
+-- Returns the FontString used for button text, handling both the .Text
+-- shorthand (UIPanelButtonTemplate) and the generic GetFontString API.
+function C.GetButtonFontString(btn)
+    if not btn then return nil end
+    return btn.Text or (btn.GetFontString and btn:GetFontString())
+end
+
+-- ── Action button factory ─────────────────────────────────────────────────────
+-- Creates a UIPanelButtonTemplate Button, optionally sizes it, then applies
+-- StyleButton.  Pass nil for width/height to skip that dimension.
+function C.NewActionButton(parent, width, height)
+    local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+    if width and height then
+        btn:SetSize(width, height)
+    elseif height then
+        btn:SetHeight(height)
+    end
+    C.StyleButton(btn)
+    return btn
+end
+
+-- ── Theme text-color helper ───────────────────────────────────────────────────
+-- Applies the current theme's text color to any FontString.
+-- alpha defaults to the theme's own alpha (or 1 if absent).
+function C.ApplyThemeTextColor(fontString, alpha)
+    if not (fontString and fontString.SetTextColor) then return end
+    local t = Addon.THEME and Addon.THEME.text
+    if t then fontString:SetTextColor(t.r, t.g, t.b, alpha or t.a or 1) end
 end

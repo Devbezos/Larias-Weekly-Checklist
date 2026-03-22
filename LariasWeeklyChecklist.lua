@@ -18,6 +18,7 @@ _G[addonName] = Addon
 -- Shared global registry used by both the main addon and the optional
 -- localization companion addon. Locale files register into this table.
 local LOCALE_REGISTRY_KEY = "LARIASWEEKLYCHECKLIST_LOCALE_REGISTRY"
+Addon.LOCALE_REGISTRY_KEY = LOCALE_REGISTRY_KEY
 
 -- Ensure the global locale registry exists and has the expected shape.
 -- reg.strings[locale] = localized UI strings
@@ -478,16 +479,115 @@ function LariasWeeklyChecklist_CompartmentOnLeave()
     GameTooltip:Hide()
 end
 
+-- ── Shared theme-color definitions ───────────────────────────────────────────
+-- Single source of truth for background / text / header color entries.
+-- Used by both GearPopup (compact swatches) and Settings (full-size swatches).
+-- Each entry exposes :get() → r,g,b; :save(r,g,b); :reset() so callers
+-- don't need to duplicate db-access logic.
+Addon.THEME_COLOR_DEFS = {
+    { labelKey = "COLOR_PICKER_BG",   label = "Background", rk = "bgR",     gk = "bgG",     bk = "bgB",     dr = 0.10, dg = 0.10, db = 0.10 },
+    { labelKey = "COLOR_PICKER_TEXT", label = "Text",       rk = "textR",   gk = "textG",   bk = "textB",   dr = 1.00, dg = 1.00, db = 1.00 },
+    { labelKey = "COLOR_PICKER_HDR",  label = "Header",     rk = "headerR", gk = "headerG", bk = "headerB", dr = 1.00, dg = 0.82, db = 0.00 },
+}
+for _, d in ipairs(Addon.THEME_COLOR_DEFS) do
+    function d:get()
+        local tc = (Addon.db and Addon.db.global and Addon.db.global.themeColors) or {}
+        local r = (tc[self.rk] ~= nil) and tc[self.rk] or self.dr
+        local g = (tc[self.gk] ~= nil) and tc[self.gk] or self.dg
+        local b = (tc[self.bk] ~= nil) and tc[self.bk] or self.db
+        return r, g, b
+    end
+    function d:save(r, g, b)
+        local gdb = Addon.db and Addon.db.global
+        if not gdb then return end
+        gdb.themeColors = gdb.themeColors or {}
+        gdb.themeColors[self.rk] = r; gdb.themeColors[self.gk] = g; gdb.themeColors[self.bk] = b
+        if Addon.ApplyThemeColors then Addon:ApplyThemeColors() end
+    end
+    function d:reset()
+        local gdb = Addon.db and Addon.db.global
+        if gdb and gdb.themeColors then
+            gdb.themeColors[self.rk] = nil; gdb.themeColors[self.gk] = nil; gdb.themeColors[self.bk] = nil
+        end
+        if Addon.ApplyThemeColors then Addon:ApplyThemeColors() end
+    end
+end
+
+-- ── Shared support links ──────────────────────────────────────────────────────
+-- Returns the three support resource entries as a table-of-tables so callers
+-- can iterate without duplicating URL resolution.  Resolved lazily at call
+-- time so changes to TRACKING.supportLinks (set during OnInitialize) are
+-- reflected correctly.
+function Addon:GetSupportLinks()
+    local sl = self.TRACKING and self.TRACKING.supportLinks or {}
+    local _L = self.L or {}
+    return {
+        { label = _L.SUPPORT_BTN_GUIDE_DOC or "Guide Doc",  url = sl.doc       or "" },
+        { label = _L.SUPPORT_BTN_CHECKLIST  or "Checklist",  url = sl.checklist or "" },
+        { label = _L.SUPPORT_BTN_DISCORD    or "Discord",    url = sl.discord   or "" },
+    }
+end
+
+-- ── Full addon reset ──────────────────────────────────────────────────────────
+-- Resets the current character's list data (checked items, collapsed sections,
+-- week pointer) AND all UI display settings (position, scale, opacity, theme
+-- colors) back to their defaults. Called by both the GearPopup and Settings
+-- panel reset buttons so the logic lives in one place.
+function Addon:PerformFullReset()
+    local currentKey = self.GetCurrentProfileKey and self:GetCurrentProfileKey()
+    if currentKey then
+        local chars = self.db and self.db.global and self.db.global.chars
+        if chars and chars[currentKey] then
+            local cdb = chars[currentKey]
+            if wipe then
+                wipe(cdb.checked           or {})
+                wipe(cdb.collapsedSections or {})
+            else
+                cdb.checked           = {}
+                cdb.collapsedSections = {}
+            end
+            cdb.startAtSectionId = ""
+        end
+    end
+    local gdb = self.db and self.db.global
+    if gdb then
+        gdb.mainFramePos  = nil
+        gdb.mainFrameSize = nil
+        gdb.uiScalePct    = 100
+        gdb.uiOpacityPct  = 65
+        if gdb.themeColors then wipe(gdb.themeColors) end
+    end
+    if self.ApplyThemeColors then self:ApplyThemeColors() end
+    if self.ApplyUIScale     then self:ApplyUIScale()     end
+    if self.ApplyOpacity     then self:ApplyOpacity()     end
+    local mf = self._mainFrame
+    if mf then
+        mf:ClearAllPoints()
+        mf:SetPoint("CENTER")
+        mf:SetSize(self.UI.frameW, self.UI.frameH)
+        if self.ApplyScrollLayout then self:ApplyScrollLayout() end
+    end
+    if self.LayoutHeaderButtons then self:LayoutHeaderButtons() end
+    if self.SyncGearPopup       then self:SyncGearPopup()       end
+    if self.RequestRefresh then self:RequestRefresh() else self:Refresh() end
+end
+
+-- Restores _sessionLocaleOverride from SavedVariables if a valid override is saved.
+-- Called on init (when companion is already loaded) and when companion loads late.
+local function RestoreSavedLocaleOverride(self)
+    local savedLocale = self.db and self.db.global and self.db.global.localeOverride
+    if type(savedLocale) == "string" and savedLocale ~= "" and savedLocale ~= "auto" then
+        self._sessionLocaleOverride = savedLocale
+    end
+end
+
 -- Initialize AceDB and minimap icon on addon load
 function Addon:OnInitialize()
     SetupAddonDB()
     -- Restore persisted locale override only if the localization companion is
     -- already loaded at this point. If it loads later, OnAddonLoaded handles it.
     if self.IsLocalizationCompanionLoaded and self:IsLocalizationCompanionLoaded() then
-        local savedLocale = Addon.db and Addon.db.global and Addon.db.global.localeOverride
-        if type(savedLocale) == "string" and savedLocale ~= "" and savedLocale ~= "auto" then
-            self._sessionLocaleOverride = savedLocale
-        end
+        RestoreSavedLocaleOverride(self)
     end
     if self.ApplyLocaleOverride then
         self:ApplyLocaleOverride()
@@ -540,15 +640,15 @@ function Addon:OnEnable()
         self:ConfigureTrackingEvents(nil, true, true)
     end
 
+    -- Apply saved theme-color overrides before anything else that uses THEME
+    -- (e.g. RegisterSettingsPanel calls StyleButton during panel construction).
+    if self.ApplyThemeColors then
+        self:ApplyThemeColors()
+    end
+
     -- Register the Interface → AddOns settings panel.
     if self.RegisterSettingsPanel then
         self:RegisterSettingsPanel()
-    end
-
-    -- Apply any saved theme-color overrides so THEME is correct before
-    -- the first frame is created.
-    if self.ApplyThemeColors then
-        self:ApplyThemeColors()
     end
 
     -- Version announce happens in CommsOnEnable.
@@ -559,12 +659,7 @@ function Addon:OnAddonLoaded(_, loadedName)
     if loadedName ~= LOCALIZATION_ADDON_NAME then return end
 
     -- Companion just loaded: restore any saved locale override now that it is available.
-    do
-        local savedLocale = self.db and self.db.global and self.db.global.localeOverride
-        if type(savedLocale) == "string" and savedLocale ~= "" and savedLocale ~= "auto" then
-            self._sessionLocaleOverride = savedLocale
-        end
-    end
+    RestoreSavedLocaleOverride(self)
 
     -- Refresh strings/data now that locale addon is in memory.
     if self.ApplyLocaleOverride then
@@ -2253,6 +2348,13 @@ function Addon:CreateFrame()
     -- on first open after a reload before the slider is touched.
     if self.ApplyUIScale  then self:ApplyUIScale()  end
     if self.ApplyOpacity  then self:ApplyOpacity()  end
+
+    -- Re-apply saved theme colors to all just-created frame elements.
+    -- ApplyThemeColors in OnEnable only updates Addon.THEME in memory because
+    -- the frame doesn't exist yet; this call runs with _mainFrame set so the
+    -- background texture, tracking-panel labels, and header buttons all receive
+    -- the correct saved colors immediately on first open after a reload.
+    if self.ApplyThemeColors then self:ApplyThemeColors() end
 
     if scrollFrame then scrollFrame:Show() end
 end

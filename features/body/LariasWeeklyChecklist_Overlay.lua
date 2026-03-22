@@ -30,39 +30,30 @@ local TrackingUI = { left = {}, right = {} }
 
 -- Key lists for ResizeTrackingCols to iterate without allocating.
 local LEFT_LINE_KEYS  = { "line1","line2","line3","line4","line5","line6","line7","line8","line9" }
-local RIGHT_LINE_COUNT = 10
+local RIGHT_LINE_COUNT = Addon.RIGHT_LINE_COUNT
 local RIGHT_ROW_KEYS  = {}
 for _i = 1, RIGHT_LINE_COUNT do RIGHT_ROW_KEYS[_i] = "line" .. _i end
 
--- GV layout constants (mirror of Addon.GV_LAYOUT set in GreatVault.lua).
-local GV_LABEL_W    = 60
-local GV_LABEL_GAP  =  5
-local GV_GRID_X     = GV_LABEL_W + GV_LABEL_GAP   -- 65
-local GV_ROW_H      = 24
-local GV_GRID_H     = 1 + GV_ROW_H + 1            -- 26
-local GV_BLOCK_STEP = GV_GRID_H + 6               -- 32
-local GV_BLOCK_Y    = { 0, -GV_BLOCK_STEP, -GV_BLOCK_STEP * 2 }
-local GV_CELL_W     = 40
-local GV_GRID_W     = GV_CELL_W * 3               -- 120
+-- GV layout constants (sourced from Addon.GV_LAYOUT set by GreatVault.lua).
+local _GL           = Addon.GV_LAYOUT
+local GV_LABEL_W    = _GL.LABEL_W
+local GV_LABEL_GAP  = _GL.LABEL_GAP
+local GV_GRID_X     = _GL.GRID_X
+local GV_ROW_H      = _GL.ROW_H
+local GV_GRID_H     = _GL.GRID_H
+local GV_BLOCK_STEP = _GL.BLOCK_STEP
+local GV_BLOCK_Y    = _GL.BLOCK_Y
+local GV_CELL_W     = _GL.CELL_W
+local GV_GRID_W     = _GL.GRID_W
 
 --  Shared mini-utilities 
-local COLORS = {
-    red    = "ffff4040",
-    yellow = "ffffd34d",
-    green  = "ff40ff40",
-    white  = "ffffffff",
-    dim    = "ff808080",
-}
-
-local function ColorWrap(hex, txt)
-    return "|c" .. hex .. tostring(txt or "") .. "|r"
-end
-
-local function Wipe(t)
-    if not t then return end
-    if wipe then wipe(t); return end
-    for k in pairs(t) do t[k] = nil end
-end
+local AU             = Addon.AddonUtils
+local COLORS         = AU.COLORS
+local ColorWrap      = AU.ColorWrap
+local Wipe           = AU.Wipe
+local IsNonEmptyText = AU.IsNonEmptyText
+local FormatXY       = AU.FormatXY
+local ColorForXY     = AU.ColorForXY
 
 local function SetTextIfChanged(fs, text)
     if not fs then return end
@@ -73,48 +64,13 @@ local function SetTextIfChanged(fs, text)
     end
 end
 
-local function IsNonEmptyText(text)
-    if type(text) ~= "string" then return false end
-    text = text:gsub("|[cr][%x]*", "")
-    return text:match("%S") ~= nil
-end
-
 local function SetShownIfChanged(region, shown)
     if not (region and region.IsShown and region.SetShown) then return end
     local want = shown and true or false
     if region:IsShown() ~= want then region:SetShown(want) end
 end
 
-local function IsFrameShown(frameObj)
-    return frameObj and frameObj.IsShown and frameObj:IsShown()
-end
-
-local function FormatXY(cur, cap)
-    cur = tonumber(cur) or 0; cap = tonumber(cap) or 0
-    if cap > 0 then return ("%d/%d"):format(cur, cap) end
-    return tostring(cur)
-end
-
-local function ColorForXY(cur, cap)
-    cur = tonumber(cur) or 0; cap = tonumber(cap) or 0
-    if cur <= 0 then return COLORS.red end
-    if cap > 0 and cur >= cap then return COLORS.green end
-    return COLORS.yellow
-end
-
--- Session cache shared with Currency.lua (populated lazily on first lookup per ID).
-local _overlayIconCache = {}
-local function GetCurrencyIconID(currencyID)
-    local id = tonumber(currencyID)
-    if not (id and id > 0) then return nil end
-    local cached = _overlayIconCache[id]
-    if cached ~= nil then return cached or nil end
-    if not (C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo) then return nil end
-    local info = C_CurrencyInfo.GetCurrencyInfo(id)
-    local iconID = info and info.iconFileID or nil
-    _overlayIconCache[id] = iconID or false
-    return iconID
-end
+local IsFrameShown = AU.IsFrameShown
 
 local function BottomFor(obj)
     if not obj then return 0 end
@@ -232,6 +188,7 @@ function Addon:RequestTrackingUpdate()
 end
 
 --  Rendering helpers 
+
 local function ApplyGreatVaultGrid(gridBlocks)
     local grids = TrackingUI.left.gvGrids
     if not grids then return end
@@ -240,26 +197,37 @@ local function ApplyGreatVaultGrid(gridBlocks)
         local block = gridBlocks and gridBlocks[bi]
         if not (grid and grid.cells) then break end
         if block and block.available then
-            local done    = block.complete or 0
-            local maxIlvl = block.maxIlvl  or 0
+            local done = block.complete or 0
+            if grid.header then grid.header:SetTextColor(1, 1, 1, 1) end
             for col = 1, 3 do
-                local slot    = block.slots and block.slots[col]
-                local ilvl    = slot and slot.ilvl or 0
+                local slot     = block.slots and block.slots[col]
+                local ilvl     = slot and slot.ilvl or 0
                 local unlocked = done >= col
-                local txt = (unlocked and ilvl > 0)
-                    and ColorWrap((maxIlvl > 0 and ilvl == maxIlvl) and COLORS.green or COLORS.white, tostring(ilvl))
-                    or  ColorWrap(COLORS.dim, "-")
-                SetTextIfChanged(grid.cells[col].bot, txt)
+                local cell     = grid.cells[col]
+                local txt
+                if unlocked and ilvl > 0 then
+                    txt = ColorWrap(Addon.IlvlUtils.GetColorHex(ilvl), tostring(ilvl))
+                    if cell.hit then
+                        cell.hit._lariasTooltipText = Addon.IlvlUtils.GetTrackLabel(ilvl)
+                    end
+                else
+                    txt = ColorWrap(COLORS.dim, "-")
+                    if cell.hit then cell.hit._lariasTooltipText = nil end
+                end
+                SetTextIfChanged(cell.bot, txt)
             end
         else
+            if grid.header then grid.header:SetTextColor(0.5, 0.5, 0.5, 1.0) end
             for col = 1, 3 do
-                SetTextIfChanged(grid.cells[col].bot, ColorWrap(COLORS.dim, "-"))
+                local cell = grid.cells[col]
+                SetTextIfChanged(cell.bot, ColorWrap(COLORS.dim, "-"))
+                if cell.hit then cell.hit._lariasTooltipText = nil end
             end
         end
     end
 end
 
-local function SetRightRowPair(i, rowLabel, rowValue, iconFileID, currencyID, tooltipText, amountTooltipText)
+local function SetRightRowPair(i, rowLabel, rowValue, iconFileID, currencyID, tooltipText, amountTooltipText, itemID)
     local row = TrackingUI.right[RIGHT_ROW_KEYS[i]]
     if not (row and row.label and row.value) then return end
     rowLabel = rowLabel or ""; rowValue = rowValue or ""
@@ -274,10 +242,12 @@ local function SetRightRowPair(i, rowLabel, rowValue, iconFileID, currencyID, to
     if row.icon then
         if showRow and iconFileID and iconFileID ~= 0 then
             if row.icon._tex then row.icon._tex:SetTexture(iconFileID) end
-            row.icon._lariasIconCurrencyID = currencyID or nil
+            row.icon._lariasIconCurrencyID = (not itemID) and currencyID or nil
+            row.icon._lariasIconItemID     = itemID or nil
             SetShownIfChanged(row.icon, true)
         else
             row.icon._lariasIconCurrencyID = nil
+            row.icon._lariasIconItemID     = nil
             SetShownIfChanged(row.icon, false)
         end
     end
@@ -288,7 +258,7 @@ local function ApplyRightColumnAsPairs()
     local panelRows = Addon:GetCurrencyPanelRows()
     for i, row in ipairs(panelRows) do
         if i > RIGHT_LINE_COUNT then break end
-        SetRightRowPair(i, row.label, row.value, row.iconID, row.currencyID, row.tooltipText, row.amountTooltipText)
+        SetRightRowPair(i, row.label, row.value, row.iconID, row.currencyID, row.tooltipText, row.amountTooltipText, row.itemID)
     end
     for i = #panelRows + 1, RIGHT_LINE_COUNT do
         SetRightRowPair(i, "", "")
@@ -380,20 +350,7 @@ function Addon:CreateTrackingPanel(parentFrame)
     rightCol:SetSize(colW, UI.trackH - 40)
     trackingFrame._lariasRightCol = rightCol
 
-    --  Decorative column boxes 
     local BOX_PAD = 6
-    local function MakeColBox(col)
-        local box = CreateFrame("Frame", nil, trackingFrame)
-        Addon:ApplyTheme(box)
-        if box.SetBackdropColor      then box:SetBackdropColor(THEME.bg.r, THEME.bg.g, THEME.bg.b, 0.55) end
-        if box.SetBackdropBorderColor then box:SetBackdropBorderColor(THEME.border.r, THEME.border.g, THEME.border.b, 0.65) end
-        local tfLevel = trackingFrame.GetFrameLevel and trackingFrame:GetFrameLevel() or 1
-        if box.SetFrameLevel then box:SetFrameLevel(tfLevel) end
-        box:EnableMouse(false)
-        box:SetPoint("TOPLEFT",     col, "TOPLEFT",     -BOX_PAD,  24 + BOX_PAD)
-        box:SetPoint("BOTTOMRIGHT", col, "BOTTOMRIGHT",  BOX_PAD, -BOX_PAD)
-        return box
-    end
 
     local function MakeTitleButton(col, tipText, onClick)
         local btn = CreateFrame("Button", nil, trackingFrame)
@@ -402,23 +359,23 @@ function Addon:CreateTrackingPanel(parentFrame)
         btn:EnableMouse(true)
         local hl = btn:CreateTexture(nil, "HIGHLIGHT")
         hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.07)
-        btn:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_TOP")
-            GameTooltip:SetText(tipText, 1, 1, 1, 1, true)
-            GameTooltip:Show()
-        end)
-        btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        btn:SetScript("OnEnter", function(self) AU.SetTooltip(self, tipText, "ANCHOR_TOP") end)
+        btn:SetScript("OnLeave", AU.HideTooltip)
         btn:RegisterForClicks("AnyUp")
         if onClick then btn:SetScript("OnClick", onClick) end
         return btn
     end
 
-    local leftBox  = MakeColBox(leftCol)
-    local rightBox = MakeColBox(rightCol)
-    trackingFrame._lariasLeftBox  = leftBox
-    trackingFrame._lariasRightBox = rightBox
+    -- Vertical separator shown between the two columns.
+    local colSep = trackingFrame:CreateTexture(nil, "ARTWORK")
+    colSep:SetColorTexture(THEME.border.r, THEME.border.g, THEME.border.b, 0.65)
+    colSep:SetWidth(1)
+    colSep:SetPoint("TOPLEFT",    leftCol, "TOPRIGHT",    floor(colGap / 2), 24 + BOX_PAD)
+    colSep:SetPoint("BOTTOMLEFT", leftCol, "BOTTOMRIGHT", floor(colGap / 2), -BOX_PAD)
+    colSep:Hide()
+    trackingFrame._lariasColSep = colSep
 
-    MakeTitleButton(leftCol,
+    trackingFrame._lariasLeftTitleBtn = MakeTitleButton(leftCol,
         L.TOOLTIP_OPEN_GREAT_VAULT or "Click to open the Great Vault",
         function()
             if not WeeklyRewardsFrame then C_AddOns.LoadAddOn("Blizzard_WeeklyRewards") end
@@ -428,7 +385,7 @@ function Addon:CreateTrackingPanel(parentFrame)
             end
         end)
 
-    MakeTitleButton(rightCol,
+    trackingFrame._lariasRightTitleBtn = MakeTitleButton(rightCol,
         L.TOOLTIP_OPEN_CURRENCIES or "Click to open the Currency panel",
         function() ToggleCharacter("TokenFrame") end)
 
@@ -506,7 +463,15 @@ function Addon:CreateTrackingPanel(parentFrame)
         for col = 1, 3 do
             local cellX = GV_GRID_X + (col - 1) * cellW + CELL_INSET
             local cw    = cellW - CELL_INSET * 2
-            cells[col]  = { bot = MakeCellFS(cellX, blockY - 1, cw) }
+            local bot   = MakeCellFS(cellX, blockY - 1, cw)
+            local hit   = CreateFrame("Frame", nil, leftCol)
+            hit:SetAllPoints(bot)
+            hit:EnableMouse(true)
+            hit:SetScript("OnEnter", function(self)
+                if self._lariasTooltipText then AU.SetTooltip(self, self._lariasTooltipText, "ANCHOR_TOP") end
+            end)
+            hit:SetScript("OnLeave", AU.HideTooltip)
+            cells[col] = { bot = bot, hit = hit }
         end
 
         gvGrids[bi] = {
@@ -600,7 +565,11 @@ function Addon:CreateTrackingPanel(parentFrame)
         local iconTex = icon:CreateTexture(nil, "ARTWORK")
         iconTex:SetAllPoints(icon); icon._tex = iconTex
         icon:SetScript("OnEnter", function(self)
-            if self._lariasIconCurrencyID then
+            if self._lariasIconItemID then
+                GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+                GameTooltip:SetItemByID(self._lariasIconItemID)
+                GameTooltip:Show()
+            elseif self._lariasIconCurrencyID then
                 GameTooltip:SetOwner(self, "ANCHOR_LEFT")
                 GameTooltip:SetCurrencyByID(self._lariasIconCurrencyID)
                 GameTooltip:Show()
@@ -616,13 +585,13 @@ function Addon:CreateTrackingPanel(parentFrame)
         valueHit:EnableMouse(true)
         valueHit:SetScript("OnEnter", function(self)
             local tip = row._lariasAmountTooltipText
-            if tip and tip ~= "" then
-                GameTooltip:SetOwner(self, "ANCHOR_TOP")
-                GameTooltip:SetText(tip, 1, 1, 1, 1, true)
-                GameTooltip:Show()
+            if type(tip) == "table" then
+                AU.SetTooltipLines(self, tip, "ANCHOR_TOP")
+            elseif tip and tip ~= "" then
+                AU.SetTooltip(self, tip, "ANCHOR_TOP")
             end
         end)
-        valueHit:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        valueHit:SetScript("OnLeave", AU.HideTooltip)
         row._lariasValueHit = valueHit
 
         -- Full row: shows the convert tooltip when hovering over the label side.
@@ -630,13 +599,9 @@ function Addon:CreateTrackingPanel(parentFrame)
         row:EnableMouse(true)
         row:SetScript("OnEnter", function(self)
             local tip = self._lariasTooltipText
-            if tip and tip ~= "" then
-                GameTooltip:SetOwner(self, "ANCHOR_TOP")
-                GameTooltip:SetText(tip, 1, 1, 1, 1, true)
-                GameTooltip:Show()
-            end
+            if tip and tip ~= "" then AU.SetTooltip(self, tip, "ANCHOR_TOP") end
         end)
-        row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        row:SetScript("OnLeave", AU.HideTooltip)
 
         local label = row:CreateFontString(nil, "OVERLAY", template or "GameFontHighlightSmall")
         label:SetPoint("LEFT", row, "LEFT", ROW_ICON_SZ + ROW_ICON_GAP, 0)
@@ -718,9 +683,7 @@ function Addon:ApplyTrackingPanelOptions()
     SetShownIfChanged(leftTitle,  showGreatVault)
     SetShownIfChanged(rightTitle, showCurrency)
 
-    local showBothBoxes = showGreatVault and showCurrency
-    SetShownIfChanged(trackingFrame._lariasLeftBox,  showBothBoxes)
-    SetShownIfChanged(trackingFrame._lariasRightBox, showBothBoxes)
+    SetShownIfChanged(trackingFrame._lariasColSep, showGreatVault and showCurrency)
 
     if leftCol  and leftCol.ClearAllPoints  then leftCol:ClearAllPoints()  end
     if rightCol and rightCol.ClearAllPoints then rightCol:ClearAllPoints() end
@@ -822,7 +785,7 @@ local function RenderSnapshotIntoPanel(snap)
                     local qty = storedCrestQty[id] or 0
                     local lbl, val = Addon:RenderCurrencySnapshotRow({ type = "crest", id = id, qty = qty })
                     if IsNonEmptyText(lbl) or IsNonEmptyText(val) then
-                        SetRightRowPair(idx, lbl, val, GetCurrencyIconID(id))
+                        SetRightRowPair(idx, lbl, val, Addon:GetCurrencyIcon(id))
                         idx = idx + 1
                     end
                 end
@@ -841,9 +804,9 @@ local function RenderSnapshotIntoPanel(snap)
             if IsNonEmptyText(lbl) or IsNonEmptyText(val) then
                 local iconID = nil
                 if row.type == "sparks" or row.type == "cofferkeys" then
-                    iconID = GetCurrencyIconID(row.id)
+                    iconID = Addon:GetCurrencyIcon(row.id)
                 elseif row.type == "catalyst" then
-                    iconID = GetCurrencyIconID(tracking and tracking.catalystCurrencyID)
+                    iconID = Addon:GetCurrencyIcon(tracking and tracking.catalystCurrencyID)
                 end
                 SetRightRowPair(idx, lbl, val, iconID)
                 idx = idx + 1

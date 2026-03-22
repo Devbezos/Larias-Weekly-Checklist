@@ -11,19 +11,13 @@ local addonName = ...
 local Addon = _G[addonName]
 if not Addon then return end
 
--- ── GetLocaleRegistry ─────────────────────────────────────────────────────────
--- Returns the shared locale registry table written by enUS_Data.lua and the
--- localization companion addon. Kept local so it doesn't pollute globals.
-local LOCALE_REGISTRY_KEY = "LARIASWEEKLYCHECKLIST_LOCALE_REGISTRY"
-local function GetLocaleRegistry()
-    return _G[LOCALE_REGISTRY_KEY]
-end
+local LOCALE_REGISTRY_KEY = Addon.LOCALE_REGISTRY_KEY
 
 -- ── Addon:GetListData ─────────────────────────────────────────────────────────
 -- Return the checklist dataset for the current effective locale.
 -- Cached by locale code because the dataset is static per session.
 function Addon:GetListData()
-    local reg = GetLocaleRegistry()
+    local reg = _G[LOCALE_REGISTRY_KEY]
     local dataByLocale = reg and reg.data
     if type(dataByLocale) ~= "table" then return {} end
 

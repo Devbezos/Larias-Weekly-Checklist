@@ -31,59 +31,10 @@ local LOCALE_NATIVE_NAMES = {
     trTR = "Türkçe",
 }
 
--- Support resource URLs displayed in the Support section of the gear popup.
-local function GetSupportLinks()
-    local sl = Addon.TRACKING and Addon.TRACKING.supportLinks or {}
-    local _L = Addon.L or {}
-    return {
-        { label = _L.SUPPORT_BTN_GUIDE_DOC or "Guide Doc",  url = sl.doc       or "" },
-        { label = _L.SUPPORT_BTN_CHECKLIST  or "Checklist",  url = sl.checklist or "" },
-        { label = _L.SUPPORT_BTN_DISCORD    or "Discord",    url = sl.discord   or "" },
-    }
-end
+-- (GetSupportLinks and MakePopupSwatch removed; use Addon:GetSupportLinks() and Addon.Controls.NewSwatch)
 
--- Creates a small 16×16 colored swatch button.  Call swatch:SetColor(r,g,b).
-local function MakePopupSwatch(parent)
-    local btn = CreateFrame("Button", nil, parent)
-    btn:SetSize(16, 16)
-    local border = btn:CreateTexture(nil, "ARTWORK", nil, 0)
-    border:SetPoint("TOPLEFT",     btn, "TOPLEFT",     -1,  1)
-    border:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT",  1, -1)
-    border:SetColorTexture(0.55, 0.55, 0.55, 1)
-    local fill = btn:CreateTexture(nil, "ARTWORK", nil, 1)
-    fill:SetAllPoints(btn)
-    fill:SetColorTexture(1, 1, 1, 1)
-    btn._fill = fill
-    function btn:SetColor(r, g, b) self._fill:SetColorTexture(r, g, b, 1) end
-    return btn
-end
-
--- Shared color-key / default table used by both creation and sync.
--- Each entry carries get() → r,g,b and save(r,g,b) closures so callers
--- don't need to reproduce the db-access boilerplate inline.
-local function makeGearColorDef(labelKey, labelFallback, rk, gk, bk, dr, dg, db_)
-    local def = { labelKey = labelKey, label = labelFallback, rk = rk, gk = gk, bk = bk, dr = dr, dg = dg, db = db_ }
-    function def.get()
-        local tc = (Addon.db and Addon.db.global and Addon.db.global.themeColors) or {}
-        local r = (tc[rk] ~= nil) and tc[rk] or dr
-        local g = (tc[gk] ~= nil) and tc[gk] or dg
-        local b = (tc[bk] ~= nil) and tc[bk] or db_
-        return r, g, b
-    end
-    function def.save(r, g, b)
-        local gdb = Addon.db and Addon.db.global
-        if not gdb then return end
-        gdb.themeColors = gdb.themeColors or {}
-        gdb.themeColors[rk] = r; gdb.themeColors[gk] = g; gdb.themeColors[bk] = b
-        if Addon.ApplyThemeColors then Addon:ApplyThemeColors() end
-    end
-    return def
-end
-local GEAR_COLOR_DEFS = {
-    makeGearColorDef("COLOR_PICKER_BG",   "Background", "bgR",     "bgG",     "bgB",     0.10, 0.10, 0.10),
-    makeGearColorDef("COLOR_PICKER_TEXT", "Text",       "textR",   "textG",   "textB",   1.00, 1.00, 1.00),
-    makeGearColorDef("COLOR_PICKER_HDR",  "Header",     "headerR", "headerG", "headerB", 1.00, 0.82, 0.00),
-}
+-- Shared color definitions (owned by the main file; GearPopup is a consumer).
+local GEAR_COLOR_DEFS = Addon.THEME_COLOR_DEFS
 
 function Addon:SyncGearPopup()
     local p = self._gearPopup
@@ -102,16 +53,8 @@ function Addon:SyncGearPopup()
          L.HIDE_FINISHED_WEEKS or "Hide Finished Weeks")
     -- Dim the "Hide Finished Weeks" row when "Hide Completed Tasks" is active.
     do
-        local cb = p._cbHideCompleted
-        if cb then
-            local dim = db.hideCompletedTasks and true or false
-            local a = dim and 0.40 or 1.00
-            if cb._label then cb._label:SetAlpha(a) end
-            if cb._box   then cb._box:SetAlpha(a)   end
-            if cb._tick  then cb._tick:SetAlpha(a)  end
-            if cb.EnableMouse then cb:EnableMouse(not dim) end
-            if cb._hit and cb._hit.EnableMouse then cb._hit:EnableMouse(not dim) end
-        end
+        local dim = db.hideCompletedTasks and true or false
+        Addon.Controls.SetCheckEnabled(p._cbHideCompleted, not dim)
     end
     Sync(p._cbHideGreatVault,   not db.showGreatVault,
          L.OPTIONS_HIDE_GREAT_VAULT  or "Hide Great Vault")
@@ -188,7 +131,7 @@ function Addon:SyncGearPopup()
     if p._gearColorSwatches then
         for i, def in ipairs(GEAR_COLOR_DEFS) do
             local sw = p._gearColorSwatches[i]
-            if sw then sw:SetColor(def.get()) end
+            if sw then sw:SetColor(def:get()) end
         end
     end
 end
@@ -216,53 +159,10 @@ function Addon:ToggleGearPopup(anchor, growRight)
 
         -- ── Reset List button (top of popup) ───────────────────────────────
         local rstStartY = PAD          -- px from popup top
-        local resetBtn = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
+        local resetBtn = Addon.Controls.NewActionButton(p, nil, 22)
         resetBtn:SetPoint("TOPLEFT",  p, "TOPLEFT",  PAD,  -rstStartY)
         resetBtn:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PAD, -rstStartY)
-        resetBtn:SetHeight(22)
-        if Addon._styleActionButton then Addon._styleActionButton(resetBtn) end
-        resetBtn:SetScript("OnClick", function()
-            -- Reset only the current character's list data (checked items,
-            -- collapsed sections, week pointer). Display preferences (hide
-            -- great vault, currency, etc.) and UI scale are intentionally kept.
-            local currentKey = Addon.GetCurrentProfileKey and Addon:GetCurrentProfileKey()
-            if currentKey then
-                local chars = Addon.db and Addon.db.global and Addon.db.global.chars
-                if chars and chars[currentKey] then
-                    local cdb = chars[currentKey]
-                    if wipe then
-                        wipe(cdb.checked or {})
-                        wipe(cdb.collapsedSections or {})
-                    else
-                        cdb.checked = {}
-                        cdb.collapsedSections = {}
-                    end
-                    cdb.startAtSectionId = ""
-                end
-            end
-            -- Reset main frame position, size, UI scale, and theme colors back to defaults.
-            local gdb = Addon.db and Addon.db.global
-            if gdb then
-                gdb.mainFramePos  = nil
-                gdb.mainFrameSize = nil
-                gdb.uiScalePct    = 100
-                gdb.uiOpacityPct  = 65
-                if gdb.themeColors then wipe(gdb.themeColors) end
-            end
-            if Addon.ApplyThemeColors then Addon:ApplyThemeColors() end
-            if Addon.ApplyUIScale  then Addon:ApplyUIScale()  end
-            if Addon.ApplyOpacity  then Addon:ApplyOpacity()  end
-            local mf = Addon._mainFrame
-            if mf then
-                mf:ClearAllPoints()
-                mf:SetPoint("CENTER")
-                mf:SetSize(Addon.UI.frameW, Addon.UI.frameH)
-                if Addon.ApplyScrollLayout then Addon:ApplyScrollLayout() end
-            end
-            if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
-            if Addon.SyncGearPopup        then Addon:SyncGearPopup()        end
-            if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
-        end)
+        resetBtn:SetScript("OnClick", function() Addon:PerformFullReset() end)
         p._gearResetBtn = resetBtn
 
         -- ── Divider after Reset ────────────────────────────────────────────
@@ -373,15 +273,9 @@ function Addon:ToggleGearPopup(anchor, growRight)
             if _tooltipKey then
                 cb:SetScript("OnEnter", function(self_)
                     local tip = Addon.L and Addon.L[_tooltipKey]
-                    if tip then
-                        GameTooltip:SetOwner(self_, "ANCHOR_RIGHT")
-                        GameTooltip:SetText(tip, nil, nil, nil, nil, true)
-                        GameTooltip:Show()
-                    end
+                    if tip then Addon.AddonUtils.SetTooltip(self_, tip) end
                 end)
-                cb:SetScript("OnLeave", function()
-                    GameTooltip:Hide()
-                end)
+                cb:SetScript("OnLeave", Addon.AddonUtils.HideTooltip)
             end
 
             local hit = cb._hit
@@ -399,11 +293,7 @@ function Addon:ToggleGearPopup(anchor, growRight)
         -- ── Compact color swatches – beside sliders (right column) ──────────
         -- colorSectionDiv divides the slider+color zone from the credit block.
         local COLOR_DIV_Y = 72   -- divider bottom (px from popup BOTTOMLEFT); accounts for the support link section below
-        local colorSectionDiv = p:CreateTexture(nil, "ARTWORK")
-        colorSectionDiv:SetColorTexture(0.3, 0.3, 0.3, 0.5)
-        colorSectionDiv:SetHeight(1)
-        colorSectionDiv:SetPoint("BOTTOMLEFT",  p, "BOTTOMLEFT",  PAD,  COLOR_DIV_Y)
-        colorSectionDiv:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -PAD, COLOR_DIV_Y)
+        local colorSectionDiv = Addon.Controls.NewDivider(p, COLOR_DIV_Y, PAD, PAD, "BOTTOM")
 
         -- ── Scale & Opacity (left) + Colors (right) in one row ─────────────
         local SROW_H_P   = (Addon.UI.sliderLabelH or 14) + 2 + math.max(16, Addon.UI.sliderH or 20)
@@ -412,11 +302,7 @@ function Addon:ToggleGearPopup(anchor, growRight)
         local SDIV_BOT   = SCALE_BOT + SROW_H_P + 8
 
         -- Divider above the combined zone.
-        local sliderSectionDiv = p:CreateTexture(nil, "ARTWORK")
-        sliderSectionDiv:SetColorTexture(0.3, 0.3, 0.3, 0.5)
-        sliderSectionDiv:SetHeight(1)
-        sliderSectionDiv:SetPoint("BOTTOMLEFT",  p, "BOTTOMLEFT",  PAD,  SDIV_BOT)
-        sliderSectionDiv:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -PAD, SDIV_BOT)
+        local sliderSectionDiv = Addon.Controls.NewDivider(p, SDIV_BOT, PAD, PAD, "BOTTOM")
 
         local SLIDER_W    = 190                  -- left column: slider width
         local COLOR_COL_X = PAD + SLIDER_W + 10  -- right column: x from popup left
@@ -484,14 +370,14 @@ function Addon:ToggleGearPopup(anchor, growRight)
             local rowBotY = swatchBotYs[si] or swatchBotYs[#swatchBotYs]
             local _L = Addon.L or {}
 
-            local sw = MakePopupSwatch(p)
+            local sw = Addon.Controls.NewSwatch(p, 16)
             sw:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", COLOR_COL_X, rowBotY)
-            sw:SetColor(sd.get())
+            sw:SetColor(sd:get())
             sw:SetScript("OnClick", function()
-                local cr, cg, cb = sd.get()
+                local cr, cg, cb = sd:get()
                 OpenPopupColorPicker(cr, cg, cb,
-                    function(nr, ng, nb) sd.save(nr, ng, nb); sw:SetColor(nr, ng, nb) end,
-                    function(pr, pg, pb) sd.save(pr, pg, pb); sw:SetColor(pr, pg, pb) end
+                    function(nr, ng, nb) sd:save(nr, ng, nb); sw:SetColor(nr, ng, nb) end,
+                    function(pr, pg, pb) sd:save(pr, pg, pb); sw:SetColor(pr, pg, pb) end
                 )
             end)
             p._gearColorSwatches[si] = sw
@@ -518,29 +404,23 @@ function Addon:ToggleGearPopup(anchor, growRight)
         do
             local parts = {}
             if _ver     ~= "" then parts[#parts + 1] = "v" .. _ver          end
-            if _dataVer ~= "" then parts[#parts + 1] = "Data: " .. _dataVer end
+            if _dataVer ~= "" then parts[#parts + 1] = "Spreadsheet v" .. _dataVer end
             verLabel:SetText(table.concat(parts, "  \226\128\162  "))
         end
         verLabel:SetTextColor(0.45, 0.45, 0.45, 0.6)
 
         -- ── Support links (Guide Doc / Checklist / Discord) ─────────────────────
         -- Divider above the buttons.
-        local suppDiv = p:CreateTexture(nil, "ARTWORK")
-        suppDiv:SetColorTexture(0.3, 0.3, 0.3, 0.5)
-        suppDiv:SetHeight(1)
-        suppDiv:SetPoint("BOTTOMLEFT",  p, "BOTTOMLEFT",  PAD,  76)
-        suppDiv:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -PAD, 76)
+        local suppDiv = Addon.Controls.NewDivider(p, 76, PAD, PAD, "BOTTOM")
 
         -- Divide available width (minus two side-pads and two 4 px inter-button gaps) equally among 3 buttons.
         local SUPP_BTN_W = math.floor((p:GetWidth() - 2 * PAD - 8) / 3)
-        for si, sl in ipairs(GetSupportLinks()) do
+        for si, sl in ipairs(Addon:GetSupportLinks()) do
             local _url = sl.url
             local sx   = PAD + (si - 1) * (SUPP_BTN_W + 4)
-            local sbtn = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
+            local sbtn = Addon.Controls.NewActionButton(p, SUPP_BTN_W, 22)
             sbtn:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", sx, 48)
-            sbtn:SetSize(SUPP_BTN_W, 22)
             sbtn:SetText(sl.label)
-            if Addon._styleActionButton then Addon._styleActionButton(sbtn) end
             sbtn:SetScript("OnClick", function() Addon.OpenSupportLink(_url) end)
         end
 
@@ -548,20 +428,14 @@ function Addon:ToggleGearPopup(anchor, growRight)
         -- Sits above the slider section divider when visible.
         --   SDIV_BOT≈168  ->  lang btn bottom=173, lang divider bottom=199
         --   VER_PAD grows from 172 to 202 when this button is visible.
-        local langDivider = p:CreateTexture(nil, "ARTWORK")
-        langDivider:SetColorTexture(0.3, 0.3, 0.3, 0.5)
-        langDivider:SetHeight(1)
-        langDivider:SetPoint("BOTTOMLEFT",  p, "BOTTOMLEFT",  PAD,  199)
-        langDivider:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -PAD, 199)
+        local langDivider = Addon.Controls.NewDivider(p, 199, PAD, PAD, "BOTTOM")
         langDivider:Hide()
         p._gearLangDiv = langDivider
 
-        local langBtn = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
+        local langBtn = Addon.Controls.NewActionButton(p, nil, 22)
         langBtn:SetPoint("BOTTOMLEFT",  p, "BOTTOMLEFT",  PAD,  173)
         langBtn:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -PAD, 173)
-        langBtn:SetHeight(22)
         langBtn:Hide()
-        if Addon._styleActionButton then Addon._styleActionButton(langBtn) end
         langBtn:SetScript("OnClick", function()
             if not Addon.SetLocaleOverride then return end
             local eff = (Addon.GetEffectiveLocaleCode and Addon:GetEffectiveLocaleCode()) or "enUS"
