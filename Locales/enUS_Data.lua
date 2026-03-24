@@ -5,7 +5,7 @@ NOTE: This is the canonical enUS dataset; other locales must keep IDs identical
 so completion tracking stays consistent across locales.
 ]]
 
--- @sheet-version: 27
+-- @sheet-version: 28
 
 local LOCALE = "enUS"
 
@@ -17,7 +17,7 @@ if type(reg) ~= "table" then
     _G[LOCALE_REGISTRY_KEY] = reg
 end
 if type(reg.data) ~= "table" then reg.data = {} end
-reg.sheet_version = "27"
+reg.sheet_version = "28"
 
 local DATASET = {
 
@@ -55,10 +55,10 @@ local DATASET = {
             { id = "4056a14a", text = "If you don't have 4set, do LFR for tier pieces - obtaining a 4set bonus will allow catalyst charges to drop from all content" },
             { id = "83fd4310", text = "Complete weekly world event quest for spark from Lady Liadrin" },
             { id = "4c264b7f", text = "Complete weekly housing quest from Vaeli for quick hero crests" },
-            { id = "260911ab", text = "(Unknown Award on repeated weeks) - Complete ?? Nulleaus for unknown rewards" },
+            { id = "e8673800", text = "No real repeatable reward, no reason to do ?? Nulleaus after the first completion" },
             { id = "547b880e", text = "Complete the 3x nightmare prey weekly quest to get an item that summons a delve boss to get a map and 20 uncapped Hero crests." },
             { id = "73ad86e4", text = "Do at least one t11 bountiful delve to get Cracked Keystone Quest for 20 uncapped Hero and Myth crests. While doing it, use your boss item from the 3x Nightmare prey quest to get a map and use it in this delve" },
-            { id = "286f219c", text = "Continue to spend all Adventurer, Veteran and Champion Crests upgrading anything" },
+            { id = "e2da3aa8", text = "Recraft your spark weapon to myth once you get 80 myth crests" },
             { id = "74924a7b", text = "Farm +10s for 266 gear in every slot" },
             { id = "591e911b", text = "Before entering Mythic, upgrade the following 3/6 hero track items to 6/6 - chest, pants, helm, 1 ring, 1 trinket. This should take 300/320 hero crests. Save the last 20 Hero crests in case you get a myth 1/6 item that you need to upgrade to 2/6 first. This gives you the largest power spike possible heading into your first week of mythic while still giving you an opportunity to save on crests in other slots. This assumption is based off of crafting a 2h + 1 other embellished item next week. Hunters or others who didn't craft weapons might consider leveling their weapon instead of pants or helmet in order to gain that power spike after they kill the first boss on mythic if the weapons don't drop." },
             { id = "cbfb6966", text = "Mythic: If you're lucky and got a Myth track item, skip to next week's upgrade advice for it." },
@@ -71,7 +71,7 @@ local DATASET = {
         items = {
             { id = "1fbc825e", text = "Open vault (272+ myth item) - upgrade after crafting" },
             { id = "83fd4310", text = "Complete weekly world event quest for spark from Lady Liadrin" },
-            { id = "260911ab", text = "(Unknown Award on repeated weeks) - Complete ?? Nulleaus for unknown rewards" },
+            { id = "e8673800", text = "No real repeatable reward, no reason to do ?? Nulleaus after the first completion" },
             { id = "09b2b53b", text = "Complete the 3x nightmare prey weekly quest for 20 uncapped Hero crests." },
             { id = "1db5f946", text = "Farm +10s for vault + crests" },
             { id = "d0aed922", text = "Heroic: Upgrade a 3/6 266 item to 6/6 276 for 60 Heroic Crests. Upgrade 2 3/6 266 items to 4/6 269 for 40 Heroic Crests. Save 20 Heroic Crests for the next step." },
@@ -86,7 +86,7 @@ local DATASET = {
         items = {
             { id = "9375e497", text = "Open vault (272+ myth item)" },
             { id = "83fd4310", text = "Complete weekly world event quest for spark from Lady Liadrin" },
-            { id = "260911ab", text = "(Unknown Award on repeated weeks) - Complete ?? Nulleaus for unknown rewards" },
+            { id = "e8673800", text = "No real repeatable reward, no reason to do ?? Nulleaus after the first completion" },
             { id = "09b2b53b", text = "Complete the 3x nightmare prey weekly quest for 20 uncapped Hero crests." },
             { id = "1db5f946", text = "Farm +10s for vault + crests" },
             { id = "6e25b0ce", text = "Heroic: Upgrade 2 of your 4/6 269 items to 6/6 276 for 80 Heroic Crests. Upgrade 1 3/6 266 items to 4/6 269 for 20 Heroic Crests. Save 20 Heroic Crests for the next step." },
@@ -101,7 +101,7 @@ local DATASET = {
         items = {
             { id = "9375e497", text = "Open vault (272+ myth item)" },
             { id = "83fd4310", text = "Complete weekly world event quest for spark from Lady Liadrin" },
-            { id = "260911ab", text = "(Unknown Award on repeated weeks) - Complete ?? Nulleaus for unknown rewards" },
+            { id = "e8673800", text = "No real repeatable reward, no reason to do ?? Nulleaus after the first completion" },
             { id = "09b2b53b", text = "Complete the 3x nightmare prey weekly quest for 20 uncapped Hero crests." },
             { id = "1db5f946", text = "Farm +10s for vault + crests" },
             { id = "cb431e83", text = "Craft next item (Check Guide for more info)" },
