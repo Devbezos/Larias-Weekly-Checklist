@@ -5,7 +5,7 @@ NOTE: This is the canonical enUS dataset; other locales must keep IDs identical
 so completion tracking stays consistent across locales.
 ]]
 
--- @sheet-version: 28
+-- @sheet-version: 29
 
 local LOCALE = "enUS"
 
@@ -17,7 +17,7 @@ if type(reg) ~= "table" then
     _G[LOCALE_REGISTRY_KEY] = reg
 end
 if type(reg.data) ~= "table" then reg.data = {} end
-reg.sheet_version = "28"
+reg.sheet_version = "29"
 
 local DATASET = {
 
@@ -57,6 +57,7 @@ local DATASET = {
             { id = "4c264b7f", text = "Complete weekly housing quest from Vaeli for quick hero crests" },
             { id = "e8673800", text = "No real repeatable reward, no reason to do ?? Nulleaus after the first completion" },
             { id = "547b880e", text = "Complete the 3x nightmare prey weekly quest to get an item that summons a delve boss to get a map and 20 uncapped Hero crests." },
+            { id = "8d655cd7", text = "The weekly delver's call quest to do 5 delves rewards a random piece of raid loot at champion ilvl. THIS CAN INCLUDE MARCH GEAR, including Radiant/Umbral plume. Do this quest for a chance at your bis trinkets on normal ilvl." },
             { id = "73ad86e4", text = "Do at least one t11 bountiful delve to get Cracked Keystone Quest for 20 uncapped Hero and Myth crests. While doing it, use your boss item from the 3x Nightmare prey quest to get a map and use it in this delve" },
             { id = "e2da3aa8", text = "Recraft your spark weapon to myth once you get 80 myth crests" },
             { id = "74924a7b", text = "Farm +10s for 266 gear in every slot" },
