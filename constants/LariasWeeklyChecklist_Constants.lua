@@ -23,7 +23,7 @@ local tracking = {
     crestAchievementIDs = {
         61809,
         42767,
-        72768,
+        42768,
         42769,
         42770,
     },
@@ -72,6 +72,28 @@ local tracking = {
         doc       = "https://docs.google.com/document/d/e/2PACX-1vTGkZ2Cjr0jlv90XqW9vy9VXsVucd-yMCgHdyCvX_kQfOrexNDAC7Lf3LifuhqxrcWqJ0W3zIhvK3ii/pub",
         checklist = "https://docs.google.com/spreadsheets/d/1iK2SZUcz_ljnkdTG7KW6pqfzaUDuSgnlh1HupcLrkus",
         discord   = "https://discord.gg/postnerfclarity",
+    },
+    -- Midnight crafted weapons that can have a stat choice (Blacksmithing + Inscription).
+    -- Keyed by item ID for O(1) lookup.  Add new IDs here as new craftable weapons are added.
+    craftingWarnItemIDs = {
+        -- Blacksmithing
+        [237837]=true, -- Farstrider's Mercy        (AGI, 1H Dagger)
+        [237838]=true, -- Magister's Ritual Knife   (INT, 1H Dagger)
+        [237839]=true, -- Spellbreaker's Blade      (AGI, 1H Sword)
+        [237840]=true, -- Spellbreaker's Warglaive  (AGI, 1H Warglaive)
+        [237841]=true, -- Spellbreaker's Ultimatum  (AGI/STR, 1H Mace)
+        [237842]=true, -- Bloomforged Greataxe      (AGI/STR, 2H Axe)
+        [237843]=true, -- Magister's Mana Sword     (INT, 1H Sword)
+        [237844]=true, -- Magister's Cleaver        (INT, 1H Axe)
+        [237845]=true, -- Bloomforged Claw          (AGI, Fist Weapon)
+        [237846]=true, -- Blood Knight's Warblade   (STR, 2H Sword)
+        [237847]=true, -- Blood Knight's Impetus    (STR, 2H Polearm)
+        [237848]=true, -- Blood Knight's Mercy      (STR, 2H Mace)
+        [237849]=true, -- Magister's Valediction    (INT, 2H Mace)
+        [237850]=true, -- Farstrider's Chopper      (AGI, 1H Axe)
+        -- Inscription
+        [245770]=true, -- Aln'hara Cane             (INT, 2H Staff)
+        [245771]=true, -- Aln'hara Pikestaff        (AGI, 2H Staff)
     },
     -- ── Feature flags ──────────────────────────────────────────────────────
     -- Master switches for optional UI features.  Set a flag to false to

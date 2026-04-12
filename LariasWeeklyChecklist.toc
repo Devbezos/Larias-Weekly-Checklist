@@ -58,4 +58,5 @@ features\body\LariasWeeklyChecklist_GreatVault.lua
 features\body\LariasWeeklyChecklist_Currency.lua
 features\body\LariasWeeklyChecklist_Overlay.lua
 features\services\LariasWeeklyChecklist_UpgradeWarning.lua
+features\services\LariasWeeklyChecklist_CraftingWarning.lua
 features\footer\LariasWeeklyChecklist_Footer.lua

@@ -71,6 +71,8 @@ function Addon:SyncGearPopup()
          L.OPTIONS_HIDE_MINIMAP_BTN or "Hide Minimap Button")
     Sync(p._cbDisableUpgradeWarn, db.upgradeWarnDisabled and true or false,
          L.OPTIONS_DISABLE_UPGRADE_WARN or "Hide Upgrade Warnings")
+    Sync(p._cbDisableCraftWarn, db.craftWarnDisabled and true or false,
+         L.OPTIONS_DISABLE_CRAFT_WARN or "Hide Crafting Warnings")
 
     -- Refresh color swatch labels in case locale changed since popup was built.
     if p._gearColorLabels then
@@ -106,7 +108,7 @@ function Addon:SyncGearPopup()
 
     -- Recalculate popup height based on visible content.
     do
-        -- Layout is 2-column (5 left + 4 right); height uses 5 rows (the taller column).
+        -- Layout is 2-column (5 left + 5 right); height uses 5 rows (the taller column).
         local PAD     = 10
         local TILE_H  = 34
         local cbsY    = 47  -- PAD(10) + reset(22) + 6 + div(1) + 8
@@ -169,7 +171,7 @@ function Addon:ToggleGearPopup(anchor, growRight)
         local div1StartY = rstStartY + 22 + 6
         Addon.Controls.NewDivider(p, -div1StartY, PAD, PAD)
 
-        -- ── 8 Checkboxes ──────────────────────────────────────────────────
+        -- ── 10 Checkboxes ─────────────────────────────────────────────────
         local checks = {
             { key = "_cbHideCompletedTasks",   tooltipKey = "OPTIONS_TOOLTIP_HIDE_COMPLETED_TASKS" },
             { key = "_cbHideCompleted",         tooltipKey = "OPTIONS_TOOLTIP_HIDE_FINISHED_WEEKS"  },
@@ -180,6 +182,7 @@ function Addon:ToggleGearPopup(anchor, growRight)
             { key = "_cbHideUpdateNotice",      tooltipKey = "OPTIONS_TOOLTIP_HIDE_UPDATE_NOTICE"   },
             { key = "_cbHideMinimapBtn",        tooltipKey = "OPTIONS_TOOLTIP_HIDE_MINIMAP_BTN"     },
             { key = "_cbDisableUpgradeWarn",    tooltipKey = "OPTIONS_TOOLTIP_DISABLE_UPGRADE_WARN" },
+            { key = "_cbDisableCraftWarn",       tooltipKey = "OPTIONS_TOOLTIP_DISABLE_CRAFT_WARN"   },
         }
         local callbacks = {
             _cbHideCompletedTasks = function(checked)
@@ -231,6 +234,11 @@ function Addon:ToggleGearPopup(anchor, growRight)
                 local db = Addon:EnsurePrefs()
                 db.upgradeWarnDisabled = checked or nil
                 if Addon.CheckUpgradeWarning then Addon:CheckUpgradeWarning() end
+            end,
+            _cbDisableCraftWarn = function(checked)
+                local db = Addon:EnsurePrefs()
+                db.craftWarnDisabled = checked or nil
+                if Addon.CheckCraftingWarning then Addon:CheckCraftingWarning() end
             end,
             _cbHideMinimapBtn = function(checked)
                 local gdb = Addon.db and Addon.db.global
