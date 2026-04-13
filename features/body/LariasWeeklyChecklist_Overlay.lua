@@ -599,7 +599,11 @@ function Addon:CreateTrackingPanel(parentFrame)
         row:EnableMouse(true)
         row:SetScript("OnEnter", function(self)
             local tip = self._lariasTooltipText
-            if tip and tip ~= "" then AU.SetTooltip(self, tip, "ANCHOR_TOP") end
+            if type(tip) == "table" then
+                AU.SetTooltipLines(self, tip, "ANCHOR_TOP")
+            elseif tip and tip ~= "" then
+                AU.SetTooltip(self, tip, "ANCHOR_TOP")
+            end
         end)
         row:SetScript("OnLeave", AU.HideTooltip)
 

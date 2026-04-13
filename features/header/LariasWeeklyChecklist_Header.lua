@@ -191,21 +191,7 @@ function Addon:CreateHeader(frame)
 
         if oldIdx == 0 and #order > 0 then oldIdx = 1 end
 
-        if newIdx > oldIdx then
-            if type(db.checked)          ~= "table" then db.checked          = {} end
-            if type(db.collapsedSections) ~= "table" then db.collapsedSections = {} end
-            if type(db.sectionCompleted)  ~= "table" then db.sectionCompleted  = {} end
-            for i = oldIdx, newIdx - 1 do
-                local secId  = order[i]
-                local secDef = Addon._sectionsById and Addon._sectionsById[secId]
-                local items  = secDef and secDef.items or {}
-                for _, item in ipairs(items) do
-                    db.checked[secId .. ":" .. tostring(item.id)] = true
-                end
-                db.collapsedSections[secId] = true
-                db.sectionCompleted[secId]  = true  -- persist so hide-finished-weeks survives updates
-            end
-        elseif newIdx <= oldIdx then
+        if newIdx <= oldIdx then
             local checked   = type(db.checked)          == "table" and db.checked          or nil
             local collapsed = type(db.collapsedSections) == "table" and db.collapsedSections or nil
             local done      = type(db.sectionCompleted)  == "table" and db.sectionCompleted  or nil
