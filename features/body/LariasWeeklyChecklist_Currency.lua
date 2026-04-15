@@ -37,12 +37,9 @@ local ColorForXY     = AU.ColorForXY
 
 local function IsAchievementCompleteSafe(achievementID)
     if not achievementID then return false end
-    if C_AchievementInfo and C_AchievementInfo.IsAchievementComplete then
-        return C_AchievementInfo.IsAchievementComplete(achievementID) and true or false
-    end
     if GetAchievementInfo then
-        local _, _, _, completed = GetAchievementInfo(achievementID)
-        return completed == true
+        local _, _, _, _, _, _, _, _, _, _, _, _, wasEarnedByMe = GetAchievementInfo(achievementID)
+        return wasEarnedByMe == true
     end
     return false
 end

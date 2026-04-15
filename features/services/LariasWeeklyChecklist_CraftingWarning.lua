@@ -10,38 +10,8 @@ if not Addon then return end
 local L = Addon.L or {}
 
 -- ── Spec → primary stat lookup ───────────────────────────────────────────────
--- GetSpecializationInfoByID does not expose primary stat, so this table must be
--- maintained manually whenever new specs are added.
-local SPEC_STAT = {}
-do
-    local STR_SPECS = {
-        71, 72, 73,       -- Warrior:      Arms, Fury, Protection
-        66, 70,           -- Paladin:      Protection, Retribution
-        250, 251, 252,    -- Death Knight: Blood, Frost, Unholy
-    }
-    local AGI_SPECS = {
-        253, 254, 255,    -- Hunter:       Beast Mastery, Marksmanship, Survival
-        259, 260, 261,    -- Rogue:        Assassination, Outlaw, Subtlety
-        263,              -- Shaman:       Enhancement
-        103, 104,         -- Druid:        Feral, Guardian
-        268, 269,         -- Monk:         Brewmaster, Windwalker
-        577, 581,         -- Demon Hunter: Havoc, Vengeance
-    }
-    local INT_SPECS = {
-        65,               -- Paladin:      Holy
-        256, 257, 258,    -- Priest:       Discipline, Holy, Shadow
-        262, 264,         -- Shaman:       Elemental, Restoration
-        62, 63, 64,       -- Mage:         Arcane, Fire, Frost
-        265, 266, 267,    -- Warlock:      Affliction, Demonology, Destruction
-        270,              -- Monk:         Mistweaver
-        102, 105,         -- Druid:        Balance, Restoration
-        1480,             -- Demon Hunter: Devourer
-        1467, 1468, 1473, -- Evoker:       Devastation, Preservation, Augmentation
-    }
-    for _, id in ipairs(STR_SPECS) do SPEC_STAT[id] = "STR" end
-    for _, id in ipairs(AGI_SPECS) do SPEC_STAT[id] = "AGI" end
-    for _, id in ipairs(INT_SPECS) do SPEC_STAT[id] = "INT" end
-end
+-- primaryStat values returned by GetSpecializationInfo: 1=STR, 2=AGI, 3=INT.
+local PRIMARY_STAT_MAP = { [1]="STR", [2]="AGI", [3]="INT" }
 
 -- Human-readable display names used in the warning message.
 local STAT_NAMES = { STR="Strength", AGI="Agility", INT="Intellect" }
@@ -93,8 +63,8 @@ local function GetPlayerPrimaryStat()
     if not GetSpecialization then return nil end
     local idx = GetSpecialization()
     if not idx then return nil end
-    local specID = select(1, GetSpecializationInfo(idx))
-    return specID and SPEC_STAT[specID]
+    local _, _, _, _, _, primaryStat = GetSpecializationInfo(idx)
+    return PRIMARY_STAT_MAP[primaryStat]
 end
 
 -- ── Professions frame hooking ────────────────────────────────────────────────
@@ -174,10 +144,6 @@ local function EnsureWarnPanel()
     local btn = CreateFrame("Button", nil, holder, "UIPanelButtonTemplate")
     btn:SetSize(180, BTN_H) ; btn:SetPoint("TOP", label, "BOTTOM", 0, -6)
     btn:SetText(L.CRAFT_WARN_DISABLE_BTN or "Hide Crafting Warning")
-    btn:SetScript("OnEnter", function(self)
-        Addon.AddonUtils.SetTooltip(self, L.CRAFT_WARN_DISABLE_TOOLTIP or "Check Larias's guide for more information.", "ANCHOR_BOTTOM")
-    end)
-    btn:SetScript("OnLeave", Addon.AddonUtils.HideTooltip)
     btn:SetScript("OnClick", function()
         Addon:EnsurePrefs().craftWarnDisabled = true ; holder:Hide()
         if Addon.RefreshSettingsCheckboxes then Addon:RefreshSettingsCheckboxes() end
