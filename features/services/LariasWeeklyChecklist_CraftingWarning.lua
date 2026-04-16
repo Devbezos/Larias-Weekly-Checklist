@@ -18,43 +18,63 @@ local STAT_NAMES = { STR="Strength", AGI="Agility", INT="Intellect" }
 
 -- ── Module state ─────────────────────────────────────────────────────────────
 local _warn             -- cached warn panel { holder, label }
-local _pendingItemID    -- item whose data hasn't loaded yet; retried on ITEM_DATA_LOAD_RESULT
+local _pendingItemID    -- item whose data hasn't loaded yet; retried via timer
 local _currentRecipeID  -- recipe currently open in the Professions UI
 local _hookedForms = {} -- tracks which SchematicForm/Form frames we've already hooked
-local _scanTip          -- hidden GameTooltip used as a fallback for stat scanning
+local _sparkReagentCache = {} -- [recipeID] = itemID or false
+local _profAddonsSeen   = 0    -- unregister ADDON_LOADED once both professions UI addons have loaded
+
+-- ── Event frame (early, so helpers below can close over it) ──────────────────
+-- Only ADDON_LOADED is registered at startup.  TRADE_SKILL_DETAILS_UPDATE is
+-- registered lazily when a crafting window opens and unregistered when it closes.
+local ev = CreateFrame("Frame")
+ev:RegisterEvent("ADDON_LOADED")
+
+local function OnCraftingWindowOpen()
+    ev:RegisterEvent("TRADE_SKILL_DETAILS_UPDATE")
+end
+
+local function OnCraftingWindowClose()
+    ev:UnregisterEvent("TRADE_SKILL_DETAILS_UPDATE")
+    if _warn then _warn.holder:Hide() end
+    _pendingItemID   = nil
+    _currentRecipeID = nil
+end
 
 -- ── Stat detection ───────────────────────────────────────────────────────────
 
--- Returns "STR", "AGI", "INT", or nil by scanning the item's tooltip lines.
--- Prefers the C_TooltipInfo API (no frame required); falls back to a hidden
--- GameTooltip when that API is unavailable.
+-- Returns "STR", "AGI", "INT", or nil for the item's primary stat.
+-- Tries GetItemStats first, then falls back to C_TooltipInfo tooltip scanning.
+-- The fallback is needed for crafted template items where GetItemStats returns
+-- empty. Global strings (_G["ITEM_MOD_*_SHORT"]) are used so it works on all
+-- client locales.
 local function GetItemMainStat(itemLink)
     if not itemLink then return nil end
+
+    if GetItemStats then
+        local stats = {}
+        GetItemStats(itemLink, stats)
+        if (stats["ITEM_MOD_STRENGTH_SHORT"]  or 0) > 0 then return "STR" end
+        if (stats["ITEM_MOD_AGILITY_SHORT"]   or 0) > 0 then return "AGI" end
+        if (stats["ITEM_MOD_INTELLECT_SHORT"] or 0) > 0 then return "INT" end
+    end
+
+    -- Fallback: scan tooltip lines using localized stat names from global strings.
     if C_TooltipInfo and C_TooltipInfo.GetHyperlink then
+        local strName = _G["ITEM_MOD_STRENGTH_SHORT"]  or "Strength"
+        local agiName = _G["ITEM_MOD_AGILITY_SHORT"]   or "Agility"
+        local intName = _G["ITEM_MOD_INTELLECT_SHORT"] or "Intellect"
         local data = C_TooltipInfo.GetHyperlink(itemLink)
         if data and data.lines then
             for _, line in ipairs(data.lines) do
                 local t = line.leftText or ""
-                if t:find("Strength")  then return "STR" end
-                if t:find("Agility")   then return "AGI" end
-                if t:find("Intellect") then return "INT" end
+                if t:find(strName, 1, true) then return "STR" end
+                if t:find(agiName, 1, true) then return "AGI" end
+                if t:find(intName, 1, true) then return "INT" end
             end
         end
     end
-    -- Fallback: scan a hidden GameTooltip for the stat text.
-    if not _scanTip then
-        _scanTip = CreateFrame("GameTooltip", "LWCCraftWarnScanTip", UIParent, "GameTooltipTemplate")
-        _scanTip:SetOwner(UIParent, "ANCHOR_NONE")
-    end
-    _scanTip:ClearLines()
-    _scanTip:SetHyperlink(itemLink)
-    for i = 1, _scanTip:NumLines() do
-        local left = _G["LWCCraftWarnScanTipTextLeft" .. i]
-        local t = left and left:GetText() or ""
-        if t:find("Strength")  then return "STR" end
-        if t:find("Agility")   then return "AGI" end
-        if t:find("Intellect") then return "INT" end
-    end
+
     return nil
 end
 
@@ -65,6 +85,67 @@ local function GetPlayerPrimaryStat()
     if not idx then return nil end
     local _, _, _, _, _, primaryStat = GetSpecializationInfo(idx)
     return PRIMARY_STAT_MAP[primaryStat]
+end
+
+-- Checks whether the game has colored the item's type line red, which is exactly
+-- what the client does when the player's class cannot use that item class/subclass.
+-- itemClassID: 2 = Weapon, 4 = Armor.  Returns false if red (can't use), true if
+-- another color (can use), or nil if the line wasn't found.
+local function PlayerCanUseItemType(itemClassID, subClassID, itemLink)
+    if not (itemLink and C_TooltipInfo and C_TooltipInfo.GetHyperlink and GetItemSubClassInfo) then
+        return nil
+    end
+    local typeName = GetItemSubClassInfo(itemClassID, subClassID)
+    if not typeName then return nil end
+    local data = C_TooltipInfo.GetHyperlink(itemLink)
+    if not (data and data.lines) then return nil end
+    for _, line in ipairs(data.lines) do
+        if line.leftText == typeName then
+            local c = line.leftColor
+            if c and c.r > 0.9 and (c.g or 0) < 0.1 and (c.b or 0) < 0.1 then
+                return false  -- red = not proficient
+            end
+            return true
+        end
+    end
+    return nil  -- line not found; skip the check
+end
+
+-- ── Spark reagent detection ────────────────────────────────────────────────
+
+-- Scans the recipe schematic for the configured spark item ID and returns
+-- itemID, quantityRequired on success, or nil if the recipe has no spark slot.
+-- Results are cached per recipeID for the session.
+local function FindSparkForRecipe(recipeID)
+    if not recipeID then return nil end
+    local cached = _sparkReagentCache[recipeID]
+    if cached ~= nil then
+        return cached and cached[1] or nil, cached and cached[2] or nil
+    end
+
+    local sparkItemID = Addon.TRACKING and tonumber(Addon.TRACKING.sparkItemID)
+    if not (sparkItemID and sparkItemID > 0) then
+        _sparkReagentCache[recipeID] = false; return nil
+    end
+
+    if not (C_TradeSkillUI and C_TradeSkillUI.GetRecipeSchematic) then
+        _sparkReagentCache[recipeID] = false; return nil
+    end
+    local ok, sc = pcall(C_TradeSkillUI.GetRecipeSchematic, recipeID, false)
+    if not ok or not sc then _sparkReagentCache[recipeID] = false; return nil end
+
+    for _, slot in ipairs(sc.reagentSlotSchematics or {}) do
+        local qty = tonumber(slot.quantityRequired) or 1
+        for _, reagent in ipairs(slot.reagents or {}) do
+            if tonumber(reagent.itemID) == sparkItemID then
+                _sparkReagentCache[recipeID] = { sparkItemID, qty }
+                return sparkItemID, qty
+            end
+        end
+    end
+    -- Recipe has no spark slot; cache so we don't re-scan.
+    _sparkReagentCache[recipeID] = false
+    return nil
 end
 
 -- ── Professions frame hooking ────────────────────────────────────────────────
@@ -81,7 +162,7 @@ local function HookForm(form, label)
         _pendingItemID   = (info and (info.itemID or 0) > 0) and info.itemID or nil
         C_Timer.After(0, function() Addon:CheckCraftingWarning() end)
     end)
-    -- Hide the warning when the form closes.
+    -- Hide the warning when this schematic form closes (recipe deselected).
     form:HookScript("OnHide", function()
         if _warn then _warn.holder:Hide() end
         _pendingItemID = nil ; _currentRecipeID = nil
@@ -102,22 +183,17 @@ local function SetupFrame(root, rootName)
         if root.OrdersPage.SchematicForm then HookForm(root.OrdersPage.SchematicForm, rootName .. ".OrdersPage.SchematicForm") end
         if root.OrdersPage.Form          then HookForm(root.OrdersPage.Form,          rootName .. ".OrdersPage.Form")          end
     end
-    -- Also hide on root close in case no sub-form fires OnHide first.
-    root:HookScript("OnHide", function()
-        if _warn then _warn.holder:Hide() end
-        _pendingItemID = nil ; _currentRecipeID = nil
-    end)
+    -- Activate recipe/bag events when the window opens; tear down on close.
+    root:HookScript("OnShow", OnCraftingWindowOpen)
+    root:HookScript("OnHide", OnCraftingWindowClose)
 end
 
 -- ── Warning panel ────────────────────────────────────────────────────────────
 
 -- Builds the warning panel the first time it is needed (lazy init).
--- The panel is anchored below whichever Professions frame is currently open.
+-- Anchor is set dynamically each time the warning is shown, so no anchor here.
 local function EnsureWarnPanel()
     if _warn then return end
-    local anchor = (ProfessionsFrame and ProfessionsFrame:IsShown() and ProfessionsFrame)
-                or (ProfessionsCustomerOrdersFrame and ProfessionsCustomerOrdersFrame:IsShown() and ProfessionsCustomerOrdersFrame)
-                or UIParent
 
     local PAD_W=10 ; local BODY_H=34 ; local BTN_H=22
     local PANEL_H = PAD_W + BODY_H + 6 + BTN_H + PAD_W
@@ -125,7 +201,6 @@ local function EnsureWarnPanel()
     local holder = Addon:NewThemedFrame(nil, UIParent)
     holder:SetFrameStrata("DIALOG") ; holder:SetFrameLevel(200)
     holder:SetSize(410, PANEL_H) ; holder:SetClampedToScreen(true) ; holder:EnableMouse(true)
-    holder:SetPoint("TOP", anchor, "BOTTOM", 0, -6)
     local bg = Addon.THEME.bg
     holder:SetBackdropColor(bg.r, bg.g, bg.b, 1.0)
     if holder.SetBackdropBorderColor then
@@ -163,11 +238,9 @@ function Addon:CheckCraftingWarning()
 
     local itemID, itemLink
     if _pendingItemID and _pendingItemID > 0 then
-        -- A specific item was passed directly (e.g. from a customer order form).
         itemID = _pendingItemID
         _, itemLink = GetItemInfo(itemID)
     elseif _currentRecipeID and C_TradeSkillUI and C_TradeSkillUI.GetRecipeSchematic then
-        -- Derive the output item from the recipe schematic.
         local ok, sc = pcall(C_TradeSkillUI.GetRecipeSchematic, _currentRecipeID, false)
         if ok and sc then
             local gco = sc.guaranteedCraftingOutput
@@ -176,7 +249,6 @@ function Addon:CheckCraftingWarning()
                 if e.item and e.item.GetItemID then itemID = e.item:GetItemID()
                 elseif type(e.itemID) == "number" and e.itemID > 0 then itemID = e.itemID end
             end
-            -- Some recipes expose outputItemID directly on the schematic.
             if not (itemID and itemID > 0) and (sc.outputItemID or 0) > 0 then itemID = sc.outputItemID end
             if itemID and itemID > 0 then _, itemLink = GetItemInfo(itemID) end
         end
@@ -184,64 +256,103 @@ function Addon:CheckCraftingWarning()
 
     if not itemID then return end
 
-    -- Only warn for items in the addon's curated craftingWarnItemIDs set.
-    local constants = _G[addonName .. "_CONSTANTS"]
-    local warnIDs = constants and constants.craftingWarnItemIDs
-    if not warnIDs or not warnIDs[itemID] then return end
+    if _currentRecipeID then
+        local sparkItemID = FindSparkForRecipe(_currentRecipeID)
+        if sparkItemID and GetItemCount(sparkItemID, true) < 1 then return end
+    end
 
     if not itemLink then
-        -- Item data hasn't loaded yet; store the ID and wait for ITEM_DATA_LOAD_RESULT.
         _pendingItemID = itemID
         if C_Item and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(itemID) end
+        C_Timer.After(0.5, function()
+            if _pendingItemID == itemID then Addon:CheckCraftingWarning() end
+        end)
         return
     end
 
-    local itemStat   = GetItemMainStat(itemLink)
-    local playerStat = GetPlayerPrimaryStat()
-    if not itemStat or not playerStat then return end
-    if itemStat == playerStat then return end  -- stats match, no warning needed
+    local itemName, _, _, _, _, _, _, _, _, _, _, classID, subClassID = GetItemInfo(itemLink)
+    itemName = itemName or (L.CRAFT_WARN_UNKNOWN_ITEM or "this item")
+    local warnMsg
+
+    if classID == 2 or classID == 4 then
+        local cannotEquip = not IsEquippableItem(itemLink)
+            or (classID == 2 and PlayerCanUseItemType(2, subClassID, itemLink) == false)
+        if cannotEquip then
+            warnMsg = string.format(
+                L.CRAFT_WARN_EQUIP_MSG or "Warning: Your class cannot equip %s.\nYou may be crafting the wrong item.",
+                itemName)
+        end
+    end
+
+    if not warnMsg and classID == 4 and subClassID and subClassID >= 1 and subClassID <= 4 then
+        local armorOk = PlayerCanUseItemType(4, subClassID, itemLink)
+        if armorOk == false then
+            local armorTypeName = (GetItemSubClassInfo and GetItemSubClassInfo(4, subClassID)) or tostring(subClassID)
+            warnMsg = string.format(
+                L.CRAFT_WARN_ARMOR_MSG or "Warning: %s is %s armor, but your class cannot wear it.\nYou may be crafting the wrong item.",
+                itemName, armorTypeName)
+        end
+    end
+
+    if not warnMsg and classID == 2 then
+        local itemStat   = GetItemMainStat(itemLink)
+        local playerStat = GetPlayerPrimaryStat()
+        if itemStat and playerStat and itemStat ~= playerStat then
+            warnMsg = string.format(
+                L.CRAFT_WARN_MSG or "Warning: %s has %s, but your spec uses %s.\nYou may be crafting the wrong weapon.",
+                itemName, STAT_NAMES[itemStat] or itemStat, STAT_NAMES[playerStat] or playerStat)
+        end
+    end
+
+    if not warnMsg then return end
 
     EnsureWarnPanel()
     if not _warn then return end
 
-    -- Re-anchor every time in case the player switched between crafting frames.
     local anchor = (ProfessionsFrame and ProfessionsFrame:IsShown() and ProfessionsFrame)
                 or (ProfessionsCustomerOrdersFrame and ProfessionsCustomerOrdersFrame:IsShown() and ProfessionsCustomerOrdersFrame)
                 or UIParent
     _warn.holder:ClearAllPoints()
     _warn.holder:SetPoint("TOP", anchor, "BOTTOM", 0, -6)
 
-    local itemName = GetItemInfo(itemLink) or (L.CRAFT_WARN_UNKNOWN_ITEM or "this item")
-    local fmt = L.CRAFT_WARN_MSG or "Warning: %s has %s, but your spec uses %s.\nYou may be crafting the wrong weapon."
-    _warn.label:SetText(string.format(fmt, itemName, STAT_NAMES[itemStat] or itemStat, STAT_NAMES[playerStat] or playerStat))
+    _warn.label:SetText(warnMsg)
     _warn.holder:Show()
 end
 
 -- ── Event handling ───────────────────────────────────────────────────────────
+-- ev was created early in the file so OnCraftingWindowOpen/Close could close
+-- over it.  Only ADDON_LOADED runs permanently (until both professions addons
+-- are seen); TRADE_SKILL_DETAILS_UPDATE is activated only while a window is open.
 
-local ev = CreateFrame("Frame")
-ev:RegisterEvent("ADDON_LOADED")          -- hook Professions frames when their UI loads
-ev:RegisterEvent("TRADE_SKILL_DETAILS_UPDATE") -- fires when the active recipe changes
-ev:RegisterEvent("ITEM_DATA_LOAD_RESULT") -- fires when a previously-missing item finishes loading
 ev:SetScript("OnEvent", function(_, event, arg1)
     if event == "ADDON_LOADED" then
-        -- Hook frames as soon as the Blizzard Professions UI modules are loaded.
+        local hooked = false
         if arg1 == "Blizzard_ProfessionsUI" and ProfessionsFrame then
             SetupFrame(ProfessionsFrame, "ProfessionsFrame")
+            hooked = true
         elseif arg1 == "Blizzard_ProfessionsCustomerOrders" and ProfessionsCustomerOrdersFrame then
             SetupFrame(ProfessionsCustomerOrdersFrame, "ProfessionsCustomerOrdersFrame")
+            hooked = true
+        end
+        if hooked then
+            _profAddonsSeen = _profAddonsSeen + 1
+            if _profAddonsSeen >= 2 then ev:UnregisterEvent("ADDON_LOADED") end
         end
     elseif event == "TRADE_SKILL_DETAILS_UPDATE" then
+        -- Only registered while a crafting window is open (see OnCraftingWindowOpen).
         _currentRecipeID = arg1 or _currentRecipeID
         C_Timer.After(0, function() Addon:CheckCraftingWarning() end)
-    elseif event == "ITEM_DATA_LOAD_RESULT" then
-        -- Retry the check now that the pending item's data is available.
-        if tonumber(arg1) == _pendingItemID then
-            Addon:CheckCraftingWarning()
-        end
     end
 end)
 
--- Handle UI reload: the Professions frames may already exist before ADDON_LOADED fires.
-if ProfessionsFrame then SetupFrame(ProfessionsFrame, "ProfessionsFrame") end
-if ProfessionsCustomerOrdersFrame then SetupFrame(ProfessionsCustomerOrdersFrame, "ProfessionsCustomerOrdersFrame") end
+-- Handle UI reload: frames may already exist before ADDON_LOADED fires.
+-- SetupFrame adds the OnShow/OnHide hooks that manage active event registration.
+if ProfessionsFrame then
+    SetupFrame(ProfessionsFrame, "ProfessionsFrame")
+    _profAddonsSeen = _profAddonsSeen + 1
+end
+if ProfessionsCustomerOrdersFrame then
+    SetupFrame(ProfessionsCustomerOrdersFrame, "ProfessionsCustomerOrdersFrame")
+    _profAddonsSeen = _profAddonsSeen + 1
+end
+if _profAddonsSeen >= 2 then ev:UnregisterEvent("ADDON_LOADED") end

@@ -288,7 +288,7 @@ function Addon:CreateHeader(frame)
         if type(data) == "table" then
             for i = 1, #data do
                 local section = data[i]
-                if type(section) == "table" then
+                if type(section) == "table" and not (currentIdx > 0 and i < currentIdx) then
                     local id        = section.id
                     local isCurrent = (tostring(id or "") == currentId)
                     local label = ExtractMonthRangeLabel(section.title or id or "")

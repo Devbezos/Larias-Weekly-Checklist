@@ -321,14 +321,10 @@ local function ComputeCrestTradeup(cache, crestCount, batchLower, batchHigher)
     for i = 2, crestCount do
         local tradeFromPrev = 0
         if cache.unlocked[i - 1] then
-            -- If the previous tier is at its weekly cap, lower crests can't funnel
-            -- through it; only the wallet balance is available to convert upward.
-            local prevEarned = cache.earned[i - 1]    or 0
-            local prevWkMax  = cache.weeklyMax[i - 1] or 0
-            local prevCapped = prevWkMax > 0 and prevEarned >= prevWkMax
-            local prevAmt    = prevCapped and (cache.cur[i - 1] or 0)
-                                          or (tonumber(effective[i - 1]) or 0)
-            tradeFromPrev = floor(prevAmt / batchLower) * batchHigher
+            -- Always cascade using the effective (potentially traded-up) amount from
+            -- the previous tier.  Crest trading at the vendor is based on wallet
+            -- balance, not weekly earn caps, so the weekly-cap check was removed.
+            tradeFromPrev = floor((effective[i - 1] or 0) / batchLower) * batchHigher
         end
         gained[i]    = tradeFromPrev
         effective[i] = (cache.cur[i] or 0) + tradeFromPrev
