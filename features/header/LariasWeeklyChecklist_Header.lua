@@ -159,60 +159,9 @@ function Addon:CreateHeader(frame)
     local function HandlePick(sectionId, sf)
         local db       = Addon:EnsureDB()
         local picker   = EnsureHeaderPicker()
-        local order    = Addon._order or {}
         local newStart = tostring(sectionId or "")
 
-        -- Resolve the "current" position using the same logic as PopulateHeaderPicker
-        -- and LayoutHeaderButtons_: prefer the stored pin, but if it's empty or its
-        -- week is now complete, fall back to the first incomplete week.
-        local rawStored = tostring(db.startAtSectionId or "")
-        local oldStart
-        if rawStored ~= "" and not (Addon._IsSectionCompleteById and
-                Addon._IsSectionCompleteById(rawStored, db)) then
-            oldStart = rawStored
-        else
-            -- First incomplete week (same as the ">" marker in the picker).
-            for i = 1, #order do
-                if Addon._IsSectionCompleteById and
-                   not Addon._IsSectionCompleteById(order[i], db) then
-                    oldStart = tostring(order[i])
-                    break
-                end
-            end
-            if not oldStart and order[1] then oldStart = tostring(order[1]) end
-        end
-        oldStart = oldStart or ""
-
-        local oldIdx, newIdx = 0, 0
-        for i = 1, #order do
-            if order[i] == oldStart then oldIdx = i end
-            if order[i] == newStart then newIdx = i end
-        end
-
-        if oldIdx == 0 and #order > 0 then oldIdx = 1 end
-
-        if newIdx <= oldIdx then
-            local checked   = type(db.checked)          == "table" and db.checked          or nil
-            local collapsed = type(db.collapsedSections) == "table" and db.collapsedSections or nil
-            local done      = type(db.sectionCompleted)  == "table" and db.sectionCompleted  or nil
-            local fromIdx   = (newIdx == 0 and 1 or newIdx)
-            -- Clear from the selected week all the way to the end: jumping back to
-            -- a week means "show everything from here forward", regardless of how
-            -- far ahead oldIdx happened to be.
-            for i = fromIdx, #order do
-                local secId  = order[i]
-                local secDef = Addon._sectionsById and Addon._sectionsById[secId]
-                local items  = secDef and secDef.items or {}
-                if checked then
-                    for _, item in ipairs(items) do
-                        checked[secId .. ":" .. tostring(item.id)] = nil
-                    end
-                end
-                if collapsed then collapsed[secId] = nil end
-                if done      then done[secId]      = nil end  -- un-complete when navigating backward
-            end
-        end
-
+        -- Just pin the selected week; do not touch any checked/collapsed/completed data.
         db.startAtSectionId = newStart
         -- Ensure the newly-selected section starts expanded.
         if db.collapsedSections and newStart and newStart ~= "" then
@@ -245,15 +194,7 @@ function Addon:CreateHeader(frame)
         local storedStart = tostring(db0.startAtSectionId or "")
         local currentId
         if storedStart ~= "" then
-            -- If that pinned week is now complete, clear the pin so the marker
-            -- advances to the first-incomplete / last-active week below.
-            if Addon._IsSectionCompleteById and
-               Addon._IsSectionCompleteById(storedStart, db0) then
-                db0.startAtSectionId = ""
-                storedStart = ""
-            else
-                currentId = storedStart
-            end
+            currentId = storedStart
         end
         if not currentId then
             -- No explicit pin: find the first incomplete week, matching the same
@@ -272,23 +213,10 @@ function Addon:CreateHeader(frame)
             end
         end
 
-        -- Pre-compute index of the current week so tooltips can say
-        -- "Reset to week" (going back) vs "Go to week" (going forward).
-        local currentIdx = 0
-        if type(data) == "table" then
-            for i = 1, #data do
-                local s = data[i]
-                if type(s) == "table" and tostring(s.id or "") == currentId then
-                    currentIdx = i
-                    break
-                end
-            end
-        end
-
         if type(data) == "table" then
             for i = 1, #data do
                 local section = data[i]
-                if type(section) == "table" and not (currentIdx > 0 and i < currentIdx) then
+                if type(section) == "table" then
                     local id        = section.id
                     local isCurrent = (tostring(id or "") == currentId)
                     local label = ExtractMonthRangeLabel(section.title or id or "")
@@ -303,17 +231,11 @@ function Addon:CreateHeader(frame)
                     btn:SetEnabled(true)
                     local capturedId    = id
                     local capturedTitle = section.title or label
-                    local capturedIdx   = i
                     btn:SetScript("OnClick", function()
                         HandlePick(capturedId, Addon._scrollFrame)
                     end)
                     btn:SetScript("OnEnter", function(self_)
-                        local prefix
-                        if currentIdx > 0 and capturedIdx > currentIdx then
-                            prefix = L.PICKER_GO_TO_WEEK_TOOLTIP or "Go to week:"
-                        else
-                            prefix = L.PICKER_RESET_WEEK_TOOLTIP or "Reset to week:"
-                        end
+                        local prefix = L.PICKER_GO_TO_WEEK_TOOLTIP or "Go to week:"
                         Addon.AddonUtils.SetTooltip(self_, prefix .. "\n" .. capturedTitle)
                     end)
                     btn:SetScript("OnLeave", Addon.AddonUtils.HideTooltip)
@@ -378,15 +300,7 @@ function Addon:CreateHeader(frame)
                 local storedStart = tostring(db0.startAtSectionId or "")
                 local currentId
                 if storedStart ~= "" then
-                    -- If the pinned week is now fully complete, clear the pin and
-                    -- auto-advance to the first incomplete week instead.
-                    if Addon._IsSectionCompleteById and
-                       Addon._IsSectionCompleteById(storedStart, db0) then
-                        db0.startAtSectionId = ""
-                        storedStart = ""
-                    else
-                        currentId = storedStart
-                    end
+                    currentId = storedStart
                 end
                 -- If the section index is built but no longer contains this ID
                 -- (stale SavedVariable from an older data format, version bump, etc.)
