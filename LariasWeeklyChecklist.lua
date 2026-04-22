@@ -2118,6 +2118,15 @@ local function SyncAllDataAndFrames()
     local want       = #Addon._order
     local haveBefore = #Addon._activeSections
 
+    -- Pre-populate the full index BEFORE ApplySectionVisuals iterates the
+    -- section frames. UpdateSectionVisuals looks up startAtSectionId in this
+    -- index; if the target section comes later in the list, its entry wouldn't
+    -- exist yet when earlier sections are processed, causing the hide-filter to
+    -- silently fail and those earlier sections to remain visible.
+    for i = 1, want do
+        Addon._sectionsIndexById[Addon._order[i]] = i
+    end
+
     SyncSectionPool(want, haveBefore)
     ApplySectionVisuals(want, haveBefore, dataChanged, database, scrollChild)
 end

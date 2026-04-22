@@ -113,7 +113,6 @@ function Addon:ConfigureTrackingEvents(parentFrame, showGreatVault, showCurrency
     trackingEventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
     if showGreatVault then
         trackingEventFrame:RegisterEvent("WEEKLY_REWARDS_UPDATE")
-        trackingEventFrame:RegisterEvent("ITEM_DATA_LOAD_RESULT")
     end
     if showCurrency then
         trackingEventFrame:RegisterEvent("CURRENCY_DISPLAY_UPDATE")
@@ -122,17 +121,11 @@ function Addon:ConfigureTrackingEvents(parentFrame, showGreatVault, showCurrency
         SafeRegisterEvent(trackingEventFrame, "CATALYST_CHARGES_UPDATED")
         SafeRegisterEvent(trackingEventFrame, "CATALYST_UPDATE")
         SafeRegisterEvent(trackingEventFrame, "ITEM_INTERACTION_ITEM_SELECTION_UPDATED")
-        if not showGreatVault then
-            -- Avoid double-registration: Great Vault block already registered this above.
-            trackingEventFrame:RegisterEvent("ITEM_DATA_LOAD_RESULT")
-        end
     end
 
     trackingEventFrame:SetScript("OnEvent", function()
         if IsFrameShown(parentFrame) and IsFrameShown(Addon._trackingFrame) then
             Addon:RequestTrackingUpdate()
-        elseif Addon:HasTrackingSnapshot() then
-            Addon:RequestBackgroundSnapshotUpdate()
         end
     end)
 end
@@ -599,7 +592,11 @@ function Addon:CreateTrackingPanel(parentFrame)
         row:EnableMouse(true)
         row:SetScript("OnEnter", function(self)
             local tip = self._lariasTooltipText
-            if tip and tip ~= "" then AU.SetTooltip(self, tip, "ANCHOR_TOP") end
+            if type(tip) == "table" then
+                AU.SetTooltipLines(self, tip, "ANCHOR_TOP")
+            elseif tip and tip ~= "" then
+                AU.SetTooltip(self, tip, "ANCHOR_TOP")
+            end
         end)
         row:SetScript("OnLeave", AU.HideTooltip)
 
@@ -634,7 +631,7 @@ function Addon:CreateTrackingPanel(parentFrame)
             Addon:RequestTrackingUpdate()
         end)
         trackingFrame:SetScript("OnHide", function()
-            if trackingEventFrame and not Addon:HasTrackingSnapshot() then
+            if trackingEventFrame then
                 trackingEventFrame:UnregisterAllEvents()
             end
         end)
