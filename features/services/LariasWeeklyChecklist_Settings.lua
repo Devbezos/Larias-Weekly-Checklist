@@ -241,6 +241,15 @@ local function BuildPanel()
             end,
         },
         {
+            label   = L.OPTIONS_DISABLE_BONUS_ROLL_WARN or "Hide Bonus Roll Warnings",
+            tooltip = L.OPTIONS_TOOLTIP_DISABLE_BONUS_ROLL_WARN or "Hides the warning shown when the bonus roll window opens.",
+            getVal   = function(d) return d.bonusRollWarnDisabled and true or false end,
+            onChange = function(v)
+                Addon:EnsurePrefs().bonusRollWarnDisabled = v
+                if Addon.CheckBonusRollWarning then Addon:CheckBonusRollWarning() end
+            end,
+        },
+        {
             label   = L.OPTIONS_HIDE_MINIMAP_BTN or "Hide Minimap Button",
             tooltip = L.OPTIONS_TOOLTIP_HIDE_MINIMAP_BTN or "Hides the minimap button.\nYou can still open the checklist with /larias.",
             getVal   = function(_d)
@@ -264,8 +273,8 @@ local function BuildPanel()
     _checkboxes = {}
     for i, row in ipairs(rows) do
         local _row  = row
-        local col   = (i <= 5) and 0 or 1              -- 0 = left column, 1 = right column
-        local ri    = (i <= 5) and (i - 1) or (i - 6)  -- 0-based row index within column
+        local col   = (i <= 6) and 0 or 1              -- 0 = left column, 1 = right column
+        local ri    = (i <= 6) and (i - 1) or (i - 7)  -- 0-based row index within column
         local colX  = (col == 0) and LEFT_CB_X or RIGHT_CB_X
         local rowY  = curY - ri * STEP
         local cb = Addon.Controls.NewCheckBox(canvas, function(newState)
@@ -301,7 +310,7 @@ local function BuildPanel()
         if entry.row._isFinishedWeeks then _finishedWeeksEntry = entry end
     end
 
-    curY = curY - 5 * STEP   -- 5 rows per column
+    curY = curY - 6 * STEP   -- 6 rows in the left column (the taller one)
 
     -- ── Divider ───────────────────────────────────────────────────────────────
     Addon.Controls.NewDivider(canvas, curY, PAD, PAD)

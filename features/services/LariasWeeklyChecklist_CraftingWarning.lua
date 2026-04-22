@@ -16,6 +16,64 @@ local PRIMARY_STAT_MAP = { [1]="STR", [2]="AGI", [3]="INT" }
 -- Human-readable display names used in the warning message.
 local STAT_NAMES = { STR="Strength", AGI="Agility", INT="Intellect" }
 
+-- ── Armor type lookup ────────────────────────────────────────────────────────
+-- Class → preferred armor subClassID (Cloth=1, Leather=2, Mail=3, Plate=4).
+-- Mirrors WoW's armor specialisation that applies at level 50+.
+local CLASS_ARMOR_SUBCLASS = {
+    WARRIOR     = 4,  -- Plate
+    PALADIN     = 4,
+    DEATHKNIGHT = 4,
+    DEMONHUNTER = 2,  -- Leather
+    DRUID       = 2,
+    EVOKER      = 2,
+    MONK        = 2,
+    ROGUE       = 2,
+    HUNTER      = 3,  -- Mail
+    SHAMAN      = 3,
+    MAGE        = 1,  -- Cloth
+    PRIEST      = 1,
+    WARLOCK     = 1,
+}
+
+-- Class → set of allowed weapon subClassIDs.
+-- Weapon subClassIDs: 0=Axe1H, 1=Axe2H, 2=Bow, 3=Gun, 4=Mace1H, 5=Mace2H,
+-- 6=Polearm, 7=Sword1H, 8=Sword2H, 9=Warglaive, 10=Staff, 13=Fist,
+-- 15=Dagger, 17=Crossbow, 18=Wand.
+local CLASS_WEAPON_SUBCLASSES = {
+    WARRIOR     = { [0]=true,[1]=true,[2]=true,[3]=true,[4]=true,[5]=true,
+                    [6]=true,[7]=true,[8]=true,[10]=true,[13]=true,[15]=true,[17]=true },
+    PALADIN     = { [0]=true,[1]=true,[4]=true,[5]=true,[6]=true,[7]=true,[8]=true },
+    DEATHKNIGHT = { [0]=true,[1]=true,[4]=true,[5]=true,[6]=true,[7]=true,[8]=true },
+    DRUID       = { [4]=true,[5]=true,[6]=true,[10]=true,[13]=true,[15]=true },
+    HUNTER      = { [0]=true,[2]=true,[3]=true,[6]=true,[7]=true,[10]=true,
+                    [13]=true,[15]=true,[17]=true },
+    MAGE        = { [7]=true,[10]=true,[15]=true,[18]=true },
+    MONK        = { [0]=true,[4]=true,[6]=true,[7]=true,[10]=true,[13]=true,[15]=true },
+    PRIEST      = { [4]=true,[10]=true,[15]=true,[18]=true },
+    ROGUE       = { [0]=true,[4]=true,[7]=true,[13]=true,[15]=true },
+    SHAMAN      = { [0]=true,[1]=true,[4]=true,[5]=true,[6]=true,
+                    [10]=true,[13]=true,[15]=true },
+    WARLOCK     = { [7]=true,[10]=true,[15]=true,[18]=true },
+    DEMONHUNTER = { [9]=true,[13]=true,[15]=true },
+    EVOKER      = { [0]=true,[4]=true,[7]=true,[10]=true,[13]=true,[15]=true },
+}
+
+-- Returns the armor subClassID the player should be wearing, or nil.
+local function GetPlayerPreferredArmorSubClass()
+    local _, classFile = UnitClass("player")
+    return classFile and CLASS_ARMOR_SUBCLASS[classFile]
+end
+
+-- Returns false if the player's class cannot use this weapon subClassID.
+-- Returns true if allowed, or true if the class is unknown (fail open).
+local function PlayerCanUseWeaponSubClass(subClassID)
+    local _, classFile = UnitClass("player")
+    if not classFile then return true end
+    local allowed = CLASS_WEAPON_SUBCLASSES[classFile]
+    if not allowed then return true end
+    return allowed[subClassID] == true
+end
+
 -- ── Module state ─────────────────────────────────────────────────────────────
 local _warn             -- cached warn panel { holder, label }
 local _pendingItemID    -- item whose data hasn't loaded yet; retried via timer
@@ -109,6 +167,25 @@ local function PlayerCanUseItemType(itemClassID, subClassID, itemLink)
         end
     end
     return nil  -- line not found; skip the check
+end
+
+-- Fallback equip-restriction check for when PlayerCanUseItemType can't find
+-- the type line (e.g. GetItemSubClassInfo returns "Staves" but tooltip says
+-- "Staff"). Scans the first few tooltip lines for any red-colored entry;
+-- WoW renders the weapon/armor type line red when the player's class can't
+-- use that type. Lines 2-7 cover item level, type, and slot rows.
+local function HasEarlyRedTooltipLine(itemLink)
+    if not (itemLink and C_TooltipInfo and C_TooltipInfo.GetHyperlink) then return false end
+    local data = C_TooltipInfo.GetHyperlink(itemLink)
+    if not (data and data.lines) then return false end
+    for i = 2, math.min(7, #data.lines) do
+        local line = data.lines[i]
+        local c    = line and line.leftColor
+        if c and c.r > 0.9 and (c.g or 0) < 0.1 and (c.b or 0) < 0.1 then
+            return true
+        end
+    end
+    return false
 end
 
 -- ── Spark reagent detection ────────────────────────────────────────────────
@@ -276,7 +353,21 @@ function Addon:CheckCraftingWarning()
 
     if classID == 2 or classID == 4 then
         local cannotEquip = not IsEquippableItem(itemLink)
-            or (classID == 2 and PlayerCanUseItemType(2, subClassID, itemLink) == false)
+        if not cannotEquip and classID == 2 then
+            -- Allowlist check is the primary gate: crafting item links are template
+            -- links so IsEquippableItem and tooltip-color detection both return
+            -- "can equip" even for weapons the player's class can never use.
+            if not PlayerCanUseWeaponSubClass(subClassID) then
+                cannotEquip = true
+            else
+                local typeResult = PlayerCanUseItemType(2, subClassID, itemLink)
+                if typeResult == false then
+                    cannotEquip = true
+                elseif typeResult == nil then
+                    cannotEquip = HasEarlyRedTooltipLine(itemLink)
+                end
+            end
+        end
         if cannotEquip then
             warnMsg = string.format(
                 L.CRAFT_WARN_EQUIP_MSG or "Warning: Your class cannot equip %s.\nYou may be crafting the wrong item.",
@@ -291,6 +382,21 @@ function Addon:CheckCraftingWarning()
             warnMsg = string.format(
                 L.CRAFT_WARN_ARMOR_MSG or "Warning: %s is %s armor, but your class cannot wear it.\nYou may be crafting the wrong item.",
                 itemName, armorTypeName)
+        end
+    end
+
+    -- Check: player is crafting armor of a lower type than their class wears.
+    -- PlayerCanUseItemType only fires when the tooltip is red (can't equip at all);
+    -- higher-armor-type classes (e.g. Plate) can equip lower types without a red
+    -- tooltip, so we need an explicit class → preferred armor check here.
+    if not warnMsg and classID == 4 and subClassID and subClassID >= 1 and subClassID <= 4 then
+        local preferred = GetPlayerPreferredArmorSubClass()
+        if preferred and subClassID ~= preferred then
+            local craftedTypeName   = (GetItemSubClassInfo and GetItemSubClassInfo(4, subClassID))  or tostring(subClassID)
+            local expectedTypeName  = (GetItemSubClassInfo and GetItemSubClassInfo(4, preferred))   or tostring(preferred)
+            warnMsg = string.format(
+                L.CRAFT_WARN_ARMOR_TYPE_MSG or "Warning: %s is %s armor, but your class wears %s.\nYou may be crafting the wrong item.",
+                itemName, craftedTypeName, expectedTypeName)
         end
     end
 

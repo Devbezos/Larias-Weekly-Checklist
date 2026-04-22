@@ -73,6 +73,8 @@ function Addon:SyncGearPopup()
          L.OPTIONS_DISABLE_UPGRADE_WARN or "Hide Upgrade Warnings")
     Sync(p._cbDisableCraftWarn, db.craftWarnDisabled and true or false,
          L.OPTIONS_DISABLE_CRAFT_WARN or "Hide Crafting Warnings")
+    Sync(p._cbDisableBonusRollWarn, db.bonusRollWarnDisabled and true or false,
+         L.OPTIONS_DISABLE_BONUS_ROLL_WARN or "Hide Bonus Roll Warnings")
 
     -- Refresh color swatch labels in case locale changed since popup was built.
     if p._gearColorLabels then
@@ -108,13 +110,13 @@ function Addon:SyncGearPopup()
 
     -- Recalculate popup height based on visible content.
     do
-        -- Layout is 2-column (5 left + 5 right); height uses 5 rows (the taller column).
+        -- Layout is 2-column (6 left + 5 right); height uses 6 rows (the taller column).
         local PAD     = 10
         local TILE_H  = 34
         local cbsY    = 47  -- PAD(10) + reset(22) + 6 + div(1) + 8
         -- VER_PAD covers slider section + color section + support links + credit/ver + lang btn (30 if visible).
         local VER_PAD = showLangToggle and 202 or 172
-        local totalH  = cbsY + 5 * TILE_H + PAD + VER_PAD
+        local totalH  = cbsY + 6 * TILE_H + PAD + VER_PAD
         p:SetHeight(totalH)
     end
 
@@ -171,7 +173,7 @@ function Addon:ToggleGearPopup(anchor, growRight)
         local div1StartY = rstStartY + 22 + 6
         Addon.Controls.NewDivider(p, -div1StartY, PAD, PAD)
 
-        -- ── 10 Checkboxes ─────────────────────────────────────────────────
+        -- ── 11 Checkboxes ─────────────────────────────────────────────────
         local checks = {
             { key = "_cbHideCompletedTasks",   tooltipKey = "OPTIONS_TOOLTIP_HIDE_COMPLETED_TASKS" },
             { key = "_cbHideCompleted",         tooltipKey = "OPTIONS_TOOLTIP_HIDE_FINISHED_WEEKS"  },
@@ -181,8 +183,9 @@ function Addon:ToggleGearPopup(anchor, growRight)
             { key = "_cbHideIlvlRef",           tooltipKey = "OPTIONS_TOOLTIP_HIDE_ILVL_REF_BTN"    },
             { key = "_cbHideUpdateNotice",      tooltipKey = "OPTIONS_TOOLTIP_HIDE_UPDATE_NOTICE"   },
             { key = "_cbHideMinimapBtn",        tooltipKey = "OPTIONS_TOOLTIP_HIDE_MINIMAP_BTN"     },
-            { key = "_cbDisableUpgradeWarn",    tooltipKey = "OPTIONS_TOOLTIP_DISABLE_UPGRADE_WARN" },
-            { key = "_cbDisableCraftWarn",       tooltipKey = "OPTIONS_TOOLTIP_DISABLE_CRAFT_WARN"   },
+            { key = "_cbDisableUpgradeWarn",    tooltipKey = "OPTIONS_TOOLTIP_DISABLE_UPGRADE_WARN"   },
+            { key = "_cbDisableCraftWarn",       tooltipKey = "OPTIONS_TOOLTIP_DISABLE_CRAFT_WARN"     },
+            { key = "_cbDisableBonusRollWarn",   tooltipKey = "OPTIONS_TOOLTIP_DISABLE_BONUS_ROLL_WARN" },
         }
         local callbacks = {
             _cbHideCompletedTasks = function(checked)
@@ -240,6 +243,11 @@ function Addon:ToggleGearPopup(anchor, growRight)
                 db.craftWarnDisabled = checked or nil
                 if Addon.CheckCraftingWarning then Addon:CheckCraftingWarning() end
             end,
+            _cbDisableBonusRollWarn = function(checked)
+                local db = Addon:EnsurePrefs()
+                db.bonusRollWarnDisabled = checked or nil
+                if Addon.CheckBonusRollWarning then Addon:CheckBonusRollWarning() end
+            end,
             _cbHideMinimapBtn = function(checked)
                 local gdb = Addon.db and Addon.db.global
                 if gdb then
@@ -262,8 +270,8 @@ function Addon:ToggleGearPopup(anchor, growRight)
         local COL_W      = math.floor((p:GetWidth() - 2 * PAD) / 2)  -- half inner width
 
         for i, info in ipairs(checks) do
-            local col      = (i <= 5) and 0 or 1              -- 0 = left, 1 = right
-            local ri       = (i <= 5) and (i - 1) or (i - 6) -- row within column
+            local col      = (i <= 6) and 0 or 1              -- 0 = left, 1 = right
+            local ri       = (i <= 6) and (i - 1) or (i - 7) -- row within column
             local colX     = PAD + col * COL_W
             local tileTopY = -(cbsY + ri * TILE_H)
 
