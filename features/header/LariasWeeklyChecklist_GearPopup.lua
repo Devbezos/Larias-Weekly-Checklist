@@ -73,8 +73,9 @@ function Addon:SyncGearPopup()
          L.OPTIONS_DISABLE_UPGRADE_WARN or "Hide Upgrade Warnings")
     Sync(p._cbDisableCraftWarn, db.craftWarnDisabled and true or false,
          L.OPTIONS_DISABLE_CRAFT_WARN or "Hide Crafting Warnings")
-    Sync(p._cbDisableBonusRollWarn, db.bonusRollWarnDisabled and true or false,
-         L.OPTIONS_DISABLE_BONUS_ROLL_WARN or "Hide Bonus Roll Warnings")
+    -- bonus roll warning option temporarily hidden
+    -- Sync(p._cbDisableBonusRollWarn, db.bonusRollWarnDisabled and true or false,
+    --      L.OPTIONS_DISABLE_BONUS_ROLL_WARN or "Hide Bonus Roll Warnings")
 
     -- Refresh color swatch labels in case locale changed since popup was built.
     if p._gearColorLabels then
@@ -185,7 +186,6 @@ function Addon:ToggleGearPopup(anchor, growRight)
             { key = "_cbHideMinimapBtn",        tooltipKey = "OPTIONS_TOOLTIP_HIDE_MINIMAP_BTN"     },
             { key = "_cbDisableUpgradeWarn",    tooltipKey = "OPTIONS_TOOLTIP_DISABLE_UPGRADE_WARN"   },
             { key = "_cbDisableCraftWarn",       tooltipKey = "OPTIONS_TOOLTIP_DISABLE_CRAFT_WARN"     },
-            { key = "_cbDisableBonusRollWarn",   tooltipKey = "OPTIONS_TOOLTIP_DISABLE_BONUS_ROLL_WARN" },
         }
         local callbacks = {
             _cbHideCompletedTasks = function(checked)
@@ -243,11 +243,7 @@ function Addon:ToggleGearPopup(anchor, growRight)
                 db.craftWarnDisabled = checked or nil
                 if Addon.CheckCraftingWarning then Addon:CheckCraftingWarning() end
             end,
-            _cbDisableBonusRollWarn = function(checked)
-                local db = Addon:EnsurePrefs()
-                db.bonusRollWarnDisabled = checked or nil
-                if Addon.CheckBonusRollWarning then Addon:CheckBonusRollWarning() end
-            end,
+            -- bonus roll warning callback temporarily hidden
             _cbHideMinimapBtn = function(checked)
                 local gdb = Addon.db and Addon.db.global
                 if gdb then

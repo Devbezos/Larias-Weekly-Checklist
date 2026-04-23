@@ -240,6 +240,7 @@ local function BuildPanel()
                 if Addon.CheckCraftingWarning then Addon:CheckCraftingWarning() end
             end,
         },
+        --[[ bonus roll warning option temporarily hidden
         {
             label   = L.OPTIONS_DISABLE_BONUS_ROLL_WARN or "Hide Bonus Roll Warnings",
             tooltip = L.OPTIONS_TOOLTIP_DISABLE_BONUS_ROLL_WARN or "Hides the warning shown when the bonus roll window opens.",
@@ -249,6 +250,7 @@ local function BuildPanel()
                 if Addon.CheckBonusRollWarning then Addon:CheckBonusRollWarning() end
             end,
         },
+        --]]
         {
             label   = L.OPTIONS_HIDE_MINIMAP_BTN or "Hide Minimap Button",
             tooltip = L.OPTIONS_TOOLTIP_HIDE_MINIMAP_BTN or "Hides the minimap button.\nYou can still open the checklist with /larias.",
