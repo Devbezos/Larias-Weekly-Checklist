@@ -64,12 +64,13 @@ local STRINGS = {
 	UPGRADE_WARN_MSG             = "Upgrading a 1/6 %s item is a waste of %d crests.\nYou should upgrade a %s item to 6/6 first to save crests",
 	UPGRADE_WARN_DISABLE_BTN     = "Hide Upgrade Warning",
 	UPGRADE_WARN_DISABLE_TOOLTIP = "Check Larias's guide for more information.",
-	-- Bonus roll warning
-	BONUS_ROLL_WARN_MSG             = "|cffff6600Warning:|r Bonus rolls are currently bugged.\nIt is recommended to not use them.",
-	BONUS_ROLL_WARN_DISABLE_BTN     = "Hide Bonus Roll Warning",
-	BONUS_ROLL_WARN_DISABLE_TOOLTIP = "There is no duplicate protection.",
-	OPTIONS_DISABLE_BONUS_ROLL_WARN  = "Hide Bonus Roll Warnings",
-	OPTIONS_TOOLTIP_DISABLE_BONUS_ROLL_WARN = "Hides the warning shown when the bonus roll window opens.",
+	-- Bonus roll warning (temporarily disabled)
+	-- BONUS_ROLL_WARN_MSG             = "|cffff6600Warning:|r Bonus rolls are currently bugged.\nIt is recommended to not use them.",
+	-- BONUS_ROLL_WARN_MSG             = "|cffff6600Warning:|r Are you sure you want to use a bonus roll?",
+	-- BONUS_ROLL_WARN_DISABLE_BTN     = "Hide Bonus Roll Warning",
+	-- BONUS_ROLL_WARN_DISABLE_TOOLTIP = "There is no duplicate protection.",
+	-- OPTIONS_DISABLE_BONUS_ROLL_WARN  = "Hide Bonus Roll Warnings",
+	-- OPTIONS_TOOLTIP_DISABLE_BONUS_ROLL_WARN = "Hides the warning shown when the bonus roll window opens.",
 	-- Crafting stat warning
 	CRAFT_WARN_MSG             = "Warning: %s has %s, but your spec uses %s.\nYou may be crafting the wrong weapon.",
 	CRAFT_WARN_UNKNOWN_ITEM    = "this item",

@@ -73,8 +73,9 @@ function Addon:SyncGearPopup()
          L.OPTIONS_DISABLE_UPGRADE_WARN or "Hide Upgrade Warnings")
     Sync(p._cbDisableCraftWarn, db.craftWarnDisabled and true or false,
          L.OPTIONS_DISABLE_CRAFT_WARN or "Hide Crafting Warnings")
-    Sync(p._cbDisableBonusRollWarn, db.bonusRollWarnDisabled and true or false,
-         L.OPTIONS_DISABLE_BONUS_ROLL_WARN or "Hide Bonus Roll Warnings")
+    -- bonus roll warning option temporarily hidden
+    -- Sync(p._cbDisableBonusRollWarn, db.bonusRollWarnDisabled and true or false,
+    --      L.OPTIONS_DISABLE_BONUS_ROLL_WARN or "Hide Bonus Roll Warnings")
 
     -- Refresh color swatch labels in case locale changed since popup was built.
     if p._gearColorLabels then

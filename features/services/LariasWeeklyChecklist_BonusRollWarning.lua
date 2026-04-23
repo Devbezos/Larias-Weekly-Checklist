@@ -126,14 +126,16 @@ local _hooksInstalled  -- guard against double-hooking on UI reload
 --- Shows the warning panel unless the player has permanently dismissed it.
 function Addon:CheckBonusRollWarning()
     if _warn then _warn.holder:Hide() end
+    return -- warning temporarily disabled
 
-    local prefs = self:EnsurePrefs()
-    if prefs.bonusRollWarnDisabled then return end
-    if not _warn then return end
+    -- local prefs = self:EnsurePrefs()
+    -- if prefs.bonusRollWarnDisabled then return end
+    -- if not _warn then return end
 
-    local msg = L.BONUS_ROLL_WARN_MSG or "|cffff6600Warning:|r Bonus rolls are currently bugged.\nIt is recommended to not use them."
-    _warn.label:SetText(msg)
-    _warn.holder:Show()
+    -- local msg = L.BONUS_ROLL_WARN_MSG or "|cffff6600Warning:|r Are you sure you want to use a bonus roll?"
+    -- local msg = L.BONUS_ROLL_WARN_MSG or "|cffff6600Warning:|r Bonus rolls are currently bugged.\nIt is recommended to not use them."
+    -- _warn.label:SetText(msg)
+    -- _warn.holder:Show()
 end
 
 -- ── Deferred setup ────────────────────────────────────────────────────────────
