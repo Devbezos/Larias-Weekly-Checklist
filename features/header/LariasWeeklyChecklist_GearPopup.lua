@@ -117,7 +117,7 @@ function Addon:SyncGearPopup()
         local cbsY    = 47  -- PAD(10) + reset(22) + 6 + div(1) + 8
         -- VER_PAD covers slider section + color section + support links + credit/ver + lang btn (30 if visible).
         local VER_PAD = showLangToggle and 202 or 172
-        local totalH  = cbsY + 6 * TILE_H + PAD + VER_PAD
+        local totalH  = cbsY + 5 * TILE_H + PAD + VER_PAD
         p:SetHeight(totalH)
     end
 
@@ -266,8 +266,8 @@ function Addon:ToggleGearPopup(anchor, growRight)
         local COL_W      = math.floor((p:GetWidth() - 2 * PAD) / 2)  -- half inner width
 
         for i, info in ipairs(checks) do
-            local col      = (i <= 6) and 0 or 1              -- 0 = left, 1 = right
-            local ri       = (i <= 6) and (i - 1) or (i - 7) -- row within column
+            local col      = (i <= 5) and 0 or 1              -- 0 = left, 1 = right
+            local ri       = (i <= 5) and (i - 1) or (i - 6) -- row within column
             local colX     = PAD + col * COL_W
             local tileTopY = -(cbsY + ri * TILE_H)
 

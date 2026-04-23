@@ -275,8 +275,8 @@ local function BuildPanel()
     _checkboxes = {}
     for i, row in ipairs(rows) do
         local _row  = row
-        local col   = (i <= 6) and 0 or 1              -- 0 = left column, 1 = right column
-        local ri    = (i <= 6) and (i - 1) or (i - 7)  -- 0-based row index within column
+        local col   = (i <= 5) and 0 or 1              -- 0 = left column, 1 = right column
+        local ri    = (i <= 5) and (i - 1) or (i - 6)  -- 0-based row index within column
         local colX  = (col == 0) and LEFT_CB_X or RIGHT_CB_X
         local rowY  = curY - ri * STEP
         local cb = Addon.Controls.NewCheckBox(canvas, function(newState)
@@ -312,7 +312,7 @@ local function BuildPanel()
         if entry.row._isFinishedWeeks then _finishedWeeksEntry = entry end
     end
 
-    curY = curY - 6 * STEP   -- 6 rows in the left column (the taller one)
+    curY = curY - 5 * STEP   -- 5 rows per column
 
     -- ── Divider ───────────────────────────────────────────────────────────────
     Addon.Controls.NewDivider(canvas, curY, PAD, PAD)
