@@ -108,6 +108,10 @@ local STRINGS = {
 	TRACKING_NO_ID = "No ID",
 	TRACKING_TRADE_UP_SUFFIX = " Convert)",
 	TRACKING_CONVERT_TOOLTIP = "Number of crests you will gain from converting previous crests",
+	TRACKING_TRADEUP_TITLE                  = "Trade-up available",
+	TRACKING_TRADEUP_CURRENTLY_EARNABLE_FMT = "Currently earnable: %d",
+	TRACKING_TRADEUP_UNCAPPED_FMT           = "Uncapped: %d",
+	TRACKING_TRADEUP_EARNABLE_FMT           = "Earnable: %d",
 	TRACKING_CREST_AMOUNT_TOOLTIP = "Accurately tracks how many crests you can hold including overcapped crests",
 
 	TRACKING_CATALYST_LABEL = "Catalyst",
@@ -126,9 +130,9 @@ local STRINGS = {
 	SUPPORT_BTN_DISCORD      = "Discord",
 
 	-- Minimap tooltip
-	MINIMAP_TOOLTIP_LEFT_CLICK_TOGGLE = "Left-click: Toggle checklist",
-	MINIMAP_TOOLTIP_RIGHT_CLICK_OPTIONS = "Right-click: Options",
-	MINIMAP_TOOLTIP_MIDDLE_CLICK_ILVL = "Middle-click: Ilvl Refs",
+	MINIMAP_TOOLTIP_LEFT_CLICK_TOGGLE = "Left-click: Show Checklist",
+	MINIMAP_TOOLTIP_RIGHT_CLICK_OPTIONS = "Right-click: Show Options",
+	MINIMAP_TOOLTIP_MIDDLE_CLICK_ILVL = "Middle-click: Show Alt Summary",
 
 	-- Main window
 	TAB_OPTIONS = "Options",
@@ -145,6 +149,7 @@ local STRINGS = {
 	CHAR_PICKER_TOOLTIP_REMOVE  = "To remove a character, use the Options menu.",
 
 	-- Week picker
+	PICKER_HEADER_TOOLTIP       = "Click to change week",
 	PICKER_RESET_WEEK_TOOLTIP   = "Reset to week:",
 	PICKER_GO_TO_WEEK_TOOLTIP   = "Go to week:",
 

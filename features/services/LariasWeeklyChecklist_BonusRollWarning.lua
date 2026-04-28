@@ -5,117 +5,16 @@
 -- The panel is anchored below BonusRollFrame and can be permanently dismissed
 -- from the Options panel.
 --
+-- NOTE: Warning is currently disabled (BonusRolls not relevant this season).
+--       The panel infrastructure is kept so it can be re-enabled by uncommenting
+--       the body of CheckBonusRollWarning.
+--
 -- Option: prefs.bonusRollWarnDisabled  (bool, default false = warnings enabled)
 local addonName = ...
 local Addon = _G[addonName]
 if not Addon then return end
 
 local L = Addon.L or {}
-
--- ── Debug logger ─────────────────────────────────────────────────────────────
--- Dumps everything knowable about BonusRollFrame and related APIs to chat.
--- Called once each time the frame becomes visible. Remove when done exploring.
-local function DebugDumpBonusRoll()
-    local function p(msg) print("|cff00ccff[BonusRoll]|r " .. tostring(msg)) end
-    local function dump(label, val)
-        local t = type(val)
-        if t == "table" then
-            p(label .. " = <table>")
-            for k, v in pairs(val) do
-                p("  ." .. tostring(k) .. " = " .. tostring(v))
-            end
-        else
-            p(label .. " = " .. tostring(val) .. "  (" .. t .. ")")
-        end
-    end
-
-    p("───── BonusRollFrame opened ─────")
-
-    -- 1. Top-level frame fields (strings, numbers, booleans only)
-    if BonusRollFrame then
-        local skip = { ["0"] = true }  -- skip numeric widget children
-        for k, v in pairs(BonusRollFrame) do
-            local t = type(v)
-            if t ~= "function" and t ~= "userdata" and not skip[tostring(k)] then
-                p("BonusRollFrame." .. tostring(k) .. " = " .. tostring(v))
-            end
-        end
-    else
-        p("BonusRollFrame = nil")
-    end
-
-    -- 2. C_BonusRoll namespace
-    if C_BonusRoll then
-        p("C_BonusRoll exists:")
-        for k, v in pairs(C_BonusRoll) do
-            p("  C_BonusRoll." .. tostring(k) .. " = " .. tostring(v))
-        end
-        -- Try common query calls safely
-        local calls = {
-            "GetActiveLootSpec",
-            "GetNumBonusRollTokens",
-        }
-        for _, name in ipairs(calls) do
-            if type(C_BonusRoll[name]) == "function" then
-                local ok, r1, r2, r3 = pcall(C_BonusRoll[name])
-                p("  C_BonusRoll." .. name .. "() => ok=" .. tostring(ok) .. " r1=" .. tostring(r1) .. " r2=" .. tostring(r2) .. " r3=" .. tostring(r3))
-            end
-        end
-    else
-        p("C_BonusRoll = nil")
-    end
-
-    -- 3. GetLootSpecialization / loot-related globals
-    if GetLootSpecialization then
-        local ok, v = pcall(GetLootSpecialization)
-        p("GetLootSpecialization() = " .. tostring(ok) .. " / " .. tostring(v))
-    end
-
-    -- 4. EJ (Encounter Journal) — current encounter
-    if EJ_GetCurrentInstance then
-        local ok, instID = pcall(EJ_GetCurrentInstance)
-        p("EJ_GetCurrentInstance() = " .. tostring(ok) .. " / " .. tostring(instID))
-    end
-    if EJ_GetEncounterInfo then
-        -- Try to get current encounter from the frame itself
-        local encID = BonusRollFrame and BonusRollFrame.encounterID
-        if encID then
-            local ok, name = pcall(EJ_GetEncounterInfo, encID)
-            p("EJ_GetEncounterInfo(" .. tostring(encID) .. ") = " .. tostring(ok) .. " / " .. tostring(name))
-        else
-            p("BonusRollFrame.encounterID = nil")
-        end
-    end
-
-    -- 5. BONUS_ROLL_STARTED event args are not available here (already fired),
-    --    but check if the frame stores them
-    local fields = { "encounterID", "uiTextureKit", "currencyID", "currencyAmount",
-                     "rollType", "lootSpec", "itemID", "numRolls" }
-    for _, f in ipairs(fields) do
-        local v = BonusRollFrame and BonusRollFrame[f]
-        if v ~= nil then p("BonusRollFrame." .. f .. " = " .. tostring(v)) end
-    end
-
-    -- 6. Currency token balance
-    if C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo then
-        -- Common bonus roll currency IDs (Timewarped Badge, various seals)
-        local tryIDs = { 1166, 1273, 1274, 1275, 1276, 1721, 2032, 2815 }
-        for _, id in ipairs(tryIDs) do
-            local ok, info = pcall(C_CurrencyInfo.GetCurrencyInfo, id)
-            if ok and info and (info.quantity or 0) > 0 then
-                p("Currency[" .. id .. "] " .. tostring(info.name) .. " = " .. tostring(info.quantity))
-            end
-        end
-    end
-
-    -- 7. BONUS_ROLL events registered on the frame
-    p("Registered events on BonusRollFrame:")
-    if BonusRollFrame.GetNumEvents then  -- not standard; just guard
-        p("  (GetNumEvents not available)")
-    end
-
-    p("───── end dump ─────")
-end
 
 -- ── Module state ─────────────────────────────────────────────────────────────
 local _warn            -- cached warn panel { holder, label, dismissBtn }
@@ -124,18 +23,10 @@ local _hooksInstalled  -- guard against double-hooking on UI reload
 -- ── Addon:CheckBonusRollWarning ───────────────────────────────────────────────
 --- Called whenever BonusRollFrame becomes visible.
 --- Shows the warning panel unless the player has permanently dismissed it.
+--- NOTE: disabled this season — re-enable by removing the early return.
 function Addon:CheckBonusRollWarning()
     if _warn then _warn.holder:Hide() end
     return -- warning temporarily disabled
-
-    -- local prefs = self:EnsurePrefs()
-    -- if prefs.bonusRollWarnDisabled then return end
-    -- if not _warn then return end
-
-    -- local msg = L.BONUS_ROLL_WARN_MSG or "|cffff6600Warning:|r Are you sure you want to use a bonus roll?"
-    -- local msg = L.BONUS_ROLL_WARN_MSG or "|cffff6600Warning:|r Bonus rolls are currently bugged.\nIt is recommended to not use them."
-    -- _warn.label:SetText(msg)
-    -- _warn.holder:Show()
 end
 
 -- ── Deferred setup ────────────────────────────────────────────────────────────
@@ -199,7 +90,6 @@ local function SetupHooks()
     -- the frame has finished its own OnShow layout.
     hooksecurefunc(BonusRollFrame, "Show", function()
         C_Timer.After(0, function()
-            DebugDumpBonusRoll()
             Addon:CheckBonusRollWarning()
         end)
     end)

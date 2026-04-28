@@ -60,4 +60,6 @@ features\body\LariasWeeklyChecklist_Overlay.lua
 features\services\LariasWeeklyChecklist_UpgradeWarning.lua
 features\services\LariasWeeklyChecklist_CraftingWarning.lua
 features\services\LariasWeeklyChecklist_BonusRollWarning.lua
+features\footer\LariasWeeklyChecklist_CharPicker.lua
+features\footer\LariasWeeklyChecklist_AltsSummary.lua
 features\footer\LariasWeeklyChecklist_Footer.lua

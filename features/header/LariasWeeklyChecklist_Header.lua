@@ -88,7 +88,21 @@ function Addon:CreateHeader(frame)
         if ilvlRefBtn then return ilvlRefBtn end
         local btn = Addon.Controls.NewActionButton(frame, 140, 22)
         btn:SetText(L.ILVLREF_BUTTON or "View Item Levels")
-        btn:SetScript("OnClick", function() Addon:ToggleIlvlRefWindow() end)
+        btn:RegisterForClicks("AnyUp")
+        btn:SetScript("OnClick", function(self_, button)
+            if button == "RightButton" then
+                Addon:ShowContextMenu(self_, {
+                    { text = "Disable Item Level Popup", onClick = function()
+                        local db = Addon:EnsurePrefs()
+                        db.showIlvlRefBtn = false
+                        if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
+                        if Addon.SyncGearPopup       then Addon:SyncGearPopup()       end
+                    end },
+                })
+                return
+            end
+            Addon:ToggleIlvlRefWindow()
+        end)
         ilvlRefBtn              = btn
         frame._lariasIlvlRefBtn = btn
         return btn
@@ -282,13 +296,14 @@ function Addon:CreateHeader(frame)
     end
 
     Addon._PopulateHeaderPicker = PopulateHeaderPicker
+    Addon._EnsureHeaderPicker    = EnsureHeaderPicker
 
     -- ── LayoutHeaderButtons_ ─────────────────────────────────────────────────
     local function LayoutHeaderButtons_()
         if Addon._inLayoutHeaderButtons then return end
         Addon._inLayoutHeaderButtons = true
         local dbLocal = Addon:EnsurePrefs()
-        local showCW  = dbLocal.showChangeWeekBtn ~= false
+        local showCW  = false  -- Change Week button removed
         local showIR  = dbLocal.showIlvlRefBtn    ~= false
 
         -- changeWeekBtn: top-left of the frame.
@@ -341,9 +356,21 @@ function Addon:CreateHeader(frame)
             btn._lariasSelectedLabel = cwWeekLabel
             btn:SetText(cwWeekLabel)
             local cwTip = L.CHANGE_WEEK_BUTTON or "Change Week"
-            btn:SetScript("OnEnter", function(self_) Addon.AddonUtils.SetTooltip(self_, cwTip, "ANCHOR_BOTTOMLEFT") end)
+            btn:SetScript("OnEnter", function(self_) Addon.AddonUtils.SetTooltip(self_, cwTip .. "\nRight-click to disable", "ANCHOR_BOTTOMLEFT") end)
             btn:SetScript("OnLeave", Addon.AddonUtils.HideTooltip)
-            btn:SetScript("OnClick", function()
+            btn:RegisterForClicks("AnyUp")
+            btn:SetScript("OnClick", function(self_, button)
+                if button == "RightButton" then
+                    Addon:ShowContextMenu(self_, {
+                        { text = "Disable Week Selector", onClick = function()
+                            local db = Addon:EnsurePrefs()
+                            db.showChangeWeekBtn = false
+                            if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
+                            if Addon.SyncGearPopup       then Addon:SyncGearPopup()       end
+                        end },
+                    })
+                    return
+                end
                 local p = EnsureHeaderPicker()
                 if p and p._lariasClosedAt and (GetTime() - p._lariasClosedAt) < 0.20 then p._lariasClosedAt = nil; return end
                 if p and p.IsShown and p:IsShown() then
@@ -360,11 +387,43 @@ function Addon:CreateHeader(frame)
                 end
             end)
             btn:ClearAllPoints()
-            local cwInsetX = (Addon.UI.padOuterX or 14) + (Addon.UI.sectionInsetX or 14)
-            btn:SetPoint("TOPLEFT", frame, "TOPLEFT", cwInsetX, -(Addon.UI.padOuterTop or 10) - 2)
+            local cwPadX = Addon.UI.padOuterX or 14
+            btn:SetPoint("TOPLEFT", frame, "TOPLEFT", cwPadX, -(Addon.UI.padOuterTop or 10) - 2)
             btn:Show()
         elseif changeWeekBtn then
             changeWeekBtn:Hide()
+        end
+
+        -- charPickerBtn: top-left of the frame (where Change Week was).
+        -- Defined by InitCharPickerUI in LariasWeeklyChecklist_CharPicker.lua.
+        local showCP = dbLocal.showCharPickerBtn ~= false
+        local cp = Addon.CharPicker
+        if cp and cp.EnsureBtn then
+            local cpBtn = cp.EnsureBtn()
+            cpBtn:ClearAllPoints()
+            local cwPadX = Addon.UI.padOuterX or 14
+            cpBtn:SetPoint("TOPLEFT", frame, "TOPLEFT", cwPadX, -(Addon.UI.padOuterTop or 10) - 2)
+            if showCP then
+                cpBtn:RegisterForClicks("AnyUp")
+                cpBtn:SetScript("OnClick", function(self_, button)
+                    if button == "RightButton" then
+                        Addon:ShowContextMenu(self_, {
+                            { text = "Disable Swap Profile", onClick = function()
+                                local db = Addon:EnsurePrefs()
+                                db.showCharPickerBtn = false
+                                if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
+                                if Addon.SyncGearPopup       then Addon:SyncGearPopup()       end
+                            end },
+                        })
+                        return
+                    end
+                    if cp.OnClick then cp.OnClick() end
+                end)
+                if cp.UpdateLabel then cp.UpdateLabel() end
+                cpBtn:Show()
+            else
+                cpBtn:Hide()
+            end
         end
 
         -- ilvlRefBtn: left of gearBtn.
@@ -383,7 +442,7 @@ function Addon:CreateHeader(frame)
 
         -- Enforce minimum frame width based on visible button footprint.
         local _insetX = (Addon.UI.padOuterX or 14) + (Addon.UI.sectionInsetX or 14)
-        local _leftW  = _insetX + (showCW and (108 + 6) or 0)
+        local _leftW  = (Addon.UI.padOuterX or 14) + (showCW and (108 + 6) or 0)
         local _rightW = (Addon.UI.closeInset or 4) + 32 + 2 + 20
         if showIR then _rightW = _rightW + 4 + 140 end
         local _minW   = _leftW + 20 + _rightW

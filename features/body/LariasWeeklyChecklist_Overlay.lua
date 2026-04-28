@@ -126,6 +126,10 @@ function Addon:ConfigureTrackingEvents(parentFrame, showGreatVault, showCurrency
     trackingEventFrame:SetScript("OnEvent", function()
         if IsFrameShown(parentFrame) and IsFrameShown(Addon._trackingFrame) then
             Addon:RequestTrackingUpdate()
+        elseif not parentFrame then
+            -- Background mode (called from OnEnable with no UI frame): keep the
+            -- snapshot current silently so AltsSummary always has fresh data.
+            Addon:RequestBackgroundSnapshotUpdate()
         end
     end)
 end
@@ -145,11 +149,18 @@ function Addon:RequestBackgroundSnapshotUpdate()
 end
 
 function Addon:UpdateSnapshotBackground()
-    if not self:HasTrackingSnapshot() then return end
-    local db   = self:EnsureDB()
+    -- Always snapshot the currently-logged-in character.  Temporarily clear
+    -- _viewingChar so EnsureDB targets the own key, not a viewed alt's key.
+    local wasViewing  = self._viewingChar
+    self._viewingChar = nil
+    local db          = self:EnsureDB()
+    self._viewingChar = wasViewing
+    if not db.trackingSnapshot or type(db.trackingSnapshot) ~= "table" then
+        db.trackingSnapshot = {}
+    end
     local snap = db.trackingSnapshot
-    if type(snap) ~= "table" then return end
     ComputeSnapshotData(snap)
+    snap.updatedAt = time()
 end
 
 function Addon:RequestTrackingUpdate()
@@ -185,36 +196,55 @@ end
 local function ApplyGreatVaultGrid(gridBlocks)
     local grids = TrackingUI.left.gvGrids
     if not grids then return end
+    local function setGridVisible(grid, shown)
+        local function sv(obj) if obj then if shown then obj:Show() else obj:Hide() end end end
+        sv(grid.header); sv(grid.topLine); sv(grid.botLine)
+        sv(grid.vLeft);  sv(grid.vRight);  sv(grid.vMid1); sv(grid.vMid2)
+        if grid.cells then
+            for col = 1, 3 do
+                local cell = grid.cells[col]
+                if cell then sv(cell.bot); sv(cell.hit) end
+            end
+        end
+        -- _hoverZone shows/hides with the block; _xBtn appears on hover only
+        sv(grid._hoverZone)
+        if grid._xBtn then grid._xBtn:Hide() end
+    end
     for bi = 1, 3 do
         local grid  = grids[bi]
         local block = gridBlocks and gridBlocks[bi]
         if not (grid and grid.cells) then break end
-        if block and block.available then
-            local done = block.complete or 0
-            if grid.header then grid.header:SetTextColor(1, 1, 1, 1) end
-            for col = 1, 3 do
-                local slot     = block.slots and block.slots[col]
-                local ilvl     = slot and slot.ilvl or 0
-                local unlocked = done >= col
-                local cell     = grid.cells[col]
-                local txt
-                if unlocked and ilvl > 0 then
-                    txt = ColorWrap(Addon.IlvlUtils.GetColorHex(ilvl), tostring(ilvl))
-                    if cell.hit then
-                        cell.hit._lariasTooltipText = Addon.IlvlUtils.GetTrackLabel(ilvl)
+        if Addon:IsGVBlockHidden(bi) then
+            setGridVisible(grid, false)
+        else
+            setGridVisible(grid, true)
+            if block and block.available then
+                local done = block.complete or 0
+                if grid.header then grid.header:SetTextColor(1, 1, 1, 1) end
+                for col = 1, 3 do
+                    local slot     = block.slots and block.slots[col]
+                    local ilvl     = slot and slot.ilvl or 0
+                    local unlocked = done >= col
+                    local cell     = grid.cells[col]
+                    local txt
+                    if unlocked and ilvl > 0 then
+                        txt = ColorWrap(Addon.IlvlUtils.GetColorHex(ilvl), tostring(ilvl))
+                        if cell.hit then
+                            cell.hit._lariasTooltipText = Addon.IlvlUtils.GetTrackLabel(ilvl)
+                        end
+                    else
+                        txt = ColorWrap(COLORS.dim, "-")
+                        if cell.hit then cell.hit._lariasTooltipText = nil end
                     end
-                else
-                    txt = ColorWrap(COLORS.dim, "-")
+                    SetTextIfChanged(cell.bot, txt)
+                end
+            else
+                if grid.header then grid.header:SetTextColor(0.5, 0.5, 0.5, 1.0) end
+                for col = 1, 3 do
+                    local cell = grid.cells[col]
+                    SetTextIfChanged(cell.bot, ColorWrap(COLORS.dim, "-"))
                     if cell.hit then cell.hit._lariasTooltipText = nil end
                 end
-                SetTextIfChanged(cell.bot, txt)
-            end
-        else
-            if grid.header then grid.header:SetTextColor(0.5, 0.5, 0.5, 1.0) end
-            for col = 1, 3 do
-                local cell = grid.cells[col]
-                SetTextIfChanged(cell.bot, ColorWrap(COLORS.dim, "-"))
-                if cell.hit then cell.hit._lariasTooltipText = nil end
             end
         end
     end
@@ -244,6 +274,10 @@ local function SetRightRowPair(i, rowLabel, rowValue, iconFileID, currencyID, to
             SetShownIfChanged(row.icon, false)
         end
     end
+    if row.frame then
+        local showX = showRow and currencyID and not itemID
+        row.frame._lariasRightClickCurrencyID = showX and currencyID or nil
+    end
 end
 
 local function ApplyRightColumnAsPairs()
@@ -272,8 +306,20 @@ local function ResizeTrackingPanelToContent(addon)
         end
     end
 
-    if bottomRight > 0 and Addon._reflowGVGrid then
-        Addon._reflowGVGrid(bottomRight)
+    -- Reflow GV to fill available height, but never shorter than its natural
+    -- height (one standard row per visible block).  This prevents GV from
+    -- shrinking when currencies are removed while still allowing it to expand
+    -- alongside a long currency list when currencies are present.
+    if Addon._reflowGVGrid then
+        local GAP        = 6
+        local GV_GRID_H  = 1 + GV_ROW_H + 1  -- BORDER + ROW + BORDER = 26
+        local nVisible   = 0
+        for bi = 1, 3 do
+            if not addon:IsGVBlockHidden(bi) then nVisible = nVisible + 1 end
+        end
+        local naturalGvH = nVisible * GV_GRID_H + max(0, nVisible - 1) * GAP
+        local targetGvH  = max(naturalGvH, bottomRight)
+        Addon._reflowGVGrid(targetGvH > 0 and targetGvH or nil)
     end
 
     local bottomLeft = max(0, BottomFor(TrackingUI.left._gvSentinel))
@@ -355,7 +401,12 @@ function Addon:CreateTrackingPanel(parentFrame)
         btn:SetScript("OnEnter", function(self) AU.SetTooltip(self, tipText, "ANCHOR_TOP") end)
         btn:SetScript("OnLeave", AU.HideTooltip)
         btn:RegisterForClicks("AnyUp")
-        if onClick then btn:SetScript("OnClick", onClick) end
+        if onClick then
+            btn:SetScript("OnClick", function(self_, button)
+                if button == "RightButton" then return end
+                onClick()
+            end)
+        end
         return btn
     end
 
@@ -377,10 +428,32 @@ function Addon:CreateTrackingPanel(parentFrame)
                 else WeeklyRewardsFrame:Show() end
             end
         end)
+    trackingFrame._lariasLeftTitleBtn:HookScript("OnClick", function(self_, button)
+        if button ~= "RightButton" then return end
+        Addon:ShowContextMenu(self_, {
+            { text = "Disable Great Vault Section", onClick = function()
+                local db = Addon:EnsurePrefs()
+                db.showGreatVault = false
+                if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
+                if Addon.SyncGearPopup then Addon:SyncGearPopup() end
+            end },
+        })
+    end)
 
     trackingFrame._lariasRightTitleBtn = MakeTitleButton(rightCol,
         L.TOOLTIP_OPEN_CURRENCIES or "Click to open the Currency panel",
         function() ToggleCharacter("TokenFrame") end)
+    trackingFrame._lariasRightTitleBtn:HookScript("OnClick", function(self_, button)
+        if button ~= "RightButton" then return end
+        Addon:ShowContextMenu(self_, {
+            { text = "Disable Currency Section", onClick = function()
+                local db = Addon:EnsurePrefs()
+                db.showCurrency = false
+                if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
+                if Addon.SyncGearPopup then Addon:SyncGearPopup() end
+            end },
+        })
+    end)
 
     local rightTitle = trackingFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     rightTitle:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", padL + colW + colGap, -8)
@@ -472,6 +545,24 @@ function Addon:CreateTrackingPanel(parentFrame)
             vLeft  = vLeft, vRight = vRight, vMid1 = vMid1, vMid2 = vMid2,
             cells  = cells, gridTopY = blockY,
         }
+
+        -- Invisible hover zone over the label column; right-click to hide this block.
+        do
+            local _bi = bi
+            local hz = CreateFrame("Frame", nil, leftCol)
+            hz:SetPoint("TOPLEFT", leftCol, "TOPLEFT", 0, blockY)
+            hz:SetSize(GV_GRID_X - 2, GV_GRID_H)
+            hz:EnableMouse(true)
+            hz:SetScript("OnMouseUp", function(self_, button)
+                if button ~= "RightButton" then return end
+                Addon:ShowContextMenu(self_, {
+                    { text = "Hide this vault row", onClick = function()
+                        Addon:SetGVBlockHidden(_bi, true)
+                    end },
+                })
+            end)
+            gvGrids[bi]._hoverZone = hz
+        end
     end
     TrackingUI.left.gvGrids    = gvGrids
     TrackingUI.left._gvSentinel = gvGrids[3] and gvGrids[3].botLine
@@ -491,53 +582,94 @@ function Addon:CreateTrackingPanel(parentFrame)
         local availGridW = max(60, (leftCol:GetWidth() or 0) - GV_GRID_X)
         local cellW = max(30, floor(availGridW / 3))
         local gridW = cellW * 3
-        local gridH = max(14, floor((max(0, targetH) - GAP * 2) / 3))
+
+        -- Count visible (non-hidden) blocks so row heights fill available space.
+        local nVisible = 0
+        for bi = 1, 3 do
+            if not Addon:IsGVBlockHidden(bi) then nVisible = nVisible + 1 end
+        end
+        local GAP_TOTAL = max(0, nVisible - 1) * GAP
+        local gridH = max(14, floor((max(0, targetH) - GAP_TOTAL) / max(1, nVisible)))
         local rowH  = max(10, gridH - BORDER * 2)
         gridH       = BORDER + rowH + BORDER
 
+        local visRow = 0
+        TrackingUI.left._gvSentinel = nil
         for bi = 1, 3 do
-            local blockY   = -(bi - 1) * (gridH + GAP)
-            local gridBotY = blockY - BORDER - rowH
             local grid = grds[bi]
             if not grid then break end
-
-            local function setHL(t, y)
-                if not t then return end
-                t:ClearAllPoints()
-                t:SetPoint("TOPLEFT", leftCol, "TOPLEFT", GV_GRID_X, y)
-                t:SetWidth(gridW); t._lariasBaseY = y
-            end
-            setHL(grid.topLine, blockY); setHL(grid.botLine, gridBotY)
-
-            if grid.header then
-                grid.header:ClearAllPoints()
-                grid.header:SetPoint("TOPLEFT", leftCol, "TOPLEFT", 0, blockY)
-                grid.header:SetSize(GV_LABEL_W, gridH)
-            end
-
-            if bi == 3 then TrackingUI.left._gvSentinel = grid.botLine end
-
-            local function setVL(t, x, y)
-                if not t then return end
-                t:ClearAllPoints(); t:SetPoint("TOPLEFT", leftCol, "TOPLEFT", x, y)
-                t:SetSize(1, gridH)
-            end
-            setVL(grid.vLeft,  GV_GRID_X,             blockY)
-            setVL(grid.vRight, GV_GRID_X + gridW,     blockY)
-            setVL(grid.vMid1,  GV_GRID_X + cellW,     blockY)
-            setVL(grid.vMid2,  GV_GRID_X + cellW * 2, blockY)
-
-            for col = 1, 3 do
-                local cellX = GV_GRID_X + (col - 1) * cellW + CINSET
-                local cw    = cellW - CINSET * 2
-                local cell  = grid.cells and grid.cells[col]
-                if cell and cell.bot then
-                    cell.bot:ClearAllPoints()
-                    cell.bot:SetPoint("TOPLEFT", leftCol, "TOPLEFT", cellX, blockY - BORDER)
-                    cell.bot:SetSize(cw, rowH)
+            local function h(obj) if obj and obj.Hide then obj:Hide() end end
+            if Addon:IsGVBlockHidden(bi) then
+                -- Hide every element of this block.
+                h(grid.header); h(grid.topLine); h(grid.botLine)
+                h(grid.vLeft);  h(grid.vRight);  h(grid.vMid1); h(grid.vMid2)
+                if grid.cells then
+                    for col = 1, 3 do
+                        local c = grid.cells[col]
+                        if c then h(c.bot); h(c.hit) end
+                    end
                 end
+                h(grid._xBtn)
+                h(grid._hoverZone)
+            else
+                local blockY   = -(visRow) * (gridH + GAP)
+                local gridBotY = blockY - BORDER - rowH
+                visRow = visRow + 1
+
+                local function setHL(t, y)
+                    if not t then return end
+                    t:ClearAllPoints()
+                    t:SetPoint("TOPLEFT", leftCol, "TOPLEFT", GV_GRID_X, y)
+                    t:SetWidth(gridW); t._lariasBaseY = y
+                    t:Show()
+                end
+                setHL(grid.topLine, blockY); setHL(grid.botLine, gridBotY)
+
+                if grid.header then
+                    grid.header:ClearAllPoints()
+                    grid.header:SetPoint("TOPLEFT", leftCol, "TOPLEFT", 0, blockY)
+                    grid.header:SetSize(GV_LABEL_W, gridH)
+                    grid.header:Show()
+                end
+
+                if grid._xBtn then
+                    grid._xBtn:ClearAllPoints()
+                    grid._xBtn:SetPoint("TOPLEFT", leftCol, "TOPLEFT", GV_GRID_X - 16, blockY)
+                    -- hidden until hovered; shown via _hoverZone
+                end
+                if grid._hoverZone then
+                    grid._hoverZone:ClearAllPoints()
+                    grid._hoverZone:SetPoint("TOPLEFT", leftCol, "TOPLEFT", 0, blockY)
+                    grid._hoverZone:SetSize(GV_GRID_X - 2, gridH)
+                    grid._hoverZone:Show()
+                end
+
+                TrackingUI.left._gvSentinel = grid.botLine
+
+                local function setVL(t, x, y)
+                    if not t then return end
+                    t:ClearAllPoints(); t:SetPoint("TOPLEFT", leftCol, "TOPLEFT", x, y)
+                    t:SetSize(1, gridH); t:Show()
+                end
+                setVL(grid.vLeft,  GV_GRID_X,             blockY)
+                setVL(grid.vRight, GV_GRID_X + gridW,     blockY)
+                setVL(grid.vMid1,  GV_GRID_X + cellW,     blockY)
+                setVL(grid.vMid2,  GV_GRID_X + cellW * 2, blockY)
+
+                for col = 1, 3 do
+                    local cellX = GV_GRID_X + (col - 1) * cellW + CINSET
+                    local cw    = cellW - CINSET * 2
+                    local cell  = grid.cells and grid.cells[col]
+                    if cell and cell.bot then
+                        cell.bot:ClearAllPoints()
+                        cell.bot:SetPoint("TOPLEFT", leftCol, "TOPLEFT", cellX, blockY - BORDER)
+                        cell.bot:SetSize(cw, rowH)
+                        cell.bot:Show()
+                    end
+                    if cell and cell.hit then cell.hit:Show() end
+                end
+                grid.gridTopY = blockY
             end
-            grid.gridTopY = blockY
         end
     end
     Addon._reflowGVGrid = ReflowGVGrid
@@ -585,6 +717,16 @@ function Addon:CreateTrackingPanel(parentFrame)
             end
         end)
         valueHit:SetScript("OnLeave", AU.HideTooltip)
+        valueHit:SetScript("OnMouseUp", function(_, button)
+            if button ~= "RightButton" then return end
+            local id = row._lariasRightClickCurrencyID
+            if not id then return end
+            Addon:ShowContextMenu(row, {
+                { text = "Hide this currency", onClick = function()
+                    Addon:SetCurrencyHidden(id, true)
+                end },
+            })
+        end)
         row._lariasValueHit = valueHit
 
         -- Full row: shows the convert tooltip when hovering over the label side.
@@ -598,7 +740,19 @@ function Addon:CreateTrackingPanel(parentFrame)
                 AU.SetTooltip(self, tip, "ANCHOR_TOP")
             end
         end)
-        row:SetScript("OnLeave", AU.HideTooltip)
+        row:SetScript("OnLeave", function(self)
+            AU.HideTooltip()
+        end)
+        row:SetScript("OnMouseUp", function(self, button)
+            if button ~= "RightButton" then return end
+            local id = self._lariasRightClickCurrencyID
+            if not id then return end
+            Addon:ShowContextMenu(self, {
+                { text = "Hide this currency", onClick = function()
+                    Addon:SetCurrencyHidden(id, true)
+                end },
+            })
+        end)
 
         local label = row:CreateFontString(nil, "OVERLAY", template or "GameFontHighlightSmall")
         label:SetPoint("LEFT", row, "LEFT", ROW_ICON_SZ + ROW_ICON_GAP, 0)
@@ -614,6 +768,7 @@ function Addon:CreateTrackingPanel(parentFrame)
         value:SetText("")
 
         label:SetPoint("RIGHT", value, "LEFT", -6, 0)
+
         return { frame = row, icon = icon, label = label, value = value }
     end
 
@@ -654,6 +809,15 @@ function Addon:ApplyTrackingPanelOptions()
     local prefs = self:EnsurePrefs()
     local showGreatVault = prefs.showGreatVault and true or false
     local showCurrency   = prefs.showCurrency   and true or false
+    -- Suppress the currency column when tracking data exists but every currency
+    -- has been individually hidden (GetCurrencyPanelRows returns nothing to show).
+    if showCurrency and self.TRACKING and #self:GetCurrencyPanelRows() == 0 then
+        showCurrency = false
+    end
+    -- Suppress the GV column when all 3 blocks have been individually hidden.
+    if showGreatVault and Addon:IsGVBlockHidden(1) and Addon:IsGVBlockHidden(2) and Addon:IsGVBlockHidden(3) then
+        showGreatVault = false
+    end
 
     local wantPanel
     wantPanel = (showGreatVault or showCurrency) and IsMainFrameOnListTab()
@@ -749,6 +913,7 @@ local function SaveTrackingSnapshot(db)
     local snap = db.trackingSnapshot
     if type(snap) ~= "table" then snap = {}; db.trackingSnapshot = snap end
     ComputeSnapshotData(snap)
+    snap.updatedAt = time()  -- Unix timestamp; read by AltsSummary for "last updated" display.
 end
 
 local function RenderSnapshotIntoPanel(snap)
@@ -772,9 +937,7 @@ local function RenderSnapshotIntoPanel(snap)
         -- Render crests in current config order (with 0 for missing IDs).
         local tracking = Addon.TRACKING
         if tracking and Addon.GetGVData then
-            -- GetCrestIDsAndCount is in the Currency module; replicate minimal logic.
-            local ids = tracking.crestCurrencyIDs or {}
-            local crestCount = (type(ids) == "table" and ids[1]) and #ids or 4
+            local ids, crestCount = Addon:GetCrestIDsAndCount()
             for i = 1, crestCount do
                 if idx > RIGHT_LINE_COUNT then break end
                 local id = ids[i]
@@ -827,6 +990,21 @@ function Addon:UpdateTracking()
     if not (wantPanel and self._trackingFrame and self._trackingFrame:IsShown()) then
         if self.ApplyScrollLayout then self:ApplyScrollLayout() end
         return
+    end
+
+    -- When viewing an alt, render their stored snapshot instead of live data.
+    local viewKey = self._viewingChar
+    if viewKey then
+        local altCdb  = self.db and self.db.global and self.db.global.chars and self.db.global.chars[viewKey]
+        local altSnap = altCdb and altCdb.trackingSnapshot
+        if altSnap then
+            RenderSnapshotIntoPanel(altSnap)
+        else
+            ApplyGreatVaultGrid(nil)
+            for i = 1, RIGHT_LINE_COUNT do SetRightRowPair(i, "", "") end
+        end
+        ResizeTrackingPanelToContent(self)
+        return  -- Do not overwrite own snapshot when viewing an alt.
     end
 
     -- Live render: GreatVault via module API, currency via module API.

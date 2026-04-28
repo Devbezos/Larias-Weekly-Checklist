@@ -300,12 +300,16 @@ local function SetupAddonDB()
             themeColors   = {},  -- { bgR, bgG, bgB, textR, textG, textB } nil values use compiled defaults
             minimap       = {},  -- LibDBIcon position/hide state (account-wide)
             charClasses   = {},  -- [profileKey] = classToken (e.g. "WARRIOR")
+            charLevels    = {},  -- [profileKey] = player level at last login
+            hiddenChars   = {},  -- [profileKey] = true  (hidden from char picker / alt summary)
             -- Account-wide display preferences (shared across all characters).
             hideCompletedSections = true,
             showGreatVault        = true,
             showCurrency          = true,
-            showChangeWeekBtn     = true,
+            showChangeWeekBtn     = false,
             showIlvlRefBtn        = true,
+            showCharPickerBtn     = true,
+            showAltSummaryBtn     = true,
             showScaleSlider       = true,
             showOpacitySlider     = true,
             hideUpdateNotice      = false,
@@ -408,17 +412,20 @@ local function SetupMinimapIcon()
                     Addon:ToggleGearPopup(self_)
                 end
             elseif button == "MiddleButton" then
-                if Addon.ToggleIlvlRefWindow then
-                    Addon:ToggleIlvlRefWindow()
+                if IsShiftKeyDown() then
+                    if Addon.ToggleIlvlRefWindow then Addon:ToggleIlvlRefWindow() end
+                else
+                    if Addon.ToggleAltsSummary then Addon:ToggleAltsSummary() end
                 end
             end
         end,
         OnTooltipShow = function(tooltip)
             if not tooltip then return end
             tooltip:AddLine(L.DISPLAY_NAME or addonName, 1, 0.82, 0)
-            tooltip:AddLine(L.MINIMAP_TOOLTIP_LEFT_CLICK_TOGGLE or "", 1, 1, 1)
-            tooltip:AddLine(L.MINIMAP_TOOLTIP_RIGHT_CLICK_OPTIONS or "", 1, 1, 1)
-            tooltip:AddLine(L.MINIMAP_TOOLTIP_MIDDLE_CLICK_ILVL or "Middle-click: toggle ilvl refs", 1, 1, 1)
+            tooltip:AddLine(L.MINIMAP_TOOLTIP_LEFT_CLICK_TOGGLE or "Left-click: Show Checklist", 1, 1, 1)
+            tooltip:AddLine(L.MINIMAP_TOOLTIP_RIGHT_CLICK_OPTIONS or "Right-click: Show Options", 1, 1, 1)
+            tooltip:AddLine("Middle-click: Show Alt Summary", 1, 1, 1)
+            tooltip:AddLine("Shift+Middle: Show Item Level Ref", 1, 1, 1)
 
             if Addon.ShouldShowLocalizationCompanionHint and Addon:ShouldShowLocalizationCompanionHint() then
                 tooltip:AddLine(" ")
@@ -461,7 +468,11 @@ function LariasWeeklyChecklist_CompartmentClick(_, button, down)  -- luacheck: i
             Addon:ToggleGearPopup(AddonCompartmentFrame or _compartmentFrame)
         end
     elseif button == "MiddleButton" then
-        if Addon.ToggleIlvlRefWindow then Addon:ToggleIlvlRefWindow() end
+        if IsShiftKeyDown() then
+            if Addon.ToggleIlvlRefWindow then Addon:ToggleIlvlRefWindow() end
+        else
+            if Addon.ToggleAltsSummary then Addon:ToggleAltsSummary() end
+        end
     end
 end
 
@@ -470,9 +481,10 @@ function LariasWeeklyChecklist_CompartmentOnEnter(_, frame)
     local L = Addon.L or {}
     GameTooltip:SetOwner(frame, "ANCHOR_TOP")
     GameTooltip:AddLine(L.DISPLAY_NAME or addonName, 1, 0.82, 0)
-    GameTooltip:AddLine(L.MINIMAP_TOOLTIP_LEFT_CLICK_TOGGLE  or "Left-click: Toggle checklist",   1, 1, 1)
-    GameTooltip:AddLine(L.MINIMAP_TOOLTIP_RIGHT_CLICK_OPTIONS or "Right-click: Options",           1, 1, 1)
-    GameTooltip:AddLine(L.MINIMAP_TOOLTIP_MIDDLE_CLICK_ILVL  or "Middle-click: Ilvl Refs",        1, 1, 1)
+    GameTooltip:AddLine(L.MINIMAP_TOOLTIP_LEFT_CLICK_TOGGLE  or "Left-click: Show Checklist",   1, 1, 1)
+    GameTooltip:AddLine(L.MINIMAP_TOOLTIP_RIGHT_CLICK_OPTIONS or "Right-click: Show Options",     1, 1, 1)
+    GameTooltip:AddLine("Middle-click: Show Alt Summary",                                         1, 1, 1)
+    GameTooltip:AddLine("Shift+Middle: Show Item Level Ref",                                      1, 1, 1)
     GameTooltip:Show()
 end
 
@@ -527,6 +539,46 @@ function Addon:GetSupportLinks()
         { label = _L.SUPPORT_BTN_CHECKLIST  or "Checklist",  url = sl.checklist or "" },
         { label = _L.SUPPORT_BTN_DISCORD    or "Discord",    url = sl.discord   or "" },
     }
+end
+
+-- ── Context menu ────────────────────────────────────────────────────────────
+-- Lightweight right-click context menu.  items = {{text=string, onClick=fn}, ...}
+-- Re-uses a single singleton popup panel so only one menu is open at a time.
+local _rcCtxPanel
+local _rcCtxBtns = {}
+function Addon:ShowContextMenu(anchor, items)
+    if not (items and #items > 0) then return end
+    if not _rcCtxPanel then
+        _rcCtxPanel = Addon.Controls.NewPopupPanel("DIALOG", 0.10)
+        _rcCtxPanel:SetWidth(180)
+    end
+    for _, b in ipairs(_rcCtxBtns) do b:Hide() end
+    _rcCtxBtns = {}
+    local ROW_H = 22
+    local PAD   = 6
+    local y     = -PAD
+    for _, item in ipairs(items) do
+        local btn = CreateFrame("Button", nil, _rcCtxPanel, "UIPanelButtonTemplate")
+        btn:SetPoint("TOPLEFT",  _rcCtxPanel, "TOPLEFT",  PAD,  y)
+        btn:SetPoint("TOPRIGHT", _rcCtxPanel, "TOPRIGHT", -PAD, y)
+        btn:SetHeight(ROW_H)
+        btn:SetText(item.text or "")
+        if Addon.Controls and Addon.Controls.StyleButton then
+            Addon.Controls.StyleButton(btn)
+        end
+        local _cb = item.onClick
+        btn:SetScript("OnClick", function()
+            _rcCtxPanel:Hide()
+            if _cb then _cb() end
+        end)
+        btn:Show()
+        y = y - ROW_H - 2
+        tinsert(_rcCtxBtns, btn)
+    end
+    _rcCtxPanel:SetHeight(-y + PAD)
+    _rcCtxPanel:ClearAllPoints()
+    _rcCtxPanel:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -4)
+    _rcCtxPanel:Show()
 end
 
 -- ── Full addon reset ──────────────────────────────────────────────────────────
@@ -634,11 +686,26 @@ function Addon:OnEnable()
         self:PruneObsoleteSavedState()
     end
 
-    -- If this character already has snapshot data from a previous session,
-    -- register tracking events immediately so their snapshot stays current
-    -- even if they never open the addon this session.
-    if self.ConfigureTrackingEvents and self.HasTrackingSnapshot and self:HasTrackingSnapshot() then
+    -- Always register background tracking events so the snapshot is kept current
+    -- even when the addon window is never opened this session.  Previously this
+    -- was gated behind HasTrackingSnapshot(), which meant brand-new characters
+    -- (or those with no prior snapshot) never got their data saved.
+    if self.ConfigureTrackingEvents then
         self:ConfigureTrackingEvents(nil, true, true)
+    end
+
+    -- Record this character's class and level immediately on login so they
+    -- appear in AltsSummary even if the main window is never opened.
+    -- (Previously this only happened inside the CreateFrame callback.)
+    do
+        local _, classToken = UnitClass("player")
+        local profileKey    = self:GetCurrentProfileKey()
+        if classToken and profileKey and profileKey ~= "" then
+            self.db.global.charClasses         = self.db.global.charClasses or {}
+            self.db.global.charClasses[profileKey] = classToken
+            self.db.global.charLevels          = self.db.global.charLevels  or {}
+            self.db.global.charLevels[profileKey]  = UnitLevel("player")
+        end
     end
 
     -- Apply saved theme-color overrides before anything else that uses THEME
@@ -713,12 +780,119 @@ function Addon:GetCurrentProfileKey()
     return key
 end
 
+--- Returns true if the given currency ID is hidden for the current character.
+function Addon:IsCurrencyHidden(currencyID)
+    if not currencyID then return false end
+    local key = self:GetCurrentProfileKey()
+    local gdb = self.db and self.db.global
+    local cdb = gdb and gdb.chars and gdb.chars[key]
+    return cdb and cdb.hiddenCurrencies and cdb.hiddenCurrencies[tostring(currencyID)] == true
+end
+
+--- Hides or restores a currency for the current character.
+function Addon:SetCurrencyHidden(currencyID, hidden)
+    local key = self:GetCurrentProfileKey()
+    if not (key and key ~= "") then return end
+    local gdb = self.db and self.db.global
+    if not gdb then return end
+    gdb.chars = gdb.chars or {}
+    gdb.chars[key] = gdb.chars[key] or {}
+    gdb.chars[key].hiddenCurrencies = gdb.chars[key].hiddenCurrencies or {}
+    if hidden then
+        gdb.chars[key].hiddenCurrencies[tostring(currencyID)] = true
+    else
+        gdb.chars[key].hiddenCurrencies[tostring(currencyID)] = nil
+    end
+    if self.RequestTrackingUpdate then self:RequestTrackingUpdate() end
+    if self.RefreshAltsSummary    then self:RefreshAltsSummary()    end
+    if self.SyncGearPopup         then self:SyncGearPopup()         end
+    -- Rebuild restore panel if it is currently open.
+    if self._restoreHiddenFrame and self._restoreHiddenFrame:IsShown() then
+        self:OpenRestoreHiddenCurrencies(nil)
+    end
+end
+
+--- Returns an array of { id, name } for every currency the current character has hidden.
+function Addon:GetHiddenCurrencyList()
+    local key = self:GetCurrentProfileKey()
+    local gdb = self.db and self.db.global
+    local cdb = gdb and gdb.chars and gdb.chars[key]
+    local hidden = cdb and cdb.hiddenCurrencies
+    if not hidden then return {} end
+    local result = {}
+    for idStr in pairs(hidden) do
+        local id = tonumber(idStr)
+        if id then
+            local name = idStr
+            if C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo then
+                local info = C_CurrencyInfo.GetCurrencyInfo(id)
+                if info and info.name then name = info.name end
+            end
+            result[#result + 1] = { id = id, name = name }
+        end
+    end
+    table.sort(result, function(a, b) return a.name < b.name end)
+    return result
+end
+
+local _GV_BLOCK_NAMES = { "Raid", "M+ / Delve", "World" }
+
+--- Returns true if the given GV block (1=Raid, 2=Dungeons, 3=World) is hidden.
+function Addon:IsGVBlockHidden(blockIdx)
+    if not blockIdx then return false end
+    local key = self:GetCurrentProfileKey()
+    local gdb = self.db and self.db.global
+    local cdb = gdb and gdb.chars and gdb.chars[key]
+    return cdb and cdb.hiddenGVBlocks and cdb.hiddenGVBlocks[tostring(blockIdx)] == true
+end
+
+--- Hides or restores a GV block row for the current character.
+function Addon:SetGVBlockHidden(blockIdx, hidden)
+    local key = self:GetCurrentProfileKey()
+    if not (key and key ~= "") then return end
+    local gdb = self.db and self.db.global
+    if not gdb then return end
+    gdb.chars = gdb.chars or {}
+    gdb.chars[key] = gdb.chars[key] or {}
+    gdb.chars[key].hiddenGVBlocks = gdb.chars[key].hiddenGVBlocks or {}
+    if hidden then
+        gdb.chars[key].hiddenGVBlocks[tostring(blockIdx)] = true
+    else
+        gdb.chars[key].hiddenGVBlocks[tostring(blockIdx)] = nil
+    end
+    if self.RequestTrackingUpdate then self:RequestTrackingUpdate() end
+    if self.RefreshAltsSummary    then self:RefreshAltsSummary()    end
+    if self.SyncGearPopup         then self:SyncGearPopup()         end
+    if self._restoreHiddenFrame and self._restoreHiddenFrame:IsShown() then
+        self:OpenRestoreHiddenCurrencies(nil)
+    end
+end
+
+--- Returns an array of { idx, name } for every GV block the current character has hidden.
+function Addon:GetHiddenGVBlockList()
+    local key = self:GetCurrentProfileKey()
+    local gdb = self.db and self.db.global
+    local cdb = gdb and gdb.chars and gdb.chars[key]
+    local hidden = cdb and cdb.hiddenGVBlocks
+    if not hidden then return {} end
+    local result = {}
+    for idxStr in pairs(hidden) do
+        local idx = tonumber(idxStr)
+        if idx and _GV_BLOCK_NAMES[idx] then
+            result[#result + 1] = { idx = idx, name = _GV_BLOCK_NAMES[idx] }
+        end
+    end
+    table.sort(result, function(a, b) return a.idx < b.idx end)
+    return result
+end
+
 function Addon:EnsureDB()
     if not self.db then
         SetupAddonDB()
     end
     -- All per-character data lives in db.global.chars[key].
-    local key   = self:GetCurrentProfileKey()
+    -- When viewing another character via the char picker, use that key.
+    local key   = self._viewingChar or self:GetCurrentProfileKey()
     local chars = self.db.global.chars
     if not chars[key] then chars[key] = {} end
     local cdb = chars[key]
@@ -1116,6 +1290,14 @@ function Addon:ApplyThemeColors()
     local _pickerFrame = _mf and _mf._lariasHeaderPicker
     if _pickerFrame and self._PopulateHeaderPicker then self._PopulateHeaderPicker() end
 
+    -- Re-apply theme to Alt Summary popup and repopulate so row/text colors refresh.
+    if self._altsSummaryFrame then
+        self:ApplyTheme(self._altsSummaryFrame)
+        local _bg = self.THEME.bg
+        self._altsSummaryFrame:SetBackdropColor(_bg.r, _bg.g, _bg.b, 1.0)
+        if self.RefreshAltsSummary then self:RefreshAltsSummary() end
+    end
+
     -- Repaint list item labels with the new text color.
     if self.RequestRefresh then self:RequestRefresh() end
 end
@@ -1404,7 +1586,8 @@ local function AcquireSectionFrame()
     sectionFrame._header = header
 
     local title = header:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    title:SetPoint("LEFT", header, "LEFT", 3, 0)
+    title:SetPoint("LEFT",  header, "LEFT",  3, 0)
+    title:SetPoint("RIGHT", header, "RIGHT", -3, 0)
     title:SetTextColor(Addon.THEME.header.r, Addon.THEME.header.g, Addon.THEME.header.b, Addon.THEME.header.a)
     title:SetJustifyH("LEFT")
     if title.SetWordWrap then title:SetWordWrap(true) end
@@ -1446,6 +1629,8 @@ local function ReleaseSectionFrame(sectionFrame)
     end
 
     sectionFrame._header:SetScript("OnClick", nil)
+    sectionFrame._header:SetScript("OnEnter", nil)
+    sectionFrame._header:SetScript("OnLeave", nil)
     if sectionFrame._expandBtn then
         sectionFrame._expandBtn:SetScript("OnClick", nil)
     end
@@ -1687,6 +1872,10 @@ local function SetHeaderText(sectionFrame, sectionId, complete)
     -- repeating it.  Falls back to the full title if there's no " - " at all.
     titleText = titleText:match("^.-%s%-%s(.+)$") or titleText
     if complete then titleText = (L.DONE_PREFIX or "") .. titleText end
+    -- Show a dropdown arrow on the current-week header so it's clear it's clickable.
+    if sectionFrame._isPickerSection then
+        titleText = titleText .. "  |TInterface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up:14:14|t"
+    end
     sectionFrame._title:SetText(titleText)
 end
 
@@ -1965,8 +2154,9 @@ UpdateSectionVisuals = function(sectionFrame, sectionId, precomputedCurrentId)
 
     SetHeaderText(sectionFrame, sectionId, complete)
     -- Reserve space for the expand button on the right side of the header.
+    -- The picker section has no expand button (it's hidden), so give it the full width.
     local headerTextW = Addon.UI.itemTextWidth + Addon.UI.headerTextExtraW
-    if sectionFrame._expandBtn then headerTextW = headerTextW - 26 end
+    if sectionFrame._expandBtn and not sectionFrame._isPickerSection then headerTextW = headerTextW - 26 end
     ComputeHeaderHeight(sectionFrame, headerTextW)
 
     -- Default-collapse sections that have never been explicitly toggled,
@@ -1986,6 +2176,9 @@ UpdateSectionVisuals = function(sectionFrame, sectionId, precomputedCurrentId)
         SetSectionCollapsed(sectionId, collapsed, database)
     end
 
+    -- The current/active week (picker section) is always fully expanded.
+    if sectionFrame._isPickerSection then collapsed = false end
+
     local checkedMap = database.checked
     for i = 1, #sectionFrame._checkboxes do
         local checkbox = sectionFrame._checkboxes[i]
@@ -2000,8 +2193,14 @@ UpdateSectionVisuals = function(sectionFrame, sectionId, precomputedCurrentId)
     UpdateSectionHeight(sectionFrame, collapsed)
 
     -- Sync the expand button's visual state.
+    -- Picker section has no collapse toggle; hide the button entirely.
     if sectionFrame._expandBtn then
-        sectionFrame._expandBtn:SetExpanded(not collapsed)
+        if sectionFrame._isPickerSection then
+            sectionFrame._expandBtn:Hide()
+        else
+            sectionFrame._expandBtn:Show()
+            sectionFrame._expandBtn:SetExpanded(not collapsed)
+        end
     end
 end
 
@@ -2101,7 +2300,41 @@ local function ApplySectionVisuals(want, haveBefore, dataChanged, database, chil
         end
 
         sectionFrame._header._sectionFrame = sectionFrame
-        sectionFrame._header:SetScript("OnClick", OnHeaderClick)
+        local isCurrentSec = (tostring(sectionId) == tostring(currentSectionId or ""))
+        sectionFrame._isPickerSection = isCurrentSec
+        if sectionFrame._expandBtn then
+            sectionFrame._expandBtn:SetShown(not isCurrentSec)
+        end
+        if isCurrentSec then
+            -- Current/topmost week: clicking the section title opens the week picker.
+            -- Expand/collapse still works via the expand button on the right.
+            local _capturedSF = sectionFrame
+            sectionFrame._header:SetScript("OnClick", function()
+                local p = (Addon._EnsureHeaderPicker and Addon._EnsureHeaderPicker())
+                       or (frame and frame._lariasHeaderPicker)
+                if not p then return end
+                if p._lariasClosedAt and (GetTime() - p._lariasClosedAt) < 0.20 then
+                    p._lariasClosedAt = nil; return
+                end
+                if p.IsShown and p:IsShown() then p:Hide(); return end
+                p:ClearAllPoints()
+                p:SetPoint("TOPLEFT", _capturedSF._header, "BOTTOMLEFT", 0, -4)
+                p:Show()
+                if C_Timer and C_Timer.After then
+                    C_Timer.After(0, Addon._PopulateHeaderPicker)
+                elseif Addon._PopulateHeaderPicker then
+                    Addon._PopulateHeaderPicker()
+                end
+            end)
+            sectionFrame._header:SetScript("OnEnter", function(self_)
+                Addon.AddonUtils.SetTooltip(self_, L.PICKER_HEADER_TOOLTIP or "Click to change week", "ANCHOR_BOTTOMLEFT")
+            end)
+            sectionFrame._header:SetScript("OnLeave", Addon.AddonUtils.HideTooltip)
+        else
+            sectionFrame._header:SetScript("OnClick", OnHeaderClick)
+            sectionFrame._header:SetScript("OnEnter", nil)
+            sectionFrame._header:SetScript("OnLeave", nil)
+        end
 
         UpdateSectionVisuals(sectionFrame, sectionId, currentSectionId)
     end
@@ -2229,6 +2462,7 @@ function Addon:CreateFrame()
         if Addon._gearPopup and Addon._gearPopup.IsShown and Addon._gearPopup:IsShown() then
             Addon._gearPopup:Hide()
         end
+        if Addon.CharPicker and Addon.CharPicker.Close then Addon.CharPicker.Close() end
     end)
     -- Record this character's class the first time the list is opened so the
     -- character picker can colour-code entries. Intentionally deferred from
@@ -2240,6 +2474,17 @@ function Addon:CreateFrame()
         if classToken and profileKey and profileKey ~= "" then
             self.db.global.charClasses = self.db.global.charClasses or {}
             self.db.global.charClasses[profileKey] = classToken
+            self.db.global.charLevels = self.db.global.charLevels or {}
+            self.db.global.charLevels[profileKey] = UnitLevel("player") or 0
+            if GetAverageItemLevel then
+                local _, _, equipped = GetAverageItemLevel()
+                local ilvl = math.floor(tonumber(equipped) or 0)
+                if ilvl > 0 then
+                    self.db.global.chars = self.db.global.chars or {}
+                    self.db.global.chars[profileKey] = self.db.global.chars[profileKey] or {}
+                    self.db.global.chars[profileKey].ilvl = ilvl
+                end
+            end
         end
         -- Remove stale generic-profile entries (e.g. "Default") that don't match
         -- the "CharName - Realm" format; they cause wrong class colours in the picker.
@@ -2277,6 +2522,14 @@ function Addon:CreateFrame()
     -- Header: close/gear/change-week/ilvl-ref/char-picker buttons + week-picker popup.
     -- Defined in features/header/LariasWeeklyChecklist_Header.lua.
     self:CreateHeader(frame)
+
+    -- Character picker dropdown (footer bar + right-click hide menu).
+    -- Defined in features/footer/LariasWeeklyChecklist_CharPicker.lua.
+    -- Initialized after the header so Controls.StyleButton is available.
+    if self.InitCharPickerUI then
+        self:InitCharPickerUI(frame, Addon.Controls.StyleButton)
+        if self.LayoutHeaderButtons then self:LayoutHeaderButtons() end
+    end
 
     scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
     scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", Addon.UI.padOuterX, -Addon.UI.scrollTop)
