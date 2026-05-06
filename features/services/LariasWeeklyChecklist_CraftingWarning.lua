@@ -64,8 +64,7 @@ local function GetPlayerPreferredArmorSubClass()
     return classFile and CLASS_ARMOR_SUBCLASS[classFile]
 end
 
--- Returns false if the player's class cannot use this weapon subClassID.
--- Returns true if allowed, or true if the class is unknown (fail open).
+-- Returns true if allowed or the class is unknown (fail open), false if not allowed.
 local function PlayerCanUseWeaponSubClass(subClassID)
     local _, classFile = UnitClass("player")
     if not classFile then return true end
@@ -229,14 +228,14 @@ end
 
 -- Hooks a single SchematicForm/Form so we know when a new recipe is loaded.
 -- Guarded by _hookedForms to ensure we never double-hook the same frame.
-local function HookForm(form, label)
+local function HookForm(form)
     if not form or _hookedForms[form] then return end
     if not form.Init then return end
     _hookedForms[form] = true
     hooksecurefunc(form, "Init", function(_, info)
         -- Customer orders pass {spellID, itemID, ...}; normal crafting uses {recipeID, ...}.
         _currentRecipeID = info and (info.recipeID or info.spellID) or nil
-        _pendingItemID   = (info and (info.itemID or 0) > 0) and info.itemID or nil
+        _pendingItemID   = info and info.itemID and info.itemID > 0 and info.itemID or nil
         C_Timer.After(0, function() Addon:CheckCraftingWarning() end)
     end)
     -- Hide the warning when this schematic form closes (recipe deselected).
@@ -248,17 +247,17 @@ end
 
 -- Hooks all known SchematicForm/Form sub-frames inside a root Professions frame
 -- and adds an OnHide guard on the root itself.
-local function SetupFrame(root, rootName)
+local function SetupFrame(root)
     if not root then return end
-    if root.SchematicForm then HookForm(root.SchematicForm, rootName .. ".SchematicForm") end
-    if root.Form          then HookForm(root.Form,          rootName .. ".Form")          end
+    if root.SchematicForm then HookForm(root.SchematicForm) end
+    if root.Form          then HookForm(root.Form)          end
     if root.CraftingPage  then
-        if root.CraftingPage.SchematicForm then HookForm(root.CraftingPage.SchematicForm, rootName .. ".CraftingPage.SchematicForm") end
-        if root.CraftingPage.Form          then HookForm(root.CraftingPage.Form,          rootName .. ".CraftingPage.Form")          end
+        if root.CraftingPage.SchematicForm then HookForm(root.CraftingPage.SchematicForm) end
+        if root.CraftingPage.Form          then HookForm(root.CraftingPage.Form)          end
     end
     if root.OrdersPage then
-        if root.OrdersPage.SchematicForm then HookForm(root.OrdersPage.SchematicForm, rootName .. ".OrdersPage.SchematicForm") end
-        if root.OrdersPage.Form          then HookForm(root.OrdersPage.Form,          rootName .. ".OrdersPage.Form")          end
+        if root.OrdersPage.SchematicForm then HookForm(root.OrdersPage.SchematicForm) end
+        if root.OrdersPage.Form          then HookForm(root.OrdersPage.Form)          end
     end
     -- Activate recipe/bag events when the window opens; tear down on close.
     root:HookScript("OnShow", OnCraftingWindowOpen)
@@ -272,8 +271,8 @@ end
 local function EnsureWarnPanel()
     if _warn then return end
 
-    local PAD_W=10 ; local BODY_H=34 ; local BTN_H=22
-    local PANEL_H = PAD_W + BODY_H + 6 + BTN_H + PAD_W
+    local PAD_W=10 ; local BODY_H=34 ; local BTN_H=22 ; local GAP=6
+    local PANEL_H = PAD_W + BODY_H + GAP + BTN_H + PAD_W
 
     local holder = Addon:NewThemedFrame(nil, UIParent)
     holder:SetFrameStrata("DIALOG") ; holder:SetFrameLevel(200)
@@ -294,7 +293,7 @@ local function EnsureWarnPanel()
 
     -- "Hide warning" button: sets craftWarnDisabled and refreshes options UI.
     local btn = CreateFrame("Button", nil, holder, "UIPanelButtonTemplate")
-    btn:SetSize(180, BTN_H) ; btn:SetPoint("TOP", label, "BOTTOM", 0, -6)
+    btn:SetSize(180, BTN_H) ; btn:SetPoint("TOP", label, "BOTTOM", 0, -GAP)
     btn:SetText(L.CRAFT_WARN_DISABLE_BTN or "Hide Crafting Warning")
     btn:SetScript("OnClick", function()
         Addon:EnsurePrefs().craftWarnDisabled = true ; holder:Hide()
@@ -347,8 +346,11 @@ function Addon:CheckCraftingWarning()
         return
     end
 
-    local itemName, _, _, _, _, _, _, _, _, _, _, classID, subClassID = GetItemInfo(itemLink)
-    itemName = itemName or (L.CRAFT_WARN_UNKNOWN_ITEM or "this item")
+    local itemName, _, _, _, _, _, _, _, itemEquipLoc, _, _, classID, subClassID = GetItemInfo(itemLink)
+    itemName = itemName or L.CRAFT_WARN_UNKNOWN_ITEM or "this item"
+    -- Cloaks/back items have subClassID=1 (Cloth) in the item DB but are equippable
+    -- by all classes; skip armor-type checks for them entirely.
+    local isCloak = (itemEquipLoc == "INVTYPE_CLOAK")
     local warnMsg
 
     if classID == 2 or classID == 4 then
@@ -375,7 +377,7 @@ function Addon:CheckCraftingWarning()
         end
     end
 
-    if not warnMsg and classID == 4 and subClassID and subClassID >= 1 and subClassID <= 4 then
+    if not warnMsg and not isCloak and classID == 4 and subClassID and subClassID >= 1 and subClassID <= 4 then
         local armorOk = PlayerCanUseItemType(4, subClassID, itemLink)
         if armorOk == false then
             local armorTypeName = (GetItemSubClassInfo and GetItemSubClassInfo(4, subClassID)) or tostring(subClassID)
@@ -383,20 +385,19 @@ function Addon:CheckCraftingWarning()
                 L.CRAFT_WARN_ARMOR_MSG or "Warning: %s is %s armor, but your class cannot wear it.\nYou may be crafting the wrong item.",
                 itemName, armorTypeName)
         end
-    end
-
-    -- Check: player is crafting armor of a lower type than their class wears.
-    -- PlayerCanUseItemType only fires when the tooltip is red (can't equip at all);
-    -- higher-armor-type classes (e.g. Plate) can equip lower types without a red
-    -- tooltip, so we need an explicit class → preferred armor check here.
-    if not warnMsg and classID == 4 and subClassID and subClassID >= 1 and subClassID <= 4 then
-        local preferred = GetPlayerPreferredArmorSubClass()
-        if preferred and subClassID ~= preferred then
-            local craftedTypeName   = (GetItemSubClassInfo and GetItemSubClassInfo(4, subClassID))  or tostring(subClassID)
-            local expectedTypeName  = (GetItemSubClassInfo and GetItemSubClassInfo(4, preferred))   or tostring(preferred)
-            warnMsg = string.format(
-                L.CRAFT_WARN_ARMOR_TYPE_MSG or "Warning: %s is %s armor, but your class wears %s.\nYou may be crafting the wrong item.",
-                itemName, craftedTypeName, expectedTypeName)
+        -- Check: player is crafting armor of a lower type than their class wears.
+        -- PlayerCanUseItemType only fires when the tooltip is red (can't equip at all);
+        -- higher-armor-type classes (e.g. Plate) can equip lower types without a red
+        -- tooltip, so we need an explicit class → preferred armor check here.
+        if not warnMsg then
+            local preferred = GetPlayerPreferredArmorSubClass()
+            if preferred and subClassID ~= preferred then
+                local craftedTypeName  = (GetItemSubClassInfo and GetItemSubClassInfo(4, subClassID)) or tostring(subClassID)
+                local expectedTypeName = (GetItemSubClassInfo and GetItemSubClassInfo(4, preferred))  or tostring(preferred)
+                warnMsg = string.format(
+                    L.CRAFT_WARN_ARMOR_TYPE_MSG or "Warning: %s is %s armor, but your class wears %s.\nYou may be crafting the wrong item.",
+                    itemName, craftedTypeName, expectedTypeName)
+            end
         end
     end
 
@@ -434,10 +435,10 @@ ev:SetScript("OnEvent", function(_, event, arg1)
     if event == "ADDON_LOADED" then
         local hooked = false
         if arg1 == "Blizzard_ProfessionsUI" and ProfessionsFrame then
-            SetupFrame(ProfessionsFrame, "ProfessionsFrame")
+            SetupFrame(ProfessionsFrame)
             hooked = true
         elseif arg1 == "Blizzard_ProfessionsCustomerOrders" and ProfessionsCustomerOrdersFrame then
-            SetupFrame(ProfessionsCustomerOrdersFrame, "ProfessionsCustomerOrdersFrame")
+            SetupFrame(ProfessionsCustomerOrdersFrame)
             hooked = true
         end
         if hooked then
@@ -454,11 +455,11 @@ end)
 -- Handle UI reload: frames may already exist before ADDON_LOADED fires.
 -- SetupFrame adds the OnShow/OnHide hooks that manage active event registration.
 if ProfessionsFrame then
-    SetupFrame(ProfessionsFrame, "ProfessionsFrame")
+    SetupFrame(ProfessionsFrame)
     _profAddonsSeen = _profAddonsSeen + 1
 end
 if ProfessionsCustomerOrdersFrame then
-    SetupFrame(ProfessionsCustomerOrdersFrame, "ProfessionsCustomerOrdersFrame")
+    SetupFrame(ProfessionsCustomerOrdersFrame)
     _profAddonsSeen = _profAddonsSeen + 1
 end
 if _profAddonsSeen >= 2 then ev:UnregisterEvent("ADDON_LOADED") end
