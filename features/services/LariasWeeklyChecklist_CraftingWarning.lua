@@ -310,8 +310,7 @@ end
 -- shows or hides the warning panel accordingly.
 function Addon:CheckCraftingWarning()
     if _warn then _warn.holder:Hide() end
-    return -- crafting warning globally disabled
-    if self:EnsurePrefs().craftWarnDisabled then return end
+    do return end -- crafting warning globally disabled
 
     local itemID, itemLink
     if _pendingItemID and _pendingItemID > 0 then
