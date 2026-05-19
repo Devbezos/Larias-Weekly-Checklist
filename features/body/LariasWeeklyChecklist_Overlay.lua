@@ -250,7 +250,7 @@ local function ApplyGreatVaultGrid(gridBlocks)
     end
 end
 
-local function SetRightRowPair(i, rowLabel, rowValue, iconFileID, currencyID, tooltipText, amountTooltipText, itemID)
+local function SetRightRowPair(i, rowLabel, rowValue, iconFileID, currencyID, tooltipText, amountTooltipText, itemID, questKey)
     local row = TrackingUI.right[RIGHT_ROW_KEYS[i]]
     if not (row and row.label and row.value) then return end
     rowLabel = rowLabel or ""; rowValue = rowValue or ""
@@ -277,6 +277,7 @@ local function SetRightRowPair(i, rowLabel, rowValue, iconFileID, currencyID, to
     if row.frame then
         local showX = showRow and currencyID and not itemID
         row.frame._lariasRightClickCurrencyID = showX and currencyID or nil
+        row.frame._lariasRightClickQuestKey   = (showRow and questKey) and questKey or nil
     end
 end
 
@@ -285,7 +286,7 @@ local function ApplyRightColumnAsPairs()
     local panelRows = Addon:GetCurrencyPanelRows()
     for i, row in ipairs(panelRows) do
         if i > RIGHT_LINE_COUNT then break end
-        SetRightRowPair(i, row.label, row.value, row.iconID, row.currencyID, row.tooltipText, row.amountTooltipText, row.itemID)
+        SetRightRowPair(i, row.label, row.value, row.iconID, row.currencyID, row.tooltipText, row.amountTooltipText, row.itemID, row.questKey)
     end
     for i = #panelRows + 1, RIGHT_LINE_COUNT do
         SetRightRowPair(i, "", "")
@@ -306,10 +307,8 @@ local function ResizeTrackingPanelToContent(addon)
         end
     end
 
-    -- Reflow GV to fill available height, but never shorter than its natural
-    -- height (one standard row per visible block).  This prevents GV from
-    -- shrinking when currencies are removed while still allowing it to expand
-    -- alongside a long currency list when currencies are present.
+    -- Reflow GV to fill the same height as the currency column, but never
+    -- shrink below its natural 3-block height.
     if Addon._reflowGVGrid then
         local GAP        = 6
         local GV_GRID_H  = 1 + GV_ROW_H + 1  -- BORDER + ROW + BORDER = 26
@@ -318,8 +317,8 @@ local function ResizeTrackingPanelToContent(addon)
             if not addon:IsGVBlockHidden(bi) then nVisible = nVisible + 1 end
         end
         local naturalGvH = nVisible * GV_GRID_H + max(0, nVisible - 1) * GAP
-        local targetGvH  = max(naturalGvH, bottomRight)
-        Addon._reflowGVGrid(targetGvH > 0 and targetGvH or nil)
+        local gvTargetH  = max(naturalGvH, bottomRight)
+        Addon._reflowGVGrid(gvTargetH > 0 and gvTargetH or nil)
     end
 
     local bottomLeft = max(0, BottomFor(TrackingUI.left._gvSentinel))
@@ -546,21 +545,11 @@ function Addon:CreateTrackingPanel(parentFrame)
             cells  = cells, gridTopY = blockY,
         }
 
-        -- Invisible hover zone over the label column; right-click to hide this block.
+        -- (right-click to hide removed)
         do
-            local _bi = bi
             local hz = CreateFrame("Frame", nil, leftCol)
             hz:SetPoint("TOPLEFT", leftCol, "TOPLEFT", 0, blockY)
             hz:SetSize(GV_GRID_X - 2, GV_GRID_H)
-            hz:EnableMouse(true)
-            hz:SetScript("OnMouseUp", function(self_, button)
-                if button ~= "RightButton" then return end
-                Addon:ShowContextMenu(self_, {
-                    { text = "Hide this vault row", onClick = function()
-                        Addon:SetGVBlockHidden(_bi, true)
-                    end },
-                })
-            end)
             gvGrids[bi]._hoverZone = hz
         end
     end
@@ -719,13 +708,21 @@ function Addon:CreateTrackingPanel(parentFrame)
         valueHit:SetScript("OnLeave", AU.HideTooltip)
         valueHit:SetScript("OnMouseUp", function(_, button)
             if button ~= "RightButton" then return end
-            local id = row._lariasRightClickCurrencyID
-            if not id then return end
-            Addon:ShowContextMenu(row, {
-                { text = "Hide this currency", onClick = function()
-                    Addon:SetCurrencyHidden(id, true)
-                end },
-            })
+            local id  = row._lariasRightClickCurrencyID
+            local qk  = row._lariasRightClickQuestKey
+            if id then
+                Addon:ShowContextMenu(row, {
+                    { text = "Hide this currency", onClick = function()
+                        Addon:SetCurrencyHidden(id, true)
+                    end },
+                })
+            elseif qk then
+                Addon:ShowContextMenu(row, {
+                    { text = "Hide this row", onClick = function()
+                        Addon:SetQuestHidden(qk, true)
+                    end },
+                })
+            end
         end)
         row._lariasValueHit = valueHit
 
@@ -746,12 +743,20 @@ function Addon:CreateTrackingPanel(parentFrame)
         row:SetScript("OnMouseUp", function(self, button)
             if button ~= "RightButton" then return end
             local id = self._lariasRightClickCurrencyID
-            if not id then return end
-            Addon:ShowContextMenu(self, {
-                { text = "Hide this currency", onClick = function()
-                    Addon:SetCurrencyHidden(id, true)
-                end },
-            })
+            local qk = self._lariasRightClickQuestKey
+            if id then
+                Addon:ShowContextMenu(self, {
+                    { text = "Hide this currency", onClick = function()
+                        Addon:SetCurrencyHidden(id, true)
+                    end },
+                })
+            elseif qk then
+                Addon:ShowContextMenu(self, {
+                    { text = "Hide this row", onClick = function()
+                        Addon:SetQuestHidden(qk, true)
+                    end },
+                })
+            end
         end)
 
         local label = row:CreateFontString(nil, "OVERLAY", template or "GameFontHighlightSmall")
@@ -907,6 +912,62 @@ ComputeSnapshotData = function(snap)
 
     -- Right column: currency data via the Currency module API.
     Addon:FillCurrencySnapshot(snap)
+
+    -- Keystone: current M+ key held by the logged-in character.
+    do
+        local ksLevel = C_MythicPlus
+                        and type(C_MythicPlus.GetOwnedKeystoneLevel) == "function"
+                        and C_MythicPlus.GetOwnedKeystoneLevel() or nil
+        local ksMapID = C_MythicPlus
+                        and type(C_MythicPlus.GetOwnedKeystoneChallengeMapID) == "function"
+                        and C_MythicPlus.GetOwnedKeystoneChallengeMapID() or nil
+        local ksName
+        if ksMapID and C_ChallengeMode and type(C_ChallengeMode.GetMapUIInfo) == "function" then
+            ksName = C_ChallengeMode.GetMapUIInfo(ksMapID)
+        end
+        snap.keystone = snap.keystone or {}
+        snap.keystone.level = tonumber(ksLevel) or 0
+        snap.keystone.name  = ksName or ""
+    end
+
+    -- Equipment slots: full item data for the gear popup and upgrade-cost rows.
+    -- tier and rank are derived from the equipped item's ilvl using IlvlUtils.
+    snap.gearSlots = {}
+    local snapSlotIDs = (Addon.TRACKING and Addon.TRACKING.gearSlotIDs)
+                        or {1,2,3,5,6,7,8,9,10,11,12,13,14,15,16,17}
+    local maxRankCount = Addon.TRACKING and Addon.TRACKING.ilvlRankOffsets
+                         and #Addon.TRACKING.ilvlRankOffsets or 6
+    for _, sid in ipairs(snapSlotIDs) do
+        local link = GetInventoryItemLink and GetInventoryItemLink("player", sid)
+        -- GetDetailedItemLevelInfo parses upgrade bonus IDs from the link directly;
+        -- it is more reliable than GetInventoryItemLevel for upgraded items.
+        local ilvl = 0
+        if link and GetDetailedItemLevelInfo then
+            local effIlvl = GetDetailedItemLevelInfo(link)
+            ilvl = tonumber(effIlvl) or 0
+        end
+        if ilvl == 0 then
+            local rawIlvl = GetInventoryItemLevel and GetInventoryItemLevel("player", sid)
+            ilvl = tonumber(rawIlvl) or 0
+        end
+
+        local tierIdx, rank, maxRank
+        if ilvl > 0 and Addon.IlvlUtils then
+            tierIdx = Addon.IlvlUtils.GetTier(ilvl)
+            if tierIdx then
+                rank    = Addon.IlvlUtils.GetRank(ilvl, tierIdx)
+                maxRank = maxRankCount
+            end
+        end
+
+        snap.gearSlots[sid] = {
+            link    = link,
+            ilvl    = ilvl,
+            rank    = rank,
+            maxRank = maxRank,
+            tierIdx = tierIdx,
+        }
+    end
 end
 
 local function SaveTrackingSnapshot(db)

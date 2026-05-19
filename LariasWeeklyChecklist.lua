@@ -812,6 +812,58 @@ function Addon:SetCurrencyHidden(currencyID, hidden)
     end
 end
 
+--- Returns true when the named quest row is hidden for the current character.
+function Addon:IsQuestHidden(questKey)
+    if not questKey then return false end
+    local key = self:GetCurrentProfileKey()
+    local gdb = self.db and self.db.global
+    local cdb = gdb and gdb.chars and gdb.chars[key]
+    return cdb and cdb.hiddenQuests and cdb.hiddenQuests[questKey] == true
+end
+
+--- Hides or restores a quest row for the current character.
+function Addon:SetQuestHidden(questKey, hidden)
+    local key = self:GetCurrentProfileKey()
+    if not (key and key ~= "") then return end
+    local gdb = self.db and self.db.global
+    if not gdb then return end
+    gdb.chars = gdb.chars or {}
+    gdb.chars[key] = gdb.chars[key] or {}
+    gdb.chars[key].hiddenQuests = gdb.chars[key].hiddenQuests or {}
+    if hidden then
+        gdb.chars[key].hiddenQuests[questKey] = true
+    else
+        gdb.chars[key].hiddenQuests[questKey] = nil
+    end
+    if self.RequestTrackingUpdate then self:RequestTrackingUpdate() end
+    if self.RefreshAltsSummary    then self:RefreshAltsSummary()    end
+    if self.SyncGearPopup         then self:SyncGearPopup()         end
+    if self._restoreHiddenFrame and self._restoreHiddenFrame:IsShown() then
+        self:OpenRestoreHiddenCurrencies(nil)
+    end
+end
+
+--- Returns an array of { key, name } for every quest row the current character has hidden.
+function Addon:GetHiddenQuestList()
+    local key = self:GetCurrentProfileKey()
+    local gdb = self.db and self.db.global
+    local cdb = gdb and gdb.chars and gdb.chars[key]
+    local hidden = cdb and cdb.hiddenQuests
+    if not hidden then return {} end
+    local L2 = self.L or {}
+    local questNames = {
+        delversBounty  = L2.TRACKING_QUEST_DELVERS_BOUNTY  or "Trovehunter's Bounty",
+        weeklyPrey     = L2.TRACKING_QUEST_WEEKLY_PREY     or "Weekly Prey",
+        nullaeusSpoils = L2.TRACKING_QUEST_NULLAEUS_SPOILS or "Spoils of Nullaeus",
+    }
+    local result = {}
+    for qKey in pairs(hidden) do
+        result[#result + 1] = { key = qKey, name = questNames[qKey] or qKey }
+    end
+    table.sort(result, function(a, b) return a.name < b.name end)
+    return result
+end
+
 --- Returns an array of { id, name } for every currency the current character has hidden.
 function Addon:GetHiddenCurrencyList()
     local key = self:GetCurrentProfileKey()

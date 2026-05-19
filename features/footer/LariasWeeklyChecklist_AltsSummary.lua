@@ -11,7 +11,7 @@ local TITLE_H    = 28
 local ROW_H      = 23          -- height of each data row
 local HDR_ROW_H  = 25          -- height of section label rows
 local COL_LABEL  = 124         -- width of the left-side row label column (wider for icon+text)
-local COL_W      = 104         -- width of each character column
+local COL_W      = 120         -- width of each character column
 local BTN_H      = 18
 local BTN_W      = 74          -- centered single button per column in COL_W=104
 local ICON_SIZE  = 15          -- currency icon width/height in row labels
@@ -23,6 +23,17 @@ local NUM_CRESTS = 5
 local CREST_ABBREV = { "Adv", "Vet", "Chp", "Hero", "Myth" }
 local GV_NAMES     = { "Raid", "M+ / Delve", "World" }
 local GV_THRESHOLDS = { {2,4,6}, {1,4,8}, {2,4,8} }
+
+-- Read from TRACKING so Overlay.lua (which captures the data) uses the same list.
+local GEAR_SLOT_IDS  = (Addon.TRACKING and Addon.TRACKING.gearSlotIDs)
+                       or {1,2,3,5,6,7,8,9,10,11,12,13,14,15,16,17}
+local GEAR_SLOT_NAMES = {
+    [1]="Head",      [2]="Neck",      [3]="Shoulders",
+    [5]="Chest",     [6]="Waist",     [7]="Legs",
+    [8]="Feet",      [9]="Wrists",    [10]="Hands",
+    [11]="Ring 1",   [12]="Ring 2",   [13]="Trinket 1",
+    [14]="Trinket 2",[15]="Back",     [16]="Main Hand", [17]="Off Hand",
+}
 
 -- ── Alpha constants ────────────────────────────────────────────────────
 local A_FULL    = 1.00   -- present, data available
@@ -40,10 +51,166 @@ local _layout      = nil
 -- or on panel open.  Avoids redundant BuildRowDefs calls when only character data changes.
 local _cachedRows  = nil
 local _rowsDirty   = true
+local _gearPopupFrame   = nil   -- lazily-created gear popup; one shared instance
+local _gearClickCatcher = nil   -- full-screen dismiss layer shown behind the popup
 -- Convenience alias: snapshot type-tag strings (defined in Currency.lua, published on Addon).
 -- AltsSummary reads this rather than repeating magic strings.
 local ST  -- assigned in PopulateSummary after Currency.lua has loaded
 local PopulateSummary  -- forward declaration
+local ShowGearPopup    -- forward declaration
+
+-- ── Gear popup ───────────────────────────────────────────────────────────────
+-- Shows a small frame listing ilvl per gear slot for a character.
+-- anchor: the hdrHit frame to position near.  charKey: unique char identifier.
+ShowGearPopup = function(anchor, charKey, charName, cr, cg, cb, snap)
+    if not _gearPopupFrame then
+        local POPUP_W  = 290
+        local GP_ROW_H = 18
+        local GP_TTL_H = 22
+        local POPUP_H  = GP_TTL_H + 4 + #GEAR_SLOT_IDS * GP_ROW_H + 6
+        local f = Addon:NewThemedFrame(nil, UIParent)
+        -- Override bg to fully opaque (NewThemedFrame uses theme default a=0.65).
+        local _bg = Addon.THEME.bg
+        f:SetBackdropColor(_bg.r, _bg.g, _bg.b, 1.0)
+        f:SetFrameStrata("TOOLTIP")
+        f:SetClampedToScreen(true)
+        f:SetSize(POPUP_W, POPUP_H)
+
+        local titleFS = f:CreateFontString(nil, "OVERLAY")
+        titleFS:SetFont("Fonts\\FRIZQT__.TTF", 11, "")
+        titleFS:SetPoint("TOPLEFT",  f, "TOPLEFT",  6, -4)
+        titleFS:SetPoint("TOPRIGHT", f, "TOPRIGHT", -6, -4)
+        titleFS:SetHeight(GP_TTL_H - 4)
+        titleFS:SetJustifyH("LEFT")
+        titleFS:SetJustifyV("MIDDLE")
+        f._titleFS = titleFS
+
+        local sep = f:CreateTexture(nil, "ARTWORK")
+        sep:SetHeight(1)
+        sep:SetColorTexture(0.4, 0.4, 0.4, 0.7)
+        sep:SetPoint("TOPLEFT",  f, "TOPLEFT",  4, -GP_TTL_H)
+        sep:SetPoint("TOPRIGHT", f, "TOPRIGHT", -4, -GP_TTL_H)
+
+        f._rows = {}
+        for i, sid in ipairs(GEAR_SLOT_IDS) do
+            local rowY = -(GP_TTL_H + 4 + (i - 1) * GP_ROW_H)
+
+            -- Invisible hit region covering the full row width for mouse events.
+            local hit = CreateFrame("Frame", nil, f)
+            hit:SetPoint("TOPLEFT", f, "TOPLEFT", 4, rowY)
+            hit:SetSize(POPUP_W - 8, GP_ROW_H)
+            hit:EnableMouse(true)
+            hit:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+            local lblFS = f:CreateFontString(nil, "OVERLAY")
+            lblFS:SetFont("Fonts\\FRIZQT__.TTF", 10, "")
+            lblFS:SetPoint("TOPLEFT", f, "TOPLEFT", 8, rowY)
+            lblFS:SetSize(78, GP_ROW_H)
+            lblFS:SetJustifyH("LEFT")
+            lblFS:SetJustifyV("MIDDLE")
+            lblFS:SetTextColor(0.52, 0.52, 0.52, 1)
+            lblFS:SetText(GEAR_SLOT_NAMES[sid])
+
+            local nameFS = f:CreateFontString(nil, "OVERLAY")
+            nameFS:SetFont("Fonts\\FRIZQT__.TTF", 10, "")
+            nameFS:SetPoint("TOPLEFT",  f, "TOPLEFT",  90, rowY)
+            nameFS:SetSize(POPUP_W - 90 - 42 - 8, GP_ROW_H)
+            nameFS:SetJustifyH("LEFT")
+            nameFS:SetJustifyV("MIDDLE")
+
+            local ilvlFS = f:CreateFontString(nil, "OVERLAY")
+            ilvlFS:SetFont("Fonts\\FRIZQT__.TTF", 10, "")
+            ilvlFS:SetPoint("TOPRIGHT", f, "TOPRIGHT", -8, rowY)
+            ilvlFS:SetSize(40, GP_ROW_H)
+            ilvlFS:SetJustifyH("RIGHT")
+            ilvlFS:SetJustifyV("MIDDLE")
+
+            f._rows[i] = { sid = sid, hit = hit, nameFS = nameFS, ilvlFS = ilvlFS }
+        end
+        -- Hide catcher whenever the popup is closed by any path.
+        f:SetScript("OnHide", function()
+            if _gearClickCatcher then _gearClickCatcher:Hide() end
+        end)
+        _gearPopupFrame = f
+    end
+
+    if not _gearClickCatcher then
+        local c = CreateFrame("Frame", nil, UIParent)
+        c:SetAllPoints(UIParent)
+        c:SetFrameStrata("DIALOG")
+        c:EnableMouse(true)
+        c:SetScript("OnMouseDown", function()
+            if _gearPopupFrame then _gearPopupFrame:Hide() end
+            c:Hide()
+        end)
+        c:Hide()
+        _gearClickCatcher = c
+    end
+
+    local f = _gearPopupFrame
+    f._titleFS:SetText(charName)
+    f._titleFS:SetTextColor(cr, cg, cb, 1)
+
+    local gearSlots = snap and snap.gearSlots
+    for _, row in ipairs(f._rows) do
+        local slotData = gearSlots and gearSlots[row.sid]
+        -- Support both old format (plain number) and current format (table).
+        local link, ilvl
+        if type(slotData) == "table" then
+            link = slotData.link
+            ilvl = tonumber(slotData.ilvl) or 0
+        elseif type(slotData) == "number" then
+            ilvl = slotData
+        else
+            ilvl = 0
+        end
+
+        -- Item name, quality-colored.
+        if link then
+            local itemName, _, quality = GetItemInfo(link)
+            if itemName then
+                local qr, qg, qb = GetItemQualityColor(quality or 1)
+                row.nameFS:SetText(itemName)
+                row.nameFS:SetTextColor(qr or 1, qg or 1, qb or 1, 1)
+            else
+                row.nameFS:SetText("Loading...")
+                row.nameFS:SetTextColor(0.55, 0.55, 0.55, 1)
+            end
+        else
+            row.nameFS:SetText("Empty")
+            row.nameFS:SetTextColor(0.27, 0.27, 0.27, 1)
+        end
+
+        -- ilvl: tier-colored.
+        if ilvl and ilvl > 0 then
+            local hex = (Addon.IlvlUtils and Addon.IlvlUtils.GetColorHex(ilvl)) or "ffffffff"
+            local r_ = (tonumber(hex:sub(3,4), 16) or 255) / 255
+            local g_ = (tonumber(hex:sub(5,6), 16) or 255) / 255
+            local b_ = (tonumber(hex:sub(7,8), 16) or 255) / 255
+            row.ilvlFS:SetText(tostring(ilvl))
+            row.ilvlFS:SetTextColor(r_, g_, b_, 1)
+        else
+            row.ilvlFS:SetText("")
+        end
+
+        -- Hover: full WoW item tooltip (shows gems, enchants, stats, set bonuses).
+        local _link = link
+        if _link then
+            row.hit:SetScript("OnEnter", function(s_)
+                GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
+                GameTooltip:SetHyperlink(_link)
+                GameTooltip:Show()
+            end)
+        else
+            row.hit:SetScript("OnEnter", nil)
+        end
+    end
+    f._charKey = charKey
+    f:ClearAllPoints()
+    f:SetPoint("TOPLEFT", anchor, "TOPRIGHT", 6, 0)
+    _gearClickCatcher:Show()
+    f:Show()
+end
 
 -- ── Dynamic layout ────────────────────────────────────────────────────────────
 local function ComputeLayout()
@@ -70,11 +237,17 @@ local function CalcGVBreakdown(snap)
     return s[1], s[2], s[3]
 end
 
-local function GVColor(slots)
-    if     slots >= 3 then return 0.3, 1.0, 0.3
-    elseif slots >= 1 then return 1.0, 0.82, 0.0
-    else                    return 0.5, 0.5,  0.5
+
+-- ── Hex colour helper ───────────────────────────────────────────────────────
+-- Converts a 6-char hex string (e.g. "FF8000") to three 0-1 floats.
+-- Falls back to (0.7, 0.7, 0.7) when nil or malformed.
+local function HexToRGB(hex)
+    if hex and #hex >= 6 then
+        return (tonumber(hex:sub(1,2), 16) or 179) / 255,
+               (tonumber(hex:sub(3,4), 16) or 179) / 255,
+               (tonumber(hex:sub(5,6), 16) or 179) / 255
     end
+    return 0.7, 0.7, 0.7
 end
 
 -- ── Currency icon helper ──────────────────────────────────────────────────────
@@ -157,7 +330,10 @@ local function EnsurePanel()
     titleFS:SetPoint("TOPLEFT", f, "TOPLEFT", PAD, -7)
     f._altsTitleFS = titleFS
 
-    local closeBtn = Addon.Controls.NewCloseButton(f, function() f:Hide() end)
+    local closeBtn = Addon.Controls.NewCloseButton(f, function()
+        if _gearPopupFrame then _gearPopupFrame:Hide() end
+        f:Hide()
+    end)
     closeBtn:SetPoint("TOPRIGHT", f, "TOPRIGHT", -4, -4)
 
     -- "Show hidden" checkbox.
@@ -215,7 +391,31 @@ local function BuildCharList(gdb, ownKey, allKeys, maxLvl)
     return chars
 end
 
-local function BuildRowDefs(tracking, LAYOUT)
+-- Compute the total crest cost to max all items of crest tier `tierIdx`,
+-- using the rank (x/y) stored in the snapshot.  No ilvl range math needed.
+-- Returns (totalCost, details, costPerStep, freeRanks).
+local function CalcTierUpgradeCost(snap, tierIdx)
+    if not (snap and snap.gearSlots) then return 0 end
+    local TRACKING    = Addon.TRACKING
+    local costPerStep = (TRACKING and TRACKING.crestUpgradeCostPerStep
+                        and TRACKING.crestUpgradeCostPerStep[tierIdx]) or 15
+    local freeRanks   = (TRACKING and TRACKING.crestUpgradeFreeRanks
+                        and TRACKING.crestUpgradeFreeRanks[tierIdx])   or 0
+    local totalCost = 0
+    for _, sid in ipairs(GEAR_SLOT_IDS) do
+        local sd = snap.gearSlots[sid]
+        if type(sd) == "table" and sd.tierIdx == tierIdx
+                and sd.rank and sd.maxRank and sd.rank < sd.maxRank then
+            local remaining = math.max(0,
+                (sd.maxRank - sd.rank) - math.max(0, freeRanks - (sd.rank - 1))
+            )
+            totalCost = totalCost + remaining * costPerStep
+        end
+    end
+    return totalCost
+end
+
+local function BuildRowDefs(tracking, LAYOUT, ownSnap)
     local rows = {}
     local function addSec(lbl, action)  rows[#rows + 1] = { type = "sechdr", label = lbl, action = action } end
     local function addRow(t, lbl, extra)
@@ -223,22 +423,51 @@ local function BuildRowDefs(tracking, LAYOUT)
         if extra then for k, v in pairs(extra) do r[k] = v end end
         rows[#rows + 1] = r
     end
-
-    addSec("Crests", "currency")
-    for i = 1, NUM_CRESTS do
+    -- Returns display name and tier RGB for crest tier i.
+    local function CrestTierInfo(i)
         local name = (Addon.IlvlUtils and Addon.IlvlUtils.GetCrestTrackName(i))
                      or CREST_ABBREV[i] or ("Tier " .. i)
         local hex  = tracking and tracking.crestColors and tracking.crestColors[i]
-        local cr, cg, cb = 0.7, 0.7, 0.7
-        if hex and #hex >= 6 then
-            cr = (tonumber("0x" .. hex:sub(1,2)) or 179)/255
-            cg = (tonumber("0x" .. hex:sub(3,4)) or 179)/255
-            cb = (tonumber("0x" .. hex:sub(5,6)) or 179)/255
-        end
+        local cr, cg, cb = HexToRGB(hex)
+        return name, cr, cg, cb
+    end
+
+    addSec("Crests", "currency")
+    for i = 1, NUM_CRESTS do
+        local name, cr, cg, cb = CrestTierInfo(i)
         local crestID = tracking and tracking.crestCurrencyIDs and tracking.crestCurrencyIDs[i]
         if not Addon:IsCurrencyHidden(crestID) then
             addRow("crest", name, { crestIdx = i, cr = cr, cg = cg, cb = cb,
                                     iconID = GetCurrencyIcon(crestID), currencyID = crestID })
+        end
+    end
+
+    -- Build upgrade-cost rows.  If the own character has gear data, skip any
+    -- tier where they have nothing left to upgrade (all items maxed or absent).
+    do
+        local ownHasGearData = false
+        if ownSnap and ownSnap.gearSlots then
+            for _, sid in ipairs(GEAR_SLOT_IDS) do
+                local sd = ownSnap.gearSlots[sid]
+                if type(sd) == "table" and sd.rank then
+                    ownHasGearData = true; break
+                end
+            end
+        end
+        local upgRows = {}
+        for i = 1, NUM_CRESTS do
+            local name, cr, cg, cb = CrestTierInfo(i)
+            local show = true
+            if ownHasGearData then
+                show = CalcTierUpgradeCost(ownSnap, i) > 0
+            end
+            if show then
+                upgRows[#upgRows + 1] = { type = "upgcost", label = name, tierIdx = i, cr = cr, cg = cg, cb = cb }
+            end
+        end
+        if #upgRows > 0 then
+            addSec("Upgrade Cost", nil)
+            for _, r in ipairs(upgRows) do rows[#rows + 1] = r end
         end
     end
 
@@ -273,6 +502,7 @@ local function BuildRowDefs(tracking, LAYOUT)
     local L            = Addon.L or {}
     local function addQuestRow(key, labelKey, fallback)
         if (tonumber(questIDs[key]) or 0) <= 0 then return end
+        if Addon:IsQuestHidden(key) then return end
         local iID = tonumber(questItemIDs[key]) or 0
         local icon
         if iID > 0 then
@@ -286,6 +516,7 @@ local function BuildRowDefs(tracking, LAYOUT)
     addQuestRow("weeklyPrey",     "TRACKING_QUEST_WEEKLY_PREY",     "Weekly Prey")
 
     addSec("Great Vault", "greatvault")
+    addRow("keystone", "Keystone", {})
     for gi = 1, 3 do
         if not Addon:IsGVBlockHidden(gi) then
             addRow("gv", GV_NAMES[gi], { gvBlock = gi })
@@ -505,39 +736,173 @@ local function RenderQuestCell(cell, row, sd, noSnap, alpha, th)
     end)
 end
 
+local function RenderKeystoneCell(cell, row, snap, noSnap, alpha, th)
+    cell._fs:SetFont("Fonts\\FRIZQT__.TTF", 10, "")
+    local ks    = snap and snap.keystone
+    local level = ks and tonumber(ks.level) or 0
+    if noSnap or not ks then
+        cell._fs:SetText("—")
+        cell._fs:SetTextColor(th.r, th.g, th.b, A_DIM)
+        return
+    end
+    if level <= 0 then
+        cell._fs:SetText("None")
+        cell._fs:SetTextColor(0.5, 0.5, 0.5, alpha * A_EMPTY)
+        return
+    end
+    local name    = (ks.name and ks.name ~= "") and ks.name or nil
+    local abbrev  = name and (name:match("^%S+") or name) or nil
+    local display = abbrev and ("+" .. level .. " " .. abbrev) or ("+" .. level)
+    local kr, kg, kb
+    if     level >= 10 then kr, kg, kb = 0.64, 0.21, 0.93
+    elseif level >=  7 then kr, kg, kb = 0.12, 0.44, 0.85
+    elseif level >=  4 then kr, kg, kb = 0.12, 0.73, 0.12
+    else                    kr, kg, kb = 0.70, 0.70, 0.70
+    end
+    cell._fs:SetText(display)
+    cell._fs:SetTextColor(kr, kg, kb, alpha)
+    local _level, _name = level, name
+    cell:SetScript("OnEnter", function(s_)
+        GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Keystone", 1, 0.82, 0)
+        if _name then
+            GameTooltip:AddLine("+" .. _level .. " " .. _name, 1, 1, 1)
+        else
+            GameTooltip:AddLine("+" .. _level, 1, 1, 1)
+        end
+        GameTooltip:Show()
+    end)
+end
+
+local function RenderUpgradeCostCell(cell, row, snap, noSnap, alpha, th)
+    cell._fs:SetFont("Fonts\\FRIZQT__.TTF", FONT_CELL, "")
+    local cr, cg, cb = row.cr or th.r, row.cg or th.g, row.cb or th.b
+
+    if noSnap then
+        cell._fs:SetText("\226\128\148")
+        cell._fs:SetTextColor(th.r, th.g, th.b, A_DIM)
+        cell:SetScript("OnEnter", nil)
+        return
+    end
+
+    -- Check whether any gear was actually captured for this character.
+    -- snap.gearSlots may be nil (old snapshot) or {} (capture failed / all empty).
+    local hasGearData = false
+    if snap.gearSlots then
+        for _, sid in ipairs(GEAR_SLOT_IDS) do
+            local sd = snap.gearSlots[sid]
+            if type(sd) == "table" and sd.rank then
+                hasGearData = true; break
+            end
+        end
+    end
+    if not hasGearData then
+        cell._fs:SetText("?")
+        cell._fs:SetTextColor(cr, cg, cb, A_DIM)
+        local _nil = not snap.gearSlots
+        -- Count how many slots had ilvl data vs rank data for diagnostics.
+        local _ilvlCount, _rankCount = 0, 0
+        if snap.gearSlots then
+            for _, sid in ipairs(GEAR_SLOT_IDS) do
+                local sd = snap.gearSlots[sid]
+                if type(sd) == "table" then
+                    if (sd.ilvl or 0) > 0 then _ilvlCount = _ilvlCount + 1 end
+                    if sd.rank then _rankCount = _rankCount + 1 end
+                end
+            end
+        end
+        cell:SetScript("OnEnter", function(s_)
+            GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
+            GameTooltip:SetText("No gear data", 1, 0.6, 0)
+            if _nil then
+                GameTooltip:AddLine("Snapshot predates rank capture.", 1, 0.6, 0, true)
+            elseif _ilvlCount == 0 then
+                GameTooltip:AddLine("ilvl = 0 for all slots (data not loaded?).", 1, 0.6, 0, true)
+            else
+                GameTooltip:AddLine(_ilvlCount .. " slots with ilvl, " .. _rankCount .. " with rank.", 1, 0.6, 0, true)
+            end
+            GameTooltip:AddLine("Log in as this character to refresh.", 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        return
+    end
+
+    local targetTier = row.tierIdx
+    local totalCost = CalcTierUpgradeCost(snap, targetTier)
+
+    if totalCost == 0 then
+        cell._fs:SetText("\226\128\148")
+        cell._fs:SetTextColor(cr, cg, cb, A_EMPTY)
+        cell:SetScript("OnEnter", nil)
+    else
+        cell._fs:SetText(tostring(totalCost))
+        cell._fs:SetTextColor(cr, cg, cb, alpha)
+        cell:SetScript("OnEnter", nil)
+    end
+end
+
 local function RenderGVCell(cell, row, snap, noSnap, alpha)
     local gi    = row.gvBlock
-    local gvR, gvM, gvW = CalcGVBreakdown(snap)
-    local gvVals = { gvR, gvM, gvW }
-    local slots = gvVals[gi] or 0
-    local gr, gg, gb = GVColor(slots)
-    cell._fs:SetText(noSnap and "—" or tostring(slots))
-    cell._fs:SetTextColor(gr, gg, gb, alpha)
+    local block = snap and snap.leftGrid and snap.leftGrid[gi]
+    local complete = block and tonumber(block.complete) or 0
+
+    cell._fs:SetFont("Fonts\\FRIZQT__.TTF", 10, "")
+
+    if noSnap or not block then
+        cell._fs:SetText("—")
+        cell._fs:SetTextColor(0.5, 0.5, 0.5, alpha * A_DIM)
+    else
+        local parts = {}
+        for si = 1, 3 do
+            local slotData = block.slots and block.slots[si]
+            local ilvl     = slotData and tonumber(slotData.ilvl) or 0
+            local unlocked = complete >= si
+            if unlocked then
+                if ilvl > 0 then
+                    local hex = (Addon.IlvlUtils and Addon.IlvlUtils.GetColorHex(ilvl)) or "ffffffff"
+                    parts[si] = "|c" .. hex .. ilvl .. "|r"
+                else
+                    parts[si] = "|cff55aa55—|r"
+                end
+            else
+                parts[si] = "|cff555555—|r"
+            end
+        end
+        cell._fs:SetText(table.concat(parts, " "))
+        cell._fs:SetTextColor(1, 1, 1, alpha)
+    end
+
     local _snap3, _bi = snap, gi
     cell:SetScript("OnEnter", function(s_)
-        local block    = _snap3 and _snap3.leftGrid and _snap3.leftGrid[_bi]
-        local thresh   = GV_THRESHOLDS[_bi]
-        local complete = block and tonumber(block.complete) or 0
+        local blk    = _snap3 and _snap3.leftGrid and _snap3.leftGrid[_bi]
+        local thresh = GV_THRESHOLDS[_bi]
+        local cmplt  = blk and tonumber(blk.complete) or 0
         GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
         GameTooltip:SetText(GV_NAMES[_bi], 1, 0.82, 0)
-        if not block then
+        if not blk then
             GameTooltip:AddLine("No snapshot data", 0.6, 0.6, 0.6)
             GameTooltip:Show()
             return
         end
-        GameTooltip:AddLine("Activities completed: " .. complete, 1, 1, 1)
+        GameTooltip:AddLine("Slots unlocked: " .. cmplt .. "/3", 1, 1, 1)
         GameTooltip:AddLine(" ")
         for si = 1, 3 do
             local need     = thresh[si]
-            local unlocked = complete >= si
-            local slotData = block.slots and block.slots[si]
+            local unlocked = cmplt >= si
+            local slotData = blk.slots and blk.slots[si]
             local ilvl     = slotData and tonumber(slotData.ilvl) or 0
             if unlocked then
-                local line = "Slot " .. si .. ": Unlocked"
-                if ilvl > 0 then line = line .. "  (" .. ilvl .. " ilvl)" end
+                local trackLabel = Addon.IlvlUtils and ilvl > 0 and Addon.IlvlUtils.GetTrackLabel(ilvl)
+                local line
+                if ilvl > 0 then
+                    line = "Slot " .. si .. ": " .. ilvl .. " ilvl"
+                    if trackLabel then line = line .. "  (" .. trackLabel .. ")" end
+                else
+                    line = "Slot " .. si .. ": Unlocked"
+                end
                 GameTooltip:AddLine(line, 0.3, 1.0, 0.3)
             else
-                GameTooltip:AddLine("Slot " .. si .. ": Requires " .. need .. " runs", 0.55, 0.55, 0.55)
+                GameTooltip:AddLine("Slot " .. si .. ": Requires " .. need .. " activities", 0.55, 0.55, 0.55)
             end
         end
         GameTooltip:Show()
@@ -564,7 +929,9 @@ PopulateSummary = function(panel)
     -- ── Row definitions ───────────────────────────────────────────────────────
     -- Rebuild only when currency/GV visibility has changed; otherwise reuse the cache.
     if _rowsDirty or not _cachedRows then
-        _cachedRows = BuildRowDefs(tracking, LAYOUT)
+        local ownCdb  = gdb and gdb.chars and gdb.chars[ownKey]
+        local ownSnap = ownCdb and ownCdb.trackingSnapshot
+        _cachedRows = BuildRowDefs(tracking, LAYOUT, ownSnap)
         _rowsDirty  = false
     end
     local rows = _cachedRows
@@ -597,7 +964,7 @@ PopulateSummary = function(panel)
         if col.classBar   then col.classBar:Hide()   end
         if col.hdrHit     then col.hdrHit:Hide()     end
         col.hideBtn:Hide()
-        for _, c in ipairs(col.cells) do c:Hide() end
+        for _, c in pairs(col.cells) do c:Hide() end
     end
 
     local divCursor  = 0
@@ -789,7 +1156,7 @@ PopulateSummary = function(panel)
             end
 
             local lblFS = GetLbl(row.iconID and 10 or 11, "")
-            if row.type == "crest" then
+            if row.type == "crest" or row.type == "upgcost" then
                 lblFS:SetTextColor(row.cr or th.r, row.cg or th.g, row.cb or th.b, 0.90)
             elseif row.type == "catalyst" or row.type == "sparks"
                 or row.type == "keys"     or row.type == "misc" then
@@ -815,7 +1182,17 @@ PopulateSummary = function(panel)
                     if not _cid then return end
                     GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
                     GameTooltip:SetCurrencyByID(_cid)
+                    GameTooltip:AddLine(" ")
+                    GameTooltip:AddLine("Right-click to hide", 0.5, 0.5, 0.5)
                     GameTooltip:Show()
+                end)
+                hit:SetScript("OnMouseUp", function(s_, button)
+                    if button ~= "RightButton" then return end
+                    Addon:ShowContextMenu(s_, {
+                        { text = "Hide this currency", onClick = function()
+                            Addon:SetCurrencyHidden(_cid, true)
+                        end },
+                    })
                 end)
             end
         end
@@ -900,10 +1277,7 @@ PopulateSummary = function(panel)
                 local tier   = Addon.IlvlUtils.GetTier(char.ilvl)
                 local colors = Addon.TRACKING and Addon.TRACKING.crestColors
                 if tier and colors and colors[tier] then
-                    local hex = colors[tier]
-                    ir = (tonumber("0x" .. hex:sub(1, 2)) or 217) / 255
-                    ig = (tonumber("0x" .. hex:sub(3, 4)) or 191) / 255
-                    ib = (tonumber("0x" .. hex:sub(5, 6)) or 128) / 255
+                    ir, ig, ib = HexToRGB(colors[tier])
                 end
             end
             col.ilvlFS:SetTextColor(ir, ig, ib, char.alpha * A_ILVL)
@@ -937,6 +1311,7 @@ PopulateSummary = function(panel)
             col.hdrHit:SetPoint("TOPLEFT", panel, "TOPLEFT", colX, COL_HDR_TOP)
             col.hdrHit:SetSize(COL_W, COL_HDR_H)
             local _snap, _name, _cr, _cg, _cb = snap, charName, char.cr, char.cg, char.cb
+            local _ck = char.key
             col.hdrHit:SetScript("OnEnter", function(s_)
                 GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
                 GameTooltip:SetText(_name, _cr, _cg, _cb)
@@ -945,7 +1320,18 @@ PopulateSummary = function(panel)
                 else
                     GameTooltip:AddLine("No snapshot data", 0.5, 0.5, 0.5)
                 end
+                GameTooltip:AddLine(" ")
+                GameTooltip:AddLine("Click to view gear", 0.5, 0.5, 0.5)
                 GameTooltip:Show()
+            end)
+            col.hdrHit:SetScript("OnMouseUp", function(s_, button)
+                if button ~= "LeftButton" then return end
+                if _gearPopupFrame and _gearPopupFrame:IsShown()
+                   and _gearPopupFrame._charKey == _ck then
+                    _gearPopupFrame:Hide()
+                else
+                    ShowGearPopup(s_, _ck, _name, _cr, _cg, _cb, _snap)
+                end
             end)
         end
 
@@ -1014,6 +1400,7 @@ PopulateSummary = function(panel)
                 cell:SetPoint("TOPLEFT", panel, "TOPLEFT", colX, cellRowY)
                 cell:SetSize(COL_W, h)
 
+                cell._fs:SetFont("Fonts\\FRIZQT__.TTF", FONT_CELL, "")
                 cell._fs:SetText("—")
                 cell._fs:SetTextColor(th.r, th.g, th.b, A_DIM)
                 cell._tu:SetText("")
@@ -1034,9 +1421,15 @@ PopulateSummary = function(panel)
                     RenderMiscCell(cell, row, sd, noSnap, alpha, th)
                 elseif rtype == "quest" then
                     RenderQuestCell(cell, row, sd, noSnap, alpha, th)
+                elseif rtype == "upgcost" then
+                    RenderUpgradeCostCell(cell, row, snap, noSnap, alpha, th)
+                elseif rtype == "keystone" then
+                    RenderKeystoneCell(cell, row, snap, noSnap, alpha, th)
                 elseif rtype == "gv" then
                     RenderGVCell(cell, row, snap, noSnap, alpha)
                 end
+
+                cell:SetScript("OnMouseUp", nil)
             end
 
             cellRowY = cellRowY - h
@@ -1079,11 +1472,13 @@ end
 
 function Addon:CloseAltsSummary()
     if altSummaryFrame then altSummaryFrame:Hide() end
+    if _gearPopupFrame then _gearPopupFrame:Hide() end
 end
 
 function Addon:ToggleAltsSummary(anchorFrame)
     local f = altSummaryFrame
     if f and f.IsShown and f:IsShown() then
+        if _gearPopupFrame then _gearPopupFrame:Hide() end
         f:Hide()
     else
         self:OpenAltsSummary(anchorFrame)

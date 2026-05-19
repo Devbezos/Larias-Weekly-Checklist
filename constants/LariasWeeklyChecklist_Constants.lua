@@ -63,9 +63,21 @@ local tracking = { -- https://www.wowhead.com/currencies/season-1
     -- How many crests trade up to the next tier and how many are produced.
     crestTradeBatch = { 30, 10 },
 
+    -- Crests required per single rank upgrade, indexed by crest tier (1=Adventurer → 5=Myth).
+    -- Adjust if Blizzard changes upgrade costs mid-season.
+    crestUpgradeCostPerStep = {15, 15, 15, 15, 15},
+
+    -- Free rank upgrades per tier granted account-wide (e.g. 2 = first 2 ranks cost 0 crests).
+    -- Set to the appropriate value when Blizzard activates alt-upgrade discounts.
+    crestUpgradeFreeRanks = {0, 0, 0, 0, 0},
+
     -- Per-rank ilvl offsets within any track (rank 1 = +0, rank 6 = +17).
     -- Gaps: 4, 3, 3, 3, 4 — constant across all seasons and tiers.
     ilvlRankOffsets = { 0, 4, 7, 10, 13, 17 },
+
+    -- Equipment slot IDs captured for the gear popup and upgrade-cost rows.
+    -- Slot 4 (shirt) and ranged/ammo slots are intentionally excluded.
+    gearSlotIDs = {1,2,3,5,6,7,8,9,10,11,12,13,14,15,16,17},
 
     -- Crest tier display colors as 6-digit hex RGB (index-matched to crest tier order).
     -- Used by the ilvl reference window to color each tier's rows.

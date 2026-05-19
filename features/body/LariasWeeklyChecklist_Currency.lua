@@ -563,7 +563,7 @@ end
 local _panelRowBuf  = {}  -- result array, returned and reused each call
 local _panelRowPool = {}  -- pool of row sub-tables, one slot per max possible row
 
-local function FillRow(n, lbl, val, iconID, currencyID, tooltipText, amountTooltipText, itemID)
+local function FillRow(n, lbl, val, iconID, currencyID, tooltipText, amountTooltipText, itemID, questKey)
     if not _panelRowPool[n] then _panelRowPool[n] = {} end
     local r             = _panelRowPool[n]
     r.label             = lbl
@@ -573,6 +573,7 @@ local function FillRow(n, lbl, val, iconID, currencyID, tooltipText, amountToolt
     r.tooltipText       = tooltipText or nil
     r.amountTooltipText = amountTooltipText or nil
     r.itemID            = itemID or nil
+    r.questKey          = questKey or nil
     _panelRowBuf[n] = r
 end
 
@@ -661,7 +662,7 @@ function Addon:GetCurrencyPanelRows()
     end
 
     -- Delver's Bounty (quest)
-    if n < RIGHT_LINE_COUNT then
+    if n < RIGHT_LINE_COUNT and not Addon:IsQuestHidden("delversBounty") then
         local bLbl, bVal = GetDelversBountyParts()
         if IsNonEmptyText(bLbl) or IsNonEmptyText(bVal) then
             n = n + 1
@@ -675,12 +676,12 @@ function Addon:GetCurrencyPanelRows()
                     bLblFinal = ColorWrap(qhex, itemName)
                 end
             end
-            FillRow(n, bLblFinal, bVal, bIcon, nil, nil, nil, bItemID > 0 and bItemID or nil)
+            FillRow(n, bLblFinal, bVal, bIcon, nil, nil, nil, bItemID > 0 and bItemID or nil, "delversBounty")
         end
     end
 
     -- Spoils of Nullaeus (quest)
-    if n < RIGHT_LINE_COUNT then
+    if n < RIGHT_LINE_COUNT and not Addon:IsQuestHidden("nullaeusSpoils") then
         local sLbl, sVal = GetNullaeusSpoilsParts()
         if IsNonEmptyText(sLbl) or IsNonEmptyText(sVal) then
             n = n + 1
@@ -694,16 +695,16 @@ function Addon:GetCurrencyPanelRows()
                     sLblFinal = ColorWrap(qhex, itemName)
                 end
             end
-            FillRow(n, sLblFinal, sVal, sIcon, nil, nil, nil, sItemID > 0 and sItemID or nil)
+            FillRow(n, sLblFinal, sVal, sIcon, nil, nil, nil, sItemID > 0 and sItemID or nil, "nullaeusSpoils")
         end
     end
 
     -- Weekly Prey (quest)
-    if n < RIGHT_LINE_COUNT then
+    if n < RIGHT_LINE_COUNT and not Addon:IsQuestHidden("weeklyPrey") then
         local pLbl, pVal = GetWeeklyPreyParts()
         if IsNonEmptyText(pLbl) or IsNonEmptyText(pVal) then
             n = n + 1
-            FillRow(n, pLbl, pVal, nil, nil)
+            FillRow(n, pLbl, pVal, nil, nil, nil, nil, nil, "weeklyPrey")
         end
     end
 

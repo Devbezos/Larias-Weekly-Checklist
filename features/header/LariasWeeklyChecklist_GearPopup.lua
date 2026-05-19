@@ -99,7 +99,8 @@ function Addon:SyncGearPopup()
     do
         local nCur    = Addon.GetHiddenCurrencyList and #Addon:GetHiddenCurrencyList() or 0
         local nGV     = Addon.GetHiddenGVBlockList  and #Addon:GetHiddenGVBlockList()  or 0
-        local nHidden = nCur + nGV
+        local nQuest  = Addon.GetHiddenQuestList    and #Addon:GetHiddenQuestList()    or 0
+        local nHidden = nCur + nGV + nQuest
         if p._restoreHiddenBtn then
             p._restoreHiddenBtn:SetShown(nHidden > 0)
             if nHidden > 0 then
@@ -607,6 +608,13 @@ function Addon:OpenRestoreHiddenCurrencies(anchor)
         combined[#combined + 1] = {
             name      = e.name .. " |cff808080(Vault)|r",
             onRestore = function() Addon:SetGVBlockHidden(_idx, false) end,
+        }
+    end
+    for _, e in ipairs(self:GetHiddenQuestList()) do
+        local _qk = e.key
+        combined[#combined + 1] = {
+            name      = e.name .. " |cff808080(Quest)|r",
+            onRestore = function() Addon:SetQuestHidden(_qk, false) end,
         }
     end
     if #combined == 0 then
