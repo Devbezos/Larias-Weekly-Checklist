@@ -423,7 +423,7 @@ local function GetCrestLines()
                     xy = FormatXY(earned, wkMax)
                     color = (earned >= wkMax) and COLORS.green or (cache.unlocked[i] and COLORS.yellow or COLORS.red)
                 else
-                    xy = tostring(earned); color = COLORS.green
+                    xy = tostring(held); color = COLORS.green
                 end
                 local tipBonus = math.max(0, held - earned)
                 local tipTbl

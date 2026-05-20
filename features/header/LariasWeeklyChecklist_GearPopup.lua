@@ -82,6 +82,7 @@ function Addon:SyncGearPopup()
     Sync(p._cbDisableCraftWarn, db.craftWarnDisabled and true or false,
          L.OPTIONS_DISABLE_CRAFT_WARN or "Hide Crafting Warnings")
 
+
     -- Refresh color swatch labels in case locale changed since popup was built.
     if p._gearColorLabels then
         for si, sd in ipairs(GEAR_COLOR_DEFS) do
