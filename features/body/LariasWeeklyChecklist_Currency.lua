@@ -765,7 +765,8 @@ function Addon:FillCurrencySnapshot(snap)
         local shardInfo    = getCurrency and getCurrency(cofferShardsID)
         local kEarned    = (shardInfo and tonumber(shardInfo.quantityEarnedThisWeek)) or 0
         local kWeeklyCap = (shardInfo and tonumber(shardInfo.maxWeeklyQuantity))      or 0
-        snap.rightRows[#snap.rightRows + 1] = { type = SNAP_TYPES.COFFERKEYS, id = cofferDisplayID or cofferShardsID, qty = kEarned, cap = kWeeklyCap }
+        -- Convert shard units (100 shards = 1 key) to key units, matching GetCofferKeysParts display.
+        snap.rightRows[#snap.rightRows + 1] = { type = SNAP_TYPES.COFFERKEYS, id = cofferDisplayID or cofferShardsID, qty = math.floor(kEarned / 100), cap = math.floor(kWeeklyCap / 100) }
     end
     local miscIDs = tracking and tracking.miscCurrencyIDs
     if type(miscIDs) == "table" then

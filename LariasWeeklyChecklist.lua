@@ -959,6 +959,7 @@ function Addon:EnsureDB()
         if cdb.collapsedSections == nil then cdb.collapsedSections = {} end
         if cdb.trackingSnapshot  == nil then cdb.trackingSnapshot  = {} end
         if cdb.sectionCompleted  == nil then cdb.sectionCompleted  = {} end
+        if cdb.customItems       == nil then cdb.customItems       = {} end
         cdb._lariasDefaultsApplied = true
     end
     return cdb
@@ -1278,7 +1279,26 @@ function Addon:ApplyThemeColors()
             self._mainFrame._lariaBgTex:SetColorTexture(bg.r, bg.g, bg.b, 1)
         end
     end
-    if self._trackingFrame then self:ApplyTheme(self._trackingFrame) end
+    if self._trackingFrame  then self:ApplyTheme(self._trackingFrame)  end
+    -- Alt summary: re-apply colors depending on whether it's inline (transparent)
+    -- or a standalone popup (opaque, matching the main window's solid background).
+    local _asf = self._altsSummaryFrame
+    if _asf then
+        if _asf._inline then
+            -- Inline mode: keep fully transparent so it blends into the main window.
+            if _asf.SetBackdropColor       then _asf:SetBackdropColor(0, 0, 0, 0)       end
+            if _asf.SetBackdropBorderColor then _asf:SetBackdropBorderColor(0, 0, 0, 0) end
+        else
+            -- Popup mode: solid bg + border to match the main window.
+            local bg = self.THEME.bg
+            local bd = self.THEME.border
+            if _asf.SetBackdropColor       then _asf:SetBackdropColor(bg.r, bg.g, bg.b, 1.0)       end
+            if _asf.SetBackdropBorderColor then _asf:SetBackdropBorderColor(bd.r, bd.g, bd.b, bd.a) end
+            local h = self.THEME.header
+            if _asf._altsTitleBgTex then _asf._altsTitleBgTex:SetColorTexture(h.r, h.g, h.b, 0.09) end
+            if _asf._altsTitleFS    then _asf._altsTitleFS:SetTextColor(h.r, h.g, h.b, 1)          end
+        end
+    end
     -- Refresh the gear popup backdrop (safe to call even when hidden; Reset hides
     -- the popup before calling ApplyThemeColors, so IsShown() would miss it).
     if self._gearPopup then self:ApplyTheme(self._gearPopup) end
@@ -1608,6 +1628,7 @@ end
 -- Must sit above third-party addon overlays (e.g. NaowhQOL UIWidgetPowerBarContainerFrame
 -- sits at ~121) so header buttons can receive mouse clicks.
 local SECTION_FRAME_LEVEL = 200
+local CUSTOM_SECTION_ID   = "__larias_custom__"
 
 local function AcquireSectionFrame()
     local sectionFrame = tremove(Addon._sectionPool)
@@ -1791,6 +1812,31 @@ local function LayoutFrom(startIndex)
     scrollChild:SetHeight(scrollHeight)
 end
 
+function Addon:AddCustomItem(text)
+    text = text and text:match("^%s*(.-)%s*$")
+    if not text or text == "" then return end
+    local db = self:EnsureDB()
+    db.customItems = db.customItems or {}
+    local id = "c" .. tostring(math.floor((GetTime() * 1000) % 1e7))
+             .. tostring(math.random(1000, 9999))
+    tinsert(db.customItems, { id = id, text = text })
+    self:RequestRefresh()
+end
+
+function Addon:DeleteCustomItem(itemId)
+    local db = self:EnsureDB()
+    if not db.customItems then return end
+    for i = #db.customItems, 1, -1 do
+        if db.customItems[i].id == itemId then
+            tremove(db.customItems, i)
+            local key = CUSTOM_SECTION_ID .. ":" .. tostring(itemId)
+            if db.checked then db.checked[key] = nil end
+            break
+        end
+    end
+    self:RequestRefresh()
+end
+
 function Addon:IsListComplete(db)
     db = db or self:EnsureDB()
 
@@ -1810,8 +1856,10 @@ function Addon:IsListComplete(db)
 end
 
 function Addon:UpdateCompletionEasterEgg(db)
-    -- Fun cosmetic: show pig icon when everything is done.
-    -- Also hides the scrollbar when the list is complete.
+    -- When the list is fully complete (no visible sections), hide the scroll
+    -- content and tracking panel, and show a completion panel with an "Add
+    -- personal task" button.  Restores everything when the user unchecks an
+    -- item and the list becomes incomplete again.
     if not (frame and scrollFrame) then return end
 
     db = db or self:EnsureDB()
@@ -1828,21 +1876,13 @@ function Addon:UpdateCompletionEasterEgg(db)
         end
     end
 
-    local showPig = isComplete and (visibleSections == 0)
+    local showComplete = isComplete and (visibleSections == 0)
 
-    local pig = frame._lariasPigTexture
-    if pig and pig.SetShown then
-        pig:SetShown(showPig)
-        if showPig and scrollFrame and scrollFrame.GetWidth and scrollFrame.GetHeight then
-            local scrollWidth = tonumber(scrollFrame:GetWidth()) or 0
-            local scrollHeight = tonumber(scrollFrame:GetHeight()) or 0
-            local size = math.min(scrollWidth > 0 and scrollWidth or 260, scrollHeight > 0 and scrollHeight or 260)
-            size = math.max(120, size)
-            if pig.SetSize then
-                pig:SetSize(size, size)
-            end
-        end
-    end
+    -- The easter egg (touch grass) is superseded; never show it.
+    local egg = frame._lariasPigTexture
+    if egg and egg.SetShown then egg:SetShown(false) end
+
+    if showComplete then scrollFrame:Hide() else scrollFrame:Show() end
 
     local sb = scrollFrame.ScrollBar
     if sb and sb.SetShown then
@@ -1851,6 +1891,67 @@ function Addon:UpdateCompletionEasterEgg(db)
         sb:Hide()
     elseif sb and (not isComplete) and sb.Show then
         sb:Show()
+    end
+
+    local tf = self._trackingFrame
+    local cpBtn = frame._lariasCharPickerBtn
+    if showComplete then
+        if tf then tf:Hide() end
+        if cpBtn then cpBtn:Hide() end
+    else
+        local prefs = self:EnsurePrefs()
+        if tf and (prefs.showGreatVault or prefs.showCurrency) then tf:Show() end
+        if cpBtn then cpBtn:Show() end
+        if self.ApplyScrollLayout then self:ApplyScrollLayout() end
+    end
+
+    -- ── Completion panel (shown in place of the scroll list) ─────────────────
+    if showComplete then
+        -- Lazy-create once.
+        if not frame._lariasCompletePanel then
+            local cp = CreateFrame("Frame", nil, frame)
+            cp:SetFrameLevel((frame:GetFrameLevel() or 0) + 5)
+
+            local label = cp:CreateFontString(nil, "OVERLAY")
+            label:SetFont("Fonts\\FRIZQT__.TTF", 13, "")
+            label:SetTextColor(Addon.THEME.header.r, Addon.THEME.header.g, Addon.THEME.header.b, 1)
+            label:SetText("All done!")
+            label:SetPoint("CENTER", cp, "CENTER", 0, 20)
+            cp._label = label
+
+            local btn = CreateFrame("Button", nil, cp)
+            btn:SetSize(160, 24)
+            if Addon._styleActionButton then
+                Addon._styleActionButton(btn)
+            end
+            local fs = btn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            fs:SetAllPoints()
+            fs:SetText("+ Add personal task")
+            btn._fs = fs
+            btn:SetScript("OnClick", function()
+                StaticPopup_Show("LARIAS_ADD_CUSTOM_ITEM")
+            end)
+            btn:SetPoint("CENTER", cp, "CENTER", 0, -8)
+            cp._addBtn = btn
+
+            frame._lariasCompletePanel = cp
+        end
+
+        local cp = frame._lariasCompletePanel
+        -- Keep label colour in sync with current theme header.
+        if cp._label then
+            local h = Addon.THEME.header
+            cp._label:SetTextColor(h.r, h.g, h.b, 1)
+        end
+        -- Anchor to the same area the scroll frame occupies.
+        cp:ClearAllPoints()
+        cp:SetPoint("TOPLEFT",     frame, "TOPLEFT",     Addon.UI.padOuterX, -Addon.UI.scrollTop)
+        cp:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -Addon.UI.scrollRight, Addon.UI.scrollBottom)
+        cp:Show()
+    else
+        if frame._lariasCompletePanel then
+            frame._lariasCompletePanel:Hide()
+        end
     end
 end
 
@@ -2152,6 +2253,23 @@ local function SyncCheckboxesForSection(sectionFrame, sectionId, db)
         checkbox:SetScript("OnEnter", nil)
         checkbox:SetScript("OnLeave", nil)
 
+        -- Custom (personal) items: shift-click deletes, tooltip hints at it.
+        if sectionId == CUSTOM_SECTION_ID then
+            local _capturedItemId = item.id
+            checkbox:SetScript("OnClick", function(self_)
+                if IsShiftKeyDown() then
+                    Addon:DeleteCustomItem(_capturedItemId)
+                else
+                    OnCheckboxClick(self_)
+                end
+            end)
+            checkbox:SetScript("OnEnter", function(self_)
+                Addon.AddonUtils.SetTooltip(self_,
+                    "Shift+click to remove this task", "ANCHOR_RIGHT")
+            end)
+            checkbox:SetScript("OnLeave", Addon.AddonUtils.HideTooltip)
+        end
+
         if isGuide then
             if checkbox.SetHyperlinksEnabled then
                 checkbox:SetHyperlinksEnabled(true)
@@ -2398,6 +2516,17 @@ local function SyncAllDataAndFrames()
     if not data then return end  -- data not ready yet (addon still initialising)
     local sig         = CalcDataSig(data)
     local dataChanged = RebuildDataIndex(data, sig)
+
+    -- Inject per-character custom items as a synthetic "Personal Tasks" section.
+    local customItems = database.customItems
+    if customItems and #customItems > 0 then
+        Addon._sectionsById[CUSTOM_SECTION_ID] = {
+            id    = CUSTOM_SECTION_ID,
+            title = "Personal Tasks",
+            items = customItems,
+        }
+        Addon._order[#Addon._order + 1] = CUSTOM_SECTION_ID
+    end
 
     Wipe(Addon._sectionsIndexById)
     local want       = #Addon._order

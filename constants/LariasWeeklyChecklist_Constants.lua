@@ -65,7 +65,11 @@ local tracking = { -- https://www.wowhead.com/currencies/season-1
 
     -- Crests required per single rank upgrade, indexed by crest tier (1=Adventurer → 5=Myth).
     -- Adjust if Blizzard changes upgrade costs mid-season.
-    crestUpgradeCostPerStep = {15, 15, 15, 15, 15},
+    crestUpgradeCostPerStep = {20, 20, 20, 20, 20},
+
+    -- Reduced crest cost per step when the character has the upgrade cost reduction
+    -- (account-wide or character-specific discount — toggled per character in Alt Summary).
+    crestUpgradeCostReduced = {10, 10, 10, 10, 10},
 
     -- Free rank upgrades per tier granted account-wide (e.g. 2 = first 2 ranks cost 0 crests).
     -- Set to the appropriate value when Blizzard activates alt-upgrade discounts.

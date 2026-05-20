@@ -92,6 +92,40 @@ function Addon.OpenSupportLink(url)
     end
 end
 
+-- "Add personal task" input popup.
+StaticPopupDialogs["LARIAS_ADD_CUSTOM_ITEM"] = StaticPopupDialogs["LARIAS_ADD_CUSTOM_ITEM"] or {
+    text         = "Add a personal task:",
+    button1      = "Add",
+    button2      = CANCEL or "Cancel",
+    hasEditBox   = true,
+    editBoxWidth = 280,
+    maxLetters   = 120,
+    timeout      = 0,
+    whileDead    = true,
+    hideOnEscape = true,
+    preferredIndex = 5,
+    OnShow = function(self)
+        self.EditBox:SetText("")
+        self.EditBox:SetFocus()
+    end,
+    OnAccept = function(self)
+        local text = self.EditBox:GetText()
+        if text and text:match("%S") then
+            if Addon.AddCustomItem then Addon:AddCustomItem(text) end
+        end
+    end,
+    EditBoxOnEnterPressed = function(self)
+        local text = self:GetText()
+        if text and text:match("%S") then
+            if Addon.AddCustomItem then Addon:AddCustomItem(text) end
+        end
+        StaticPopup_Hide("LARIAS_ADD_CUSTOM_ITEM")
+    end,
+    EditBoxOnEscapePressed = function(self)
+        self:GetParent():Hide()
+    end,
+}
+
 -- (MakeSwatch removed; use Addon.Controls.NewSwatch(parent, 22) instead.)
 
 -- ── Interaction helpers ──────────────────────────────────────────────────────

@@ -946,7 +946,10 @@ ComputeSnapshotData = function(snap)
             local effIlvl = GetDetailedItemLevelInfo(link)
             ilvl = tonumber(effIlvl) or 0
         end
-        if ilvl == 0 then
+        -- Only fall back to GetInventoryItemLevel when we have a real item link.
+        -- Without this guard, GetInventoryItemLevel("player", 17) echoes the 2H
+        -- weapon ilvl for an empty off-hand slot, causing double upgrade cost.
+        if ilvl == 0 and link then
             local rawIlvl = GetInventoryItemLevel and GetInventoryItemLevel("player", sid)
             ilvl = tonumber(rawIlvl) or 0
         end
@@ -967,6 +970,80 @@ ComputeSnapshotData = function(snap)
             maxRank = maxRank,
             tierIdx = tierIdx,
         }
+    end
+
+    -- Weapon slot comparison: prefer 2H (slot 16 only) over dual-wield (slots 16+17)
+    -- when the 2H ilvl is >= the off-hand ilvl, OR when slot 17 has no real item.
+    -- The link-gated fallback above already keeps slot 17 at ilvl=0 for 2H users;
+    -- this block is a safety net in case any stray ilvl bled through.
+    do
+        local ws16 = snap.gearSlots[16]
+        local ws17 = snap.gearSlots[17]
+        if ws16 and ws17 then
+            local ilvl16 = ws16.ilvl or 0
+            local ilvl17 = ws17.ilvl or 0
+            -- If 2H is highest (slot 17 has no real link but echoed an ilvl), clear it.
+            if ilvl16 > 0 and ilvl16 >= ilvl17 and not ws17.link then
+                snap.gearSlots[17] = { link=nil, ilvl=0, rank=nil, maxRank=nil, tierIdx=nil }
+            end
+        end
+    end
+
+    -- Auto-detect per-tier upgrade cost AND true max rank via C_ItemUpgrade.
+    -- #info.upgradeLevelInfos = the item's actual max rank (e.g. 5 for embellished, 6 for normal).
+    -- If an item's true max < the tier max, it is embellished/capped → exclude from cost.
+    -- Cost is captured once per tier from the first upgradable (non-embellished) slot found.
+    snap.upgradeCostPerStep = {}
+    if C_ItemUpgrade and C_ItemUpgrade.SetItemUpgradeFromLocation
+            and C_ItemUpgrade.GetItemUpgradeItemInfo and ItemLocation then
+        local TRACKING = Addon.TRACKING
+        local crestIDs = TRACKING and TRACKING.crestCurrencyIDs
+        local checkedTiers = {}
+        for _, sid in ipairs(snapSlotIDs) do
+            local gs = snap.gearSlots[sid]
+            if gs and gs.link and gs.tierIdx and gs.rank and gs.maxRank then
+                local tierIdx = gs.tierIdx
+                local crestID = crestIDs and crestIDs[tierIdx]
+                pcall(function()
+                    C_ItemUpgrade.SetItemUpgradeFromLocation(
+                        ItemLocation:CreateFromEquipmentSlot(sid))
+                    local info = C_ItemUpgrade.GetItemUpgradeItemInfo()
+                    if info and info.upgradeLevelInfos then
+                        -- Detect embellished/crafted cap: true max rank < tier max rank.
+                        -- Store trueMaxRank so CalcTierUpgradeCost can use the correct
+                        -- cap even for items that aren't yet at their embellished max.
+                        -- trueMaxRank == 0 means the API returned an empty list; this
+                        -- usually happens for a fully-upgraded embellished item that
+                        -- can't be upgraded further → treat it as capped at current rank.
+                        local trueMaxRank = #info.upgradeLevelInfos
+                        if trueMaxRank > 0 and trueMaxRank < gs.maxRank then
+                            -- Embellished with known cap lower than the tier max.
+                            snap.gearSlots[sid].trueMaxRank = trueMaxRank
+                        elseif trueMaxRank == 0 and gs.rank and gs.rank < gs.maxRank then
+                            -- No upgrade levels returned; item is at its embellished cap.
+                            snap.gearSlots[sid].trueMaxRank = gs.rank
+                        end
+                        -- Capture per-tier cost from first slot that is still upgradable.
+                        if crestID and not checkedTiers[tierIdx]
+                                and snap.gearSlots[sid].rank < snap.gearSlots[sid].maxRank then
+                            local nextLevel = (info.currUpgrade or 0) + 1
+                            local levelInfo = info.upgradeLevelInfos[nextLevel]
+                                          or info.upgradeLevelInfos[1]
+                            if levelInfo and levelInfo.currencyCostsToUpgrade then
+                                for _, ce in ipairs(levelInfo.currencyCostsToUpgrade) do
+                                    if ce.currencyID == crestID then
+                                        snap.upgradeCostPerStep[tierIdx] = ce.cost
+                                        checkedTiers[tierIdx] = true
+                                        break
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end)
+            end
+        end
+        if C_ItemUpgrade.ClearItemUpgrade then C_ItemUpgrade.ClearItemUpgrade() end
     end
 end
 
