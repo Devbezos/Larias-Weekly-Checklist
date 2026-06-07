@@ -72,26 +72,28 @@ Libraries will be fetched from these repository URLs:
 
 ```
 LariasWeeklyChecklist/
-├── Libs/
-│   ├── LibStub/                 (populated by pkgmeta)
-│   ├── CallbackHandler-1.0/     (populated by pkgmeta)
-│   ├── Ace3/                    (populated by pkgmeta)
-│   ├── LibDataBroker-1.1/       (populated by pkgmeta)
-│   └── LibDBIcon-1.0/           (populated by pkgmeta)
-├── Locales/
-│   ├── enUS.lua
-│   ├── enUS_Data.lua
-│   └── ...
-├── data/
-├── scripts/
-├── LariasWeeklyChecklist.toc
-├── LariasWeeklyChecklist.lua
-├── LariasWeeklyChecklist_Constants.lua
-├── LariasWeeklyChecklist_Currency.lua
-├── .pkgmeta                     (dependency configuration)
-└── README.md
+|-- assets/
+|-- components/
+|-- constants/
+|-- data/
+|-- features/
+|   |-- body/
+|   |-- footer/
+|   |-- header/
+|   |-- services/
+|   `-- utils/
+|-- lib/                            (local dev libraries; ignored by git)
+|-- locales/
+|   |-- enUS.lua
+|   `-- enUS_Data.lua
+|-- scripts/
+|   |-- deploy_to_wow.ps1
+|   `-- watch_deploy.ps1
+|-- LariasWeeklyChecklist.toc
+|-- LariasWeeklyChecklist.lua
+|-- LLM.md
+`-- README.md
 ```
-
 ## About .pkgmeta
 
 The `.pkgmeta` file is the standard configuration file for WoW addon packaging tools. It specifies:

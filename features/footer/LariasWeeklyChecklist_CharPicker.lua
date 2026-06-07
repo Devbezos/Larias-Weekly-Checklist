@@ -142,9 +142,15 @@ function Addon:InitCharPickerUI(frame, styleFunc)
                 Addon.Controls.ApplyThemeTextColor(tr)
             end
         else
-            local lbl = L.CHAR_PICKER_BUTTON or "Swap Profile"
-            btn:SetText(lbl .. " " .. arrowTex)
-            Addon.Controls.ApplyThemeTextColor(tr)
+            local myName = (UnitName and UnitName("player")) or (L.CHAR_PICKER_BUTTON or "Swap Profile")
+            btn:SetText(myName .. " " .. arrowTex)
+            local _, myClassToken = UnitClass and UnitClass("player")
+            local myCC = myClassToken and RAID_CLASS_COLORS and RAID_CLASS_COLORS[myClassToken]
+            if myCC and tr and tr.SetTextColor then
+                tr:SetTextColor(myCC.r, myCC.g, myCC.b, 1)
+            else
+                Addon.Controls.ApplyThemeTextColor(tr)
+            end
         end
     end
 
@@ -431,7 +437,7 @@ function Addon:InitCharPickerUI(frame, styleFunc)
             smBtn:SetPoint("TOPLEFT",  p, "TOPLEFT",  0, posY)
             smBtn:SetPoint("TOPRIGHT", p, "TOPRIGHT", 0, posY)
             smBtn:SetHeight(CPICK_ROW_H)
-            smBtn:SetText("\226\137\161 Alt Summary")  -- ≡
+            smBtn:SetText("Alt Summary")
             smBtn:SetEnabled(true)
             local tr = Addon.Controls.GetButtonFontString(smBtn)
             if tr then tr:SetTextColor(0.70, 0.70, 1, 1) end

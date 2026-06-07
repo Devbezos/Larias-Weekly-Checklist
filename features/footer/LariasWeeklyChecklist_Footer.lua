@@ -135,18 +135,35 @@ function Addon:ApplyScaleSliderVisibility()
 end
 
 -- ── Addon:ApplyOpacity ────────────────────────────────────────────────────────
+function Addon:GetUIOpacityAlpha()
+    local pct = (self.db and self.db.global and tonumber(self.db.global.uiOpacityPct)) or 65
+    return math.max(0, math.min(1.0, pct / 100))
+end
+
 -- Sets the background texture alpha from the saved opacity percentage.
 -- Drives only the dedicated bg texture so child widgets remain fully opaque,
 -- except the status banner which fades proportionally with the background.
 function Addon:ApplyOpacity()
-    local pct   = (self.db and self.db.global and tonumber(self.db.global.uiOpacityPct)) or 65
-    local alpha = math.max(0, math.min(1.0, pct / 100))
+    local alpha = self:GetUIOpacityAlpha()
     local mf    = self._mainFrame
     if mf and mf._lariaBgTex then
         mf._lariaBgTex:SetAlpha(alpha)
     end
     if self._statusBanner then
         self._statusBanner:SetAlpha(alpha)
+    end
+    -- Alt summary backdrop alpha follows the same opacity setting.
+    local asf = self._altsSummaryFrame
+    if asf and asf._lariaBgTex then
+        local bg = self.THEME.bg
+        asf._lariaBgTex:SetColorTexture(bg.r, bg.g, bg.b, 1)
+        asf._lariaBgTex:SetAlpha(alpha)
+        if asf.SetBackdropColor then
+            asf:SetBackdropColor(0, 0, 0, 0)
+        end
+    elseif asf and asf.SetBackdropColor then
+        local bg = self.THEME.bg
+        asf:SetBackdropColor(bg.r, bg.g, bg.b, alpha)
     end
     -- Gear popup is always fully opaque regardless of the main frame opacity.
     if self._gearPopup and self._gearPopup.SetBackdropColor then

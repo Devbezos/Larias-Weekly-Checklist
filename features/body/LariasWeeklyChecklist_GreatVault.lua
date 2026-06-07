@@ -20,18 +20,18 @@ local ColorWrap = AU.ColorWrap
 local Wipe      = AU.Wipe
 
 -- ── Great Vault layout constants ──────────────────────────────────────────────
-local GV_LABEL_W     = 60
-local GV_LABEL_GAP   =  5
-local GV_GRID_X      = GV_LABEL_W + GV_LABEL_GAP   -- 65
-local GV_ROW_H       = 24
-local GV_GRID_H      = 1 + GV_ROW_H + 1            -- 26
-local GV_BLOCK_STEP  = GV_GRID_H + 6               -- 32
+local GV_LABEL_W     = 62
+local GV_LABEL_GAP   =  8
+local GV_GRID_X      = GV_LABEL_W + GV_LABEL_GAP   -- 70
+local GV_ROW_H       = 34
+local GV_GRID_H      = 1 + GV_ROW_H + 1            -- 36
+local GV_BLOCK_STEP  = GV_GRID_H + 8               -- 44
 local GV_BLOCK_Y     = { 0, -GV_BLOCK_STEP, -GV_BLOCK_STEP * 2 }
-local GV_CELL_W      = 40
-local GV_GRID_W      = GV_CELL_W * 3               -- 120
+local GV_CELL_W      = 54
+local GV_GRID_W      = GV_CELL_W * 3               -- 162
 local GV_THRESHOLDS  = { {2,4,6}, {1,4,8}, {2,4,8} }
 local GV_SECTION_KEYS   = { "TRACKING_GV_RAID", "TRACKING_GV_DUNGEONS", "TRACKING_GV_WORLD" }
-local GV_SECTION_LABELS = { "Raid", "Dungeons", "World" }
+local GV_SECTION_LABELS = { "Raid", "M+", "World" }
 
 -- Expose layout constants so Overlay can build the grid UI.
 Addon.GV_LAYOUT = {

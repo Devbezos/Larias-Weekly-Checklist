@@ -1,4 +1,4 @@
-﻿-- LariasWeeklyChecklist_Overlay.lua
+-- LariasWeeklyChecklist_Overlay.lua
 -- Owns the tracking panel frame, event routing, snapshot persistence and
 -- all UI rendering.  Pure data computation lives in GreatVault.lua and
 -- Currency.lua; this file wires them together through the Addon: API.
@@ -307,18 +307,19 @@ local function ResizeTrackingPanelToContent(addon)
         end
     end
 
-    -- Reflow GV to fill the same height as the currency column, but never
-    -- shrink below its natural 3-block height.
+    -- Reflow GV rows: use natural cell height (squares stay square) and centre
+    -- the blocks vertically.  targetH drives how much space to centre within;
+    -- at least naturalGvH so currency shrinking never collapses the GV.
     if Addon._reflowGVGrid then
-        local GAP        = 6
-        local GV_GRID_H  = 1 + GV_ROW_H + 1  -- BORDER + ROW + BORDER = 26
+        local GAP        = 8
+        local GV_GRID_H  = 1 + GV_ROW_H + 1
         local nVisible   = 0
         for bi = 1, 3 do
             if not addon:IsGVBlockHidden(bi) then nVisible = nVisible + 1 end
         end
         local naturalGvH = nVisible * GV_GRID_H + max(0, nVisible - 1) * GAP
-        local gvTargetH  = max(naturalGvH, bottomRight)
-        Addon._reflowGVGrid(gvTargetH > 0 and gvTargetH or nil)
+        local targetGvH  = max(naturalGvH, bottomRight)
+        Addon._reflowGVGrid(targetGvH > 0 and targetGvH or nil)
     end
 
     local bottomLeft = max(0, BottomFor(TrackingUI.left._gvSentinel))
@@ -494,7 +495,7 @@ function Addon:CreateTrackingPanel(parentFrame)
     end
 
     local function MakeCellFS(xOff, yOff, w)
-        local fs = leftCol:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local fs = leftCol:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
         fs:SetPoint("TOPLEFT", leftCol, "TOPLEFT", xOff, yOff)
         fs:SetSize(w, GV_ROW_H); fs:SetJustifyH("CENTER"); fs:SetJustifyV("MIDDLE")
         if fs.SetWordWrap then fs:SetWordWrap(false) end
@@ -512,7 +513,7 @@ function Addon:CreateTrackingPanel(parentFrame)
         local botLine = MakeHLine(gridBotY, GRID_BOR_A, GV_GRID_X, GV_GRID_W)
         botLine._lariasBaseY = gridBotY
 
-        local hdr = leftCol:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local hdr = leftCol:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
         hdr:SetPoint("TOPLEFT", leftCol, "TOPLEFT", 0, blockY)
         hdr:SetSize(GV_LABEL_W, GV_GRID_H); hdr:SetJustifyH("LEFT"); hdr:SetJustifyV("MIDDLE")
         if hdr.SetWordWrap then hdr:SetWordWrap(false) end
@@ -561,16 +562,18 @@ function Addon:CreateTrackingPanel(parentFrame)
     local function ReflowGVGrid(targetH)
         local grds = TrackingUI.left.gvGrids
         if not grds then return end
-        local GAP = 6; local BORDER = 1; local CINSET = 4
+        local GAP = 8; local BORDER = 1; local CINSET = 4
         if targetH and targetH > 0 then
             TrackingUI.left._lastGvH = targetH
         else
             targetH = TrackingUI.left._lastGvH
             if not (targetH and targetH > 0) then return end
         end
-        local availGridW = max(60, (leftCol:GetWidth() or 0) - GV_GRID_X)
-        local cellW = max(30, floor(availGridW / 3))
-        local gridW = cellW * 3
+        -- Keep the Great Vault grid at its own designed width.  The Currency
+        -- column can change the tracking panel's available width, but that
+        -- should never resize GV cells.
+        local cellW = GV_CELL_W
+        local gridW = GV_GRID_W
 
         -- Count visible (non-hidden) blocks so row heights fill available space.
         local nVisible = 0
@@ -578,9 +581,12 @@ function Addon:CreateTrackingPanel(parentFrame)
             if not Addon:IsGVBlockHidden(bi) then nVisible = nVisible + 1 end
         end
         local GAP_TOTAL = max(0, nVisible - 1) * GAP
-        local gridH = max(14, floor((max(0, targetH) - GAP_TOTAL) / max(1, nVisible)))
-        local rowH  = max(10, gridH - BORDER * 2)
-        gridH       = BORDER + rowH + BORDER
+        -- Use the natural GV row height so Currency can never shrink the grid.
+        local gridH   = GV_GRID_H
+        local rowH    = GV_ROW_H
+        -- Vertically centre the blocks; equal whitespace above and below.
+        local naturalH = nVisible * gridH + GAP_TOTAL
+        local vOffset  = max(0, floor((max(0, targetH) - naturalH) / 2))
 
         local visRow = 0
         TrackingUI.left._gvSentinel = nil
@@ -601,7 +607,7 @@ function Addon:CreateTrackingPanel(parentFrame)
                 h(grid._xBtn)
                 h(grid._hoverZone)
             else
-                local blockY   = -(visRow) * (gridH + GAP)
+                local blockY   = -(vOffset + visRow * (gridH + GAP))
                 local gridBotY = blockY - BORDER - rowH
                 visRow = visRow + 1
 
@@ -826,6 +832,7 @@ function Addon:ApplyTrackingPanelOptions()
 
     local wantPanel
     wantPanel = (showGreatVault or showCurrency) and IsMainFrameOnListTab()
+               and not (Addon.IsListComplete and Addon:IsListComplete())
 
     trackingFrame:SetShown(wantPanel)
     if not wantPanel then
@@ -989,11 +996,12 @@ ComputeSnapshotData = function(snap)
         end
     end
 
-    -- Auto-detect per-tier upgrade cost AND true max rank via C_ItemUpgrade.
-    -- #info.upgradeLevelInfos = the item's actual max rank (e.g. 5 for embellished, 6 for normal).
-    -- If an item's true max < the tier max, it is embellished/capped → exclude from cost.
-    -- Cost is captured once per tier from the first upgradable (non-embellished) slot found.
+    -- Auto-detect per-tier upgrade cost and true max rank via C_ItemUpgrade.
+    -- WoW only returns reliable upgrade details in some contexts, so missing or
+    -- empty API data must not mark an item as capped.  When details are missing,
+    -- Alt Summary falls back to rank math and default crest costs.
     snap.upgradeCostPerStep = {}
+    snap.upgradeDetailsAvailable = false
     if C_ItemUpgrade and C_ItemUpgrade.SetItemUpgradeFromLocation
             and C_ItemUpgrade.GetItemUpgradeItemInfo and ItemLocation then
         local TRACKING = Addon.TRACKING
@@ -1008,27 +1016,90 @@ ComputeSnapshotData = function(snap)
                     C_ItemUpgrade.SetItemUpgradeFromLocation(
                         ItemLocation:CreateFromEquipmentSlot(sid))
                     local info = C_ItemUpgrade.GetItemUpgradeItemInfo()
-                    if info and info.upgradeLevelInfos then
-                        -- Detect embellished/crafted cap: true max rank < tier max rank.
-                        -- Store trueMaxRank so CalcTierUpgradeCost can use the correct
-                        -- cap even for items that aren't yet at their embellished max.
-                        -- trueMaxRank == 0 means the API returned an empty list; this
-                        -- usually happens for a fully-upgraded embellished item that
-                        -- can't be upgraded further → treat it as capped at current rank.
-                        local trueMaxRank = #info.upgradeLevelInfos
-                        if trueMaxRank > 0 and trueMaxRank < gs.maxRank then
-                            -- Embellished with known cap lower than the tier max.
-                            snap.gearSlots[sid].trueMaxRank = trueMaxRank
-                        elseif trueMaxRank == 0 and gs.rank and gs.rank < gs.maxRank then
-                            -- No upgrade levels returned; item is at its embellished cap.
-                            snap.gearSlots[sid].trueMaxRank = gs.rank
+                    if info and type(info.upgradeLevelInfos) == "table" then
+                        snap.upgradeDetailsAvailable = true
+                        -- Read the next upgrade step once; reused for tier correction,
+                        -- embellished detection, and cost capture below.
+                        -- NOTE: #upgradeLevelInfos is REMAINING levels from current rank,
+                        -- not an absolute index.  The nextLevel index may be out of range
+                        -- if currUpgrade counts from the track start; the [1] fallback
+                        -- always gives us the next remaining upgrade.
+                        local nextLevel = (info.currUpgrade or 0) + 1
+                        local levelInfo = info.upgradeLevelInfos[nextLevel]
+                                      or info.upgradeLevelInfos[1]
+                        local costs = levelInfo and levelInfo.currencyCostsToUpgrade
+                        local remainingCrestCost, sawRemainingCrestCost = 0, false
+
+                        -- Correct tier BEFORE computing trueMaxRank.
+                        -- Items at rank 5/6 of tier N share ilvl values with rank 1/2
+                        -- of tier N+1, so GetTier() can assign the wrong tier.  A
+                        -- Champion rank-5 item (ilvl 259) appears as Hero rank-1 and
+                        -- would be falsely flagged embellished (trueMaxRank = 1+1 = 2 < 6)
+                        -- without this correction.  The upgrade currency resolves the
+                        -- ambiguity definitively.
+                        if costs and crestIDs then
+                            local actualTierIdx = nil
+                            for _, ce in ipairs(costs) do
+                                for ti, cid in ipairs(crestIDs) do
+                                    if ce.currencyID == cid then
+                                        actualTierIdx = ti; break
+                                    end
+                                end
+                                if actualTierIdx then break end
+                            end
+                            if actualTierIdx and actualTierIdx ~= tierIdx then
+                                local newRank = Addon.IlvlUtils
+                                    and Addon.IlvlUtils.GetRank(gs.ilvl, actualTierIdx)
+                                if newRank then
+                                    snap.gearSlots[sid].tierIdx = actualTierIdx
+                                    snap.gearSlots[sid].rank    = newRank
+                                    gs.tierIdx = actualTierIdx
+                                    gs.rank    = newRank
+                                    tierIdx    = actualTierIdx
+                                    crestID    = crestIDs[actualTierIdx]
+                                end
+                            end
                         end
-                        -- Capture per-tier cost from first slot that is still upgradable.
+
+                        -- Detect embellished/crafted caps using the now-corrected rank.
+                        -- Empty upgradeLevelInfos is not enough proof of a cap; WoW can
+                        -- return that when upgrade details are temporarily unavailable.
+                        local nLevels     = #info.upgradeLevelInfos
+                        local trueMaxRank = (nLevels > 0) and (gs.rank + nLevels) or nil
+                        if trueMaxRank and trueMaxRank < gs.maxRank then
+                            snap.gearSlots[sid].trueMaxRank = trueMaxRank
+                        end
+
+                        if crestID and nLevels > 0 then
+                            -- Sum the exact remaining crest cost reported by WoW for
+                            -- this slot. This captures crest discounts per item/tier,
+                            -- including fully discounted steps where no crest is due.
+                            for _, upgradeInfo in ipairs(info.upgradeLevelInfos) do
+                                local stepCosts = upgradeInfo and upgradeInfo.currencyCostsToUpgrade
+                                local stepHasCrest = false
+                                if stepCosts then
+                                    for _, ce in ipairs(stepCosts) do
+                                        if ce.currencyID == crestID then
+                                            stepHasCrest = true
+                                            sawRemainingCrestCost = true
+                                            remainingCrestCost = remainingCrestCost + (tonumber(ce.cost) or 0)
+                                            break
+                                        end
+                                    end
+                                end
+                                -- If WoW gives remaining upgrade levels but omits the
+                                -- crest currency on a step, treat that step as discounted
+                                -- to zero crests rather than capping the item.
+                                if not stepHasCrest then sawRemainingCrestCost = true end
+                            end
+                        end
+                        if sawRemainingCrestCost then
+                            snap.gearSlots[sid].upgradeCostRemaining = remainingCrestCost
+                        end
+
+                        -- Capture per-tier cost from the first upgradable slot found.
                         if crestID and not checkedTiers[tierIdx]
                                 and snap.gearSlots[sid].rank < snap.gearSlots[sid].maxRank then
-                            local nextLevel = (info.currUpgrade or 0) + 1
-                            local levelInfo = info.upgradeLevelInfos[nextLevel]
-                                          or info.upgradeLevelInfos[1]
                             if levelInfo and levelInfo.currencyCostsToUpgrade then
                                 for _, ce in ipairs(levelInfo.currencyCostsToUpgrade) do
                                     if ce.currencyID == crestID then
@@ -1039,6 +1110,10 @@ ComputeSnapshotData = function(snap)
                                 end
                             end
                         end
+                    else
+                        -- No reliable item-upgrade details for this slot. Leave
+                        -- trueMaxRank unset so display code uses the normal tier cap.
+                        snap.gearSlots[sid].upgradeInfoUnavailable = true
                     end
                 end)
             end

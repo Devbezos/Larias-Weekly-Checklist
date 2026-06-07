@@ -2,25 +2,24 @@ local addonName = ...
 local Addon = _G[addonName]
 if not Addon then return end
 
--- â”€â”€ In-frame scale + opacity sliders â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
--- Two compact custom-styled sliders placed side-by-side at the bottom of the
--- main addon frame, each with a label above the track.
--- ── Shared slider widget factory ─────────────────────────────────────────────
+-- Custom slider controls used by the in-frame Scale and Opacity settings.
+-- The widget is intentionally lightweight so it can share the addon's theme
+-- colors and avoid Blizzard slider textures.
+--
 -- Creates a single slider (track + thumb + min/max labels + optional title)
--- inside `pane`.  `pane` must have a fixed height of:
---   (sliderLabelH + 2 + max(16, sliderH))  ≈ 36 px.
--- Returns a Sync() closure that repositions the thumb to the current value.
+-- inside `pane`. Returns a Sync() closure that repositions the thumb to the
+-- current value.
 --
 -- opts = {
 --   minV, maxV, stepV,
---   getVal()    → number,
+--   getVal()    - number,
 --   applyFn(v): called on mouse-up (and every tick if liveApply=true),
 --   minLabel, maxLabel,
---   fmtFn(v)    → string shown on thumb,
+--   fmtFn(v)    - string shown on the thumb,
 --   titleLabel  = string | nil   (label drawn above the track),
 --   liveApply   = true | false | nil,
 --   trackW      = number | nil   (default 100),
---   scaleFrame  = frame | nil    (GetScale() source; nil → 1.0),
+--   scaleFrame  = frame | nil    (GetScale() source; nil means 1.0),
 -- }
 function Addon:CreateSliderWidget(pane, opts)
     local THEME = Addon.THEME or {}
@@ -232,8 +231,7 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
         sf:SetPoint("BOTTOMRIGHT", parentFrame, "BOTTOMRIGHT", -inset, botPad)
     end
 
-
-    -- â”€â”€ Scale pane (left half by default) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    -- Scale pane (left side when both slider panes are visible).
     local scalePane = CreateFrame("Frame", nil, sf)
     scalePane:SetHeight(TOTAL_H)
 
@@ -258,8 +256,7 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
     })
     sf._scalePane = scalePane
     sf.Sync       = function() scaleSync() end
-
-    -- â”€â”€ Opacity pane (right half by default) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    -- Opacity pane (right side when both slider panes are visible).
     local opacityPane = CreateFrame("Frame", nil, sf)
     opacityPane:SetHeight(TOTAL_H)
 
@@ -311,7 +308,6 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
         end
     end
 
-    -- â”€â”€ Pane layout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     -- Repositions the two panes based on which are currently shown.
     -- When only one is visible it expands to full width.
     local function LayoutSliderPanes()

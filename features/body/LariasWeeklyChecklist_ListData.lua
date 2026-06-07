@@ -13,7 +13,6 @@ if not Addon then return end
 
 local LOCALE_REGISTRY_KEY = Addon.LOCALE_REGISTRY_KEY
 
--- ── Addon:GetListData ─────────────────────────────────────────────────────────
 -- Return the checklist dataset for the current effective locale.
 -- Cached by locale code because the dataset is static per session.
 function Addon:GetListData()
@@ -44,7 +43,6 @@ function Addon:GetListData()
     return {}
 end
 
--- ── Addon:PruneObsoleteSavedState ─────────────────────────────────────────────
 -- Walks the saved checked/collapsed tables and removes any keys that no longer
 -- correspond to a section or item in the current dataset. Runs once per session.
 function Addon:PruneObsoleteSavedState()
@@ -88,14 +86,14 @@ function Addon:PruneObsoleteSavedState()
     -- via sheet_to_lua) don't break already-completed weeks.
     --
     -- Two signals are combined to handle the three common update patterns:
-    --   (a) items renamed  → old IDs pruned, new IDs added; checkedCount stays
+    --   (a) items renamed: old IDs pruned, new IDs added. checkedCount stays
     --       the same but matchCount drops.  checkedCount >= currentCount catches
     --       this when item counts don't change net, and the 90% threshold below
     --       helps when a couple of new items were also added.
-    --   (b) items removed  → currentCount shrinks; checkedCount >= currentCount
+    --   (b) items removed: currentCount shrinks, so checkedCount >= currentCount
     --       still holds.
     --   (c) items added to an already-complete section (e.g. items moved in
-    --       from a deleted section) → checkedCount < currentCount but the ratio
+    --       from a deleted section): checkedCount < currentCount but the ratio
     --       is still high; the 90% threshold catches this.
     local currentSheetVer = (function()
         local r = Addon.GetLocaleRegistry and Addon.GetLocaleRegistry()
@@ -126,7 +124,7 @@ function Addon:PruneObsoleteSavedState()
                     -- Nothing was ever checked in this section; skip.
                 else
                     -- Threshold: 90% of current items must be covered by old
-                    -- checked entries.  math.max(1,…) avoids a zero floor for
+                    -- checked entries.  math.max(1, ...) avoids a zero floor for
                     -- single-item sections.  This is intentionally slightly
                     -- lenient so that a section completed at the previous
                     -- version survives even if 1-2 new items were added to it.

@@ -12,11 +12,9 @@
 local addonName = ...
 local constantsKey = tostring(addonName or "") .. "_CONSTANTS"
 
--- ══════════════════════════════════════════════════════════════════════════════
--- SEASON DATA  —  update these every new season
--- ══════════════════════════════════════════════════════════════════════════════
+-- Season data: update these every new season.
 local tracking = { -- https://www.wowhead.com/currencies/season-1
-    -- Crest currencies, index 1 (lowest) → 5 (highest).
+    -- Crest currencies, index 1 (lowest) through 5 (highest).
     crestCurrencyIDs = {
         3383,  -- wowhead.com/currency=3383  Adventurer Dawncrest
         3341,  -- wowhead.com/currency=3341  Veteran Dawncrest
@@ -56,19 +54,17 @@ local tracking = { -- https://www.wowhead.com/currencies/season-1
     ilvlBase      = 220,
     ilvlTrackStep = 13,   -- a new track starts every 13 ilvls (rank-5 of each track)
 
--- ══════════════════════════════════════════════════════════════════════════════
--- STABLE DATA  —  unlikely to change between seasons
--- ══════════════════════════════════════════════════════════════════════════════
-
+    -- Stable data: unlikely to change between seasons.
     -- How many crests trade up to the next tier and how many are produced.
     crestTradeBatch = { 30, 10 },
 
-    -- Crests required per single rank upgrade, indexed by crest tier (1=Adventurer → 5=Myth).
+    -- Crests required per single rank upgrade, indexed by crest tier.
+    -- Order matches crestCurrencyIDs: Adventurer through Myth.
     -- Adjust if Blizzard changes upgrade costs mid-season.
     crestUpgradeCostPerStep = {20, 20, 20, 20, 20},
 
     -- Reduced crest cost per step when the character has the upgrade cost reduction
-    -- (account-wide or character-specific discount — toggled per character in Alt Summary).
+    -- (account-wide or character-specific discount, toggled per character in Alt Summary).
     crestUpgradeCostReduced = {10, 10, 10, 10, 10},
 
     -- Free rank upgrades per tier granted account-wide (e.g. 2 = first 2 ranks cost 0 crests).
@@ -76,7 +72,7 @@ local tracking = { -- https://www.wowhead.com/currencies/season-1
     crestUpgradeFreeRanks = {0, 0, 0, 0, 0},
 
     -- Per-rank ilvl offsets within any track (rank 1 = +0, rank 6 = +17).
-    -- Gaps: 4, 3, 3, 3, 4 — constant across all seasons and tiers.
+    -- Gaps are 4, 3, 3, 3, 4 and are constant across seasons and tiers.
     ilvlRankOffsets = { 0, 4, 7, 10, 13, 17 },
 
     -- Equipment slot IDs captured for the gear popup and upgrade-cost rows.

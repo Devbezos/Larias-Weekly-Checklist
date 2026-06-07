@@ -1,4 +1,4 @@
-﻿-- LariasWeeklyChecklist_AltsSummary.lua
+-- LariasWeeklyChecklist_AltsSummary.lua
 -- Alt Summary popup: horizontal table — characters as columns, stats as rows.
 -- Row groups: Character header | Tasks | Crests (per tier) | Currencies | Great Vault (per activity)
 local addonName = ...
@@ -11,7 +11,7 @@ local TITLE_H    = 28
 local ROW_H      = 23          -- height of each data row
 local HDR_ROW_H  = 25          -- height of section label rows
 local COL_LABEL  = 124         -- width of the left-side row label column (wider for icon+text)
-local COL_W      = 120         -- width of each character column
+local COL_W      = 104         -- width of each character column (slightly thinner)
 local BTN_H      = 18
 local BTN_W      = 74          -- centered single button per column in COL_W=104
 local ICON_SIZE  = 15          -- currency icon width/height in row labels
@@ -300,7 +300,7 @@ local function EnsurePanel()
 
     _layout = ComputeLayout()
 
-    local f = Addon:NewThemedFrame(nil, UIParent)
+    local f = Addon:NewThemedFrame("LariasAltsSummaryFrame", UIParent)
     f:SetSize(400, 200)
     f:SetFrameStrata("DIALOG")
     f:SetFrameLevel(200)
@@ -313,6 +313,13 @@ local function EnsurePanel()
     Addon._altsSummaryFrame = f
 
     local th = Addon.THEME
+    local bgTex = f:CreateTexture(nil, "BORDER", nil, -8)
+    bgTex:SetAllPoints(f)
+    bgTex:SetColorTexture(th.bg.r, th.bg.g, th.bg.b, 1)
+    f._lariaBgTex = bgTex
+    if f.SetBackdropColor then
+        f:SetBackdropColor(0, 0, 0, 0)
+    end
 
     -- Title strip.
     local titleBgTex = f:CreateTexture(nil, "BACKGROUND")
@@ -344,6 +351,12 @@ local function EnsurePanel()
     chk._label:SetText("Show hidden")
     f._footerChk = chk
 
+    -- Close the gear popup whenever the summary panel is hidden (close button,
+    -- ESC via UISpecialFrames, or any other dismiss path).
+    f:SetScript("OnHide", function()
+        if _gearPopupFrame then _gearPopupFrame:Hide() end
+    end)
+
     -- Pool tables for reuse.
     f._colPool     = {}
     f._divTexPool  = {}
@@ -352,6 +365,8 @@ local function EnsurePanel()
     f._rowHitPool  = {}
 
     altSummaryFrame = f
+    -- Register with UISpecialFrames so ESC closes this window.
+    tinsert(UISpecialFrames, "LariasAltsSummaryFrame")
     return f
 end
 
@@ -366,7 +381,7 @@ local function BuildCharList(gdb, ownKey, allKeys, maxLvl)
         local isOwn      = (charKey == ownKey) or (charKey:lower() == ownKey:lower())
         local charLevel  = gdb and gdb.charLevels and gdb.charLevels[charKey]
         local isMaxLevel = isOwn or (charLevel and charLevel >= maxLvl)
-        if isMaxLevel and (not isHidden or _showHidden) and classToken then
+        if isMaxLevel and (isOwn or not isHidden or _showHidden) and classToken then
             local cdb  = gdb and gdb.chars and gdb.chars[charKey]
             local snap = cdb and cdb.trackingSnapshot
             local cr, cg, cb = th.r, th.g, th.b
@@ -391,53 +406,41 @@ local function BuildCharList(gdb, ownKey, allKeys, maxLvl)
     return chars
 end
 
--- Per-session cache: item link → effective max rank.
--- Avoids repeated C_ItemUpgrade calls for the same stored alt item links.
-local _effectiveMaxCache = {}
-
 -- Returns the effective max rank for a gear slot, accounting for embellished/crafted
 -- items that are capped below the tier max rank.
--- Uses trueMaxRank if already stored; otherwise tries C_ItemUpgrade.GetItemUpgradeInfo
--- on the stored link, caches the result, and persists it back to the slot data.
+-- Trusts trueMaxRank if it was stored at snapshot-save time.  Falls back to
+-- the tier max rank otherwise so temporary upgrade-API failures do not zero
+-- out normal upgrade costs.
+--
+-- NOTE: We intentionally do NOT call C_ItemUpgrade.SetItemUpgradeFromItemLink here.
+-- That API returns an empty upgradeLevelInfos table when the player is not at an
+-- upgrade vendor, which causes every item to appear embellished (nLevels = 0 →
+-- effectiveMax = rank → cost = 0 → "—" for all tiers).  Snapshot capture only
+-- stores trueMaxRank when WoW provides usable upgrade details.
 local function GetSlotEffectiveMax(sd)
-    if sd.trueMaxRank ~= nil then return sd.trueMaxRank end
-    if not (sd.link and sd.rank and sd.maxRank and sd.rank < sd.maxRank) then
-        return sd.maxRank
+    if sd.trueMaxRank ~= nil then
+        -- Sanity: trueMaxRank must be >= current rank.  Old snapshots stored the
+        -- remaining-level count instead of the effective max rank, producing values
+        -- always < rank.  Detect and clear those stale entries.
+        if sd.trueMaxRank >= (sd.rank or 0) then return sd.trueMaxRank end
+        sd.trueMaxRank = nil  -- stale; ignore, fall through to tier max
     end
-    local cached = _effectiveMaxCache[sd.link]
-    if cached ~= nil then
-        if cached < sd.maxRank then sd.trueMaxRank = cached end
-        return cached
-    end
-    if C_ItemUpgrade and C_ItemUpgrade.SetItemUpgradeFromItemLink
-            and C_ItemUpgrade.GetItemUpgradeItemInfo then
-        local ok = pcall(C_ItemUpgrade.SetItemUpgradeFromItemLink, sd.link)
-        if ok then
-            local info = C_ItemUpgrade.GetItemUpgradeItemInfo()
-            if info and info.upgradeLevelInfos then
-                local nLevels = #info.upgradeLevelInfos
-                local effectiveMax = sd.maxRank
-                if nLevels == 0 then
-                    effectiveMax = sd.rank  -- no upgrades available → embellished cap
-                elseif (sd.rank + nLevels) < sd.maxRank then
-                    effectiveMax = sd.rank + nLevels  -- partial cap
-                end
-                if C_ItemUpgrade.ClearItemUpgrade then
-                    pcall(C_ItemUpgrade.ClearItemUpgrade)
-                end
-                _effectiveMaxCache[sd.link] = effectiveMax
-                if effectiveMax < sd.maxRank then
-                    sd.trueMaxRank = effectiveMax  -- persist back to snapshot
-                end
-                return effectiveMax
-            end
-            if C_ItemUpgrade.ClearItemUpgrade then
-                pcall(C_ItemUpgrade.ClearItemUpgrade)
-            end
-        end
-    end
-    _effectiveMaxCache[sd.link] = sd.maxRank  -- not embellished or API unavailable
+    -- No trueMaxRank means the item was not flagged as embellished/crafted at
+    -- snapshot time — treat it as upgradeable to the full tier max.
     return sd.maxRank
+end
+
+local function IsSlotLimitedCrafted(sd, effectiveMax)
+    if type(sd) ~= "table" then return false end
+    effectiveMax = effectiveMax or GetSlotEffectiveMax(sd)
+    return effectiveMax and sd.maxRank and effectiveMax < sd.maxRank
+end
+
+local function GetSlotUpgradeCost(slotID, sd, snap, tierIdx, effectiveMax)
+    if Addon.GetCrestSlotUpgradeCost then
+        return Addon:GetCrestSlotUpgradeCost(slotID, sd, snap, tierIdx, effectiveMax)
+    end
+    return 0
 end
 
 -- Compute the total crest cost to max all items of crest tier `tierIdx`,
@@ -445,32 +448,33 @@ end
 -- Returns totalCost.
 local function CalcTierUpgradeCost(snap, tierIdx)
     if not (snap and snap.gearSlots) then return 0 end
-    local TRACKING  = Addon.TRACKING
-    -- Prefer the actual cost captured at snapshot time via C_ItemUpgrade;
-    -- it already reflects any active account-wide or character discounts.
-    -- Fall back to constants for old snapshots.
-    local costPerStep
-    if snap.upgradeCostPerStep and snap.upgradeCostPerStep[tierIdx] then
-        costPerStep = snap.upgradeCostPerStep[tierIdx]
-    else
-        local costList = TRACKING and TRACKING.crestUpgradeCostPerStep
-        costPerStep = (costList and costList[tierIdx]) or 20
-    end
-    local freeRanks   = (TRACKING and TRACKING.crestUpgradeFreeRanks
-                        and TRACKING.crestUpgradeFreeRanks[tierIdx])   or 0
     local totalCost = 0
     for _, sid in ipairs(GEAR_SLOT_IDS) do
         local sd = snap.gearSlots[sid]
         local effectiveMax = sd and GetSlotEffectiveMax(sd)
         if type(sd) == "table" and sd.tierIdx == tierIdx
-                and sd.rank and effectiveMax and sd.rank < effectiveMax then
-            local remaining = math.max(0,
-                (effectiveMax - sd.rank) - math.max(0, freeRanks - (sd.rank - 1))
-            )
-            totalCost = totalCost + remaining * costPerStep
+                and sd.rank and effectiveMax and sd.rank < effectiveMax
+                and not IsSlotLimitedCrafted(sd, effectiveMax) then
+            totalCost = totalCost + GetSlotUpgradeCost(sid, sd, snap, tierIdx, effectiveMax)
         end
     end
     return totalCost
+end
+
+local function GetCrestAvailabilityForTier(snap, tierIdx)
+    local TRACKING = Addon.TRACKING
+    local crestID = TRACKING and TRACKING.crestCurrencyIDs and TRACKING.crestCurrencyIDs[tierIdx]
+    local heldQty, tradeupQty = 0, 0
+    if crestID and snap and snap.rightRows then
+        for _, r in ipairs(snap.rightRows) do
+            if r.type == "crest" and r.id == crestID then
+                heldQty    = tonumber(r.qty) or 0
+                tradeupQty = tonumber(r.tradeup) or 0
+                break
+            end
+        end
+    end
+    return heldQty, tradeupQty, heldQty + tradeupQty
 end
 
 local function BuildRowDefs(tracking, LAYOUT, ownSnap)
@@ -500,57 +504,45 @@ local function BuildRowDefs(tracking, LAYOUT, ownSnap)
         end
     end
 
-    -- Build upgrade-cost rows.  If the own character has gear data, skip any
-    -- tier where they have nothing left to upgrade (all items maxed or absent).
+    -- Build upgrade-cost rows for all tiers.
     do
-        local ownHasGearData = false
-        if ownSnap and ownSnap.gearSlots then
-            for _, sid in ipairs(GEAR_SLOT_IDS) do
-                local sd = ownSnap.gearSlots[sid]
-                if type(sd) == "table" and sd.rank then
-                    ownHasGearData = true; break
-                end
-            end
-        end
-        local upgRows = {}
+        addSec("Upgrade Cost", nil)
         for i = 1, NUM_CRESTS do
             local name, cr, cg, cb = CrestTierInfo(i)
-            local show = true
-            if ownHasGearData then
-                show = CalcTierUpgradeCost(ownSnap, i) > 0
-            end
-            if show then
-                upgRows[#upgRows + 1] = { type = "upgcost", label = name, tierIdx = i, cr = cr, cg = cg, cb = cb }
-            end
-        end
-        if #upgRows > 0 then
-            addSec("Upgrade Cost", nil)
-            for _, r in ipairs(upgRows) do rows[#rows + 1] = r end
+            rows[#rows + 1] = { type = "upgcost", label = name, tierIdx = i, cr = cr, cg = cg, cb = cb }
         end
     end
 
     addSec("Currencies", "currency")
     local _catID = tracking and tracking.catalystCurrencyID
     if not Addon:IsCurrencyHidden(_catID) then
+        local _cr, _cg, _cb = Addon:GetCurrencyQualityColorRGB(_catID)
         addRow("catalyst", "Catalyst Charges", { iconID = GetCurrencyIcon(_catID),
-                                                 currencyID = _catID })
+                                                 currencyID = _catID,
+                                                 cr = _cr, cg = _cg, cb = _cb })
     end
     local _sprkID = tracking and tracking.sparkCurrencyID
     if not Addon:IsCurrencyHidden(_sprkID) then
+        local _cr, _cg, _cb = Addon:GetCurrencyQualityColorRGB(_sprkID)
         addRow("sparks",   "Sparks",           { iconID = GetCurrencyIcon(_sprkID),
-                                                 currencyID = _sprkID })
+                                                 currencyID = _sprkID,
+                                                 cr = _cr, cg = _cg, cb = _cb })
     end
     local _keysID = tracking and tracking.cofferKeysDisplayCurrencyID
     if not Addon:IsCurrencyHidden(_keysID) then
+        local _cr, _cg, _cb = Addon:GetCurrencyQualityColorRGB(_keysID)
         addRow("keys",     "Coffer Keys",      { iconID = GetCurrencyIcon(_keysID),
-                                                 currencyID = _keysID })
+                                                 currencyID = _keysID,
+                                                 cr = _cr, cg = _cg, cb = _cb })
     end
     for mi, mID in ipairs(LAYOUT.miscIDs) do
         if not Addon:IsCurrencyHidden(tonumber(mID)) then
             local info = C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo
                          and C_CurrencyInfo.GetCurrencyInfo(tonumber(mID))
+            local _cr, _cg, _cb = Addon:GetCurrencyQualityColorRGB(tonumber(mID))
             addRow("misc", (info and info.name) or ("Currency " .. mID),
-                   { miscIdx = mi, miscID = mID, iconID = GetCurrencyIcon(mID) })
+                   { miscIdx = mi, miscID = mID, iconID = GetCurrencyIcon(mID),
+                     cr = _cr, cg = _cg, cb = _cb })
         end
     end
 
@@ -572,6 +564,16 @@ local function BuildRowDefs(tracking, LAYOUT, ownSnap)
     addQuestRow("delversBounty",  "TRACKING_QUEST_DELVERS_BOUNTY",  "Trovehunter's Bounty")
     addQuestRow("nullaeusSpoils", "TRACKING_QUEST_NULLAEUS_SPOILS", "Spoils of Nullaeus")
     addQuestRow("weeklyPrey",     "TRACKING_QUEST_WEEKLY_PREY",     "Weekly Prey")
+
+    -- Weapon/trinket upgrade items (289 → 298): single row showing combined-equivalent
+    do
+        local _, _, _, _, _, _, _, _, _, combinedTex = GetItemInfo and GetItemInfo(268552) or nil
+        if not combinedTex and C_Item and C_Item.GetItemIconByID then
+            combinedTex = C_Item.GetItemIconByID(268552)
+        end
+        local combinedName = GetItemInfo and select(1, GetItemInfo(268552))
+        addRow("weapupg", combinedName or "Upgrade Sigil", { iconID = combinedTex })
+    end
 
     addSec("Great Vault", "greatvault")
     addRow("keystone", "Keystone", {})
@@ -595,6 +597,9 @@ local function NewSnapData()
         miscQtys   = {}, miscCaps      = {},
         crestQtys  = {}, crestEarneds  = {}, crestCaps = {}, crestTradeups = {},
         questsDone = {},
+        weapUpgShardQty    = 0,
+        weapUpgCombinedQty = 0,
+        weapUpgNeed        = 0,
     }
 end
 
@@ -635,6 +640,10 @@ local function ExtractSnapData(snap, crestIDs, LAYOUT)
             end
         elseif t == ST.QUEST then
             d.questsDone[r_.key] = r_.done
+        elseif t == ST.WEAPUPG then
+            d.weapUpgShardQty    = tonumber(r_.shardQty)    or 0
+            d.weapUpgCombinedQty = tonumber(r_.combinedQty) or 0
+            d.weapUpgNeed        = tonumber(r_.need)        or 0
         end
     end
     return d
@@ -652,6 +661,17 @@ end
 --   alpha  : base alpha for the character column
 --   th     : Addon.THEME.text {r,g,b}
 
+-- Returns (r,g,b) for a crest cell based on weekly earned vs cap.
+-- Green when uncapped or plenty of room; yellow when close; red when fully capped.
+local function CrestProgressColor(earned, cap)
+    if cap <= 0 then return 0.3, 1.0, 0.3 end  -- uncapped → always green
+    local pct = earned / cap
+    if     pct >= 1.0 then return 1.0, 0.4,  0.4   -- at cap → red
+    elseif pct >= 0.6 then return 1.0, 0.82, 0.0   -- close   → yellow
+    else                   return 0.3, 1.0,  0.3   -- room    → green
+    end
+end
+
 local function RenderCrestCell(cell, row, sd, noSnap, alpha, _th, crestIDs, highestTuIdx)
     local idx    = row.crestIdx
     local earned = sd.crestEarneds[idx] or 0
@@ -664,10 +684,11 @@ local function RenderCrestCell(cell, row, sd, noSnap, alpha, _th, crestIDs, high
         cell._fs:SetTextColor(cr2, cg2, cb2, alpha * A_EMPTY)
         cell._tu:SetText("")
     else
-        -- Show current held crests (wallet balance) vs season cap.
+        -- Show current held crests (wallet balance) vs weekly cap.
         local baseStr = (cap > 0) and (qty .. "/" .. cap) or tostring(qty)
         cell._fs:SetText(baseStr)
-        cell._fs:SetTextColor(cr2, cg2, cb2, alpha * (qty > 0 and A_FULL or A_EMPTY))
+        local pr, pg, pb = CrestProgressColor(earned, cap)
+        cell._fs:SetTextColor(pr, pg, pb, alpha * (qty > 0 and A_FULL or A_EMPTY))
         if tuAmt > 0 then
             cell._tu:SetText("+" .. tuAmt)
             cell._tu:SetTextColor(0.30, 0.65, 1.0, alpha)
@@ -753,7 +774,7 @@ end
 
 local function RenderSparksCell(cell, row, sd, noSnap, alpha, th)
     local sprkQty, sprkCap, sprkQD = sd.sprkQty, sd.sprkCap, sd.sprkQD
-    local sqr, sqg, sqb = th.r, th.g, th.b
+    local sqr, sqg, sqb = 0.64, 0.21, 0.93   -- epic purple; overridden by quest state
     if     sprkQD == true  then sqr, sqg, sqb = 0.3, 1.0, 0.3
     elseif sprkQD == false then sqr, sqg, sqb = 1.0, 0.5, 0.5
     end
@@ -836,6 +857,42 @@ local function RenderMiscCell(cell, row, sd, noSnap, alpha, th)
             GameTooltip:Show()
         end)
     end
+end
+
+local function RenderWeapUpgCell(cell, row, sd, noSnap, alpha, th)
+    local shardQty    = sd.weapUpgShardQty    or 0
+    local combinedQty = sd.weapUpgCombinedQty or 0
+    local need        = sd.weapUpgNeed        or 0
+    local total       = combinedQty + shardQty / 5  -- combined-equivalent with fractional shards
+    if noSnap then
+        cell._fs:SetText("—")
+        cell._fs:SetTextColor(th.r, th.g, th.b, A_DIM)
+        cell:SetScript("OnEnter", nil)
+        return
+    end
+    if need == 0 then
+        cell._fs:SetText(("%.1f"):format(total))
+        cell._fs:SetTextColor(th.r, th.g, th.b, alpha * (total > 0 and A_FULL or A_DIM))
+    else
+        local str = ("%.1f"):format(total) .. "/" .. need
+        if     total >= need       then cell._fs:SetTextColor(0.3,  1.0,  0.3,  alpha)
+        elseif total >= need * 0.5 then cell._fs:SetTextColor(1.0,  0.82, 0.0,  alpha)
+        else                            cell._fs:SetTextColor(th.r, th.g, th.b, alpha)
+        end
+        cell._fs:SetText(str)
+    end
+    local _total, _need, _shards, _combined = total, need, shardQty, combinedQty
+    cell:SetScript("OnEnter", function(s_)
+        GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
+        GameTooltip:SetText(row.label or "Upgrade Sigil", 1, 0.82, 0)
+        if _need > 0 then
+            GameTooltip:AddLine(("%.1f / %d needed"):format(_total, _need), 1, 1, 1)
+            GameTooltip:AddLine(_combined .. " sigils + " .. _shards .. " shards", 0.7, 0.7, 0.7)
+        else
+            GameTooltip:AddLine("No slots need upgrading", 0.5, 1.0, 0.5)
+        end
+        GameTooltip:Show()
+    end)
 end
 
 local function RenderQuestCell(cell, row, sd, noSnap, alpha, th)
@@ -964,25 +1021,32 @@ local function RenderUpgradeCostCell(cell, row, snap, noSnap, alpha, th)
         cell._fs:SetTextColor(cr, cg, cb, A_EMPTY)
         cell:SetScript("OnEnter", nil)
     else
-        cell._fs:SetText(tostring(totalCost))
-        cell._fs:SetTextColor(cr, cg, cb, alpha)
+        -- Availability is per crest type: wallet balance plus this tier's own
+        -- trade-up amount from lower crests, if that conversion is unlocked.
+        local heldQty, tradeupQty, availableQty = GetCrestAvailabilityForTier(snap, targetTier)
+        cell._fs:SetText(availableQty .. "/" .. totalCost)
+        if availableQty >= totalCost then
+            cell._fs:SetTextColor(0.3, 1.0, 0.3, alpha)
+        elseif availableQty >= totalCost * 0.5 then
+            cell._fs:SetTextColor(1.0, 0.82, 0.0, alpha)
+        else
+            cell._fs:SetTextColor(cr, cg, cb, alpha)
+        end
         local _snap, _tierIdx = snap, targetTier
         local _name, _cr, _cg, _cb = row.label, cr, cg, cb
         local _total = totalCost
+        local _held  = heldQty
+        local _tradeup = tradeupQty
+        local _available = availableQty
         cell:SetScript("OnEnter", function(s_)
             GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
             GameTooltip:SetText(_name .. " Upgrade Cost", _cr, _cg, _cb)
-            GameTooltip:AddLine("Total: " .. _total .. " crests", 1, 1, 1)
-            local TRACKING    = Addon.TRACKING
-            local costPerStep
-            if _snap.upgradeCostPerStep and _snap.upgradeCostPerStep[_tierIdx] then
-                costPerStep = _snap.upgradeCostPerStep[_tierIdx]
+            GameTooltip:AddLine("Available: " .. _available .. "  /  Need: " .. _total, 1, 1, 1)
+            if _tradeup > 0 then
+                GameTooltip:AddLine("Held: " .. _held .. "  +  Trade-up: " .. _tradeup, 0.65, 0.82, 1.0)
             else
-                local _costList = TRACKING and TRACKING.crestUpgradeCostPerStep
-                costPerStep = (_costList and _costList[_tierIdx]) or 20
+                GameTooltip:AddLine("Held: " .. _held, 0.75, 0.75, 0.75)
             end
-            local freeRanks   = (TRACKING and TRACKING.crestUpgradeFreeRanks
-                                and TRACKING.crestUpgradeFreeRanks[_tierIdx])   or 0
             if _snap and _snap.gearSlots then
                 local hasAny = false
                 for _, sid in ipairs(GEAR_SLOT_IDS) do
@@ -993,26 +1057,22 @@ local function RenderUpgradeCostCell(cell, row, snap, noSnap, alpha, th)
                     else
                         local effectiveMax = GetSlotEffectiveMax(slotData)
                         if effectiveMax then
-                            local isEmbellished = (effectiveMax < (slotData.maxRank or effectiveMax))
+                            local isEmbellished = IsSlotLimitedCrafted(slotData, effectiveMax)
                             local needsUpgrade  = (slotData.rank < effectiveMax)
-                            if needsUpgrade or (isEmbellished and not needsUpgrade) then
+                            if (needsUpgrade and not isEmbellished) or isEmbellished then
                                 if not hasAny then
                                     GameTooltip:AddLine(" ")
                                     hasAny = true
                                 end
                                 local slotName = GEAR_SLOT_NAMES[sid] or ("Slot " .. sid)
-                                if isEmbellished and not needsUpgrade then
-                                    -- Item is at its embellished cap — show dimmed with label.
+                                if isEmbellished then
+                                    -- Limited crafted items cannot be upgraded to the full track max.
                                     GameTooltip:AddLine(
                                         "|cff666666" .. slotName .. "  "
                                         .. slotData.rank .. "/" .. effectiveMax .. "|r"
-                                        .. "  |cffffcc00(Embellishment)|r", 1, 1, 1)
+                                        .. "  |cffffcc00(Embellished crafted - ignored)|r", 1, 1, 1)
                                 else
-                                    local remaining = math.max(0,
-                                        (effectiveMax - slotData.rank)
-                                        - math.max(0, freeRanks - (slotData.rank - 1))
-                                    )
-                                    local slotCost = remaining * costPerStep
+                                    local slotCost = GetSlotUpgradeCost(sid, slotData, _snap, _tierIdx, effectiveMax)
                                     GameTooltip:AddLine(
                                         slotName .. "  " .. slotData.rank .. "/" .. effectiveMax
                                         .. "   (" .. slotCost .. ")", 0.85, 0.85, 0.85)
@@ -1129,26 +1189,27 @@ PopulateSummary = function(panel)
     end
 
     local isInline = panel._inline
+    local colW = COL_W
     if panel._altsTitleBgTex then panel._altsTitleBgTex:SetShown(not isInline) end
     if panel._altsTitleFS    then panel._altsTitleFS:SetShown(not isInline)    end
     if panel._altsCloseBtn   then panel._altsCloseBtn:SetShown(not isInline)   end
 
-    -- Transparent backdrop when inline (content sits on the main window's bg).
-    -- When shown as a standalone popup, use alpha=1 to match the main window's
-    -- solid background (the main window paints a fully-opaque bg texture).
-    if isInline then
-        if panel.SetBackdropColor       then panel:SetBackdropColor(0, 0, 0, 0)       end
-        if panel.SetBackdropBorderColor then panel:SetBackdropBorderColor(0, 0, 0, 0) end
-    else
-        local bg = Addon.THEME.bg
-        local bd = Addon.THEME.border
-        if panel.SetBackdropColor       then panel:SetBackdropColor(bg.r, bg.g, bg.b, 1.0)       end
+    -- Use the same theme colors as the main frame.  ApplyOpacity below supplies
+    -- the saved background alpha so the Alt Summary matches the main window.
+    do
+        local bg  = Addon.THEME.bg
+        local bd  = Addon.THEME.border
+        if panel._lariaBgTex            then panel._lariaBgTex:SetColorTexture(bg.r, bg.g, bg.b, 1.0) end
+        if panel.SetBackdropColor       then panel:SetBackdropColor(0, 0, 0, 0)                    end
         if panel.SetBackdropBorderColor then panel:SetBackdropBorderColor(bd.r, bd.g, bd.b, bd.a) end
-        -- Refresh title strip & label with the current header color.
-        local h = Addon.THEME.header
-        if panel._altsTitleBgTex then panel._altsTitleBgTex:SetColorTexture(h.r, h.g, h.b, 0.09) end
-        if panel._altsTitleFS    then panel._altsTitleFS:SetTextColor(h.r, h.g, h.b, 1)          end
+        if not isInline then
+            -- Refresh title strip & label with the current header color.
+            local h = Addon.THEME.header
+            if panel._altsTitleBgTex then panel._altsTitleBgTex:SetColorTexture(h.r, h.g, h.b, 0.09) end
+            if panel._altsTitleFS    then panel._altsTitleFS:SetTextColor(h.r, h.g, h.b, 1)          end
+        end
     end
+    if Addon.ApplyOpacity then Addon:ApplyOpacity() end
 
     local CONTENT_TOP = isInline and -PAD or -(TITLE_H + 4)
     local COL_HDR_TOP = CONTENT_TOP
@@ -1156,7 +1217,7 @@ PopulateSummary = function(panel)
     local BTNS_TOP    = ROWS_TOP - totalContentH - 4
     local FOOTER_TOP  = BTNS_TOP - BTN_ROW_H - 4
     local TOTAL_H     = math.abs(FOOTER_TOP) + 20 + PAD
-    local TOTAL_W     = PAD + COL_LABEL + numChars * COL_W + PAD
+    local TOTAL_W     = PAD + COL_LABEL + numChars * colW + PAD
 
     panel:SetSize(math.max(300, TOTAL_W), math.max(120, TOTAL_H))
 
@@ -1250,7 +1311,7 @@ PopulateSummary = function(panel)
     end
     local function GetCell(col, rowIdx)
         if not col.cells[rowIdx] then
-            col.cells[rowIdx] = MakeCell(panel, COL_W, ROW_H)
+            col.cells[rowIdx] = MakeCell(panel, colW, ROW_H)
         end
         local c = col.cells[rowIdx]
         c:Show()
@@ -1367,8 +1428,9 @@ PopulateSummary = function(panel)
             if row.type == "crest" or row.type == "upgcost" then
                 lblFS:SetTextColor(row.cr or th.r, row.cg or th.g, row.cb or th.b, 0.90)
             elseif row.type == "catalyst" or row.type == "sparks"
-                or row.type == "keys"     or row.type == "misc" then
-                lblFS:SetTextColor(1, 0.82, 0, 0.85)  -- WoW gold for all currency rows
+                or row.type == "keys"     or row.type == "misc"
+                or row.type == "weapupg" then
+                lblFS:SetTextColor(row.cr or 1, row.cg or 0.82, row.cb or 0, 0.85)
             else
                 lblFS:SetTextColor(th.r, th.g, th.b, 0.80)
             end
@@ -1428,34 +1490,6 @@ PopulateSummary = function(panel)
         end
     end
 
-    -- "+ Add task" button — only visible in inline (completion) mode.
-    local addBtn = panel._addTaskBtn
-    if isInline then
-        if not addBtn then
-            addBtn = CreateFrame("Button", nil, panel)
-            addBtn:SetSize(90, 18)
-            local fs = addBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-            fs:SetAllPoints()
-            fs:SetText("|cff00cc44+|r Add task")
-            addBtn._fs = fs
-            addBtn:SetScript("OnClick", function()
-                StaticPopup_Show("LARIAS_ADD_CUSTOM_ITEM")
-            end)
-            addBtn:SetScript("OnEnter", function(self_)
-                self_._fs:SetTextColor(1, 1, 0.4, 1)
-            end)
-            addBtn:SetScript("OnLeave", function(self_)
-                self_._fs:SetTextColor(1, 1, 1, 1)
-            end)
-            panel._addTaskBtn = addBtn
-        end
-        addBtn:ClearAllPoints()
-        addBtn:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -PAD, FOOTER_TOP - 3)
-        addBtn:Show()
-    elseif addBtn then
-        addBtn:Hide()
-    end
-
     -- ── Character columns ─────────────────────────────────────────────────────
     local crestIDs = {}
     if tracking and tracking.crestCurrencyIDs then
@@ -1466,7 +1500,7 @@ PopulateSummary = function(panel)
     local btnY = BTNS_TOP - math.floor((BTN_ROW_H - BTN_H) / 2)
 
     for ci, char in ipairs(chars) do
-        local colX   = PAD + COL_LABEL + (ci - 1) * COL_W
+        local colX   = PAD + COL_LABEL + (ci - 1) * colW
         local snap   = char.snap
         local noSnap = not snap
 
@@ -1484,13 +1518,13 @@ PopulateSummary = function(panel)
         -- Thin class-color bar at top of the name header.
         col.classBar:SetColorTexture(char.cr, char.cg, char.cb, 0.35)
         col.classBar:SetPoint("TOPLEFT",  panel, "TOPLEFT", colX,         COL_HDR_TOP)
-        col.classBar:SetPoint("TOPRIGHT", panel, "TOPLEFT", colX + COL_W, COL_HDR_TOP)
+        col.classBar:SetPoint("TOPRIGHT", panel, "TOPLEFT", colX + colW, COL_HDR_TOP)
         col.classBar:SetHeight(2)
 
         -- Character name.
         local charName = (char.key:match("^(.-)%s*%-") or char.key):gsub("^%s+",""):gsub("%s+$","")
         if charName == "" then charName = char.key end
-        local maxChars = math.floor(COL_W / 7)
+        local maxChars = math.floor(colW / 7)
         if #charName > maxChars then charName = charName:sub(1, maxChars - 1) .. "." end
 
         col.nameFS:SetText(charName)
@@ -1500,7 +1534,7 @@ PopulateSummary = function(panel)
         col.nameFS:SetJustifyV("MIDDLE")
         col.nameFS:ClearAllPoints()
         col.nameFS:SetPoint("TOPLEFT", panel, "TOPLEFT", colX, COL_HDR_TOP - 2)
-        col.nameFS:SetSize(COL_W, 18)
+        col.nameFS:SetSize(colW, 18)
 
         -- Item level below character name.
         if col.ilvlFS then
@@ -1521,7 +1555,7 @@ PopulateSummary = function(panel)
             col.ilvlFS:SetJustifyV("MIDDLE")
             col.ilvlFS:ClearAllPoints()
             col.ilvlFS:SetPoint("TOPLEFT", panel, "TOPLEFT", colX, COL_HDR_TOP - 20)
-            col.ilvlFS:SetSize(COL_W, 13)
+            col.ilvlFS:SetSize(colW, 13)
         end
 
         -- Last-updated timestamp below ilvl.
@@ -1538,14 +1572,14 @@ PopulateSummary = function(panel)
             col.updatedFS:SetJustifyV("MIDDLE")
             col.updatedFS:ClearAllPoints()
             col.updatedFS:SetPoint("TOPLEFT", panel, "TOPLEFT", colX, COL_HDR_TOP - 33)
-            col.updatedFS:SetSize(COL_W, 11)
+            col.updatedFS:SetSize(colW, 11)
         end
 
         -- Column-header hit region: tooltip showing full last-updated datetime.
         if col.hdrHit then
             col.hdrHit:ClearAllPoints()
             col.hdrHit:SetPoint("TOPLEFT", panel, "TOPLEFT", colX, COL_HDR_TOP)
-            col.hdrHit:SetSize(COL_W, COL_HDR_H)
+            col.hdrHit:SetSize(colW, COL_HDR_H)
             local _snap, _name, _cr, _cg, _cb = snap, charName, char.cr, char.cg, char.cb
             local _ck = char.key
             col.hdrHit:SetScript("OnEnter", function(s_)
@@ -1573,13 +1607,13 @@ PopulateSummary = function(panel)
         end
 
         -- Hide button centered in the column.
-        local btnX = colX + math.floor((COL_W - BTN_W) / 2)
+        local btnX = colX + math.floor((colW - BTN_W) / 2)
 
         col.hideBtn:ClearAllPoints()
         col.hideBtn:SetPoint("TOPLEFT", panel, "TOPLEFT", btnX, btnY)
         col.hideBtn:SetSize(BTN_W, BTN_H)
 
-        if char.isOwn then
+        if char.isOwn and not char.isHidden then
             col.hideBtn:SetText("—")
             col.hideBtn:SetEnabled(false)
             local fs = Addon.Controls.GetButtonFontString(col.hideBtn)
@@ -1597,6 +1631,11 @@ PopulateSummary = function(panel)
                 if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
                 _rowsDirty = true
                 PopulateSummary(panel)
+                if panel._inline and Addon._mainFrame then
+                    local padX = (Addon.UI and Addon.UI.padOuterX) or 14
+                    Addon._mainFrame:SetWidth(2 * padX + panel:GetWidth())
+                    if Addon.ApplyScrollLayout then Addon:ApplyScrollLayout() end
+                end
             end)
         else
             col.hideBtn:SetText("Hide")
@@ -1614,6 +1653,11 @@ PopulateSummary = function(panel)
                 if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
                 _rowsDirty = true
                 PopulateSummary(panel)
+                if panel._inline and Addon._mainFrame then
+                    local padX = (Addon.UI and Addon.UI.padOuterX) or 14
+                    Addon._mainFrame:SetWidth(2 * padX + panel:GetWidth())
+                    if Addon.ApplyScrollLayout then Addon:ApplyScrollLayout() end
+                end
             end)
         end
 
@@ -1635,7 +1679,7 @@ PopulateSummary = function(panel)
                 local cell = GetCell(col, ri)
                 cell:ClearAllPoints()
                 cell:SetPoint("TOPLEFT", panel, "TOPLEFT", colX, cellRowY)
-                cell:SetSize(COL_W, h)
+                cell:SetSize(colW, h)
 
                 cell._fs:SetFont("Fonts\\FRIZQT__.TTF", FONT_CELL, "")
                 cell._fs:SetText("—")
@@ -1664,6 +1708,8 @@ PopulateSummary = function(panel)
                     RenderKeystoneCell(cell, row, snap, noSnap, alpha, th)
                 elseif rtype == "gv" then
                     RenderGVCell(cell, row, snap, noSnap, alpha)
+                elseif rtype == "weapupg" then
+                    RenderWeapUpgCell(cell, row, sd, noSnap, alpha, th)
                 end
 
                 cell:SetScript("OnMouseUp", nil)
@@ -1693,6 +1739,9 @@ function Addon:OpenAltsSummary(anchorFrame)
     -- the user has been in-game without opening the main window first.
     if self.UpdateSnapshotBackground then self:UpdateSnapshotBackground() end
     local f = EnsurePanel()
+    -- Sync scale and opacity to current settings (frame may have been created lazily).
+    f:SetScale(Addon.GetUIScale and Addon:GetUIScale() or 1.0)
+    if Addon.ApplyOpacity then Addon:ApplyOpacity() end
     if not f._wasMoved then
         f:ClearAllPoints()
         if anchorFrame then
@@ -1714,34 +1763,35 @@ function Addon:OpenAltsSummaryInline(mainFrame)
     -- so the Alt Summary replaces the empty scroll content inline.
     if self.UpdateSnapshotBackground then self:UpdateSnapshotBackground() end
     local f = EnsurePanel()
-    if not f._wasMoved then
-        f:ClearAllPoints()
-        if mainFrame then
-            local padX      = (Addon.UI and Addon.UI.padOuterX)  or 6
-            local scrollTop = (Addon.UI and Addon.UI.scrollTop)   or 60
-            f:SetPoint("TOPLEFT", mainFrame, "TOPLEFT", padX, -scrollTop)
-        else
-            f:SetPoint("CENTER", UIParent, "CENTER", 0, 60)
-        end
-        f:SetClampedToScreen(true)
+    -- Sync scale and opacity to current settings (frame may have been created lazily).
+    f:SetScale(Addon.GetUIScale and Addon:GetUIScale() or 1.0)
+    if Addon.ApplyOpacity then Addon:ApplyOpacity() end
+    -- Inline mode always anchors to the main frame; clear any drag-moved position.
+    f._wasMoved = false
+    f:ClearAllPoints()
+    if mainFrame then
+        local padX      = (Addon.UI and Addon.UI.padOuterX) or 14
+        local scrollTop = (Addon.UI and Addon.UI.scrollTop) or 60
+        f:SetPoint("TOPLEFT", mainFrame, "TOPLEFT", padX, -scrollTop)
+    else
+        f:SetPoint("CENTER", UIParent, "CENTER", 0, 60)
     end
+    f:SetClampedToScreen(true)
     f._inline  = true
     _rowsDirty = true
     PopulateSummary(f)
+    -- Resize the main frame to exactly fit the alt summary width.
+    if mainFrame then
+        local padX = (Addon.UI and Addon.UI.padOuterX) or 14
+        mainFrame:SetWidth(2 * padX + f:GetWidth())
+        if Addon.ApplyScrollLayout then Addon:ApplyScrollLayout() end
+    end
     f:Show()
 end
 
 function Addon:CloseAltsSummary()
     if altSummaryFrame then altSummaryFrame:Hide() end
     if _gearPopupFrame then _gearPopupFrame:Hide() end
-end
-
-function Addon:GetAltsSummaryWidth()
-    return altSummaryFrame and altSummaryFrame.GetWidth and altSummaryFrame:GetWidth() or nil
-end
-
-function Addon:GetAltsSummaryHeight()
-    return altSummaryFrame and altSummaryFrame.GetHeight and altSummaryFrame:GetHeight() or nil
 end
 
 function Addon:ToggleAltsSummary(anchorFrame)

@@ -1,4 +1,4 @@
-﻿-- LariasWeeklyChecklist_CraftingWarning.lua
+-- LariasWeeklyChecklist_CraftingWarning.lua
 -- Warns the player when they are about to craft a weapon whose primary stat
 -- does not match their current specialization (e.g. crafting an Agility weapon
 -- as an Intellect spec). The panel is shown over the Professions UI and can be
@@ -241,7 +241,8 @@ local function HookForm(form)
     -- Hide the warning when this schematic form closes (recipe deselected).
     form:HookScript("OnHide", function()
         if _warn then _warn.holder:Hide() end
-        _pendingItemID = nil ; _currentRecipeID = nil
+        _pendingItemID = nil
+        _currentRecipeID = nil
     end)
 end
 
@@ -271,12 +272,19 @@ end
 local function EnsureWarnPanel()
     if _warn then return end
 
-    local PAD_W=10 ; local BODY_H=34 ; local BTN_H=22 ; local GAP=6
+    local PAD_W  = 10
+    local BODY_H = 34
+    local BTN_H  = 22
+    local GAP    = 6
     local PANEL_H = PAD_W + BODY_H + GAP + BTN_H + PAD_W
 
     local holder = Addon:NewThemedFrame(nil, UIParent)
-    holder:SetFrameStrata("DIALOG") ; holder:SetFrameLevel(200)
-    holder:SetSize(410, PANEL_H) ; holder:SetClampedToScreen(true) ; holder:EnableMouse(true)
+    holder:SetFrameStrata("DIALOG")
+    holder:SetFrameLevel(200)
+    holder:SetSize(410, PANEL_H)
+    holder:SetClampedToScreen(true)
+    holder:EnableMouse(true)
+
     local bg = Addon.THEME.bg
     holder:SetBackdropColor(bg.r, bg.g, bg.b, 1.0)
     if holder.SetBackdropBorderColor then
@@ -289,14 +297,18 @@ local function EnsureWarnPanel()
     local label = holder:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     label:SetPoint("TOPLEFT",  holder, "TOPLEFT",  PAD_W, -PAD_W)
     label:SetPoint("TOPRIGHT", holder, "TOPRIGHT", -PAD_W,-PAD_W)
-    label:SetJustifyH("CENTER") ; label:SetTextColor(1, 0.4, 0.4) ; label:SetWordWrap(true)
+    label:SetJustifyH("CENTER")
+    label:SetTextColor(1, 0.4, 0.4)
+    label:SetWordWrap(true)
 
     -- "Hide warning" button: sets craftWarnDisabled and refreshes options UI.
     local btn = CreateFrame("Button", nil, holder, "UIPanelButtonTemplate")
-    btn:SetSize(180, BTN_H) ; btn:SetPoint("TOP", label, "BOTTOM", 0, -GAP)
+    btn:SetSize(180, BTN_H)
+    btn:SetPoint("TOP", label, "BOTTOM", 0, -GAP)
     btn:SetText(L.CRAFT_WARN_DISABLE_BTN or "Hide Crafting Warning")
     btn:SetScript("OnClick", function()
-        Addon:EnsurePrefs().craftWarnDisabled = true ; holder:Hide()
+        Addon:EnsurePrefs().craftWarnDisabled = true
+        holder:Hide()
         if Addon.RefreshSettingsCheckboxes then Addon:RefreshSettingsCheckboxes() end
         if Addon.SyncGearPopup then Addon:SyncGearPopup() end
     end)

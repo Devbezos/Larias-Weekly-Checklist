@@ -37,6 +37,7 @@ locales\enUS_Data.lua
 # Core
 constants\LariasWeeklyChecklist_Constants.lua
 LariasWeeklyChecklist.lua
+features\services\general\LariasWeeklyChecklist_Database.lua
 
 # Reusable UI components (must follow main file)
 components\LariasWeeklyChecklist_Buttons.lua
@@ -48,8 +49,8 @@ components\LariasWeeklyChecklist_Options.lua
 # Feature modules
 features\utils\LariasWeeklyChecklist_AddonUtils.lua
 features\utils\LariasWeeklyChecklist_IlvlUtils.lua
-features\services\LariasWeeklyChecklist_Comms.lua
-features\services\LariasWeeklyChecklist_Settings.lua
+features\services\comms\LariasWeeklyChecklist_Comms.lua
+features\services\general\LariasWeeklyChecklist_Settings.lua
 features\header\LariasWeeklyChecklist_GearPopup.lua
 features\header\LariasWeeklyChecklist_IlvlRef.lua
 features\header\LariasWeeklyChecklist_Header.lua
@@ -57,9 +58,9 @@ features\body\LariasWeeklyChecklist_ListData.lua
 features\body\LariasWeeklyChecklist_GreatVault.lua
 features\body\LariasWeeklyChecklist_Currency.lua
 features\body\LariasWeeklyChecklist_Overlay.lua
-features\services\LariasWeeklyChecklist_UpgradeWarning.lua
-features\services\LariasWeeklyChecklist_CraftingWarning.lua
-features\services\LariasWeeklyChecklist_BonusRollWarning.lua
+features\body\LariasWeeklyChecklist_AltsSummary.lua
+features\services\warnings\LariasWeeklyChecklist_UpgradeWarning.lua
+features\services\warnings\LariasWeeklyChecklist_CraftingWarning.lua
+features\services\general\LariasWeeklyChecklist_CrestConvert.lua
 features\footer\LariasWeeklyChecklist_CharPicker.lua
-features\footer\LariasWeeklyChecklist_AltsSummary.lua
 features\footer\LariasWeeklyChecklist_Footer.lua
