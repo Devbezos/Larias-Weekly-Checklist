@@ -28,6 +28,7 @@ function C.NewPopupPanel(strata, fadeTime)
         local alpha = math.max(0, math.min(1.0, pct / 100))
         p:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, alpha)
     end
+    Addon:ApplyPopupBorder(p)
     p:SetFrameStrata(st)
     p:SetClampedToScreen(true)
     p:SetSize(200, 40)
@@ -122,7 +123,8 @@ function C.NewDivider(parent, y, leftPad, rightPad, anchorSide)
     div:SetHeight(1)
     if Addon.THEME then
         local bdr = Addon.THEME.border
-        div:SetColorTexture(bdr.r, bdr.g, bdr.b, 0.5)
+        local vs = Addon.VISUAL_STYLE or {}
+        div:SetColorTexture(bdr.r, bdr.g, bdr.b, vs.dividerA or 0.5)
     end
     if y then
         div:SetPoint(side .. "LEFT",  parent, side .. "LEFT",  lp,  y)

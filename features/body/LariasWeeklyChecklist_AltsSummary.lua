@@ -4,6 +4,7 @@
 local addonName = ...
 local Addon = _G[addonName]
 if not Addon then return end
+local L = Addon.L or {}
 
 -- ── Layout constants ──────────────────────────────────────────────────────────
 local PAD        = 8
@@ -28,11 +29,22 @@ local GV_THRESHOLDS = { {2,4,6}, {1,4,8}, {2,4,8} }
 local GEAR_SLOT_IDS  = (Addon.TRACKING and Addon.TRACKING.gearSlotIDs)
                        or {1,2,3,5,6,7,8,9,10,11,12,13,14,15,16,17}
 local GEAR_SLOT_NAMES = {
-    [1]="Head",      [2]="Neck",      [3]="Shoulders",
-    [5]="Chest",     [6]="Waist",     [7]="Legs",
-    [8]="Feet",      [9]="Wrists",    [10]="Hands",
-    [11]="Ring 1",   [12]="Ring 2",   [13]="Trinket 1",
-    [14]="Trinket 2",[15]="Back",     [16]="Main Hand", [17]="Off Hand",
+    [1]=L.ALT_SUMMARY_GEAR_SLOT_HEAD or "Head",
+    [2]=L.ALT_SUMMARY_GEAR_SLOT_NECK or "Neck",
+    [3]=L.ALT_SUMMARY_GEAR_SLOT_SHOULDERS or "Shoulders",
+    [5]=L.ALT_SUMMARY_GEAR_SLOT_CHEST or "Chest",
+    [6]=L.ALT_SUMMARY_GEAR_SLOT_WAIST or "Waist",
+    [7]=L.ALT_SUMMARY_GEAR_SLOT_LEGS or "Legs",
+    [8]=L.ALT_SUMMARY_GEAR_SLOT_FEET or "Feet",
+    [9]=L.ALT_SUMMARY_GEAR_SLOT_WRISTS or "Wrists",
+    [10]=L.ALT_SUMMARY_GEAR_SLOT_HANDS or "Hands",
+    [11]=L.ALT_SUMMARY_GEAR_SLOT_RING1 or "Ring 1",
+    [12]=L.ALT_SUMMARY_GEAR_SLOT_RING2 or "Ring 2",
+    [13]=L.ALT_SUMMARY_GEAR_SLOT_TRINKET1 or "Trinket 1",
+    [14]=L.ALT_SUMMARY_GEAR_SLOT_TRINKET2 or "Trinket 2",
+    [15]=L.ALT_SUMMARY_GEAR_SLOT_BACK or "Back",
+    [16]=L.ALT_SUMMARY_GEAR_SLOT_MAIN_HAND or "Main Hand",
+    [17]=L.ALT_SUMMARY_GEAR_SLOT_OFF_HAND or "Off Hand",
 }
 
 -- ── Alpha constants ────────────────────────────────────────────────────
@@ -42,13 +54,39 @@ local A_DIM     = 0.45   -- no data / placeholder
 local A_ILVL    = 0.85   -- ilvl label (slightly dimmed)
 local FONT_SM   = 11     -- small font: ilvl, sub-labels
 local FONT_CELL = 12     -- standard cell font
+local FONT_FACE  = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+local FONT_FLAGS = "OUTLINE"
+
+-- Alt Summary visual tuning.  These keep the table compact while borrowing
+-- the softer, banded rhythm of larger roster dashboards.
+local VS = Addon.VISUAL_STYLE or {}
+local STYLE = {
+    headerBandA    = VS.sectionBandA or 0.13,
+    headerLineA    = VS.strongDividerA or 0.42,
+    footerBandA    = VS.sectionBandA or 0.12,
+    sectionBandA   = VS.sectionBandA or 0.11,
+    sectionLineA   = VS.sectionAccentA or 0.28,
+    rowLightA      = 0.014,
+    rowDarkA       = 0.050,
+    rowLineA       = 0.060,
+    colLineA       = 0.100,
+    classBarA      = 0.55,
+}
+local PLACEHOLDER_DASH = Addon.PLACEHOLDER_DASH or "\226\128\148"
+
+local function SetPlaceholder(cell, th, alpha)
+    th = th or (Addon.THEME and Addon.THEME.text) or { r = 1, g = 1, b = 1 }
+    if not (cell and cell._fs) then return end
+    cell._fs:SetText(PLACEHOLDER_DASH)
+    cell._fs:SetTextColor(th.r, th.g, th.b, alpha or A_DIM)
+end
 
 -- ── Module state ──────────────────────────────────────────────────────────────
 local altSummaryFrame
 local _showHidden  = false
 local _layout      = nil
--- Row-defs cache: rebuilt only when currency/GV hidden state changes (via RefreshAltsSummary)
--- or on panel open.  Avoids redundant BuildRowDefs calls when only character data changes.
+-- Row-defs cache: rebuilt when visibility or gear-cost state can change row presence.
+-- Avoids redundant BuildRowDefs calls when only rendering/layout state changes.
 local _cachedRows  = nil
 local _rowsDirty   = true
 local _gearPopupFrame   = nil   -- lazily-created gear popup; one shared instance
@@ -70,14 +108,13 @@ ShowGearPopup = function(anchor, charKey, charName, cr, cg, cb, snap)
         local POPUP_H  = GP_TTL_H + 4 + #GEAR_SLOT_IDS * GP_ROW_H + 6
         local f = Addon:NewThemedFrame(nil, UIParent)
         -- Override bg to fully opaque (NewThemedFrame uses theme default a=0.65).
-        local _bg = Addon.THEME.bg
-        f:SetBackdropColor(_bg.r, _bg.g, _bg.b, 1.0)
+        Addon:ApplyOpaquePopupTheme(f)
         f:SetFrameStrata("TOOLTIP")
         f:SetClampedToScreen(true)
         f:SetSize(POPUP_W, POPUP_H)
 
         local titleFS = f:CreateFontString(nil, "OVERLAY")
-        titleFS:SetFont("Fonts\\FRIZQT__.TTF", 11, "")
+        titleFS:SetFont(FONT_FACE, 11, FONT_FLAGS)
         titleFS:SetPoint("TOPLEFT",  f, "TOPLEFT",  6, -4)
         titleFS:SetPoint("TOPRIGHT", f, "TOPRIGHT", -6, -4)
         titleFS:SetHeight(GP_TTL_H - 4)
@@ -87,7 +124,8 @@ ShowGearPopup = function(anchor, charKey, charName, cr, cg, cb, snap)
 
         local sep = f:CreateTexture(nil, "ARTWORK")
         sep:SetHeight(1)
-        sep:SetColorTexture(0.4, 0.4, 0.4, 0.7)
+        local _vs = Addon.VISUAL_STYLE or {}
+        sep:SetColorTexture(0.4, 0.4, 0.4, _vs.strongDividerA or 0.7)
         sep:SetPoint("TOPLEFT",  f, "TOPLEFT",  4, -GP_TTL_H)
         sep:SetPoint("TOPRIGHT", f, "TOPRIGHT", -4, -GP_TTL_H)
 
@@ -103,7 +141,7 @@ ShowGearPopup = function(anchor, charKey, charName, cr, cg, cb, snap)
             hit:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
             local lblFS = f:CreateFontString(nil, "OVERLAY")
-            lblFS:SetFont("Fonts\\FRIZQT__.TTF", 10, "")
+            lblFS:SetFont(FONT_FACE, 10, FONT_FLAGS)
             lblFS:SetPoint("TOPLEFT", f, "TOPLEFT", 8, rowY)
             lblFS:SetSize(78, GP_ROW_H)
             lblFS:SetJustifyH("LEFT")
@@ -112,14 +150,14 @@ ShowGearPopup = function(anchor, charKey, charName, cr, cg, cb, snap)
             lblFS:SetText(GEAR_SLOT_NAMES[sid])
 
             local nameFS = f:CreateFontString(nil, "OVERLAY")
-            nameFS:SetFont("Fonts\\FRIZQT__.TTF", 10, "")
+            nameFS:SetFont(FONT_FACE, 10, FONT_FLAGS)
             nameFS:SetPoint("TOPLEFT",  f, "TOPLEFT",  90, rowY)
             nameFS:SetSize(POPUP_W - 90 - 42 - 8, GP_ROW_H)
             nameFS:SetJustifyH("LEFT")
             nameFS:SetJustifyV("MIDDLE")
 
             local ilvlFS = f:CreateFontString(nil, "OVERLAY")
-            ilvlFS:SetFont("Fonts\\FRIZQT__.TTF", 10, "")
+            ilvlFS:SetFont(FONT_FACE, 10, FONT_FLAGS)
             ilvlFS:SetPoint("TOPRIGHT", f, "TOPRIGHT", -8, rowY)
             ilvlFS:SetSize(40, GP_ROW_H)
             ilvlFS:SetJustifyH("RIGHT")
@@ -173,11 +211,11 @@ ShowGearPopup = function(anchor, charKey, charName, cr, cg, cb, snap)
                 row.nameFS:SetText(itemName)
                 row.nameFS:SetTextColor(qr or 1, qg or 1, qb or 1, 1)
             else
-                row.nameFS:SetText("Loading...")
+                row.nameFS:SetText(L.ALT_SUMMARY_LOADING or "Loading...")
                 row.nameFS:SetTextColor(0.55, 0.55, 0.55, 1)
             end
         else
-            row.nameFS:SetText("Empty")
+            row.nameFS:SetText(L.ALT_SUMMARY_EMPTY or "Empty")
             row.nameFS:SetTextColor(0.27, 0.27, 0.27, 1)
         end
 
@@ -261,10 +299,20 @@ end
 -- ── Shared tooltip leave ──────────────────────────────────────────────────────
 local function OnCellLeave() GameTooltip:Hide() end
 
+local function ShowCurrencyHideMenu(anchor, currencyID)
+    local cid = tonumber(currencyID)
+    if not cid then return end
+    Addon:ShowContextMenu(anchor, {
+        { text = L.CONTEXT_HIDE_THIS_CURRENCY or "Hide this currency", onClick = function()
+            Addon:SetCurrencyHidden(cid, true)
+        end },
+    })
+end
+
 -- ── Widget helpers ────────────────────────────────────────────────────────────
 local function MakeFS(parent, size, flags)
     local fs = parent:CreateFontString(nil, "OVERLAY")
-    fs:SetFont("Fonts\\FRIZQT__.TTF", size or 12, flags or "")
+    fs:SetFont(FONT_FACE, size or 12, (flags == nil or flags == "") and FONT_FLAGS or flags)
     return fs
 end
 
@@ -323,14 +371,14 @@ local function EnsurePanel()
 
     -- Title strip.
     local titleBgTex = f:CreateTexture(nil, "BACKGROUND")
-    titleBgTex:SetColorTexture(th.header.r, th.header.g, th.header.b, 0.09)
+    titleBgTex:SetColorTexture(th.header.r, th.header.g, th.header.b, STYLE.sectionBandA)
     titleBgTex:SetPoint("TOPLEFT",  f, "TOPLEFT",  1, -1)
     titleBgTex:SetPoint("TOPRIGHT", f, "TOPRIGHT", -1, -1)
     titleBgTex:SetHeight(TITLE_H + 2)
     f._altsTitleBgTex = titleBgTex
 
     local titleFS = MakeFS(f, 13, "OUTLINE")
-    titleFS:SetText("Alt Summary")
+    titleFS:SetText(L.ALT_SUMMARY_TITLE or "Alt Summary")
     titleFS:SetTextColor(th.header.r, th.header.g, th.header.b, 1)
     titleFS:SetPoint("TOPLEFT", f, "TOPLEFT", PAD, -7)
     f._altsTitleFS = titleFS
@@ -345,10 +393,11 @@ local function EnsurePanel()
     -- "Show hidden" checkbox.
     local chk = Addon.Controls.NewCheckBox(f, function(checked)
         _showHidden = checked
+        _rowsDirty = true
         PopulateSummary(f)
     end, 14)
     chk:SetChecked(_showHidden)
-    chk._label:SetText("Show hidden")
+    chk._label:SetText(L.ALT_SUMMARY_SHOW_HIDDEN or "Show hidden")
     f._footerChk = chk
 
     -- Close the gear popup whenever the summary panel is hidden (close button,
@@ -432,6 +481,7 @@ end
 
 local function IsSlotLimitedCrafted(sd, effectiveMax)
     if type(sd) ~= "table" then return false end
+    if sd.isEmbellished then return true end
     effectiveMax = effectiveMax or GetSlotEffectiveMax(sd)
     return effectiveMax and sd.maxRank and effectiveMax < sd.maxRank
 end
@@ -461,6 +511,16 @@ local function CalcTierUpgradeCost(snap, tierIdx)
     return totalCost
 end
 
+local function AnyVisibleCharNeedsUpgradeCost(chars, tierIdx)
+    if not chars then return false end
+    for _, char in ipairs(chars) do
+        if CalcTierUpgradeCost(char.snap, tierIdx) > 0 then
+            return true
+        end
+    end
+    return false
+end
+
 local function GetCrestAvailabilityForTier(snap, tierIdx)
     local TRACKING = Addon.TRACKING
     local crestID = TRACKING and TRACKING.crestCurrencyIDs and TRACKING.crestCurrencyIDs[tierIdx]
@@ -477,7 +537,7 @@ local function GetCrestAvailabilityForTier(snap, tierIdx)
     return heldQty, tradeupQty, heldQty + tradeupQty
 end
 
-local function BuildRowDefs(tracking, LAYOUT, ownSnap)
+local function BuildRowDefs(tracking, LAYOUT, chars)
     local rows = {}
     local function addSec(lbl, action)  rows[#rows + 1] = { type = "sechdr", label = lbl, action = action } end
     local function addRow(t, lbl, extra)
@@ -494,7 +554,7 @@ local function BuildRowDefs(tracking, LAYOUT, ownSnap)
         return name, cr, cg, cb
     end
 
-    addSec("Crests", "currency")
+    addSec(L.ALT_SUMMARY_SECTION_CRESTS or "Crests", "currency")
     for i = 1, NUM_CRESTS do
         local name, cr, cg, cb = CrestTierInfo(i)
         local crestID = tracking and tracking.crestCurrencyIDs and tracking.crestCurrencyIDs[i]
@@ -504,34 +564,39 @@ local function BuildRowDefs(tracking, LAYOUT, ownSnap)
         end
     end
 
-    -- Build upgrade-cost rows for all tiers.
+    -- Build upgrade-cost rows only for tiers at least one visible character needs.
     do
-        addSec("Upgrade Cost", nil)
+        local firstUpgradeCostRow = #rows + 1
         for i = 1, NUM_CRESTS do
-            local name, cr, cg, cb = CrestTierInfo(i)
-            rows[#rows + 1] = { type = "upgcost", label = name, tierIdx = i, cr = cr, cg = cg, cb = cb }
+            if AnyVisibleCharNeedsUpgradeCost(chars, i) then
+                if firstUpgradeCostRow == #rows + 1 then
+                    addSec(L.ALT_SUMMARY_SECTION_UPGRADE_COST or "Upgrade Cost", nil)
+                end
+                local name, cr, cg, cb = CrestTierInfo(i)
+                rows[#rows + 1] = { type = "upgcost", label = name, tierIdx = i, cr = cr, cg = cg, cb = cb }
+            end
         end
     end
 
-    addSec("Currencies", "currency")
+    addSec(L.ALT_SUMMARY_SECTION_CURRENCIES or "Currencies", "currency")
     local _catID = tracking and tracking.catalystCurrencyID
     if not Addon:IsCurrencyHidden(_catID) then
         local _cr, _cg, _cb = Addon:GetCurrencyQualityColorRGB(_catID)
-        addRow("catalyst", "Catalyst Charges", { iconID = GetCurrencyIcon(_catID),
+        addRow("catalyst", L.TRACKING_CATALYST_CHARGES or "Catalyst Charges", { iconID = GetCurrencyIcon(_catID),
                                                  currencyID = _catID,
                                                  cr = _cr, cg = _cg, cb = _cb })
     end
     local _sprkID = tracking and tracking.sparkCurrencyID
     if not Addon:IsCurrencyHidden(_sprkID) then
         local _cr, _cg, _cb = Addon:GetCurrencyQualityColorRGB(_sprkID)
-        addRow("sparks",   "Sparks",           { iconID = GetCurrencyIcon(_sprkID),
+        addRow("sparks",   L.TRACKING_SPARKS_LABEL or "Sparks", { iconID = GetCurrencyIcon(_sprkID),
                                                  currencyID = _sprkID,
                                                  cr = _cr, cg = _cg, cb = _cb })
     end
     local _keysID = tracking and tracking.cofferKeysDisplayCurrencyID
     if not Addon:IsCurrencyHidden(_keysID) then
         local _cr, _cg, _cb = Addon:GetCurrencyQualityColorRGB(_keysID)
-        addRow("keys",     "Coffer Keys",      { iconID = GetCurrencyIcon(_keysID),
+        addRow("keys",     L.TRACKING_KEYS_LABEL or "Coffer Keys", { iconID = GetCurrencyIcon(_keysID),
                                                  currencyID = _keysID,
                                                  cr = _cr, cg = _cg, cb = _cb })
     end
@@ -540,7 +605,7 @@ local function BuildRowDefs(tracking, LAYOUT, ownSnap)
             local info = C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo
                          and C_CurrencyInfo.GetCurrencyInfo(tonumber(mID))
             local _cr, _cg, _cb = Addon:GetCurrencyQualityColorRGB(tonumber(mID))
-            addRow("misc", (info and info.name) or ("Currency " .. mID),
+            addRow("misc", (info and info.name) or ((L.ALT_SUMMARY_MISC_CURRENCY_FMT or "Currency %d"):format(mID)),
                    { miscIdx = mi, miscID = mID, iconID = GetCurrencyIcon(mID),
                      cr = _cr, cg = _cg, cb = _cb })
         end
@@ -572,11 +637,11 @@ local function BuildRowDefs(tracking, LAYOUT, ownSnap)
             combinedTex = C_Item.GetItemIconByID(268552)
         end
         local combinedName = GetItemInfo and select(1, GetItemInfo(268552))
-        addRow("weapupg", combinedName or "Upgrade Sigil", { iconID = combinedTex })
+        addRow("weapupg", combinedName or (L.TRACKING_UPGRADE_SIGIL or "Upgrade Sigil"), { iconID = combinedTex })
     end
 
-    addSec("Great Vault", "greatvault")
-    addRow("keystone", "Keystone", {})
+    addSec(L.TRACKING_GREAT_VAULT_TITLE or "Great Vault", "greatvault")
+    addRow("keystone", L.ALT_SUMMARY_KEYSTONE or "Keystone", {})
     for gi = 1, 3 do
         if not Addon:IsGVBlockHidden(gi) then
             addRow("gv", GV_NAMES[gi], { gvBlock = gi })
@@ -680,8 +745,7 @@ local function RenderCrestCell(cell, row, sd, noSnap, alpha, _th, crestIDs, high
     local tuAmt  = (idx == highestTuIdx) and (sd.crestTradeups[idx] or 0) or 0
     local cr2, cg2, cb2 = row.cr or 0.7, row.cg or 0.7, row.cb or 0.7
     if noSnap then
-        cell._fs:SetText("—")
-        cell._fs:SetTextColor(cr2, cg2, cb2, alpha * A_EMPTY)
+        SetPlaceholder(cell, _th, alpha * A_DIM)
         cell._tu:SetText("")
     else
         -- Show current held crests (wallet balance) vs weekly cap.
@@ -709,15 +773,15 @@ local function RenderCrestCell(cell, row, sd, noSnap, alpha, _th, crestIDs, high
                 if _c > 0 then
                     local bonus = math.max(0, _q - _e)
                     if bonus > 0 then
-                        GameTooltip:AddLine("Capped Crests: " .. _e,        1, 1, 1)
-                        GameTooltip:AddLine("Bonus Crests: +" .. bonus,      1, 1, 1)
-                        GameTooltip:AddLine("Total Crests: "  .. _q,         1, 1, 1)
+                        GameTooltip:AddLine((L.ALT_SUMMARY_CAPPED_CRESTS_FMT or "Capped Crests: %d"):format(_e), 1, 1, 1)
+                        GameTooltip:AddLine((L.ALT_SUMMARY_BONUS_CRESTS_FMT or "Bonus Crests: +%d"):format(bonus), 1, 1, 1)
+                        GameTooltip:AddLine((L.ALT_SUMMARY_TOTAL_CRESTS_FMT or "Total Crests: %d"):format(_q), 1, 1, 1)
                     else
-                        GameTooltip:AddLine("Earned: " .. _e .. " / " .. _c, 1, 1, 1)
-                        GameTooltip:AddLine("Total Held: "    .. _q,         1, 1, 1)
+                        GameTooltip:AddLine((L.ALT_SUMMARY_EARNED_SPACED_FMT or "Earned: %d / %d"):format(_e, _c), 1, 1, 1)
+                        GameTooltip:AddLine((L.ALT_SUMMARY_TOTAL_HELD_FMT or "Total Held: %d"):format(_q), 1, 1, 1)
                     end
                 else
-                    GameTooltip:AddLine("Crests Held: " .. _q, 1, 1, 1)
+                    GameTooltip:AddLine((L.ALT_SUMMARY_CRESTS_HELD_FMT or "Crests Held: %d"):format(_q), 1, 1, 1)
                 end
                 GameTooltip:Show()
             end)
@@ -757,16 +821,20 @@ end
 
 local function RenderCatalystCell(cell, row, sd, noSnap, alpha, th)
     local catQty = sd.catQty
-    cell._fs:SetText(noSnap and "—" or tostring(catQty))
-    cell._fs:SetTextColor(th.r, th.g, th.b, alpha * (catQty > 0 and A_FULL or A_DIM))
+    if noSnap then
+        SetPlaceholder(cell, th, alpha * A_DIM)
+    else
+        cell._fs:SetText(tostring(catQty))
+        cell._fs:SetTextColor(th.r, th.g, th.b, alpha * (catQty > 0 and A_FULL or A_DIM))
+    end
     local _qty = catQty
     if noSnap then
         cell:SetScript("OnEnter", nil)
     else
         cell:SetScript("OnEnter", function(s_)
             GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
-            GameTooltip:SetText("Catalyst Charges", 1, 0.82, 0)
-            GameTooltip:AddLine("Charges: " .. _qty, 1, 1, 1)
+            GameTooltip:SetText(L.TRACKING_CATALYST_CHARGES or "Catalyst Charges", 1, 0.82, 0)
+            GameTooltip:AddLine((L.TRACKING_CHARGES_FMT or "Charges: %d"):format(_qty), 1, 1, 1)
             GameTooltip:Show()
         end)
     end
@@ -779,24 +847,28 @@ local function RenderSparksCell(cell, row, sd, noSnap, alpha, th)
     elseif sprkQD == false then sqr, sqg, sqb = 1.0, 0.5, 0.5
     end
     local sprkStr = (sprkCap > 0) and (sprkQty .. "/" .. sprkCap) or tostring(sprkQty)
-    cell._fs:SetText(noSnap and "—" or sprkStr)
-    cell._fs:SetTextColor(sqr, sqg, sqb, alpha * (sprkQty > 0 and A_FULL or A_EMPTY))
+    if noSnap then
+        SetPlaceholder(cell, th, alpha * A_DIM)
+    else
+        cell._fs:SetText(sprkStr)
+        cell._fs:SetTextColor(sqr, sqg, sqb, alpha * (sprkQty > 0 and A_FULL or A_EMPTY))
+    end
     local _qty, _cap, _qd = sprkQty, sprkCap, sprkQD
     if noSnap then
         cell:SetScript("OnEnter", nil)
     else
         cell:SetScript("OnEnter", function(s_)
             GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
-            GameTooltip:SetText("Sparks", 1, 0.82, 0)
+            GameTooltip:SetText(L.TRACKING_SPARKS_LABEL or "Sparks", 1, 0.82, 0)
             if _cap > 0 then
-                GameTooltip:AddLine("Sparks: " .. _qty .. " / " .. _cap, 1, 1, 1)
+                GameTooltip:AddLine((L.TRACKING_SPARKS_XY_FMT or "Sparks: %d / %d"):format(_qty, _cap), 1, 1, 1)
             else
-                GameTooltip:AddLine("Sparks: " .. _qty, 1, 1, 1)
+                GameTooltip:AddLine((L.TRACKING_SPARKS_FMT or "Sparks: %d"):format(_qty), 1, 1, 1)
             end
             if _qd == true then
-                GameTooltip:AddLine("Weekly Quest: Complete",   0.3, 1.0, 0.3)
+                GameTooltip:AddLine(L.TRACKING_WEEKLY_QUEST_COMPLETE or "Weekly Quest: Complete", 0.3, 1.0, 0.3)
             elseif _qd == false then
-                GameTooltip:AddLine("Weekly Quest: Incomplete", 1.0, 0.4, 0.4)
+                GameTooltip:AddLine(L.TRACKING_WEEKLY_QUEST_INCOMPLETE or "Weekly Quest: Incomplete", 1.0, 0.4, 0.4)
             end
             GameTooltip:Show()
         end)
@@ -806,19 +878,23 @@ end
 local function RenderKeysCell(cell, row, sd, noSnap, alpha, th)
     local keysQty, keysCap = sd.keysQty, sd.keysCap
     local keysStr = (keysCap > 0) and (keysQty .. "/" .. keysCap) or tostring(keysQty)
-    cell._fs:SetText(noSnap and "—" or keysStr)
-    cell._fs:SetTextColor(th.r, th.g, th.b, alpha * (keysQty > 0 and A_FULL or A_DIM))
+    if noSnap then
+        SetPlaceholder(cell, th, alpha * A_DIM)
+    else
+        cell._fs:SetText(keysStr)
+        cell._fs:SetTextColor(th.r, th.g, th.b, alpha * (keysQty > 0 and A_FULL or A_DIM))
+    end
     local _qty, _cap = keysQty, keysCap
     if noSnap then
         cell:SetScript("OnEnter", nil)
     else
         cell:SetScript("OnEnter", function(s_)
             GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
-            GameTooltip:SetText("Coffer Keys", 1, 0.82, 0)
+            GameTooltip:SetText(L.TRACKING_KEYS_LABEL or "Coffer Keys", 1, 0.82, 0)
             if _cap > 0 then
-                GameTooltip:AddLine("Keys: " .. _qty .. " / " .. _cap, 1, 1, 1)
+                GameTooltip:AddLine((L.TRACKING_KEYS_XY_FMT or "Keys: %d/%d"):format(_qty, _cap), 1, 1, 1)
             else
-                GameTooltip:AddLine("Keys: " .. _qty, 1, 1, 1)
+                GameTooltip:AddLine((L.TRACKING_KEYS_FMT or "Keys: %d"):format(_qty), 1, 1, 1)
             end
             GameTooltip:Show()
         end)
@@ -829,8 +905,7 @@ local function RenderMiscCell(cell, row, sd, noSnap, alpha, th)
     local mQty = sd.miscQtys[row.miscIdx] or 0
     local mCap = sd.miscCaps[row.miscIdx] or 0
     if noSnap then
-        cell._fs:SetText("—")
-        cell._fs:SetTextColor(th.r, th.g, th.b, A_DIM)
+        SetPlaceholder(cell, th, alpha * A_DIM)
     elseif mCap > 0 then
         cell._fs:SetText(mQty .. "/" .. mCap)
         local pct = mQty / mCap
@@ -848,11 +923,11 @@ local function RenderMiscCell(cell, row, sd, noSnap, alpha, th)
     else
         cell:SetScript("OnEnter", function(s_)
             GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
-            GameTooltip:SetText(_lbl or "Currency", 1, 0.82, 0)
+            GameTooltip:SetText(_lbl or (L.TRACKING_CURRENCY_TITLE or "Currency"), 1, 0.82, 0)
             if _cap > 0 then
-                GameTooltip:AddLine("Amount: " .. _qty .. " / " .. _cap, 1, 1, 1)
+                GameTooltip:AddLine((L.ALT_SUMMARY_AMOUNT_XY_FMT or "Amount: %d / %d"):format(_qty, _cap), 1, 1, 1)
             else
-                GameTooltip:AddLine("Amount: " .. _qty, 1, 1, 1)
+                GameTooltip:AddLine((L.ALT_SUMMARY_AMOUNT_FMT or "Amount: %d"):format(_qty), 1, 1, 1)
             end
             GameTooltip:Show()
         end)
@@ -865,8 +940,7 @@ local function RenderWeapUpgCell(cell, row, sd, noSnap, alpha, th)
     local need        = sd.weapUpgNeed        or 0
     local total       = combinedQty + shardQty / 5  -- combined-equivalent with fractional shards
     if noSnap then
-        cell._fs:SetText("—")
-        cell._fs:SetTextColor(th.r, th.g, th.b, A_DIM)
+        SetPlaceholder(cell, th, alpha * A_DIM)
         cell:SetScript("OnEnter", nil)
         return
     end
@@ -884,12 +958,12 @@ local function RenderWeapUpgCell(cell, row, sd, noSnap, alpha, th)
     local _total, _need, _shards, _combined = total, need, shardQty, combinedQty
     cell:SetScript("OnEnter", function(s_)
         GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
-        GameTooltip:SetText(row.label or "Upgrade Sigil", 1, 0.82, 0)
+        GameTooltip:SetText(row.label or (L.TRACKING_UPGRADE_SIGIL or "Upgrade Sigil"), 1, 0.82, 0)
         if _need > 0 then
-            GameTooltip:AddLine(("%.1f / %d needed"):format(_total, _need), 1, 1, 1)
-            GameTooltip:AddLine(_combined .. " sigils + " .. _shards .. " shards", 0.7, 0.7, 0.7)
+            GameTooltip:AddLine((L.ALT_SUMMARY_SIGIL_NEEDED_FMT or "%.1f / %d needed"):format(_total, _need), 1, 1, 1)
+            GameTooltip:AddLine((L.ALT_SUMMARY_SIGIL_BREAKDOWN_FMT or "%d sigils + %d shards"):format(_combined, _shards), 0.7, 0.7, 0.7)
         else
-            GameTooltip:AddLine("No slots need upgrading", 0.5, 1.0, 0.5)
+            GameTooltip:AddLine(L.ALT_SUMMARY_NO_SLOTS_NEED_UPGRADING or "No slots need upgrading", 0.5, 1.0, 0.5)
         end
         GameTooltip:Show()
     end)
@@ -898,13 +972,12 @@ end
 local function RenderQuestCell(cell, row, sd, noSnap, alpha, th)
     local done = sd.questsDone[row.questKey]
     if noSnap or done == nil then
-        cell._fs:SetText("—")
-        cell._fs:SetTextColor(th.r, th.g, th.b, A_DIM)
+        SetPlaceholder(cell, th, alpha * A_DIM)
     elseif done then
-        cell._fs:SetText("Done")
+        cell._fs:SetText(L.ALT_SUMMARY_DONE or "Done")
         cell._fs:SetTextColor(0.3, 1.0, 0.3, alpha)
     else
-        cell._fs:SetText("No")
+        cell._fs:SetText(L.ALT_SUMMARY_NO or "No")
         cell._fs:SetTextColor(1.0, 0.45, 0.45, alpha)
     end
     local _done, _lbl = done, row.label
@@ -912,28 +985,26 @@ local function RenderQuestCell(cell, row, sd, noSnap, alpha, th)
         GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
         GameTooltip:SetText(_lbl, 1, 0.82, 0)
         if noSnap or _done == nil then
-            GameTooltip:AddLine("No snapshot data", 0.6, 0.6, 0.6)
+            GameTooltip:AddLine(L.ALT_SUMMARY_NO_SNAPSHOT or "No snapshot data", 0.6, 0.6, 0.6)
         elseif _done then
-            GameTooltip:AddLine("Completed this week", 0.3, 1.0, 0.3)
+            GameTooltip:AddLine(L.ALT_SUMMARY_COMPLETED_THIS_WEEK or "Completed this week", 0.3, 1.0, 0.3)
         else
-            GameTooltip:AddLine("Not completed this week", 1.0, 0.45, 0.45)
+            GameTooltip:AddLine(L.ALT_SUMMARY_NOT_COMPLETED_THIS_WEEK or "Not completed this week", 1.0, 0.45, 0.45)
         end
         GameTooltip:Show()
     end)
 end
 
 local function RenderKeystoneCell(cell, row, snap, noSnap, alpha, th)
-    cell._fs:SetFont("Fonts\\FRIZQT__.TTF", 10, "")
+    cell._fs:SetFont(FONT_FACE, 11, FONT_FLAGS)
     local ks    = snap and snap.keystone
     local level = ks and tonumber(ks.level) or 0
     if noSnap or not ks then
-        cell._fs:SetText("—")
-        cell._fs:SetTextColor(th.r, th.g, th.b, A_DIM)
+        SetPlaceholder(cell, th, alpha * A_DIM)
         return
     end
     if level <= 0 then
-        cell._fs:SetText("None")
-        cell._fs:SetTextColor(0.5, 0.5, 0.5, alpha * A_EMPTY)
+        SetPlaceholder(cell, th, alpha * A_DIM)
         return
     end
     local name    = (ks.name and ks.name ~= "") and ks.name or nil
@@ -950,7 +1021,7 @@ local function RenderKeystoneCell(cell, row, snap, noSnap, alpha, th)
     local _level, _name = level, name
     cell:SetScript("OnEnter", function(s_)
         GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
-        GameTooltip:SetText("Keystone", 1, 0.82, 0)
+        GameTooltip:SetText(L.ALT_SUMMARY_KEYSTONE or "Keystone", 1, 0.82, 0)
         if _name then
             GameTooltip:AddLine("+" .. _level .. " " .. _name, 1, 1, 1)
         else
@@ -961,12 +1032,11 @@ local function RenderKeystoneCell(cell, row, snap, noSnap, alpha, th)
 end
 
 local function RenderUpgradeCostCell(cell, row, snap, noSnap, alpha, th)
-    cell._fs:SetFont("Fonts\\FRIZQT__.TTF", FONT_CELL, "")
+    cell._fs:SetFont(FONT_FACE, FONT_CELL, FONT_FLAGS)
     local cr, cg, cb = row.cr or th.r, row.cg or th.g, row.cb or th.b
 
     if noSnap then
-        cell._fs:SetText("\226\128\148")
-        cell._fs:SetTextColor(th.r, th.g, th.b, A_DIM)
+        SetPlaceholder(cell, th, alpha * A_DIM)
         cell:SetScript("OnEnter", nil)
         return
     end
@@ -999,15 +1069,15 @@ local function RenderUpgradeCostCell(cell, row, snap, noSnap, alpha, th)
         end
         cell:SetScript("OnEnter", function(s_)
             GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
-            GameTooltip:SetText("No gear data", 1, 0.6, 0)
+            GameTooltip:SetText(L.ALT_SUMMARY_NO_GEAR_DATA or "No gear data", 1, 0.6, 0)
             if _nil then
-                GameTooltip:AddLine("Snapshot predates rank capture.", 1, 0.6, 0, true)
+                GameTooltip:AddLine(L.ALT_SUMMARY_SNAPSHOT_PREDATES_RANK or "Snapshot predates rank capture.", 1, 0.6, 0, true)
             elseif _ilvlCount == 0 then
-                GameTooltip:AddLine("ilvl = 0 for all slots (data not loaded?).", 1, 0.6, 0, true)
+                GameTooltip:AddLine(L.ALT_SUMMARY_ILVL_DATA_NOT_LOADED or "ilvl = 0 for all slots (data not loaded?).", 1, 0.6, 0, true)
             else
-                GameTooltip:AddLine(_ilvlCount .. " slots with ilvl, " .. _rankCount .. " with rank.", 1, 0.6, 0, true)
+                GameTooltip:AddLine((L.ALT_SUMMARY_GEAR_DATA_COUNTS_FMT or "%d slots with ilvl, %d with rank."):format(_ilvlCount, _rankCount), 1, 0.6, 0, true)
             end
-            GameTooltip:AddLine("Log in as this character to refresh.", 1, 1, 1, true)
+            GameTooltip:AddLine(L.ALT_SUMMARY_LOG_IN_REFRESH or "Log in as this character to refresh.", 1, 1, 1, true)
             GameTooltip:Show()
         end)
         return
@@ -1017,8 +1087,7 @@ local function RenderUpgradeCostCell(cell, row, snap, noSnap, alpha, th)
     local totalCost = CalcTierUpgradeCost(snap, targetTier)
 
     if totalCost == 0 then
-        cell._fs:SetText("\226\128\148")
-        cell._fs:SetTextColor(cr, cg, cb, A_EMPTY)
+        SetPlaceholder(cell, th, alpha * A_DIM)
         cell:SetScript("OnEnter", nil)
     else
         -- Availability is per crest type: wallet balance plus this tier's own
@@ -1040,12 +1109,12 @@ local function RenderUpgradeCostCell(cell, row, snap, noSnap, alpha, th)
         local _available = availableQty
         cell:SetScript("OnEnter", function(s_)
             GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
-            GameTooltip:SetText(_name .. " Upgrade Cost", _cr, _cg, _cb)
-            GameTooltip:AddLine("Available: " .. _available .. "  /  Need: " .. _total, 1, 1, 1)
+            GameTooltip:SetText((L.ALT_SUMMARY_UPGRADE_COST_TITLE_FMT or "%s Upgrade Cost"):format(_name), _cr, _cg, _cb)
+            GameTooltip:AddLine((L.ALT_SUMMARY_AVAILABLE_NEED_FMT or "Available: %d  /  Need: %d"):format(_available, _total), 1, 1, 1)
             if _tradeup > 0 then
-                GameTooltip:AddLine("Held: " .. _held .. "  +  Trade-up: " .. _tradeup, 0.65, 0.82, 1.0)
+                GameTooltip:AddLine((L.ALT_SUMMARY_HELD_TRADEUP_FMT or "Held: %d  +  Trade-up: %d"):format(_held, _tradeup), 0.65, 0.82, 1.0)
             else
-                GameTooltip:AddLine("Held: " .. _held, 0.75, 0.75, 0.75)
+                GameTooltip:AddLine((L.TRACKING_HELD_FMT or "Held: %d"):format(_held), 0.75, 0.75, 0.75)
             end
             if _snap and _snap.gearSlots then
                 local hasAny = false
@@ -1070,7 +1139,7 @@ local function RenderUpgradeCostCell(cell, row, snap, noSnap, alpha, th)
                                     GameTooltip:AddLine(
                                         "|cff666666" .. slotName .. "  "
                                         .. slotData.rank .. "/" .. effectiveMax .. "|r"
-                                        .. "  |cffffcc00(Embellished crafted - ignored)|r", 1, 1, 1)
+                                        .. "  |cffffcc00" .. (L.ALT_SUMMARY_LIMITED_CRAFTED_IGNORED or "(Embellished crafted - ignored)") .. "|r", 1, 1, 1)
                                 else
                                     local slotCost = GetSlotUpgradeCost(sid, slotData, _snap, _tierIdx, effectiveMax)
                                     GameTooltip:AddLine(
@@ -1092,11 +1161,10 @@ local function RenderGVCell(cell, row, snap, noSnap, alpha)
     local block = snap and snap.leftGrid and snap.leftGrid[gi]
     local complete = block and tonumber(block.complete) or 0
 
-    cell._fs:SetFont("Fonts\\FRIZQT__.TTF", 10, "")
+    cell._fs:SetFont(FONT_FACE, 11, FONT_FLAGS)
 
     if noSnap or not block then
-        cell._fs:SetText("—")
-        cell._fs:SetTextColor(0.5, 0.5, 0.5, alpha * A_DIM)
+        SetPlaceholder(cell, Addon.THEME and Addon.THEME.text, alpha * A_DIM)
     else
         local parts = {}
         for si = 1, 3 do
@@ -1108,10 +1176,10 @@ local function RenderGVCell(cell, row, snap, noSnap, alpha)
                     local hex = (Addon.IlvlUtils and Addon.IlvlUtils.GetColorHex(ilvl)) or "ffffffff"
                     parts[si] = "|c" .. hex .. ilvl .. "|r"
                 else
-                    parts[si] = "|cff55aa55—|r"
+                    parts[si] = "|cff55aa55" .. PLACEHOLDER_DASH .. "|r"
                 end
             else
-                parts[si] = "|cff555555—|r"
+                parts[si] = "|cff555555" .. PLACEHOLDER_DASH .. "|r"
             end
         end
         cell._fs:SetText(table.concat(parts, " "))
@@ -1126,11 +1194,11 @@ local function RenderGVCell(cell, row, snap, noSnap, alpha)
         GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
         GameTooltip:SetText(GV_NAMES[_bi], 1, 0.82, 0)
         if not blk then
-            GameTooltip:AddLine("No snapshot data", 0.6, 0.6, 0.6)
+            GameTooltip:AddLine(L.ALT_SUMMARY_NO_SNAPSHOT or "No snapshot data", 0.6, 0.6, 0.6)
             GameTooltip:Show()
             return
         end
-        GameTooltip:AddLine("Slots unlocked: " .. cmplt .. "/3", 1, 1, 1)
+        GameTooltip:AddLine((L.ALT_SUMMARY_SLOTS_UNLOCKED_FMT or "Slots unlocked: %d/3"):format(cmplt), 1, 1, 1)
         GameTooltip:AddLine(" ")
         for si = 1, 3 do
             local need     = thresh[si]
@@ -1141,14 +1209,14 @@ local function RenderGVCell(cell, row, snap, noSnap, alpha)
                 local trackLabel = Addon.IlvlUtils and ilvl > 0 and Addon.IlvlUtils.GetTrackLabel(ilvl)
                 local line
                 if ilvl > 0 then
-                    line = "Slot " .. si .. ": " .. ilvl .. " ilvl"
+                    line = (L.ALT_SUMMARY_SLOT_ILVL_FMT or "Slot %d: %d ilvl"):format(si, ilvl)
                     if trackLabel then line = line .. "  (" .. trackLabel .. ")" end
                 else
-                    line = "Slot " .. si .. ": Unlocked"
+                    line = (L.ALT_SUMMARY_SLOT_UNLOCKED_FMT or "Slot %d: Unlocked"):format(si)
                 end
                 GameTooltip:AddLine(line, 0.3, 1.0, 0.3)
             else
-                GameTooltip:AddLine("Slot " .. si .. ": Requires " .. need .. " activities", 0.55, 0.55, 0.55)
+                GameTooltip:AddLine((L.ALT_SUMMARY_SLOT_REQUIRES_FMT or "Slot %d: Requires %d activities"):format(si, need), 0.55, 0.55, 0.55)
             end
         end
         GameTooltip:Show()
@@ -1173,11 +1241,9 @@ PopulateSummary = function(panel)
     local numChars = #chars
 
     -- ── Row definitions ───────────────────────────────────────────────────────
-    -- Rebuild only when currency/GV visibility has changed; otherwise reuse the cache.
+    -- Rebuild only when row visibility can change; otherwise reuse the cache.
     if _rowsDirty or not _cachedRows then
-        local ownCdb  = gdb and gdb.chars and gdb.chars[ownKey]
-        local ownSnap = ownCdb and ownCdb.trackingSnapshot
-        _cachedRows = BuildRowDefs(tracking, LAYOUT, ownSnap)
+        _cachedRows = BuildRowDefs(tracking, LAYOUT, chars)
         _rowsDirty  = false
     end
     local rows = _cachedRows
@@ -1201,11 +1267,13 @@ PopulateSummary = function(panel)
         local bd  = Addon.THEME.border
         if panel._lariaBgTex            then panel._lariaBgTex:SetColorTexture(bg.r, bg.g, bg.b, 1.0) end
         if panel.SetBackdropColor       then panel:SetBackdropColor(0, 0, 0, 0)                    end
-        if panel.SetBackdropBorderColor then panel:SetBackdropBorderColor(bd.r, bd.g, bd.b, bd.a) end
+        if panel.SetBackdropBorderColor then
+            panel:SetBackdropBorderColor(bd.r, bd.g, bd.b, (Addon.VISUAL_STYLE and Addon.VISUAL_STYLE.panelBorderA) or bd.a)
+        end
         if not isInline then
             -- Refresh title strip & label with the current header color.
             local h = Addon.THEME.header
-            if panel._altsTitleBgTex then panel._altsTitleBgTex:SetColorTexture(h.r, h.g, h.b, 0.09) end
+            if panel._altsTitleBgTex then panel._altsTitleBgTex:SetColorTexture(h.r, h.g, h.b, STYLE.sectionBandA) end
             if panel._altsTitleFS    then panel._altsTitleFS:SetTextColor(h.r, h.g, h.b, 1)          end
         end
     end
@@ -1248,6 +1316,8 @@ PopulateSummary = function(panel)
             panel._divTexPool[divCursor] = panel:CreateTexture(nil, "ARTWORK")
         end
         local t = panel._divTexPool[divCursor]
+        t:ClearAllPoints()
+        t:SetSize(0, 0)
         t:Show()
         return t
     end
@@ -1257,7 +1327,9 @@ PopulateSummary = function(panel)
             panel._iconTexPool[iconCursor] = panel:CreateTexture(nil, "ARTWORK")
         end
         local t = panel._iconTexPool[iconCursor]
+        t:ClearAllPoints()
         t:SetSize(ICON_SIZE, ICON_SIZE)
+        t:SetTexture(nil)
         t:Show()
         return t
     end
@@ -1267,7 +1339,10 @@ PopulateSummary = function(panel)
             panel._rowLblPool[lblCursor] = MakeFS(panel, size or 12, flags)
         end
         local fs = panel._rowLblPool[lblCursor]
-        fs:SetFont("Fonts\\FRIZQT__.TTF", size or 12, flags or "")
+        fs:ClearAllPoints()
+        fs:SetFont(FONT_FACE, size or 12, (flags == nil or flags == "") and FONT_FLAGS or flags)
+        fs:SetText("")
+        fs:SetTextColor(Addon.THEME.text.r, Addon.THEME.text.g, Addon.THEME.text.b, Addon.THEME.text.a)
         fs:Show()
         return fs
     end
@@ -1281,6 +1356,10 @@ PopulateSummary = function(panel)
             panel._rowHitPool[hitCursor] = h
         end
         local h = panel._rowHitPool[hitCursor]
+        h:ClearAllPoints()
+        h:SetScript("OnEnter", nil)
+        h:SetScript("OnMouseUp", nil)
+        h:SetScript("OnLeave", OnCellLeave)
         h:Show()
         return h
     end
@@ -1301,6 +1380,17 @@ PopulateSummary = function(panel)
             }
         end
         local col = panel._colPool[colCursor]
+        col.nameFS:ClearAllPoints()
+        if col.ilvlFS     then col.ilvlFS:ClearAllPoints()     end
+        if col.updatedFS  then col.updatedFS:ClearAllPoints()  end
+        if col.hdrHit     then
+            col.hdrHit:ClearAllPoints()
+            col.hdrHit:SetScript("OnEnter", nil)
+            col.hdrHit:SetScript("OnMouseUp", nil)
+            col.hdrHit:SetScript("OnLeave", OnCellLeave)
+        end
+        if col.classBar then col.classBar:ClearAllPoints() end
+        col.hideBtn:ClearAllPoints()
         col.nameFS:Show()
         if col.ilvlFS     then col.ilvlFS:Show()     end
         if col.updatedFS  then col.updatedFS:Show()  end
@@ -1314,13 +1404,17 @@ PopulateSummary = function(panel)
             col.cells[rowIdx] = MakeCell(panel, colW, ROW_H)
         end
         local c = col.cells[rowIdx]
+        c:ClearAllPoints()
+        c:SetScript("OnEnter", nil)
+        c:SetScript("OnMouseUp", nil)
+        c:SetScript("OnLeave", OnCellLeave)
         c:Show()
         return c
     end
 
     -- ── Column-header background strip ───────────────────────────────────────
     local hdrBg = GetDiv()
-    hdrBg:SetColorTexture(brd.r, brd.g, brd.b, 0.22)
+    hdrBg:SetColorTexture(brd.r, brd.g, brd.b, STYLE.headerBandA)
     hdrBg:SetPoint("TOPLEFT",  panel, "TOPLEFT",  1,  COL_HDR_TOP)
     hdrBg:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -1, COL_HDR_TOP)
     hdrBg:SetHeight(COL_HDR_H + 2)
@@ -1328,20 +1422,20 @@ PopulateSummary = function(panel)
     -- Horizontal divider below column headers.
     local hdrDiv = GetDiv()
     hdrDiv:SetHeight(1)
-    hdrDiv:SetColorTexture(brd.r, brd.g, brd.b, 0.55)
+    hdrDiv:SetColorTexture(brd.r, brd.g, brd.b, STYLE.headerLineA)
     hdrDiv:SetPoint("TOPLEFT",  panel, "TOPLEFT",  PAD, ROWS_TOP)
     hdrDiv:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -PAD, ROWS_TOP)
 
     -- ── Button strip background (above footer checkbox) ───────────────────────
     local btnsBg = GetDiv()
-    btnsBg:SetColorTexture(brd.r, brd.g, brd.b, 0.18)
+    btnsBg:SetColorTexture(brd.r, brd.g, brd.b, STYLE.footerBandA)
     btnsBg:SetPoint("TOPLEFT",  panel, "TOPLEFT",  1, BTNS_TOP)
     btnsBg:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -1, BTNS_TOP)
     btnsBg:SetHeight(BTN_ROW_H)
 
     local btnsDiv = GetDiv()
     btnsDiv:SetHeight(1)
-    btnsDiv:SetColorTexture(brd.r, brd.g, brd.b, 0.50)
+    btnsDiv:SetColorTexture(brd.r, brd.g, brd.b, STYLE.headerLineA)
     btnsDiv:SetPoint("TOPLEFT",  panel, "TOPLEFT",  PAD, BTNS_TOP)
     btnsDiv:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -PAD, BTNS_TOP)
 
@@ -1349,7 +1443,7 @@ PopulateSummary = function(panel)
     -- Vertical divider separating labels from data columns.
     local lblDiv = GetDiv()
     lblDiv:SetWidth(1)
-    lblDiv:SetColorTexture(brd.r, brd.g, brd.b, 0.40)
+    lblDiv:SetColorTexture(brd.r, brd.g, brd.b, STYLE.colLineA)
     lblDiv:SetPoint("TOPLEFT",    panel, "TOPLEFT", PAD + COL_LABEL - 1, ROWS_TOP)
     lblDiv:SetPoint("BOTTOMLEFT", panel, "TOPLEFT", PAD + COL_LABEL - 1, FOOTER_TOP)
 
@@ -1360,10 +1454,22 @@ PopulateSummary = function(panel)
 
         if row.type == "sechdr" then
             local secBg = GetDiv()
-            secBg:SetColorTexture(header.r, header.g, header.b, 0.08)
+            secBg:SetColorTexture(header.r, header.g, header.b, STYLE.sectionBandA)
             secBg:SetPoint("TOPLEFT",  panel, "TOPLEFT",   1, curRowY)
             secBg:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -1, curRowY)
             secBg:SetHeight(h)
+
+            local secTopLine = GetDiv()
+            secTopLine:SetHeight(1)
+            secTopLine:SetColorTexture(header.r, header.g, header.b, STYLE.sectionLineA)
+            secTopLine:SetPoint("TOPLEFT",  panel, "TOPLEFT",   1, curRowY)
+            secTopLine:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -1, curRowY)
+
+            local secBottomLine = GetDiv()
+            secBottomLine:SetHeight(1)
+            secBottomLine:SetColorTexture(header.r, header.g, header.b, STYLE.sectionLineA)
+            secBottomLine:SetPoint("TOPLEFT",  panel, "TOPLEFT",   1, curRowY - h + 1)
+            secBottomLine:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -1, curRowY - h + 1)
 
             local secFS = GetLbl(10, "")
             secFS:SetTextColor(header.r, header.g, header.b, 0.90)
@@ -1378,16 +1484,12 @@ PopulateSummary = function(panel)
                     if row.action == "currency" then
                         ToggleCharacter("TokenFrame")
                     elseif row.action == "greatvault" then
-                        if not WeeklyRewardsFrame then C_AddOns.LoadAddOn("Blizzard_WeeklyRewards") end
-                        if WeeklyRewardsFrame then
-                            if WeeklyRewardsFrame:IsShown() then WeeklyRewardsFrame:Hide()
-                            else WeeklyRewardsFrame:Show() end
-                        end
+                        Addon:ToggleGreatVault()
                     end
                 end)
                 secBg:SetScript("OnEnter", function(s_)
                     GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
-                    GameTooltip:SetText("Click to open", 1, 1, 1)
+                    GameTooltip:SetText(L.TOOLTIP_CLICK_TO_OPEN or "Click to open", 1, 1, 1)
                     GameTooltip:Show()
                 end)
                 secBg:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1395,9 +1497,9 @@ PopulateSummary = function(panel)
         else
             local rowBg = GetDiv()
             if (ri % 2) == 0 then
-                rowBg:SetColorTexture(1, 1, 1, 0.03)
+                rowBg:SetColorTexture(1, 1, 1, STYLE.rowLightA)
             else
-                rowBg:SetColorTexture(0, 0, 0, 0.10)
+                rowBg:SetColorTexture(0, 0, 0, STYLE.rowDarkA)
             end
             rowBg:SetPoint("TOPLEFT",  panel, "TOPLEFT",   1, curRowY)
             rowBg:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -1, curRowY)
@@ -1405,7 +1507,7 @@ PopulateSummary = function(panel)
 
             local rowSep = GetDiv()
             rowSep:SetHeight(1)
-            rowSep:SetColorTexture(brd.r, brd.g, brd.b, 0.18)
+            rowSep:SetColorTexture(brd.r, brd.g, brd.b, STYLE.rowLineA)
             rowSep:SetPoint("TOPLEFT",  panel, "TOPLEFT",   PAD, curRowY - h + 1)
             rowSep:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -PAD, curRowY - h + 1)
 
@@ -1417,8 +1519,8 @@ PopulateSummary = function(panel)
                 local iconOffY = curRowY - math.floor((h - ICON_SIZE) / 2)
                 iconTex:ClearAllPoints()
                 iconTex:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD + 2, iconOffY)
-                textX = PAD + 2 + ICON_SIZE + 2  -- 6+2+14+2 = 24px from left edge
-                textW = COL_LABEL - 2 - ICON_SIZE - 2 - 2
+                textX = PAD + 3 + ICON_SIZE + 4
+                textW = COL_LABEL - ICON_SIZE - 12
             else
                 textX = PAD + 4
                 textW = COL_LABEL - 8
@@ -1453,16 +1555,12 @@ PopulateSummary = function(panel)
                     GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
                     GameTooltip:SetCurrencyByID(_cid)
                     GameTooltip:AddLine(" ")
-                    GameTooltip:AddLine("Right-click to hide", 0.5, 0.5, 0.5)
+                    GameTooltip:AddLine(L.CONTEXT_RIGHT_CLICK_HIDE or "Right-click to hide", 0.5, 0.5, 0.5)
                     GameTooltip:Show()
                 end)
                 hit:SetScript("OnMouseUp", function(s_, button)
                     if button ~= "RightButton" then return end
-                    Addon:ShowContextMenu(s_, {
-                        { text = "Hide this currency", onClick = function()
-                            Addon:SetCurrencyHidden(_cid, true)
-                        end },
-                    })
+                    ShowCurrencyHideMenu(s_, _cid)
                 end)
             end
         end
@@ -1473,7 +1571,7 @@ PopulateSummary = function(panel)
     -- Footer divider + checkbox.
     local footerDiv = GetDiv()
     footerDiv:SetHeight(1)
-    footerDiv:SetColorTexture(brd.r, brd.g, brd.b, 0.40)
+    footerDiv:SetColorTexture(brd.r, brd.g, brd.b, STYLE.headerLineA)
     footerDiv:SetPoint("TOPLEFT",  panel, "TOPLEFT",   PAD, FOOTER_TOP)
     footerDiv:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -PAD, FOOTER_TOP)
 
@@ -1508,18 +1606,18 @@ PopulateSummary = function(panel)
         if ci > 1 then
             local colSep = GetDiv()
             colSep:SetWidth(1)
-            colSep:SetColorTexture(brd.r, brd.g, brd.b, 0.30)
+            colSep:SetColorTexture(brd.r, brd.g, brd.b, STYLE.colLineA)
             colSep:SetPoint("TOPLEFT",    panel, "TOPLEFT", colX - 1, COL_HDR_TOP)
             colSep:SetPoint("BOTTOMLEFT", panel, "TOPLEFT", colX - 1, FOOTER_TOP)
         end
 
         local col = GetCol()
 
-        -- Thin class-color bar at top of the name header.
-        col.classBar:SetColorTexture(char.cr, char.cg, char.cb, 0.35)
-        col.classBar:SetPoint("TOPLEFT",  panel, "TOPLEFT", colX,         COL_HDR_TOP)
-        col.classBar:SetPoint("TOPRIGHT", panel, "TOPLEFT", colX + colW, COL_HDR_TOP)
-        col.classBar:SetHeight(2)
+        -- Class-color accent at the top of the name header.
+        col.classBar:SetColorTexture(char.cr, char.cg, char.cb, STYLE.classBarA)
+        col.classBar:SetPoint("TOPLEFT",  panel, "TOPLEFT", colX + 5,         COL_HDR_TOP - 1)
+        col.classBar:SetPoint("TOPRIGHT", panel, "TOPLEFT", colX + colW - 5, COL_HDR_TOP - 1)
+        col.classBar:SetHeight(3)
 
         -- Character name.
         local charName = (char.key:match("^(.-)%s*%-") or char.key):gsub("^%s+",""):gsub("%s+$","")
@@ -1528,7 +1626,7 @@ PopulateSummary = function(panel)
         if #charName > maxChars then charName = charName:sub(1, maxChars - 1) .. "." end
 
         col.nameFS:SetText(charName)
-        col.nameFS:SetFont("Fonts\\FRIZQT__.TTF", 12, "")
+        col.nameFS:SetFont(FONT_FACE, 12, FONT_FLAGS)
         col.nameFS:SetTextColor(char.cr, char.cg, char.cb, char.alpha)
         col.nameFS:SetJustifyH("CENTER")
         col.nameFS:SetJustifyV("MIDDLE")
@@ -1540,7 +1638,7 @@ PopulateSummary = function(panel)
         if col.ilvlFS then
             local ilvlText = (char.ilvl and char.ilvl > 0) and tostring(math.floor(char.ilvl)) or ""
             col.ilvlFS:SetText(ilvlText)
-            col.ilvlFS:SetFont("Fonts\\FRIZQT__.TTF", 11, "")
+            col.ilvlFS:SetFont(FONT_FACE, 11, FONT_FLAGS)
             -- Color by the highest crest tier the character qualifies for.
             local ir, ig, ib = 0.85, 0.75, 0.5  -- default warm-gold fallback
             if char.ilvl and char.ilvl > 0 and Addon.IlvlUtils then
@@ -1560,13 +1658,13 @@ PopulateSummary = function(panel)
 
         -- Last-updated timestamp below ilvl.
         if col.updatedFS then
-            local updText, updAlpha = "—", 0.35
+            local updText, updAlpha = PLACEHOLDER_DASH, 0.35
             if snap and snap.updatedAt then
                 updText  = date("%b %d", snap.updatedAt)
                 updAlpha = 0.45
             end
             col.updatedFS:SetText(updText)
-            col.updatedFS:SetFont("Fonts\\FRIZQT__.TTF", FONT_SM - 2, "")
+            col.updatedFS:SetFont(FONT_FACE, 10, FONT_FLAGS)
             col.updatedFS:SetTextColor(th.r, th.g, th.b, char.alpha * updAlpha)
             col.updatedFS:SetJustifyH("CENTER")
             col.updatedFS:SetJustifyV("MIDDLE")
@@ -1586,12 +1684,12 @@ PopulateSummary = function(panel)
                 GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
                 GameTooltip:SetText(_name, _cr, _cg, _cb)
                 if _snap and _snap.updatedAt then
-                    GameTooltip:AddLine("Last updated: " .. date("%b %d %Y %H:%M", _snap.updatedAt), 0.65, 0.65, 0.65)
+                    GameTooltip:AddLine((L.ALT_SUMMARY_LAST_UPDATED_FMT or "Last updated: %s"):format(date("%b %d %Y %H:%M", _snap.updatedAt)), 0.65, 0.65, 0.65)
                 else
-                    GameTooltip:AddLine("No snapshot data", 0.5, 0.5, 0.5)
+                    GameTooltip:AddLine(L.ALT_SUMMARY_NO_SNAPSHOT or "No snapshot data", 0.5, 0.5, 0.5)
                 end
                 GameTooltip:AddLine(" ")
-                GameTooltip:AddLine("Click to view gear", 0.5, 0.5, 0.5)
+                GameTooltip:AddLine(L.ALT_SUMMARY_CLICK_VIEW_GEAR or "Click to view gear", 0.5, 0.5, 0.5)
                 GameTooltip:Show()
             end)
             col.hdrHit:SetScript("OnMouseUp", function(s_, button)
@@ -1614,13 +1712,13 @@ PopulateSummary = function(panel)
         col.hideBtn:SetSize(BTN_W, BTN_H)
 
         if char.isOwn and not char.isHidden then
-            col.hideBtn:SetText("—")
+            col.hideBtn:SetText(PLACEHOLDER_DASH)
             col.hideBtn:SetEnabled(false)
             local fs = Addon.Controls.GetButtonFontString(col.hideBtn)
             if fs then fs:SetTextColor(0.3, 0.3, 0.3, 1) end
             col.hideBtn:SetScript("OnClick", nil)
         elseif char.isHidden then
-            col.hideBtn:SetText("Show")
+            col.hideBtn:SetText(L.CHAR_PICKER_SHOW or "Show")
             col.hideBtn:SetEnabled(true)
             local fs = Addon.Controls.GetButtonFontString(col.hideBtn)
             if fs then fs:SetTextColor(0.5, 1, 0.5, 1) end
@@ -1638,7 +1736,7 @@ PopulateSummary = function(panel)
                 end
             end)
         else
-            col.hideBtn:SetText("Hide")
+            col.hideBtn:SetText(L.CHAR_PICKER_HIDE or "Hide")
             col.hideBtn:SetEnabled(true)
             local fs = Addon.Controls.GetButtonFontString(col.hideBtn)
             if fs then fs:SetTextColor(1, 0.5, 0.5, 1) end
@@ -1681,9 +1779,8 @@ PopulateSummary = function(panel)
                 cell:SetPoint("TOPLEFT", panel, "TOPLEFT", colX, cellRowY)
                 cell:SetSize(colW, h)
 
-                cell._fs:SetFont("Fonts\\FRIZQT__.TTF", FONT_CELL, "")
-                cell._fs:SetText("—")
-                cell._fs:SetTextColor(th.r, th.g, th.b, A_DIM)
+                cell._fs:SetFont(FONT_FACE, FONT_CELL, FONT_FLAGS)
+                SetPlaceholder(cell, th, A_DIM)
                 cell._tu:SetText("")
                 cell:SetScript("OnEnter", nil)
 
@@ -1712,7 +1809,16 @@ PopulateSummary = function(panel)
                     RenderWeapUpgCell(cell, row, sd, noSnap, alpha, th)
                 end
 
-                cell:SetScript("OnMouseUp", nil)
+                local hideCurrencyID = row.currencyID or (row.type == "misc" and row.miscID)
+                if hideCurrencyID then
+                    local _cid = hideCurrencyID
+                    cell:SetScript("OnMouseUp", function(s_, button)
+                        if button ~= "RightButton" then return end
+                        ShowCurrencyHideMenu(s_, _cid)
+                    end)
+                else
+                    cell:SetScript("OnMouseUp", nil)
+                end
             end
 
             cellRowY = cellRowY - h
@@ -1725,7 +1831,7 @@ PopulateSummary = function(panel)
         noCharFS:SetTextColor(th.r, th.g, th.b, 0.5)
         noCharFS:SetJustifyH("CENTER")
         noCharFS:SetJustifyV("MIDDLE")
-        noCharFS:SetText("No characters found")
+        noCharFS:SetText(L.ALT_SUMMARY_NO_CHARACTERS or "No characters found")
         noCharFS:SetPoint("CENTER", panel, "CENTER", 0, 0)
         noCharFS:SetSize(200, 30)
     end
@@ -1754,38 +1860,6 @@ function Addon:OpenAltsSummary(anchorFrame)
     f._inline  = false
     _rowsDirty = true  -- always rebuild on open; state may have changed while panel was hidden
     PopulateSummary(f)
-    f:Show()
-end
-
-function Addon:OpenAltsSummaryInline(mainFrame)
-    -- Like OpenAltsSummary, but positions the panel at the top of the main
-    -- window's scroll area instead of below it.  Used when the list is complete
-    -- so the Alt Summary replaces the empty scroll content inline.
-    if self.UpdateSnapshotBackground then self:UpdateSnapshotBackground() end
-    local f = EnsurePanel()
-    -- Sync scale and opacity to current settings (frame may have been created lazily).
-    f:SetScale(Addon.GetUIScale and Addon:GetUIScale() or 1.0)
-    if Addon.ApplyOpacity then Addon:ApplyOpacity() end
-    -- Inline mode always anchors to the main frame; clear any drag-moved position.
-    f._wasMoved = false
-    f:ClearAllPoints()
-    if mainFrame then
-        local padX      = (Addon.UI and Addon.UI.padOuterX) or 14
-        local scrollTop = (Addon.UI and Addon.UI.scrollTop) or 60
-        f:SetPoint("TOPLEFT", mainFrame, "TOPLEFT", padX, -scrollTop)
-    else
-        f:SetPoint("CENTER", UIParent, "CENTER", 0, 60)
-    end
-    f:SetClampedToScreen(true)
-    f._inline  = true
-    _rowsDirty = true
-    PopulateSummary(f)
-    -- Resize the main frame to exactly fit the alt summary width.
-    if mainFrame then
-        local padX = (Addon.UI and Addon.UI.padOuterX) or 14
-        mainFrame:SetWidth(2 * padX + f:GetWidth())
-        if Addon.ApplyScrollLayout then Addon:ApplyScrollLayout() end
-    end
     f:Show()
 end
 

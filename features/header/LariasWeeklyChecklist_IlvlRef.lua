@@ -40,9 +40,10 @@ end
 -- Draw a 1 px horizontal rule and return the new posY.
 local function HRule(parent, posY)
     local tex = parent:CreateTexture(nil, "ARTWORK")
+    local vs = Addon.VISUAL_STYLE or {}
     tex:SetColorTexture(
         Addon.THEME.border.r, Addon.THEME.border.g,
-        Addon.THEME.border.b, Addon.THEME.border.a * 0.6)
+        Addon.THEME.border.b, vs.strongDividerA or (Addon.THEME.border.a * 0.6))
     tex:SetHeight(1)
     tex:SetPoint("TOPLEFT",  parent, "TOPLEFT",  0,  posY)
     tex:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0,  posY)
@@ -118,8 +119,8 @@ end
 -- cols = { {x, w, t, [align]} }  (x/w are cell boundaries; t = header text)
 -- rows = { {cell1, cell2, ...}, ... }
 -- Returns new posY.
-local GBOR = 0.55  -- outer border / header divider opacity multiplier
-local GLIN = 0.18  -- inner row / column line opacity multiplier
+local GBOR = (Addon.VISUAL_STYLE and Addon.VISUAL_STYLE.trackingBorderA) or 0.55
+local GLIN = (Addon.VISUAL_STYLE and Addon.VISUAL_STYLE.trackingInnerA) or 0.18
 local function GridTable(parent, posY, cols, rows)
         local borderColor = Addon.THEME.border
         local dimColor    = Addon.THEME.textDim
@@ -372,8 +373,7 @@ local function BuildIlvlRefWindow()
     win:Hide()
 
     -- Override bg to fully opaque (NewThemedFrame sets theme defaults; bg.a is 0.65).
-    local bg = Addon.THEME.bg
-    win:SetBackdropColor(bg.r, bg.g, bg.b, 1.0)
+    Addon:ApplyOpaquePopupTheme(win)
 
     -- Title (centered, leaves room for close button on the right)
     local titleFS = win:CreateFontString(nil, "ARTWORK", "GameFontNormal")

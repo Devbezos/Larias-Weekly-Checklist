@@ -4,24 +4,13 @@
 -- Each button triggers a confirmation dialog before executing the bulk purchase.
 --
 -- Trigger: MERCHANT_SHOW / MERCHANT_CLOSED events.
--- Per-tier items (CONVERT_ITEM_IDS) are detected by scanning the merchant list.
+-- Per-tier items from TRACKING.crestConvertItemIDs are detected by scanning the merchant list.
 -- The "Convert All" button converts every tier available from that vendor.
 local addonName = ...
 local Addon = _G[addonName]
 if not Addon then return end
 
 local L = Addon.L or {}
-
--- ── Conversion item IDs ───────────────────────────────────────────────────────
--- Index ci maps source tier ci → dest tier ci+1.
--- Each item purchased from the vendor spends source-tier crests and produces
--- the next-tier crests (extended-cost purchase, auto-consumed on buy).
-local CONVERT_ITEM_IDS = {
-    [1] = 263977,  -- Adventurer  → Veteran
-    [2] = 246751,  -- Veteran     → Champion
-    [3] = 246752,  -- Champion    → Hero
-    [4] = 246753,  -- Hero        → Myth
-}
 
 -- Locale keys for crest tier short-names, indexed 1-5 (mirrors UpgradeWarning).
 local CREST_LOCALE_KEYS = {
@@ -57,6 +46,10 @@ local _found = {}     -- [ci] = merchantIndex for the current merchant visit
 local _pendingConvert -- callback stored while the confirm dialog is open
 
 -- ── Helpers ───────────────────────────────────────────────────────────────────
+
+local function GetConvertItemIDs()
+    return (Addon.TRACKING and Addon.TRACKING.crestConvertItemIDs) or {}
+end
 
 -- Returns a tier-coloured short crest name for use in warning text.
 -- e.g. tier 1 → "|cFF1EFF00Adv|r"
@@ -106,17 +99,63 @@ local function GetMaxConv(ci, merchantIdx)
     return math.floor(held / costPer)
 end
 
+local function GetNpcIDFromGUID(guid)
+    if not guid then return nil end
+
+    local ok, npcID = pcall(function()
+        if type(guid) ~= "string" then return nil end
+        local id = string.match(guid, "^%w+%-%d+%-%d+%-%d+%-%d+%-(%d+)%-")
+        return tonumber(id)
+    end)
+
+    return ok and npcID or nil
+end
+
+local function GetNpcIDFromUnit(unitToken)
+    if not (UnitGUID and unitToken) then return nil end
+    local ok, guid = pcall(UnitGUID, unitToken)
+    if not ok then return nil end
+    return GetNpcIDFromGUID(guid)
+end
+
+local function TextMatchesCrestExchange(text)
+    if type(text) ~= "string" then return false end
+    text = text:lower()
+    return text:find("crest exchange", 1, true) ~= nil
+end
+
+local function FontStringMatchesCrestExchange(fontString)
+    return fontString and fontString.GetText and TextMatchesCrestExchange(fontString:GetText())
+end
+
+local function IsCrestExchangeVendor()
+    local npcID = GetNpcIDFromUnit("npc")
+    local npcIDs = Addon.TRACKING and Addon.TRACKING.crestExchangeNpcIDs
+    if npcID and npcIDs then
+        for key, value in pairs(npcIDs) do
+            if tonumber(key) == npcID and value == true then return true end
+            if tonumber(value) == npcID then return true end
+        end
+    end
+
+    if FontStringMatchesCrestExchange(_G.MerchantFrameTitleText) then return true end
+    if MerchantFrame and FontStringMatchesCrestExchange(MerchantFrame.TitleText) then return true end
+
+    return false
+end
+
 -- Scans the open merchant and populates _found[ci] = merchantIndex for each
 -- crest conversion item that the vendor sells.
 local function ScanMerchant()
     for k in pairs(_found) do _found[k] = nil end
+    local convertItemIDs = GetConvertItemIDs()
     local n = GetMerchantNumItems and GetMerchantNumItems() or 0
     for i = 1, n do
         local link = GetMerchantItemLink and GetMerchantItemLink(i)
         if link then
             local itemID = tonumber(link:match("item:(%d+)"))
             if itemID then
-                for ci, wantID in ipairs(CONVERT_ITEM_IDS) do
+                for ci, wantID in ipairs(convertItemIDs) do
                     if itemID == wantID and not _found[ci] then
                         _found[ci] = i
                     end
@@ -170,12 +209,7 @@ local function BuildPanel()
     holder:Hide()
 
     -- Fully-opaque backdrop so the panel reads clearly over the merchant UI.
-    local bg  = Addon.THEME.bg
-    local bdr = Addon.THEME.border
-    holder:SetBackdropColor(bg.r, bg.g, bg.b, 1.0)
-    if holder.SetBackdropBorderColor then
-        holder:SetBackdropBorderColor(bdr.r, bdr.g, bdr.b, bdr.a or 1)
-    end
+    Addon:ApplyOpaquePopupTheme(holder)
 
     -- Anchor to the right edge of MerchantFrame when it exists.
     if MerchantFrame then
@@ -195,7 +229,8 @@ local function BuildPanel()
     -- Create one button per conversion tier (1-4); shown/positioned in Refresh.
     -- Each button uses 3 FontStrings at fixed x offsets so columns stay aligned
     -- regardless of tier-name length (proportional font requires this approach).
-    for ci = 1, #CONVERT_ITEM_IDS do
+    local convertItemIDs = GetConvertItemIDs()
+    for ci = 1, #convertItemIDs do
         local btn = Addon.Controls.NewActionButton(holder, BTN_W, BTN_H)
         btn:SetText("")
         -- Col 1: "Src -> Dst" – reuse the button's own FS so SetEnabled tints it.
@@ -253,7 +288,8 @@ local function BuildPanel()
         local gainPer = GetGainPerPurchase()
         local plan    = {}
         local lines   = {}
-        for ci = 1, #CONVERT_ITEM_IDS do
+        local convertItemIDs = GetConvertItemIDs()
+        for ci = 1, #convertItemIDs do
             local merchantIdx = _found[ci]
             if merchantIdx then
                 local costPer = GetCostPerPurchase(merchantIdx)
@@ -314,14 +350,15 @@ function Addon:RefreshCrestConvertPanel()
 
     -- Collect which tier conversions this vendor offers.
     local visible = {}
-    for ci = 1, #CONVERT_ITEM_IDS do
+    local convertItemIDs = GetConvertItemIDs()
+    for ci = 1, #convertItemIDs do
         if _found[ci] then
             table.insert(visible, ci)
         end
     end
 
     -- Hide every button first.
-    for ci = 1, #CONVERT_ITEM_IDS do
+    for ci = 1, #convertItemIDs do
         if _btns[ci] then _btns[ci]:Hide() end
     end
     if _allBtn then _allBtn:Hide() end
@@ -388,18 +425,30 @@ evFrame:RegisterEvent("MERCHANT_SHOW")
 evFrame:RegisterEvent("MERCHANT_CLOSED")
 evFrame:SetScript("OnEvent", function(_, event)
     if event == "MERCHANT_SHOW" then
+        for k in pairs(_found) do _found[k] = nil end
+        if _panel then _panel:Hide() end
+        if _pendingConvert then
+            StaticPopup_Hide("LWMC_CREST_CONVERT")
+            _pendingConvert = nil
+        end
+
         -- Small delay so GetMerchantItemLink returns valid data on first open.
         C_Timer.After(0.05, function()
             local prefs = Addon.EnsurePrefs and Addon:EnsurePrefs()
             if prefs and prefs.crestConvertDisabled then return end
+            if not IsCrestExchangeVendor() then return end
+
             ScanMerchant()
             local anyFound = false
-            for ci = 1, #CONVERT_ITEM_IDS do
+            local convertItemIDs = GetConvertItemIDs()
+            for ci = 1, #convertItemIDs do
                 if _found[ci] then anyFound = true; break end
             end
             if anyFound then
                 BuildPanel()
                 Addon:RefreshCrestConvertPanel()
+            elseif _panel then
+                _panel:Hide()
             end
         end)
 

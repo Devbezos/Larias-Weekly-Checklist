@@ -44,6 +44,7 @@ end
 
 Addon.L = Addon.L or {}
 local L = Addon.L
+Addon.PLACEHOLDER_DASH = Addon.PLACEHOLDER_DASH or "\226\128\148"
 
 do
     local reg = GetLocaleRegistry()
@@ -189,6 +190,21 @@ local max = math.max
 local min = math.min
 local tinsert, tremove, tconcat = table.insert, table.remove, table.concat
 local CreateFrame = CreateFrame
+
+Addon.VISUAL_STYLE = Addon.VISUAL_STYLE or {
+    panelBorderA     = 0.62,
+    popupBorderA     = 0.56,
+    buttonBgA        = 0.30,
+    buttonBorderA    = 0.48,
+    buttonHighlightA = 0.05,
+    iconButtonBgA    = 0.72,
+    dividerA         = 0.24,
+    strongDividerA   = 0.40,
+    sectionBandA     = 0.10,
+    sectionAccentA   = 0.32,
+    trackingBorderA  = 0.38,
+    trackingInnerA   = 0.18,
+}
 
 Addon._debugRate = Addon._debugRate or {}
 
@@ -905,9 +921,38 @@ function Addon:ApplyTheme(frameObj)
         Mixin(frameObj, BackdropTemplateMixin)
     end
     if not frameObj.SetBackdrop then return end
+    local vs = Addon.VISUAL_STYLE or {}
+    local borderA = math.min(tonumber(Addon.THEME.border.a) or 1, tonumber(vs.panelBorderA) or 1)
     frameObj:SetBackdrop(BACKDROP_DEF)
     frameObj:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, Addon.THEME.bg.a)
-    frameObj:SetBackdropBorderColor(Addon.THEME.border.r, Addon.THEME.border.g, Addon.THEME.border.b, Addon.THEME.border.a)
+    frameObj:SetBackdropBorderColor(Addon.THEME.border.r, Addon.THEME.border.g, Addon.THEME.border.b, borderA)
+end
+
+function Addon:ApplyPopupBorder(frameObj)
+    if not frameObj or not frameObj.SetBackdropBorderColor then return end
+    local bdr = Addon.THEME and Addon.THEME.border
+    if not bdr then return end
+    local vs = Addon.VISUAL_STYLE or {}
+    frameObj:SetBackdropBorderColor(bdr.r, bdr.g, bdr.b, vs.popupBorderA or bdr.a or 1)
+end
+
+function Addon:ApplyOpaquePopupTheme(frameObj)
+    if not frameObj then return end
+    self:ApplyTheme(frameObj)
+    local bg = Addon.THEME and Addon.THEME.bg
+    if bg and frameObj.SetBackdropColor then
+        frameObj:SetBackdropColor(bg.r, bg.g, bg.b, 1.0)
+    end
+    self:ApplyPopupBorder(frameObj)
+end
+
+function Addon:ToggleGreatVault()
+    if not WeeklyRewardsFrame and C_AddOns and C_AddOns.LoadAddOn then
+        pcall(C_AddOns.LoadAddOn, "Blizzard_WeeklyRewards")
+    end
+    if not WeeklyRewardsFrame then return end
+    if WeeklyRewardsFrame:IsShown() then WeeklyRewardsFrame:Hide()
+    else WeeklyRewardsFrame:Show() end
 end
 
 -- Create a new Frame, apply BackdropTemplate if available, and theme it.
@@ -951,14 +996,21 @@ local function ApplyThemeBackdrops(self)
         elseif _asf.SetBackdropColor then
             _asf:SetBackdropColor(bg.r, bg.g, bg.b, bgA)
         end
-        if _asf.SetBackdropBorderColor then _asf:SetBackdropBorderColor(bd.r, bd.g, bd.b, bd.a) end
+        if _asf.SetBackdropBorderColor then
+            local vs = self.VISUAL_STYLE or {}
+            _asf:SetBackdropBorderColor(bd.r, bd.g, bd.b, vs.panelBorderA or bd.a)
+        end
         if not _asf._inline then
             local h = self.THEME.header
-            if _asf._altsTitleBgTex then _asf._altsTitleBgTex:SetColorTexture(h.r, h.g, h.b, 0.09) end
+            local vs = self.VISUAL_STYLE or {}
+            if _asf._altsTitleBgTex then _asf._altsTitleBgTex:SetColorTexture(h.r, h.g, h.b, vs.sectionBandA or 0.09) end
             if _asf._altsTitleFS    then _asf._altsTitleFS:SetTextColor(h.r, h.g, h.b, 1)          end
         end
     end
-    if self._gearPopup then self:ApplyTheme(self._gearPopup) end
+    if self._gearPopup then
+        self:ApplyTheme(self._gearPopup)
+        self:ApplyPopupBorder(self._gearPopup)
+    end
     if self.ApplyOpacity then self:ApplyOpacity() end
 end
 
@@ -1314,16 +1366,28 @@ end
 -- sits at ~121) so header buttons can receive mouse clicks.
 local SECTION_FRAME_LEVEL = 200
 
+local function ApplySectionHeaderTint(sectionFrame)
+    if not sectionFrame then return end
+    local h = Addon.THEME.header
+    local vs = Addon.VISUAL_STYLE or {}
+    if sectionFrame._title then
+        sectionFrame._title:SetTextColor(h.r, h.g, h.b, h.a)
+    end
+    if sectionFrame._headerBg then
+        sectionFrame._headerBg:SetColorTexture(h.r, h.g, h.b, vs.sectionBandA or 0.10)
+    end
+    if sectionFrame._headerAccent then
+        sectionFrame._headerAccent:SetColorTexture(h.r, h.g, h.b, vs.sectionAccentA or 0.32)
+    end
+end
+
 local function AcquireSectionFrame()
     local sectionFrame = tremove(Addon._sectionPool)
     if sectionFrame then
         sectionFrame:Show()
         sectionFrame:SetFrameLevel(SECTION_FRAME_LEVEL)
         -- Re-apply header color in case THEME.header changed since last use.
-        if sectionFrame._title then
-            local h = Addon.THEME.header
-            sectionFrame._title:SetTextColor(h.r, h.g, h.b, h.a)
-        end
+        ApplySectionHeaderTint(sectionFrame)
         return sectionFrame
     end
 
@@ -1342,13 +1406,23 @@ local function AcquireSectionFrame()
     end
     sectionFrame._header = header
 
+    local headerBg = header:CreateTexture(nil, "BACKGROUND")
+    headerBg:SetAllPoints(header)
+    sectionFrame._headerBg = headerBg
+
+    local headerAccent = header:CreateTexture(nil, "ARTWORK")
+    headerAccent:SetPoint("TOPLEFT", header, "TOPLEFT", 2, -1)
+    headerAccent:SetPoint("TOPRIGHT", header, "TOPRIGHT", -2, -1)
+    headerAccent:SetHeight(1)
+    sectionFrame._headerAccent = headerAccent
+
     local title = header:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("LEFT",  header, "LEFT",  3, 0)
     title:SetPoint("RIGHT", header, "RIGHT", -3, 0)
-    title:SetTextColor(Addon.THEME.header.r, Addon.THEME.header.g, Addon.THEME.header.b, Addon.THEME.header.a)
-    title:SetJustifyH("LEFT")
+    title:SetJustifyH("CENTER")
     if title.SetWordWrap then title:SetWordWrap(true) end
     sectionFrame._title = title
+    ApplySectionHeaderTint(sectionFrame)
 
     -- Expand/collapse toggle button anchored to the right of the header.
     -- Parented to sectionFrame (not the Button header) so it is a sibling
@@ -1522,10 +1596,98 @@ function Addon:IsListComplete(db)
     return true
 end
 
+local function EnsureCompletionPanel()
+    if frame and frame._lariasCompletionPanel then
+        return frame._lariasCompletionPanel
+    end
+    if not (frame and scrollChild) then return nil end
+
+    local panel = CreateFrame("Frame", nil, scrollChild)
+    panel:SetHeight(96)
+    panel:Hide()
+
+    local content = CreateFrame("Frame", nil, panel)
+    content:SetSize(220, 60)
+    content:SetPoint("CENTER", panel, "CENTER", 0, 0)
+    panel._contentFrame = content
+
+    local title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    title:SetPoint("TOP", content, "TOP", 0, 0)
+    title:SetText(L.COMPLETION_JOB_DONE or "Job's done.")
+    panel._titleFS = title
+
+    local btn = Addon.Controls and Addon.Controls.NewActionButton
+        and Addon.Controls.NewActionButton(panel, 160, 24)
+        or CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    btn:SetSize(160, 24)
+    btn:SetText(L.COMPLETION_OPEN_ALT_SUMMARY or L.ALT_SUMMARY_TITLE or "Open Alt Summary")
+    btn:SetPoint("TOP", title, "BOTTOM", 0, -14)
+    btn:SetScript("OnClick", function()
+        if Addon.ToggleAltsSummary then
+            Addon:ToggleAltsSummary(frame)
+        end
+    end)
+    btn:SetScript("OnEnter", function(self_)
+        if Addon.AddonUtils and Addon.AddonUtils.SetTooltip then
+            Addon.AddonUtils.SetTooltip(self_, L.TOOLTIP_CLICK_TO_OPEN or "Click to open")
+        end
+    end)
+    btn:SetScript("OnLeave", function()
+        if Addon.AddonUtils and Addon.AddonUtils.HideTooltip then
+            Addon.AddonUtils.HideTooltip()
+        elseif GameTooltip then
+            GameTooltip:Hide()
+        end
+    end)
+    panel._altSummaryBtn = btn
+
+    frame._lariasCompletionPanel = panel
+    return panel
+end
+
+local function ShowCompletionPanel(show)
+    local panel = EnsureCompletionPanel()
+    if not panel then return end
+
+    if not show then
+        panel:Hide()
+        return
+    end
+
+    local th = Addon.THEME or {}
+    local header = th.header or { r = 1, g = 0.82, b = 0 }
+    if panel._titleFS then
+        panel._titleFS:SetText(L.COMPLETION_JOB_DONE or "Job's done.")
+        panel._titleFS:SetTextColor(header.r, header.g, header.b, header.a or 1)
+    end
+    if panel._altSummaryBtn then
+        panel._altSummaryBtn:SetText(L.COMPLETION_OPEN_ALT_SUMMARY or L.ALT_SUMMARY_TITLE or "Open Alt Summary")
+        if Addon.Controls and Addon.Controls.StyleButton then
+            Addon.Controls.StyleButton(panel._altSummaryBtn)
+        end
+    end
+
+    local paddingX = Addon.UI.sectionInsetX
+    local sectionW = math.max(1, (scrollFrame and scrollFrame:GetWidth() or Addon.UI.frameW) - 2 * paddingX)
+    local scrollH = (scrollFrame and scrollFrame.GetHeight and tonumber(scrollFrame:GetHeight())) or 0
+    local panelH = max(96, scrollH - (Addon.UI.sectionTopPad or 0) * 2)
+    panel:ClearAllPoints()
+    panel:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", paddingX, -Addon.UI.sectionTopPad)
+    panel:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", -paddingX, -Addon.UI.sectionTopPad)
+    panel:SetWidth(sectionW)
+    panel:SetHeight(panelH)
+    if panel._contentFrame then
+        panel._contentFrame:ClearAllPoints()
+        panel._contentFrame:SetPoint("CENTER", panel, "CENTER", 0, 0)
+    end
+    panel:Show()
+    scrollChild:SetHeight(max(scrollH, panelH + (Addon.UI.sectionTopPad or 0) * 2))
+end
+
 function Addon:UpdateCompletionEasterEgg(db)
     -- When the list is fully complete (no visible sections remain after
-    -- hide-completed collapses them), replace the scroll list with the inline
-    -- alt summary.  Restores everything when the user unchecks an item.
+    -- hide-completed collapses them), show a compact completion message with
+    -- a button that opens the normal Alt Summary popup.
     if not (frame and scrollFrame) then return end
 
     db = db or self:EnsureDB()
@@ -1546,57 +1708,41 @@ function Addon:UpdateCompletionEasterEgg(db)
 
     local showComplete = isComplete and (visibleSections == 0)
 
-    if showComplete then scrollFrame:Hide() else scrollFrame:Show() end
+    scrollFrame:Show()
 
     local sb = scrollFrame.ScrollBar
     if sb and sb.SetShown then
-        sb:SetShown(not isComplete)
-    elseif sb and isComplete and sb.Hide then
+        sb:SetShown(not showComplete)
+    elseif sb and showComplete and sb.Hide then
         sb:Hide()
-    elseif sb and (not isComplete) and sb.Show then
+    elseif sb and (not showComplete) and sb.Show then
         sb:Show()
     end
 
     local tf = self._trackingFrame
-    local cpBtn = frame._lariasCharPickerBtn
     local prefs = self:EnsurePrefs()
     if tf then
-        -- Hide the tracking panel in inline-complete mode: the alt summary already
-        -- shows per-character currency/vault data and we need the vertical space.
-        if showComplete then
-            tf:Hide()
-        elseif prefs.showGreatVault or prefs.showCurrency then
+        if prefs.showGreatVault or prefs.showCurrency then
             tf:Show()
         else
             tf:Hide()
         end
     end
-    if showComplete then
-        if cpBtn then cpBtn:Hide() end
-    else
-        if cpBtn then cpBtn:Show() end
-    end
     -- Always resize tracking columns so Great Vault columns aren't shrunk in
     -- completion mode (ApplyScrollLayout was previously skipped when complete).
     if self.ApplyScrollLayout then self:ApplyScrollLayout() end
 
-    -- ── Completion panel (shown in place of the scroll list) ─────────────────
-    if showComplete then
-        -- Show the alt summary inline in place of the scroll list.
-        if self.OpenAltsSummaryInline then
-            self:OpenAltsSummaryInline(frame)
-        end
-    else
-        -- If the alt summary was shown inline (not as a standalone popup), hide it
-        -- and restore the main frame to its normal width.
-        local asf = self._altsSummaryFrame
-        if asf and asf._inline and asf.IsShown and asf:IsShown() then
-            asf:Hide()
-            local mf = self._mainFrame
-            if mf then
-                mf:SetWidth(Addon.UI.frameW)
-                if self.ApplyScrollLayout then self:ApplyScrollLayout() end
-            end
+    ShowCompletionPanel(showComplete)
+
+    -- If an older inline Alt Summary is visible from a previous complete-state
+    -- refresh, close it and restore the normal main-window width.
+    local asf = self._altsSummaryFrame
+    if asf and asf._inline and asf.IsShown and asf:IsShown() then
+        asf:Hide()
+        local mf = self._mainFrame
+        if mf then
+            mf:SetWidth(Addon.UI.frameW)
+            if self.ApplyScrollLayout then self:ApplyScrollLayout() end
         end
     end
 end
@@ -1942,6 +2088,8 @@ UpdateSectionVisuals = function(sectionFrame, sectionId, precomputedCurrentId)
     end
 
     sectionFrame:Show()
+
+    ApplySectionHeaderTint(sectionFrame)
 
     -- Only auto-collapse a completed section when the user has NOT explicitly
     -- expanded it (tracked via _userExpandedCompleted set in OnHeaderClick).
@@ -2289,8 +2437,9 @@ function Addon:CreateFrame()
         if Addon._gearPopup and Addon._gearPopup.IsShown and Addon._gearPopup:IsShown() then
             Addon._gearPopup:Hide()
         end
-        if Addon._altsSummaryFrame and Addon._altsSummaryFrame.IsShown and Addon._altsSummaryFrame:IsShown() then
-            Addon._altsSummaryFrame:Hide()
+        local altsSummary = Addon._altsSummaryFrame
+        if altsSummary and altsSummary._inline and altsSummary.IsShown and altsSummary:IsShown() then
+            altsSummary:Hide()
         end
         if Addon._restoreHiddenFrame and Addon._restoreHiddenFrame.IsShown and Addon._restoreHiddenFrame:IsShown() then
             Addon._restoreHiddenFrame:Hide()

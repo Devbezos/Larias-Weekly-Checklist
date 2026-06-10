@@ -22,6 +22,21 @@ local tracking = { -- https://www.wowhead.com/currencies/season-1
         3345,  -- wowhead.com/currency=3345  Hero Dawncrest
         3347,  -- wowhead.com/currency=3347  Myth Dawncrest
     },
+    -- Items sold by Crest Exchange vendors to trade lower-tier crests upward.
+    -- Index ci maps source crest tier ci to destination tier ci + 1.
+    crestConvertItemIDs = {
+        263977, -- Adventurer Dawncrest -> Veteran Dawncrest
+        246751, -- Veteran Dawncrest    -> Champion Dawncrest
+        246752, -- Champion Dawncrest   -> Hero Dawncrest
+        246753, -- Hero Dawncrest       -> Myth Dawncrest
+    },
+    -- NPCs that should show the crest conversion side panel.
+    crestExchangeNpcIDs = {
+        239676, -- Vaskarn <Crest Exchange>, Silvermoon City (Midnight)
+        219226, -- Vaskarn <Undermine Crest Exchange>, Dornogal
+        216449, -- Vaskarn <Awakened Crest Exchange>
+        203404, -- Vaskarn <Shadowflame Crest Exchange>
+    },
     -- Achievement IDs for each crest tier (earn-X-crests achievements), same order.
     crestAchievementIDs = {
         61809,  -- wowhead.com/achievement=61809  Adventurer

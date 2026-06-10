@@ -23,6 +23,7 @@ if not Addon then return end
 -- }
 function Addon:CreateSliderWidget(pane, opts)
     local THEME = Addon.THEME or {}
+    local STYLE = Addon.VISUAL_STYLE or {}
     local bdr   = THEME.border  or { r=0.30, g=0.30, b=0.30, a=0.90 }
     local txt   = THEME.text    or { r=1.00, g=1.00, b=1.00, a=1.00 }
 
@@ -80,14 +81,14 @@ function Addon:CreateSliderWidget(pane, opts)
     trackBar:SetHeight(TRACK_H)
     trackBar:SetPoint("LEFT",  trackCont, "LEFT",  0, 0)
     trackBar:SetPoint("RIGHT", trackCont, "RIGHT", 0, 0)
-    trackBar:SetColorTexture(bdr.r, bdr.g, bdr.b, 0.7)
+    trackBar:SetColorTexture(bdr.r, bdr.g, bdr.b, STYLE.strongDividerA or 0.7)
 
     local thumb = CreateFrame("Frame", nil, trackCont)
     thumb:SetSize(THUMB_W, THUMB_H)
     thumb:SetFrameLevel(trackCont:GetFrameLevel() + 1)
     local thumbTex = thumb:CreateTexture(nil, "ARTWORK")
     thumbTex:SetAllPoints(thumb)
-    thumbTex:SetColorTexture(txt.r * 0.45, txt.g * 0.45, txt.b * 0.45, 0.9)
+    thumbTex:SetColorTexture(txt.r * 0.45, txt.g * 0.45, txt.b * 0.45, 0.72)
     local thumbLbl = thumb:CreateFontString(nil, "OVERLAY")
     thumbLbl:SetFont("Fonts\\FRIZQT__.TTF", 11, "")
     thumbLbl:SetAllPoints(thumb)
@@ -294,7 +295,7 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
             if sp._titleLbl then sp._titleLbl:SetTextColor(t.r, t.g, t.b, 0.75) end
             if sp._minLbl   then sp._minLbl:SetTextColor(t.r, t.g, t.b, 0.65)   end
             if sp._maxLbl   then sp._maxLbl:SetTextColor(t.r, t.g, t.b, 0.65)   end
-            if sp._thumbTex then sp._thumbTex:SetColorTexture(dR, dG, dB, 0.9)  end
+            if sp._thumbTex then sp._thumbTex:SetColorTexture(dR, dG, dB, 0.72) end
             if sp._thumbLbl then sp._thumbLbl:SetTextColor(t.r, t.g, t.b, 1)    end
         end
         -- Opacity pane title, min/max labels and thumb.
@@ -303,7 +304,7 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
             if op._titleLbl then op._titleLbl:SetTextColor(t.r, t.g, t.b, 0.75) end
             if op._minLbl   then op._minLbl:SetTextColor(t.r, t.g, t.b, 0.65)   end
             if op._maxLbl   then op._maxLbl:SetTextColor(t.r, t.g, t.b, 0.65)   end
-            if op._thumbTex then op._thumbTex:SetColorTexture(dR, dG, dB, 0.9)  end
+            if op._thumbTex then op._thumbTex:SetColorTexture(dR, dG, dB, 0.72) end
             if op._thumbLbl then op._thumbLbl:SetTextColor(t.r, t.g, t.b, 1)    end
         end
     end
@@ -346,4 +347,3 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
     -- Apply saved visibility preferences.
     if Addon.ApplyScaleSliderVisibility then Addon:ApplyScaleSliderVisibility() end
 end
-

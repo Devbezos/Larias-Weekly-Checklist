@@ -30,9 +30,10 @@ local TrackingUI = { left = {}, right = {} }
 
 -- Key lists for ResizeTrackingCols to iterate without allocating.
 local LEFT_LINE_KEYS  = { "line1","line2","line3","line4","line5","line6","line7","line8","line9" }
-local RIGHT_LINE_COUNT = Addon.RIGHT_LINE_COUNT
+local RIGHT_LINE_COUNT = Addon.RIGHT_LINE_COUNT or 10
 local RIGHT_ROW_KEYS  = {}
 for _i = 1, RIGHT_LINE_COUNT do RIGHT_ROW_KEYS[_i] = "line" .. _i end
+local EnsureRightRowCount
 
 -- GV layout constants (sourced from Addon.GV_LAYOUT set by GreatVault.lua).
 local _GL           = Addon.GV_LAYOUT
@@ -93,6 +94,28 @@ local function SafeRegisterEvent(frame, eventName)
     if not (frame and eventName) then return false end
     local ok = pcall(frame.RegisterEvent, frame, eventName)
     return ok
+end
+
+local function IsItemEmbellished(itemLink)
+    if not (itemLink and C_TooltipInfo and C_TooltipInfo.GetHyperlink) then
+        return false
+    end
+
+    local data = C_TooltipInfo.GetHyperlink(itemLink)
+    if not (data and data.lines) then return false end
+
+    for _, line in ipairs(data.lines) do
+        local leftText = line and line.leftText
+        local rightText = line and line.rightText
+        if leftText and tostring(leftText):lower():find("embellish", 1, true) then
+            return true
+        end
+        if rightText and tostring(rightText):lower():find("embellish", 1, true) then
+            return true
+        end
+    end
+
+    return false
 end
 
 --  Snapshot / event API 
@@ -251,9 +274,15 @@ local function ApplyGreatVaultGrid(gridBlocks)
 end
 
 local function SetRightRowPair(i, rowLabel, rowValue, iconFileID, currencyID, tooltipText, amountTooltipText, itemID, questKey)
+    if EnsureRightRowCount then EnsureRightRowCount(i) end
     local row = TrackingUI.right[RIGHT_ROW_KEYS[i]]
     if not (row and row.label and row.value) then return end
     rowLabel = rowLabel or ""; rowValue = rowValue or ""
+    local txt = Addon.THEME and Addon.THEME.text
+    if txt then
+        row.label:SetTextColor(txt.r, txt.g, txt.b, txt.a or 1)
+        row.value:SetTextColor(txt.r, txt.g, txt.b, txt.a or 1)
+    end
     SetTextIfChanged(row.label, rowLabel)
     SetTextIfChanged(row.value, rowValue)
     local showRow = IsNonEmptyText(rowLabel) or IsNonEmptyText(rowValue)
@@ -267,10 +296,13 @@ local function SetRightRowPair(i, rowLabel, rowValue, iconFileID, currencyID, to
             if row.icon._tex then row.icon._tex:SetTexture(iconFileID) end
             row.icon._lariasIconCurrencyID = (not itemID) and currencyID or nil
             row.icon._lariasIconItemID     = itemID or nil
+            row.icon._lariasIconQuestKey   = questKey or nil
             SetShownIfChanged(row.icon, true)
         else
+            if row.icon._tex then row.icon._tex:SetTexture(nil) end
             row.icon._lariasIconCurrencyID = nil
             row.icon._lariasIconItemID     = nil
+            row.icon._lariasIconQuestKey   = nil
             SetShownIfChanged(row.icon, false)
         end
     end
@@ -284,8 +316,8 @@ end
 local function ApplyRightColumnAsPairs()
     -- Delegates to Currency module for the row data.
     local panelRows = Addon:GetCurrencyPanelRows()
+    if EnsureRightRowCount then EnsureRightRowCount(max(RIGHT_LINE_COUNT, #panelRows)) end
     for i, row in ipairs(panelRows) do
-        if i > RIGHT_LINE_COUNT then break end
         SetRightRowPair(i, row.label, row.value, row.iconID, row.currencyID, row.tooltipText, row.amountTooltipText, row.itemID, row.questKey)
     end
     for i = #panelRows + 1, RIGHT_LINE_COUNT do
@@ -312,7 +344,6 @@ local function ResizeTrackingPanelToContent(addon)
     -- at least naturalGvH so currency shrinking never collapses the GV.
     if Addon._reflowGVGrid then
         local GAP        = 8
-        local GV_GRID_H  = 1 + GV_ROW_H + 1
         local nVisible   = 0
         for bi = 1, 3 do
             if not addon:IsGVBlockHidden(bi) then nVisible = nVisible + 1 end
@@ -328,6 +359,18 @@ local function ResizeTrackingPanelToContent(addon)
     local bottomPad  = 10
     local minH       = 90
     local targetH    = max(minH, topOffset + contentH + bottomPad)
+    do
+        local main = addon._mainFrame
+        local frameH = (main and main.GetHeight and tonumber(main:GetHeight())) or UI.frameH or 737
+        local trackingBottomY = (UI.sliderBottomPad or 4) + (UI.sliderH or 20)
+        local minScrollH = 44
+        local maxH = frameH
+            - trackingBottomY
+            - (UI.scrollTop or 38)
+            - (UI.trackTopPad or 10)
+            - minScrollH
+        targetH = math.min(targetH, max(minH, maxH))
+    end
     local curH       = tonumber(trackingFrame:GetHeight()) or 0
     if abs(curH - targetH) <= 1 then return end
 
@@ -412,7 +455,8 @@ function Addon:CreateTrackingPanel(parentFrame)
 
     -- Vertical separator shown between the two columns.
     local colSep = trackingFrame:CreateTexture(nil, "ARTWORK")
-    colSep:SetColorTexture(THEME.border.r, THEME.border.g, THEME.border.b, 0.65)
+    colSep:SetColorTexture(THEME.border.r, THEME.border.g, THEME.border.b,
+        (Addon.VISUAL_STYLE and Addon.VISUAL_STYLE.strongDividerA) or 0.65)
     colSep:SetWidth(1)
     colSep:SetPoint("TOPLEFT",    leftCol, "TOPRIGHT",    floor(colGap / 2), 24 + BOX_PAD)
     colSep:SetPoint("BOTTOMLEFT", leftCol, "BOTTOMRIGHT", floor(colGap / 2), -BOX_PAD)
@@ -422,16 +466,12 @@ function Addon:CreateTrackingPanel(parentFrame)
     trackingFrame._lariasLeftTitleBtn = MakeTitleButton(leftCol,
         L.TOOLTIP_OPEN_GREAT_VAULT or "Click to open the Great Vault",
         function()
-            if not WeeklyRewardsFrame then C_AddOns.LoadAddOn("Blizzard_WeeklyRewards") end
-            if WeeklyRewardsFrame then
-                if WeeklyRewardsFrame:IsShown() then WeeklyRewardsFrame:Hide()
-                else WeeklyRewardsFrame:Show() end
-            end
+            Addon:ToggleGreatVault()
         end)
     trackingFrame._lariasLeftTitleBtn:HookScript("OnClick", function(self_, button)
         if button ~= "RightButton" then return end
         Addon:ShowContextMenu(self_, {
-            { text = "Disable Great Vault Section", onClick = function()
+            { text = L.CONTEXT_DISABLE_GREAT_VAULT or "Disable Great Vault Section", onClick = function()
                 local db = Addon:EnsurePrefs()
                 db.showGreatVault = false
                 if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
@@ -446,7 +486,7 @@ function Addon:CreateTrackingPanel(parentFrame)
     trackingFrame._lariasRightTitleBtn:HookScript("OnClick", function(self_, button)
         if button ~= "RightButton" then return end
         Addon:ShowContextMenu(self_, {
-            { text = "Disable Currency Section", onClick = function()
+            { text = L.CONTEXT_DISABLE_CURRENCY or "Disable Currency Section", onClick = function()
                 local db = Addon:EnsurePrefs()
                 db.showCurrency = false
                 if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
@@ -472,8 +512,8 @@ function Addon:CreateTrackingPanel(parentFrame)
     --  Great Vault grids 
     local GV_SECTION_KEYS   = { "TRACKING_GV_RAID", "TRACKING_GV_DUNGEONS", "TRACKING_GV_WORLD" }
     local GV_SECTION_LABELS = { "Raid", "Dungeons", "World" }
-    local GRID_BOR_A = 0.55
-    local GRID_MID_A = 0.30
+    local GRID_BOR_A = (Addon.VISUAL_STYLE and Addon.VISUAL_STYLE.trackingBorderA) or 0.55
+    local GRID_MID_A = (Addon.VISUAL_STYLE and Addon.VISUAL_STYLE.trackingInnerA) or 0.30
     local CELL_INSET = 4
 
     local function MakeHLine(yOff, alpha, xOff, w)
@@ -696,6 +736,24 @@ function Addon:CreateTrackingPanel(parentFrame)
             end
         end)
         icon:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        icon:SetScript("OnMouseUp", function(self, button)
+            if button ~= "RightButton" then return end
+            local id = self._lariasIconCurrencyID
+            local qk = self._lariasIconQuestKey
+            if id then
+                Addon:ShowContextMenu(self, {
+                    { text = L.CONTEXT_HIDE_THIS_CURRENCY or "Hide this currency", onClick = function()
+                        Addon:SetCurrencyHidden(id, true)
+                    end },
+                })
+            elseif qk then
+                Addon:ShowContextMenu(self, {
+                    { text = L.CONTEXT_HIDE_THIS_ROW or "Hide this row", onClick = function()
+                        Addon:SetQuestHidden(qk, true)
+                    end },
+                })
+            end
+        end)
 
         -- Right-side hit area: shows "Accurately tracks" tooltip over the quantity numbers.
         local valueHit = CreateFrame("Frame", nil, row)
@@ -718,13 +776,13 @@ function Addon:CreateTrackingPanel(parentFrame)
             local qk  = row._lariasRightClickQuestKey
             if id then
                 Addon:ShowContextMenu(row, {
-                    { text = "Hide this currency", onClick = function()
+                    { text = L.CONTEXT_HIDE_THIS_CURRENCY or "Hide this currency", onClick = function()
                         Addon:SetCurrencyHidden(id, true)
                     end },
                 })
             elseif qk then
                 Addon:ShowContextMenu(row, {
-                    { text = "Hide this row", onClick = function()
+                    { text = L.CONTEXT_HIDE_THIS_ROW or "Hide this row", onClick = function()
                         Addon:SetQuestHidden(qk, true)
                     end },
                 })
@@ -752,13 +810,13 @@ function Addon:CreateTrackingPanel(parentFrame)
             local qk = self._lariasRightClickQuestKey
             if id then
                 Addon:ShowContextMenu(self, {
-                    { text = "Hide this currency", onClick = function()
+                    { text = L.CONTEXT_HIDE_THIS_CURRENCY or "Hide this currency", onClick = function()
                         Addon:SetCurrencyHidden(id, true)
                     end },
                 })
             elseif qk then
                 Addon:ShowContextMenu(self, {
-                    { text = "Hide this row", onClick = function()
+                    { text = L.CONTEXT_HIDE_THIS_ROW or "Hide this row", onClick = function()
                         Addon:SetQuestHidden(qk, true)
                     end },
                 })
@@ -783,8 +841,25 @@ function Addon:CreateTrackingPanel(parentFrame)
         return { frame = row, icon = icon, label = label, value = value }
     end
 
+    EnsureRightRowCount = function(count)
+        count = max(tonumber(count) or 0, Addon.RIGHT_LINE_COUNT or 10)
+        for i = RIGHT_LINE_COUNT + 1, count do
+            RIGHT_ROW_KEYS[i] = "line" .. i
+        end
+        for i = 1, count do
+            local key = RIGHT_ROW_KEYS[i] or ("line" .. i)
+            RIGHT_ROW_KEYS[i] = key
+            if not TrackingUI.right[key] then
+                TrackingUI.right[key] = MakeLinePair(rightCol, -18 * (i - 1), "GameFontHighlight")
+            end
+        end
+        RIGHT_LINE_COUNT = max(RIGHT_LINE_COUNT, count)
+    end
+    EnsureRightRowCount(RIGHT_LINE_COUNT)
+
     for i = 1, RIGHT_LINE_COUNT do
-        TrackingUI.right["line" .. i] = MakeLinePair(rightCol, -18 * (i - 1), "GameFontHighlight")
+        local row = TrackingUI.right[RIGHT_ROW_KEYS[i]]
+        if row and row.frame then row.frame:Show() end
     end
 
     trackingFrame:SetShown((db.showGreatVault or db.showCurrency) and IsMainFrameOnListTab())
@@ -832,7 +907,6 @@ function Addon:ApplyTrackingPanelOptions()
 
     local wantPanel
     wantPanel = (showGreatVault or showCurrency) and IsMainFrameOnListTab()
-               and not (Addon.IsListComplete and Addon:IsListComplete())
 
     trackingFrame:SetShown(wantPanel)
     if not wantPanel then
@@ -971,11 +1045,12 @@ ComputeSnapshotData = function(snap)
         end
 
         snap.gearSlots[sid] = {
-            link    = link,
-            ilvl    = ilvl,
-            rank    = rank,
-            maxRank = maxRank,
-            tierIdx = tierIdx,
+            link          = link,
+            ilvl          = ilvl,
+            rank          = rank,
+            maxRank       = maxRank,
+            tierIdx       = tierIdx,
+            isEmbellished = IsItemEmbellished(link) or nil,
         }
     end
 
@@ -1152,13 +1227,12 @@ local function RenderSnapshotIntoPanel(snap)
         if tracking and Addon.GetGVData then
             local ids, crestCount = Addon:GetCrestIDsAndCount()
             for i = 1, crestCount do
-                if idx > RIGHT_LINE_COUNT then break end
                 local id = ids[i]
-                if id then
+                if id and not Addon:IsCurrencyHidden(id) then
                     local qty = storedCrestQty[id] or 0
                     local lbl, val = Addon:RenderCurrencySnapshotRow({ type = "crest", id = id, qty = qty })
                     if IsNonEmptyText(lbl) or IsNonEmptyText(val) then
-                        SetRightRowPair(idx, lbl, val, Addon:GetCurrencyIcon(id))
+                        SetRightRowPair(idx, lbl, val, Addon:GetCurrencyIcon(id), id)
                         idx = idx + 1
                     end
                 end
@@ -1167,21 +1241,34 @@ local function RenderSnapshotIntoPanel(snap)
 
         -- Remaining rows (catalyst, sparks, cofferkeys, quests).
         for _, row in ipairs(nonCrestRows) do
-            if idx > RIGHT_LINE_COUNT then break end
             local lbl, val
             if row.type then
                 lbl, val = Addon:RenderCurrencySnapshotRow(row)
             else
                 lbl = row.label or ""; val = row.value or ""
             end
-            if IsNonEmptyText(lbl) or IsNonEmptyText(val) then
-                local iconID = nil
-                if row.type == "sparks" or row.type == "cofferkeys" then
-                    iconID = Addon:GetCurrencyIcon(row.id)
-                elseif row.type == "catalyst" then
-                    iconID = Addon:GetCurrencyIcon(tracking and tracking.catalystCurrencyID)
+            local iconID = nil
+            local currencyID = nil
+            local itemID = nil
+            local questKey = nil
+            if row.type == "sparks" or row.type == "cofferkeys" or row.type == "misc" then
+                currencyID = row.id
+                iconID = Addon:GetCurrencyIcon(currencyID)
+            elseif row.type == "catalyst" then
+                currencyID = tracking and tracking.catalystCurrencyID
+                iconID = Addon:GetCurrencyIcon(currencyID)
+            elseif row.type == "quest" then
+                questKey = row.key
+                itemID = tracking and tracking.questItemIDs and tonumber(tracking.questItemIDs[questKey]) or nil
+                if itemID and itemID > 0 then
+                    local _, _, _, _, _, _, _, _, _, itemTexture = GetItemInfo(itemID)
+                    iconID = itemTexture
                 end
-                SetRightRowPair(idx, lbl, val, iconID)
+            end
+            if (not currencyID or not Addon:IsCurrencyHidden(currencyID))
+                    and (not questKey or not Addon:IsQuestHidden(questKey))
+                    and (IsNonEmptyText(lbl) or IsNonEmptyText(val)) then
+                SetRightRowPair(idx, lbl, val, iconID, currencyID, nil, nil, itemID, questKey)
                 idx = idx + 1
             end
         end

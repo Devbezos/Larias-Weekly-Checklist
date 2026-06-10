@@ -69,8 +69,9 @@ function IlvlUtils.GetCrestTrackName(tier)
     local ids = Addon.TRACKING and Addon.TRACKING.crestCurrencyIDs
     local id  = ids and ids[tier]
     if not id then return nil end
-    local fullName = C_CurrencyInfo.GetCurrencyInfo(id)
-    fullName = fullName and fullName.name
+    if not (C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo) then return nil end
+    local info = C_CurrencyInfo.GetCurrencyInfo(id)
+    local fullName = info and info.name
     if not fullName then return nil end
     return fullName:match("^(%S+)")
 end

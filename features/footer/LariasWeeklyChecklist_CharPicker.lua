@@ -262,7 +262,9 @@ function Addon:InitCharPickerUI(frame, styleFunc)
             rcMenu._rcActionBtn = ab
         end
         local ab = rcMenu._rcActionBtn
-        ab:SetText(isHidden and ("Show " .. charName) or ("Hide " .. charName))
+        ab:SetText(isHidden
+            and ((L.CHAR_PICKER_SHOW_FMT or "Show %s"):format(charName))
+            or ((L.CHAR_PICKER_HIDE_FMT or "Hide %s"):format(charName)))
         local tr = Addon.Controls.GetButtonFontString(ab)
         if tr then
             if isHidden then tr:SetTextColor(0.5, 1, 0.5, 1)
@@ -308,7 +310,7 @@ function Addon:InitCharPickerUI(frame, styleFunc)
             btn:SetPoint("TOPLEFT",  p, "TOPLEFT",  0, posY)
             btn:SetPoint("TOPRIGHT", p, "TOPRIGHT", 0, posY)
             btn:SetHeight(CPICK_ROW_H)
-            btn:SetText("<< " .. myName)  -- back to own char
+            btn:SetText((L.CHAR_PICKER_BACK_FMT or "<< %s"):format(myName))  -- back to own char
             local tr = Addon.Controls.GetButtonFontString(btn)
             local th = Addon.THEME.text
             if tr then tr:SetTextColor(th.r, th.g, th.b, 0.7) end
@@ -378,9 +380,9 @@ function Addon:InitCharPickerUI(frame, styleFunc)
                         GameTooltip:AddLine(lvlStr .. clsName, 0.85, 0.85, 0.85)
                     end
                     if isCurrentlyViewing then
-                        GameTooltip:AddLine("Currently viewing", 0.3, 1, 0.3)
+                        GameTooltip:AddLine(L.CHAR_PICKER_CURRENTLY_VIEWING or "Currently viewing", 0.3, 1, 0.3)
                     else
-                        GameTooltip:AddLine("Click to view  |  Right-click to hide", 0.5, 0.5, 0.5)
+                        GameTooltip:AddLine(L.CHAR_PICKER_TOOLTIP_ACTIONS or "Click to view  |  Right-click to hide", 0.5, 0.5, 0.5)
                     end
                     GameTooltip:Show()
                 end
@@ -437,7 +439,7 @@ function Addon:InitCharPickerUI(frame, styleFunc)
             smBtn:SetPoint("TOPLEFT",  p, "TOPLEFT",  0, posY)
             smBtn:SetPoint("TOPRIGHT", p, "TOPRIGHT", 0, posY)
             smBtn:SetHeight(CPICK_ROW_H)
-            smBtn:SetText("Alt Summary")
+            smBtn:SetText(L.ALT_SUMMARY_TITLE or "Alt Summary")
             smBtn:SetEnabled(true)
             local tr = Addon.Controls.GetButtonFontString(smBtn)
             if tr then tr:SetTextColor(0.70, 0.70, 1, 1) end

@@ -92,7 +92,7 @@ function Addon:CreateHeader(frame)
         btn:SetScript("OnClick", function(self_, button)
             if button == "RightButton" then
                 Addon:ShowContextMenu(self_, {
-                    { text = "Disable Item Level Popup", onClick = function()
+                    { text = L.CONTEXT_DISABLE_ITEM_LEVEL_POPUP or "Disable Item Level Popup", onClick = function()
                         local db = Addon:EnsurePrefs()
                         db.showIlvlRefBtn = false
                         if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
@@ -356,13 +356,13 @@ function Addon:CreateHeader(frame)
             btn._lariasSelectedLabel = cwWeekLabel
             btn:SetText(cwWeekLabel)
             local cwTip = L.CHANGE_WEEK_BUTTON or "Change Week"
-            btn:SetScript("OnEnter", function(self_) Addon.AddonUtils.SetTooltip(self_, cwTip .. "\nRight-click to disable", "ANCHOR_BOTTOMLEFT") end)
+            btn:SetScript("OnEnter", function(self_) Addon.AddonUtils.SetTooltip(self_, cwTip .. "\n" .. (L.TOOLTIP_RIGHT_CLICK_DISABLE or "Right-click to disable"), "ANCHOR_BOTTOMLEFT") end)
             btn:SetScript("OnLeave", Addon.AddonUtils.HideTooltip)
             btn:RegisterForClicks("AnyUp")
             btn:SetScript("OnClick", function(self_, button)
                 if button == "RightButton" then
                     Addon:ShowContextMenu(self_, {
-                        { text = "Disable Week Selector", onClick = function()
+                        { text = L.CONTEXT_DISABLE_WEEK_SELECTOR or "Disable Week Selector", onClick = function()
                             local db = Addon:EnsurePrefs()
                             db.showChangeWeekBtn = false
                             if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
@@ -408,7 +408,7 @@ function Addon:CreateHeader(frame)
                 cpBtn:SetScript("OnClick", function(self_, button)
                     if button == "RightButton" then
                         Addon:ShowContextMenu(self_, {
-                            { text = "Disable Swap Profile", onClick = function()
+                            { text = L.CONTEXT_DISABLE_SWAP_PROFILE or "Disable Swap Profile", onClick = function()
                                 local db = Addon:EnsurePrefs()
                                 db.showCharPickerBtn = false
                                 if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end

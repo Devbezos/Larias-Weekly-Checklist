@@ -136,12 +136,7 @@ local function SetupHooks()
         holder:EnableMouse(true)
         -- Anchor directly below the ItemUpgradeFrame, horizontally centered.
         holder:SetPoint("TOP", ItemUpgradeFrame, "BOTTOM", 0, -6)
-        local bg = Addon.THEME.bg
-        holder:SetBackdropColor(bg.r, bg.g, bg.b, 1.0)
-        if holder.SetBackdropBorderColor then
-            local bdr = Addon.THEME.border
-            holder:SetBackdropBorderColor(bdr.r, bdr.g, bdr.b, bdr.a or 1)
-        end
+        Addon:ApplyOpaquePopupTheme(holder)
         holder:Hide()
 
         -- Warning message (wraps to ~2 lines).
@@ -157,6 +152,9 @@ local function SetupHooks()
         disableBtn:SetSize(160, BTN_H)
         disableBtn:SetPoint("TOP", label, "BOTTOM", 0, -6)
         disableBtn:SetText(L.UPGRADE_WARN_DISABLE_BTN or "Hide Upgrade Warning")
+        if Addon.Controls and Addon.Controls.StyleButton then
+            Addon.Controls.StyleButton(disableBtn)
+        end
         disableBtn:SetScript("OnEnter", function(self)
             Addon.AddonUtils.SetTooltip(self, L.UPGRADE_WARN_DISABLE_TOOLTIP or "Check Larias's guide for more information.", "ANCHOR_BOTTOM")
         end)

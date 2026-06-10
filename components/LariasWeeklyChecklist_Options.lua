@@ -294,8 +294,10 @@ function Addon.OptionsPane.BuildDisplay(parent, opts)
             local n      = nCur + nGV + nQuest
             refs.restoreHiddenBtn:SetShown(n > 0)
             if n > 0 then
-                local s = n == 1 and "1 Hidden Row" or (n .. " Hidden Rows")
-                refs.restoreHiddenBtn:SetText("Restore " .. s)
+                local L = Addon.L or {}
+                local s = n == 1 and (L.HIDDEN_ROW_SINGULAR or "1 Hidden Row")
+                    or ((L.HIDDEN_ROW_PLURAL_FMT or "%d Hidden Rows"):format(n))
+                refs.restoreHiddenBtn:SetText((L.RESTORE_HIDDEN_BUTTON_FMT or "Restore %s"):format(s))
             end
         end
     end

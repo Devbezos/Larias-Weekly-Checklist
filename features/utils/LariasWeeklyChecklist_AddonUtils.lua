@@ -9,7 +9,7 @@
 --   FormatXY(cur, cap)  - formats progress as "cur/cap" or "cur".
 --   ColorForXY(cur, cap)- returns red/yellow/green based on progress.
 --
--- Also exposes Addon.RIGHT_LINE_COUNT (right-panel row cap used by Overlay + Currency).
+-- Also exposes Addon.RIGHT_LINE_COUNT (initial right-panel row count used by Overlay).
 
 local addonName = ...
 local Addon = _G[addonName]
@@ -94,5 +94,5 @@ function AddonUtils.SetTooltipLines(frame, lines, anchor)
     GameTooltip:Show()
 end
 
--- Maximum rows in the right column; owned here so Overlay and Currency stay in sync.
+-- Initial rows in the right column; Overlay grows beyond this when more rows exist.
 Addon.RIGHT_LINE_COUNT = 10

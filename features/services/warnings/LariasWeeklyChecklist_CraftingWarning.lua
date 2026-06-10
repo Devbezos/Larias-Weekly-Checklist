@@ -285,12 +285,7 @@ local function EnsureWarnPanel()
     holder:SetClampedToScreen(true)
     holder:EnableMouse(true)
 
-    local bg = Addon.THEME.bg
-    holder:SetBackdropColor(bg.r, bg.g, bg.b, 1.0)
-    if holder.SetBackdropBorderColor then
-        local bdr = Addon.THEME.border
-        holder:SetBackdropBorderColor(bdr.r, bdr.g, bdr.b, bdr.a or 1)
-    end
+    Addon:ApplyOpaquePopupTheme(holder)
     holder:Hide()
 
     -- Warning text: shown in red so it's hard to miss.
@@ -306,6 +301,9 @@ local function EnsureWarnPanel()
     btn:SetSize(180, BTN_H)
     btn:SetPoint("TOP", label, "BOTTOM", 0, -GAP)
     btn:SetText(L.CRAFT_WARN_DISABLE_BTN or "Hide Crafting Warning")
+    if Addon.Controls and Addon.Controls.StyleButton then
+        Addon.Controls.StyleButton(btn)
+    end
     btn:SetScript("OnClick", function()
         Addon:EnsurePrefs().craftWarnDisabled = true
         holder:Hide()

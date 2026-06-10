@@ -8,6 +8,7 @@ if not Addon then return end
 if Addon.InitConstants then Addon:InitConstants(addonName) end
 
 local L = Addon.L or {}
+local NA = L.TRACKING_NA or (Addon.PLACEHOLDER_DASH or "\226\128\148")
 
 local tonumber, type = tonumber, type
 local floor, max = math.floor, math.max
@@ -23,11 +24,11 @@ local Wipe      = AU.Wipe
 local GV_LABEL_W     = 62
 local GV_LABEL_GAP   =  8
 local GV_GRID_X      = GV_LABEL_W + GV_LABEL_GAP   -- 70
-local GV_ROW_H       = 34
-local GV_GRID_H      = 1 + GV_ROW_H + 1            -- 36
-local GV_BLOCK_STEP  = GV_GRID_H + 8               -- 44
-local GV_BLOCK_Y     = { 0, -GV_BLOCK_STEP, -GV_BLOCK_STEP * 2 }
 local GV_CELL_W      = 54
+local GV_ROW_H       = GV_CELL_W
+local GV_GRID_H      = 1 + GV_ROW_H + 1            -- 56
+local GV_BLOCK_STEP  = GV_GRID_H + 8               -- 64
+local GV_BLOCK_Y     = { 0, -GV_BLOCK_STEP, -GV_BLOCK_STEP * 2 }
 local GV_GRID_W      = GV_CELL_W * 3               -- 162
 local GV_THRESHOLDS  = { {2,4,6}, {1,4,8}, {2,4,8} }
 local GV_SECTION_KEYS   = { "TRACKING_GV_RAID", "TRACKING_GV_DUNGEONS", "TRACKING_GV_WORLD" }
@@ -183,7 +184,7 @@ local function MakeGVThresholdsString(complete, total, thresholds, parts)
     parts     = parts or {}
     Wipe(parts)
     if total <= 0 or type(thresholds) ~= "table" or #thresholds <= 0 then
-        return ColorWrap(COLORS.red, L.TRACKING_NA or "")
+        return ColorWrap(COLORS.red, NA)
     end
     for i = 1, #thresholds do
         local value = tonumber(thresholds[i])
@@ -202,7 +203,7 @@ local function MakeGVIlvlsRow(ilvls, maxPossible, parts)
         if value > 0 then
             parts[#parts + 1] = ColorWrap(Addon.IlvlUtils.GetColorHex(value), tostring(value))
         else
-            parts[#parts + 1] = ColorWrap(COLORS.dim, L.TRACKING_NA or "")
+            parts[#parts + 1] = ColorWrap(COLORS.dim, NA)
         end
     end
     return tconcat(parts, " ")
@@ -230,11 +231,11 @@ local function GetGreatVaultBlockLines()
     local activities = C_WeeklyRewards and C_WeeklyRewards.GetActivities and C_WeeklyRewards.GetActivities()
     if type(activities) ~= "table" then
         out[1] = ColorWrap(COLORS.dim, L.TRACKING_GV_RAID     or "Raid")
-        out[2] = ColorWrap(COLORS.red, L.TRACKING_NA  or "")
+        out[2] = ColorWrap(COLORS.red, NA)
         out[4] = ColorWrap(COLORS.dim, L.TRACKING_GV_DUNGEONS or "Dungeons")
-        out[5] = ColorWrap(COLORS.red, L.TRACKING_NA  or "")
+        out[5] = ColorWrap(COLORS.red, NA)
         out[7] = ColorWrap(COLORS.dim, L.TRACKING_GV_WORLD    or "World")
-        out[8] = ColorWrap(COLORS.red, L.TRACKING_NA  or "")
+        out[8] = ColorWrap(COLORS.red, NA)
         cache.gridBlocks = nil
         return out
     end
@@ -298,13 +299,13 @@ local function GetGreatVaultBlockLines()
     local worldMax   = (worldExampleMax   > 0) and worldExampleMax   or worldMaxIlvl
 
     out[1] = MakeGVHeaderColored(L.TRACKING_GV_RAID     or "Raid",     raidComplete,   raidMax,    raidTotal   > 0)
-    out[2] = (raidTotal   > 0) and MakeGVThresholdsString(raidComplete,   raidTotal,   {2,4,6}, cache.parts) or ColorWrap(COLORS.red, L.TRACKING_NA or "")
+    out[2] = (raidTotal   > 0) and MakeGVThresholdsString(raidComplete,   raidTotal,   {2,4,6}, cache.parts) or ColorWrap(COLORS.red, NA)
     out[3] = (raidTotal   > 0) and MakeGVIlvlsRow(cache.rIlvls, raidMax,    cache.parts) or ""
     out[4] = MakeGVHeaderColored(L.TRACKING_GV_DUNGEONS or "Dungeons",  mythicComplete, dungeonMax, mythicTotal > 0)
-    out[5] = (mythicTotal > 0) and MakeGVThresholdsString(mythicComplete, mythicTotal, {1,4,8}, cache.parts) or ColorWrap(COLORS.red, L.TRACKING_NA or "")
+    out[5] = (mythicTotal > 0) and MakeGVThresholdsString(mythicComplete, mythicTotal, {1,4,8}, cache.parts) or ColorWrap(COLORS.red, NA)
     out[6] = (mythicTotal > 0) and MakeGVIlvlsRow(cache.mIlvls, dungeonMax, cache.parts) or ""
     out[7] = MakeGVHeaderColored(L.TRACKING_GV_WORLD    or "World",     worldComplete,  worldMax,   worldTotal  > 0)
-    out[8] = (worldTotal  > 0) and MakeGVThresholdsString(worldComplete,  worldTotal,  {2,4,8}, cache.parts) or ColorWrap(COLORS.red, L.TRACKING_NA or "")
+    out[8] = (worldTotal  > 0) and MakeGVThresholdsString(worldComplete,  worldTotal,  {2,4,8}, cache.parts) or ColorWrap(COLORS.red, NA)
     out[9] = (worldTotal  > 0) and MakeGVIlvlsRow(cache.wIlvls, worldMax,  cache.parts) or ""
 
     -- Structured per-slot data for the grid renderer.

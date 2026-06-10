@@ -29,11 +29,16 @@ function C.StyleButton(btn)
     if not btn then return end
 
     local T = Addon.THEME  -- single reference; all uses below share this upvalue
+    local V = Addon.VISUAL_STYLE or {}
 
     Addon:ApplyTheme(btn)
     -- Buttons use a slightly lower bg alpha than panels.
     if btn.SetBackdropColor and T then
-        btn:SetBackdropColor(T.bg.r, T.bg.g, T.bg.b, math.max(0, (tonumber(T.bg.a) or 1) - 0.28))
+        btn:SetBackdropColor(T.bg.r, T.bg.g, T.bg.b, V.buttonBgA or math.max(0, (tonumber(T.bg.a) or 1) - 0.28))
+    end
+    if btn.SetBackdropBorderColor and T then
+        local bd = T.border or { r = 0.3, g = 0.3, b = 0.3, a = 1 }
+        btn:SetBackdropBorderColor(bd.r, bd.g, bd.b, V.buttonBorderA or bd.a or 1)
     end
 
     local function ClearTex(t)
@@ -70,9 +75,9 @@ function C.StyleButton(btn)
         local hl = btn:CreateTexture(nil, "HIGHLIGHT")
         hl:SetAllPoints(btn)
         if T then
-            hl:SetColorTexture(T.text.r, T.text.g, T.text.b, 0.06)
+            hl:SetColorTexture(T.text.r, T.text.g, T.text.b, V.buttonHighlightA or 0.06)
         else
-            hl:SetColorTexture(1, 1, 1, 0.06)
+            hl:SetColorTexture(1, 1, 1, V.buttonHighlightA or 0.06)
         end
         btn._lariasCustomHighlight = hl
     end
@@ -93,9 +98,10 @@ local function ApplyFixedBackdrop(btn)
             tile = false, edgeSize = 1,
             insets = { left = 3, right = 3, top = 3, bottom = 3 },
         })
-        btn:SetBackdropColor(0.08, 0.08, 0.08, 0.85)
+        local vs = Addon.VISUAL_STYLE or {}
+        btn:SetBackdropColor(0.08, 0.08, 0.08, vs.iconButtonBgA or 0.85)
         local bd = Addon.THEME and Addon.THEME.border or { r=0.3, g=0.3, b=0.3, a=0.8 }
-        btn:SetBackdropBorderColor(bd.r, bd.g, bd.b, bd.a)
+        btn:SetBackdropBorderColor(bd.r, bd.g, bd.b, vs.buttonBorderA or bd.a)
     end
 end
 
@@ -183,7 +189,7 @@ function C.NewIconButton(parent, texturePath, onClick, tooltip)
 
     local hl = btn:CreateTexture(nil, "HIGHLIGHT")
     hl:SetAllPoints(btn)
-    hl:SetColorTexture(1, 1, 1, 0.10)
+    hl:SetColorTexture(1, 1, 1, (Addon.VISUAL_STYLE and Addon.VISUAL_STYLE.buttonHighlightA) or 0.10)
     btn:SetHighlightTexture(hl)
 
     btn:SetScript("OnEnter", function(self_)
@@ -247,7 +253,7 @@ function C.NewExpandButton(parent, onToggle, initialExpanded, expandTip, shrinkT
 
     local hlTex = btn:CreateTexture(nil, "HIGHLIGHT")
     hlTex:SetAllPoints(btn)
-    hlTex:SetColorTexture(1, 1, 1, 0.10)
+    hlTex:SetColorTexture(1, 1, 1, (Addon.VISUAL_STYLE and Addon.VISUAL_STYLE.buttonHighlightA) or 0.10)
     btn:SetHighlightTexture(hlTex)
 
     local pushedTex = btn:CreateTexture(nil, "OVERLAY")
@@ -315,7 +321,7 @@ function C.NewSwatch(parent, size)
     local border = btn:CreateTexture(nil, "ARTWORK", nil, 0)
     border:SetPoint("TOPLEFT",     btn, "TOPLEFT",     -1,  1)
     border:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT",  1, -1)
-    border:SetColorTexture(0.55, 0.55, 0.55, 1)
+    border:SetColorTexture(0.55, 0.55, 0.55, 0.72)
     local fill = btn:CreateTexture(nil, "ARTWORK", nil, 1)
     fill:SetAllPoints(btn)
     fill:SetColorTexture(1, 1, 1, 1)

@@ -3,6 +3,7 @@
 local addonName = ...
 local Addon = _G[addonName]
 if not Addon then return end
+local L = Addon.L or {}
 
 -- (SetCheckText, OpenPopupColorPicker, LOCALE_NATIVE_NAMES moved / removed;
 --  pane builders in LariasWeeklyChecklist_Options.lua handle all of this now.)
@@ -30,7 +31,7 @@ function Addon:ToggleGearPopup(anchor, growRight)
     -- Create lazily.
     if not p then
         p = Addon.Controls.NewPopupPanel("DIALOG", 0.12)
-        if p.SetBackdropBorderColor then p:SetBackdropBorderColor(Addon.THEME.border.r, Addon.THEME.border.g, Addon.THEME.border.b, 1) end
+        Addon:ApplyPopupBorder(p)
 
         -- ── Layout constants ─────────────────────────────────────────────────
         local POPUP_W     = 340
@@ -49,7 +50,11 @@ function Addon:ToggleGearPopup(anchor, growRight)
         p:SetSize(POPUP_W, POPUP_H)
 
         -- ── Tab buttons ──────────────────────────────────────────────────────
-        local TAB_LABELS = { "Display", "Warnings", "Appearance" }
+        local TAB_LABELS = {
+            L.SETTINGS_TAB_DISPLAY or "Display",
+            L.SETTINGS_TAB_WARNINGS or "Warnings",
+            L.SETTINGS_TAB_APPEARANCE or "Appearance",
+        }
         p._tabs  = {}
         p._panes = {}
 
@@ -137,7 +142,7 @@ function Addon:ToggleGearPopup(anchor, growRight)
             creditLabel:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
             creditLabel:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", 8, 5)
             creditLabel:SetJustifyH("LEFT")
-            creditLabel:SetText("Built by Dev  \226\128\162  Approved by Larias")
+            creditLabel:SetText(L.CREDIT_BUILT_BY or "Built by Dev  \226\128\162  Approved by Larias")
             creditLabel:SetTextColor(0.45, 0.45, 0.45, 0.6)
 
             local verLabel = p:CreateFontString(nil, "OVERLAY")
@@ -146,8 +151,8 @@ function Addon:ToggleGearPopup(anchor, growRight)
             verLabel:SetJustifyH("LEFT")
             do
                 local parts = {}
-                if _ver     ~= "" then parts[#parts + 1] = "v" .. _ver          end
-                if _dataVer ~= "" then parts[#parts + 1] = "Spreadsheet v" .. _dataVer end
+                if _ver     ~= "" then parts[#parts + 1] = (L.VERSION_LABEL_FMT or "v%s"):format(_ver) end
+                if _dataVer ~= "" then parts[#parts + 1] = (L.SPREADSHEET_VERSION_LABEL_FMT or "Spreadsheet v%s"):format(_dataVer) end
                 verLabel:SetText(table.concat(parts, "  \226\128\162  "))
             end
             verLabel:SetTextColor(0.45, 0.45, 0.45, 0.6)
@@ -206,14 +211,14 @@ function Addon:OpenRestoreHiddenCurrencies(anchor)
     for _, e in ipairs(self:GetHiddenGVBlockList()) do
         local _idx = e.idx
         combined[#combined + 1] = {
-            name      = e.name .. " |cff808080(Vault)|r",
+            name      = e.name .. " |cff808080" .. (L.RESTORE_HIDDEN_VAULT_SUFFIX or "(Vault)") .. "|r",
             onRestore = function() Addon:SetGVBlockHidden(_idx, false) end,
         }
     end
     for _, e in ipairs(self:GetHiddenQuestList()) do
         local _qk = e.key
         combined[#combined + 1] = {
-            name      = e.name .. " |cff808080(Quest)|r",
+            name      = e.name .. " |cff808080" .. (L.RESTORE_HIDDEN_QUEST_SUFFIX or "(Quest)") .. "|r",
             onRestore = function() Addon:SetQuestHidden(_qk, false) end,
         }
     end
@@ -241,9 +246,7 @@ function Addon:OpenRestoreHiddenCurrencies(anchor)
     end
 
     -- Apply theme backdrop.
-    self:ApplyTheme(f)
-    local bg = self.THEME and self.THEME.bg
-    if bg then f:SetBackdropColor(bg.r, bg.g, bg.b, 1.0) end
+    self:ApplyOpaquePopupTheme(f)
 
     -- Title
     if not f._titleFS then
@@ -256,7 +259,7 @@ function Addon:OpenRestoreHiddenCurrencies(anchor)
     end
     local hdr = self.THEME and self.THEME.header
     if hdr then f._titleFS:SetTextColor(hdr.r, hdr.g, hdr.b, 1) end
-    f._titleFS:SetText("Restore Hidden Currencies")
+    f._titleFS:SetText(L.RESTORE_HIDDEN_TITLE or "Restore Hidden Currencies")
 
     -- Hide old row frames and rebuild.
     for _, rf in ipairs(f._rowFrames) do rf:Hide() end
@@ -282,7 +285,7 @@ function Addon:OpenRestoreHiddenCurrencies(anchor)
         local btn = Addon.Controls.NewActionButton(rf, nil, 18)
         btn:SetWidth(BTN_W)
         btn:SetPoint("RIGHT", rf, "RIGHT", 0, 0)
-        btn:SetText("Restore")
+        btn:SetText(L.RESTORE_HIDDEN_BTN or "Restore")
         btn:SetScript("OnClick", function()
             entry.onRestore()
         end)
