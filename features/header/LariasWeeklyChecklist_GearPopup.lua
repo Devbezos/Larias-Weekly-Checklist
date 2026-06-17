@@ -199,13 +199,20 @@ end
 --- Opens (or rebuilds) the restore-hidden-currencies panel anchored to `anchor`.
 --- If `anchor` is nil, keeps the panel's current position.
 function Addon:OpenRestoreHiddenCurrencies(anchor)
-    -- Build a unified list: hidden currencies then hidden GV blocks.
+    -- Build a unified list: hidden currencies, items, vault blocks, and quests.
     local combined = {}
     for _, e in ipairs(self:GetHiddenCurrencyList()) do
         local _id = e.id
         combined[#combined + 1] = {
             name      = e.name,
             onRestore = function() Addon:SetCurrencyHidden(_id, false) end,
+        }
+    end
+    for _, e in ipairs(self.GetHiddenItemList and self:GetHiddenItemList() or {}) do
+        local _id = e.id
+        combined[#combined + 1] = {
+            name      = e.name .. " |cff808080" .. (L.RESTORE_HIDDEN_ITEM_SUFFIX or "(Item)") .. "|r",
+            onRestore = function() Addon:SetItemHidden(_id, false) end,
         }
     end
     for _, e in ipairs(self:GetHiddenGVBlockList()) do

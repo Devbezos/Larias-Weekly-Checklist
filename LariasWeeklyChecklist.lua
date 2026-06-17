@@ -184,6 +184,7 @@ end
 local frame
 local scrollFrame
 local scrollChild
+local UpdateScrollbarVisibility
 local type, tostring = type, tostring
 local pairs, ipairs, next = pairs, ipairs, next
 local max = math.max
@@ -483,11 +484,11 @@ function Addon:ShowContextMenu(anchor, items)
     _rcCtxPanel:Show()
 end
 
--- ── Full addon reset ──────────────────────────────────────────────────────────
+-- ── List/style reset ──────────────────────────────────────────────────────────
 -- Resets the current character's list data (checked items, collapsed sections,
--- week pointer) AND all UI display settings (position, scale, opacity, theme
--- colors) back to their defaults.  Also clears every character's cached tracking
--- snapshot so stale gear/currency data is re-captured on next login.
+-- week pointer) and all UI display settings (position, scale, opacity, theme
+-- colors) back to their defaults. Character tracking data, hidden tracking
+-- rows, class/level metadata, and alt-summary snapshots are kept.
 -- Called by both the GearPopup and Settings panel reset buttons.
 function Addon:PerformFullReset()
     local currentKey = self.GetCurrentProfileKey and self:GetCurrentProfileKey()
@@ -508,16 +509,6 @@ function Addon:PerformFullReset()
         end
     end
 
-    -- Nil every character's tracking snapshot so alt-summary shows "—" until
-    -- each character logs in and a fresh snapshot is captured.
-    local allChars = self.db and self.db.global and self.db.global.chars
-    if allChars then
-        for _, cdb in pairs(allChars) do
-            if type(cdb) == "table" then
-                cdb.trackingSnapshot = nil
-            end
-        end
-    end
     local gdb = self.db and self.db.global
     if gdb then
         gdb.mainFramePos  = nil
@@ -1112,7 +1103,8 @@ function Addon:ApplyScrollLayout()
     local db = self:EnsurePrefs()
 
     scrollFrame:ClearAllPoints()
-    scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", Addon.UI.padOuterX, -Addon.UI.scrollTop)
+    local listInset = Addon.UI.sectionInsetX or Addon.UI.padOuterX or 14
+    scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", listInset, -Addon.UI.scrollTop)
 
     -- Slider + banner space must always be reserved, even when the tracking panel
     -- is hidden (both Great Vault and Currency off).  Previously this block was
@@ -1138,7 +1130,7 @@ function Addon:ApplyScrollLayout()
         extra = extra + trackingHeight + Addon.UI.trackTopPad
     end
 
-    scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -Addon.UI.scrollRight, Addon.UI.scrollBottom + extra)
+    scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -listInset, Addon.UI.scrollBottom + extra)
 
     -- Keep the scroll child width in sync with the scroll frame so that
     -- section frames anchored TOPLEFT+TOPRIGHT to scrollChild get a real width.
@@ -1151,13 +1143,8 @@ function Addon:ApplyScrollLayout()
     -- or wastes space after a resize. Frame and all children share the same
     -- coordinate space (frame:SetScale scales visually without changing logical sizes).
     local currentFrameW = frame:GetWidth() or Addon.UI.frameW
-    local newTextW = math.max(120, math.floor(
-        currentFrameW
-        - Addon.UI.padOuterX
-        - Addon.UI.scrollRight
-        - 2 * Addon.UI.sectionInsetX
-        - 38
-    ))
+    local availW = (scrollFrame and scrollFrame:GetWidth() or currentFrameW)
+    local newTextW = math.max(120, math.floor(availW - 38))
     if newTextW ~= Addon.UI.itemTextWidth then
         Addon.UI.itemTextWidth = newTextW
         -- Apply directly to all live text labels immediately -- SyncCheckboxesForSection
@@ -1183,6 +1170,9 @@ function Addon:ApplyScrollLayout()
     if self._trackingFrame and self.ResizeTrackingCols then
         self:ResizeTrackingCols()
     end
+    -- Ensure scrollbar visibility reflects current content size (guarded
+    -- because the helper may be defined later during file load).
+    if UpdateScrollbarVisibility then UpdateScrollbarVisibility() end
 end
 
 function Addon:GetUIScale()
@@ -1550,7 +1540,9 @@ end
 local function LayoutFrom(startIndex)
     -- Re-anchor sections starting at startIndex to avoid O(n) layout on every click.
     local posY = -Addon.UI.sectionTopPad
-    local paddingX = Addon.UI.sectionInsetX
+    -- The scroll frame is already inset to match the tracking panel; sections
+    -- fill its full width so week headers align with the rest of the content.
+    local paddingX = 0
     -- Hoist sectionGap: avoids two table lookups (Addon -> UI -> sectionGap) per visible section.
     local sectionGap = Addon.UI.sectionGap
     local activeSections = Addon._activeSections
@@ -1558,7 +1550,7 @@ local function LayoutFrom(startIndex)
     -- Hoist frame width query: scrollFrame:GetWidth() is a C call that returns
     -- the same value for every section in this pass, so computing it once avoids
     -- a redundant API call per visible section.
-    local sectionW = math.max(1, (scrollFrame and scrollFrame:GetWidth() or Addon.UI.frameW) - 2 * paddingX)
+    local sectionW = math.max(1, (scrollFrame and scrollFrame:GetWidth() or Addon.UI.frameW) - (2 * paddingX))
     for i = 1, #activeSections do
         local sectionFrame = activeSections[i]
         if sectionFrame:IsShown() then
@@ -1576,6 +1568,25 @@ local function LayoutFrom(startIndex)
 
     local scrollHeight = max(1, -posY + Addon.UI.sectionGap)
     scrollChild:SetHeight(scrollHeight)
+    -- Update scrollbar visibility after reflow so it hides when not needed.
+    if UpdateScrollbarVisibility then UpdateScrollbarVisibility() end
+end
+
+-- Hide or show the scrollbar depending on whether content needs scrolling.
+UpdateScrollbarVisibility = function()
+    if not scrollFrame or not scrollChild then return end
+    local sb = scrollFrame.ScrollBar
+    if not sb then return end
+    local scrollRange = (scrollFrame.GetVerticalScrollRange and tonumber(scrollFrame:GetVerticalScrollRange())) or 0
+    local childH = (scrollChild.GetHeight and tonumber(scrollChild:GetHeight())) or 0
+    local frameH = (scrollFrame.GetHeight and tonumber(scrollFrame:GetHeight())) or 0
+    local needsScroll = (scrollRange > 1) or (frameH > 0 and childH > frameH + 1)
+    if not needsScroll then
+        if scrollFrame.SetVerticalScroll then scrollFrame:SetVerticalScroll(0) end
+        if sb.SetShown then sb:SetShown(false) elseif sb.Hide then sb:Hide() end
+    else
+        if sb.SetShown then sb:SetShown(true) elseif sb.Show then sb:Show() end
+    end
 end
 
 function Addon:IsListComplete(db)
@@ -1667,7 +1678,7 @@ local function ShowCompletionPanel(show)
         end
     end
 
-    local paddingX = Addon.UI.sectionInsetX
+    local paddingX = Addon.UI.padOuterX or Addon.UI.sectionInsetX
     local sectionW = math.max(1, (scrollFrame and scrollFrame:GetWidth() or Addon.UI.frameW) - 2 * paddingX)
     local scrollH = (scrollFrame and scrollFrame.GetHeight and tonumber(scrollFrame:GetHeight())) or 0
     local panelH = max(96, scrollH - (Addon.UI.sectionTopPad or 0) * 2)
@@ -1817,10 +1828,8 @@ local function SetHeaderText(sectionFrame, sectionId, complete)
     -- repeating it.  Falls back to the full title if there's no " - " at all.
     titleText = titleText:match("^.-%s%-%s(.+)$") or titleText
     if complete then titleText = (L.DONE_PREFIX or "") .. titleText end
-    -- Show a dropdown arrow on the current-week header so it's clear it's clickable.
-    if sectionFrame._isPickerSection then
-        titleText = titleText .. "  |TInterface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up:14:14|t"
-    end
+    -- The picker toggle is shown on the right-side button; avoid duplicating
+    -- a dropdown glyph inside the centered header text.
     sectionFrame._title:SetText(titleText)
 end
 
@@ -2113,10 +2122,17 @@ UpdateSectionVisuals = function(sectionFrame, sectionId, precomputedCurrentId)
         collapsed = database.collapsedSections[sectionId] == true
     else
         -- First open: collapse everything except the current section.
-        -- Use precomputedCurrentId when available to avoid re-walking _order
-        -- once per section (ApplySectionVisuals pre-computes this).
+        -- Prefer the currently-selected (startAt) week if it makes the
+        -- section the first visible one; fall back to the computed current
+        -- section otherwise.  Use precomputedCurrentId when available to
+        -- avoid re-walking _order once per section.
         local currentId = precomputedCurrentId or GetCurrentSectionId(database)
-        collapsed = (tostring(sectionId) ~= tostring(currentId or ""))
+        local startId = tostring(database.startAtSectionId or "")
+        local firstVisibleId = currentId
+        if startId ~= "" and Addon._sectionsIndexById and Addon._sectionsIndexById[startId] then
+            firstVisibleId = startId
+        end
+        collapsed = (tostring(sectionId) ~= tostring(firstVisibleId or ""))
         SetSectionCollapsed(sectionId, collapsed, database)
     end
 
@@ -2197,6 +2213,11 @@ local function ApplySectionVisuals(want, haveBefore, dataChanged, database, chil
     -- Pre-compute once so UpdateSectionVisuals doesn't re-walk _order N times
     -- on the first open (when all collapsedSections entries are nil).
     local currentSectionId = GetCurrentSectionId(database)
+    local pickerSectionId = currentSectionId
+    local startId = tostring(database.startAtSectionId or "")
+    if startId ~= "" and Addon._sectionsIndexById and Addon._sectionsIndexById[startId] then
+        pickerSectionId = startId
+    end
     for i = 1, want do
         local sectionId    = Addon._order[i]
         local sectionFrame = Addon._activeSections[i]
@@ -2236,7 +2257,7 @@ local function ApplySectionVisuals(want, haveBefore, dataChanged, database, chil
         end
 
         sectionFrame._header._sectionFrame = sectionFrame
-        local isCurrentSec = (tostring(sectionId) == tostring(currentSectionId or ""))
+        local isCurrentSec = (tostring(sectionId) == tostring(pickerSectionId or ""))
         sectionFrame._isPickerSection = isCurrentSec
         if sectionFrame._expandBtn then
             sectionFrame._expandBtn:Show()
@@ -2268,6 +2289,64 @@ local function ApplySectionVisuals(want, haveBefore, dataChanged, database, chil
                     Addon.AddonUtils.SetTooltip(self_, L.PICKER_HEADER_TOOLTIP or "Click to change week", "ANCHOR_BOTTOMLEFT")
                 end)
                 sectionFrame._titleHover:SetScript("OnLeave", Addon.AddonUtils.HideTooltip)
+            end
+            -- Replace the right-side expand button behaviour with a week-picker
+            -- toggle for the current section. Keep the visual glyph in sync
+            -- with the picker (up when open, down when closed).
+            if sectionFrame._expandBtn then
+                local btn = sectionFrame._expandBtn
+                btn:SetScript("OnClick", function()
+                    local p = (Addon._EnsureHeaderPicker and Addon._EnsureHeaderPicker())
+                           or (frame and frame._lariasHeaderPicker)
+                    if not p then return end
+                    if p._lariasClosedAt and (GetTime() - p._lariasClosedAt) < 0.20 then
+                        p._lariasClosedAt = nil; return
+                    end
+                    if p.IsShown and p:IsShown() then p:Hide(); return end
+                    p:ClearAllPoints()
+                    p:SetPoint("TOPLEFT", _capturedSF._header, "BOTTOMLEFT", 0, -4)
+                    p:Show()
+                    if C_Timer and C_Timer.After then
+                        C_Timer.After(0, Addon._PopulateHeaderPicker)
+                    elseif Addon._PopulateHeaderPicker then
+                        Addon._PopulateHeaderPicker()
+                    end
+                end)
+                btn:SetScript("OnEnter", function(self_)
+                    GameTooltip:SetOwner(self_, "ANCHOR_BOTTOMLEFT")
+                    GameTooltip:SetText(L.CHANGE_WEEK_BUTTON or "Change Week", 1, 1, 1, 1, true)
+                    GameTooltip:Show()
+                end)
+                btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+                -- Sync glyph to picker visibility. NewExpandButton shows the
+                -- down glyph when its `_expanded` is true, but the picker code
+                -- expects up when open. Therefore set expanded = not pickerShown.
+                local picker = (Addon._EnsureHeaderPicker and Addon._EnsureHeaderPicker())
+                             or (frame and frame._lariasHeaderPicker)
+                if picker and picker.IsShown and picker:IsShown() then
+                    btn:SetExpanded(false)
+                else
+                    btn:SetExpanded(true)
+                end
+                if picker then
+                    picker._lariasSectionBtn = btn
+                end
+                if picker and not picker._lariasBoundToSectionBtn then
+                    picker:HookScript("OnShow", function(self_)
+                        local boundBtn = self_ and self_._lariasSectionBtn
+                        if boundBtn and boundBtn.SetExpanded then
+                            boundBtn:SetExpanded(false)
+                        end
+                    end)
+                    picker:HookScript("OnHide", function(self_)
+                        local boundBtn = self_ and self_._lariasSectionBtn
+                        if boundBtn and boundBtn.SetExpanded then
+                            boundBtn:SetExpanded(true)
+                        end
+                    end)
+                    picker._lariasBoundToSectionBtn = true
+                end
             end
         else
             sectionFrame._header:SetScript("OnClick", OnHeaderClick)
@@ -2483,11 +2562,19 @@ function Addon:CreateFrame()
     end
 
     scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", Addon.UI.padOuterX, -Addon.UI.scrollTop)
+    scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", Addon.UI.sectionInsetX or Addon.UI.padOuterX, -Addon.UI.scrollTop)
 
     scrollChild = CreateFrame("Frame", nil, scrollFrame)
     scrollChild:SetSize(1, 1)
     scrollFrame:SetScrollChild(scrollChild)
+    if scrollFrame.HookScript then
+        scrollFrame:HookScript("OnScrollRangeChanged", function()
+            if UpdateScrollbarVisibility then UpdateScrollbarVisibility() end
+        end)
+        scrollFrame:HookScript("OnSizeChanged", function()
+            if UpdateScrollbarVisibility then UpdateScrollbarVisibility() end
+        end)
+    end
 
     -- Expose scroll frame for the header module's deferred closures.
     Addon._scrollFrame = scrollFrame

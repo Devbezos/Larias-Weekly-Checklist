@@ -23,6 +23,8 @@ local BTN_ROW_H  = BTN_H + 8  -- = 26: button strip height at bottom of panel
 local NUM_CRESTS = 5
 local CREST_ABBREV = { "Adv", "Vet", "Chp", "Hero", "Myth" }
 local GV_NAMES     = { "Raid", "M+ / Delve", "World" }
+local BONUS_ROLLS_SECTION_ID = "599ab6a0"
+local BONUS_ROLLS_ITEM_ID    = "90409a11"
 local GV_THRESHOLDS = { {2,4,6}, {1,4,8}, {2,4,8} }
 
 -- Read from TRACKING so Overlay.lua (which captures the data) uses the same list.
@@ -61,16 +63,19 @@ local FONT_FLAGS = "OUTLINE"
 -- the softer, banded rhythm of larger roster dashboards.
 local VS = Addon.VISUAL_STYLE or {}
 local STYLE = {
-    headerBandA    = VS.sectionBandA or 0.13,
-    headerLineA    = VS.strongDividerA or 0.42,
-    footerBandA    = VS.sectionBandA or 0.12,
-    sectionBandA   = VS.sectionBandA or 0.11,
-    sectionLineA   = VS.sectionAccentA or 0.28,
-    rowLightA      = 0.014,
-    rowDarkA       = 0.050,
-    rowLineA       = 0.060,
-    colLineA       = 0.100,
-    classBarA      = 0.55,
+    headerBandA    = VS.sectionBandA or 0.10,
+    headerLineA    = VS.strongDividerA or 0.34,
+    footerBandA    = VS.sectionBandA or 0.08,
+    sectionBandA   = 0.055,
+    sectionLineA   = VS.sectionAccentA or 0.22,
+    sectionAccentA = 0.55,
+    rowLightA      = 0.025,
+    rowDarkA       = 0.060,
+    rowLineA       = 0.050,
+    colLineA       = 0.070,
+    classBarA      = 0.42,
+    hoverA         = 0.090,
+    hoverColA      = 0.045,
 }
 local PLACEHOLDER_DASH = Addon.PLACEHOLDER_DASH or "\226\128\148"
 
@@ -112,6 +117,13 @@ ShowGearPopup = function(anchor, charKey, charName, cr, cg, cb, snap)
         f:SetFrameStrata("TOOLTIP")
         f:SetClampedToScreen(true)
         f:SetSize(POPUP_W, POPUP_H)
+        f:RegisterEvent("GET_ITEM_INFO_RECEIVED")
+        f:SetScript("OnEvent", function(self_)
+            if not (self_ and self_.IsShown and self_:IsShown()) then return end
+            local ctx = self_._popupCtx
+            if not ctx then return end
+            ShowGearPopup(ctx.anchor, ctx.charKey, ctx.charName, ctx.cr, ctx.cg, ctx.cb, ctx.snap)
+        end)
 
         local titleFS = f:CreateFontString(nil, "OVERLAY")
         titleFS:SetFont(FONT_FACE, 11, FONT_FLAGS)
@@ -186,6 +198,15 @@ ShowGearPopup = function(anchor, charKey, charName, cr, cg, cb, snap)
     end
 
     local f = _gearPopupFrame
+    f._popupCtx = {
+        anchor = anchor,
+        charKey = charKey,
+        charName = charName,
+        cr = cr,
+        cg = cg,
+        cb = cb,
+        snap = snap,
+    }
     f._titleFS:SetText(charName)
     f._titleFS:SetTextColor(cr, cg, cb, 1)
 
@@ -296,15 +317,48 @@ local function GetCurrencyIcon(id)
     return info and info.iconFileID
 end
 
+local function GetCurrencyNameByID(id)
+    if not id or id == 0 then return nil end
+    local info = C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo
+                 and C_CurrencyInfo.GetCurrencyInfo(tonumber(id))
+    return info and info.name
+end
+
+local function GetItemNameByID(id)
+    if not id or id == 0 then return nil end
+    return GetItemInfo and GetItemInfo(tonumber(id)) or nil
+end
+
+local function GetItemLabelColorRGB(id)
+    if Addon.GetItemQualityColorRGB then
+        return Addon:GetItemQualityColorRGB(id)
+    end
+    return nil, nil, nil
+end
+
 -- ── Shared tooltip leave ──────────────────────────────────────────────────────
 local function OnCellLeave() GameTooltip:Hide() end
 
 local function ShowCurrencyHideMenu(anchor, currencyID)
     local cid = tonumber(currencyID)
     if not cid then return end
+    local currencyName = GetCurrencyNameByID(cid) or tostring(cid)
+    local menuText = (L.CONTEXT_HIDE_THIS_CURRENCY_FMT or "Hide %s"):format(currencyName)
     Addon:ShowContextMenu(anchor, {
-        { text = L.CONTEXT_HIDE_THIS_CURRENCY or "Hide this currency", onClick = function()
+        { text = menuText, onClick = function()
             Addon:SetCurrencyHidden(cid, true)
+        end },
+    })
+end
+
+local function ShowItemHideMenu(anchor, itemID)
+    local id = tonumber(itemID)
+    if not id then return end
+    local itemName = GetItemNameByID(id) or tostring(id)
+    local menuText = (L.CONTEXT_HIDE_THIS_ITEM_FMT or "Hide %s"):format(itemName)
+    Addon:ShowContextMenu(anchor, {
+        { text = menuText, onClick = function()
+            Addon:SetItemHidden(id, true)
         end },
     })
 end
@@ -322,7 +376,8 @@ local function MakeCell(parent, w, h)
     f:EnableMouse(true)
     f:SetScript("OnLeave", OnCellLeave)
     local fs = MakeFS(f, 12)
-    fs:SetAllPoints(f)
+    fs:SetPoint("TOPLEFT", f, "TOPLEFT", 4, 0)
+    fs:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -4, 0)
     fs:SetJustifyH("CENTER")
     fs:SetJustifyV("MIDDLE")
     f._fs = fs
@@ -413,6 +468,14 @@ local function EnsurePanel()
     f._iconTexPool = {}
     f._rowHitPool  = {}
 
+    local hoverRow = f:CreateTexture(nil, "ARTWORK", nil, -1)
+    hoverRow:Hide()
+    f._hoverRowTex = hoverRow
+
+    local hoverCol = f:CreateTexture(nil, "ARTWORK", nil, -1)
+    hoverCol:Hide()
+    f._hoverColTex = hoverCol
+
     altSummaryFrame = f
     -- Register with UISpecialFrames so ESC closes this window.
     tinsert(UISpecialFrames, "LariasAltsSummaryFrame")
@@ -438,6 +501,8 @@ local function BuildCharList(gdb, ownKey, allKeys, maxLvl)
             if cc then cr, cg, cb = cc.r, cc.g, cc.b end
             chars[#chars + 1] = {
                 key = charKey, snap = snap,
+                checked = cdb and cdb.checked,
+                sectionCompleted = cdb and cdb.sectionCompleted,
                 isOwn = isOwn, isHidden = isHidden,
                 classToken = classToken,
                 cr = cr, cg = cg, cb = cb,
@@ -576,28 +641,29 @@ local function BuildRowDefs(tracking, LAYOUT, chars)
                 rows[#rows + 1] = { type = "upgcost", label = name, tierIdx = i, cr = cr, cg = cg, cb = cb }
             end
         end
+        if firstUpgradeCostRow ~= #rows + 1 then
+            addRow("checkitem", L.ALT_SUMMARY_BONUS_ROLLS or "Bonus Rolls", {
+                sectionID = BONUS_ROLLS_SECTION_ID,
+                itemID = BONUS_ROLLS_ITEM_ID,
+            })
+        end
     end
 
     addSec(L.ALT_SUMMARY_SECTION_CURRENCIES or "Currencies", "currency")
     local _catID = tracking and tracking.catalystCurrencyID
     if not Addon:IsCurrencyHidden(_catID) then
         local _cr, _cg, _cb = Addon:GetCurrencyQualityColorRGB(_catID)
-        addRow("catalyst", L.TRACKING_CATALYST_CHARGES or "Catalyst Charges", { iconID = GetCurrencyIcon(_catID),
+        local _catName = (_catID and GetCurrencyNameByID(_catID)) or L.TRACKING_CATALYST_LABEL or "Catalyst"
+        addRow("catalyst", _catName, { iconID = GetCurrencyIcon(_catID),
                                                  currencyID = _catID,
                                                  cr = _cr, cg = _cg, cb = _cb })
     end
     local _sprkID = tracking and tracking.sparkCurrencyID
     if not Addon:IsCurrencyHidden(_sprkID) then
         local _cr, _cg, _cb = Addon:GetCurrencyQualityColorRGB(_sprkID)
-        addRow("sparks",   L.TRACKING_SPARKS_LABEL or "Sparks", { iconID = GetCurrencyIcon(_sprkID),
+        local _sprkName = (_sprkID and GetCurrencyNameByID(_sprkID)) or L.TRACKING_SPARKS_LABEL or "Sparks"
+        addRow("sparks",   _sprkName, { iconID = GetCurrencyIcon(_sprkID),
                                                  currencyID = _sprkID,
-                                                 cr = _cr, cg = _cg, cb = _cb })
-    end
-    local _keysID = tracking and tracking.cofferKeysDisplayCurrencyID
-    if not Addon:IsCurrencyHidden(_keysID) then
-        local _cr, _cg, _cb = Addon:GetCurrencyQualityColorRGB(_keysID)
-        addRow("keys",     L.TRACKING_KEYS_LABEL or "Coffer Keys", { iconID = GetCurrencyIcon(_keysID),
-                                                 currencyID = _keysID,
                                                  cr = _cr, cg = _cg, cb = _cb })
     end
     for mi, mID in ipairs(LAYOUT.miscIDs) do
@@ -619,25 +685,35 @@ local function BuildRowDefs(tracking, LAYOUT, chars)
         if (tonumber(questIDs[key]) or 0) <= 0 then return end
         if Addon:IsQuestHidden(key) then return end
         local iID = tonumber(questItemIDs[key]) or 0
+        if iID > 0 and Addon:IsItemHidden(iID) then return end
         local icon
+        local qr, qg, qb
         if iID > 0 then
             local _, _, _, _, _, _, _, _, _, tex = GetItemInfo(iID)
             if tex then icon = tex end
+            qr, qg, qb = GetItemLabelColorRGB(iID)
         end
-        addRow("quest", L[labelKey] or fallback, { questKey = key, iconID = icon })
+        addRow("quest", L[labelKey] or fallback, { questKey = key, itemID = iID > 0 and iID or nil, iconID = icon, cr = qr, cg = qg, cb = qb })
     end
-    addQuestRow("delversBounty",  "TRACKING_QUEST_DELVERS_BOUNTY",  "Trovehunter's Bounty")
     addQuestRow("nullaeusSpoils", "TRACKING_QUEST_NULLAEUS_SPOILS", "Spoils of Nullaeus")
     addQuestRow("weeklyPrey",     "TRACKING_QUEST_WEEKLY_PREY",     "Weekly Prey")
 
     -- Weapon/trinket upgrade items (289 → 298): single row showing combined-equivalent
-    do
+    if not Addon:IsItemHidden(268552) then
         local _, _, _, _, _, _, _, _, _, combinedTex = GetItemInfo and GetItemInfo(268552) or nil
         if not combinedTex and C_Item and C_Item.GetItemIconByID then
             combinedTex = C_Item.GetItemIconByID(268552)
         end
         local combinedName = GetItemInfo and select(1, GetItemInfo(268552))
-        addRow("weapupg", combinedName or (L.TRACKING_UPGRADE_SIGIL or "Upgrade Sigil"), { iconID = combinedTex })
+        local wr, wg, wb = nil, nil, nil
+        if Addon.GetItemQualityColorRGB then
+            wr, wg, wb = Addon:GetItemQualityColorRGB(268552)
+        end
+        addRow("weapupg", combinedName or (L.TRACKING_UPGRADE_SIGIL or "Upgrade Sigil"), {
+            itemID = 268552,
+            iconID = combinedTex,
+            cr = wr, cg = wg, cb = wb,
+        })
     end
 
     addSec(L.TRACKING_GREAT_VAULT_TITLE or "Great Vault", "greatvault")
@@ -974,10 +1050,10 @@ local function RenderQuestCell(cell, row, sd, noSnap, alpha, th)
     if noSnap or done == nil then
         SetPlaceholder(cell, th, alpha * A_DIM)
     elseif done then
-        cell._fs:SetText(L.ALT_SUMMARY_DONE or "Done")
+        cell._fs:SetText("1/1")
         cell._fs:SetTextColor(0.3, 1.0, 0.3, alpha)
     else
-        cell._fs:SetText(L.ALT_SUMMARY_NO or "No")
+        cell._fs:SetText("0/1")
         cell._fs:SetTextColor(1.0, 0.45, 0.45, alpha)
     end
     local _done, _lbl = done, row.label
@@ -986,6 +1062,38 @@ local function RenderQuestCell(cell, row, sd, noSnap, alpha, th)
         GameTooltip:SetText(_lbl, 1, 0.82, 0)
         if noSnap or _done == nil then
             GameTooltip:AddLine(L.ALT_SUMMARY_NO_SNAPSHOT or "No snapshot data", 0.6, 0.6, 0.6)
+        elseif _done then
+            GameTooltip:AddLine(L.ALT_SUMMARY_COMPLETED_THIS_WEEK or "Completed this week", 0.3, 1.0, 0.3)
+        else
+            GameTooltip:AddLine(L.ALT_SUMMARY_NOT_COMPLETED_THIS_WEEK or "Not completed this week", 1.0, 0.45, 0.45)
+        end
+        GameTooltip:Show()
+    end)
+end
+
+local function RenderChecklistItemCell(cell, row, char, alpha, th)
+    local checkedMap = char and char.checked
+    local completedMap = char and char.sectionCompleted
+    local key = row.sectionID and row.itemID and (tostring(row.sectionID) .. ":" .. tostring(row.itemID)) or nil
+    local done = (key and checkedMap and checkedMap[key]) or (completedMap and completedMap[row.sectionID]) or false
+    local hasData = (checkedMap ~= nil) or (completedMap ~= nil)
+
+    if not hasData then
+        SetPlaceholder(cell, th, alpha * A_DIM)
+    elseif done then
+        cell._fs:SetText("1/1")
+        cell._fs:SetTextColor(0.3, 1.0, 0.3, alpha)
+    else
+        cell._fs:SetText("0/1")
+        cell._fs:SetTextColor(1.0, 0.45, 0.45, alpha)
+    end
+
+    local _done, _hasData, _lbl = done, hasData, row.label
+    cell:SetScript("OnEnter", function(s_)
+        GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
+        GameTooltip:SetText(_lbl, 1, 0.82, 0)
+        if not _hasData then
+            GameTooltip:AddLine(L.ALT_SUMMARY_NO_CHECKLIST_DATA or "No checklist data", 0.6, 0.6, 0.6)
         elseif _done then
             GameTooltip:AddLine(L.ALT_SUMMARY_COMPLETED_THIS_WEEK or "Completed this week", 0.3, 1.0, 0.3)
         else
@@ -1294,6 +1402,8 @@ PopulateSummary = function(panel)
     for _, t in ipairs(panel._iconTexPool) do t:Hide() end
     for _, fs in ipairs(panel._rowLblPool) do fs:Hide() end
     for _, h in ipairs(panel._rowHitPool or {}) do h:Hide() end
+    if panel._hoverRowTex then panel._hoverRowTex:Hide() end
+    if panel._hoverColTex then panel._hoverColTex:Hide() end
     for _, col in ipairs(panel._colPool) do
         col.nameFS:Hide()
         if col.ilvlFS     then col.ilvlFS:Hide()     end
@@ -1320,6 +1430,30 @@ PopulateSummary = function(panel)
         t:SetSize(0, 0)
         t:Show()
         return t
+    end
+    local function ShowHover(rowY, rowH, colX, colWidth)
+        local h = Addon.THEME.header or Addon.THEME.text
+        if panel._hoverRowTex and rowY and rowH then
+            panel._hoverRowTex:SetColorTexture(h.r, h.g, h.b, STYLE.hoverA)
+            panel._hoverRowTex:ClearAllPoints()
+            panel._hoverRowTex:SetPoint("TOPLEFT",  panel, "TOPLEFT",  1, rowY)
+            panel._hoverRowTex:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -1, rowY)
+            panel._hoverRowTex:SetHeight(rowH)
+            panel._hoverRowTex:Show()
+        end
+        if panel._hoverColTex and colX and colWidth then
+            panel._hoverColTex:SetColorTexture(h.r, h.g, h.b, STYLE.hoverColA)
+            panel._hoverColTex:ClearAllPoints()
+            panel._hoverColTex:SetPoint("TOPLEFT", panel, "TOPLEFT", colX, COL_HDR_TOP)
+            panel._hoverColTex:SetSize(colWidth, COL_HDR_H + 2 + totalContentH + 4 + BTN_ROW_H)
+            panel._hoverColTex:Show()
+        elseif panel._hoverColTex then
+            panel._hoverColTex:Hide()
+        end
+    end
+    local function HideHover()
+        if panel._hoverRowTex then panel._hoverRowTex:Hide() end
+        if panel._hoverColTex then panel._hoverColTex:Hide() end
     end
     local function GetIcon()
         iconCursor = iconCursor + 1
@@ -1359,7 +1493,10 @@ PopulateSummary = function(panel)
         h:ClearAllPoints()
         h:SetScript("OnEnter", nil)
         h:SetScript("OnMouseUp", nil)
-        h:SetScript("OnLeave", OnCellLeave)
+        h:SetScript("OnLeave", function()
+            HideHover()
+            OnCellLeave()
+        end)
         h:Show()
         return h
     end
@@ -1387,7 +1524,10 @@ PopulateSummary = function(panel)
             col.hdrHit:ClearAllPoints()
             col.hdrHit:SetScript("OnEnter", nil)
             col.hdrHit:SetScript("OnMouseUp", nil)
-            col.hdrHit:SetScript("OnLeave", OnCellLeave)
+            col.hdrHit:SetScript("OnLeave", function()
+                HideHover()
+                OnCellLeave()
+            end)
         end
         if col.classBar then col.classBar:ClearAllPoints() end
         col.hideBtn:ClearAllPoints()
@@ -1407,7 +1547,10 @@ PopulateSummary = function(panel)
         c:ClearAllPoints()
         c:SetScript("OnEnter", nil)
         c:SetScript("OnMouseUp", nil)
-        c:SetScript("OnLeave", OnCellLeave)
+        c:SetScript("OnLeave", function()
+            HideHover()
+            OnCellLeave()
+        end)
         c:Show()
         return c
     end
@@ -1451,6 +1594,7 @@ PopulateSummary = function(panel)
     local curRowY = ROWS_TOP
     for ri, row in ipairs(rows) do
         local h = (row.type == "sechdr") and HDR_ROW_H or ROW_H
+        local rowTop = curRowY
 
         if row.type == "sechdr" then
             local secBg = GetDiv()
@@ -1458,6 +1602,11 @@ PopulateSummary = function(panel)
             secBg:SetPoint("TOPLEFT",  panel, "TOPLEFT",   1, curRowY)
             secBg:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -1, curRowY)
             secBg:SetHeight(h)
+
+            local secAccent = GetDiv()
+            secAccent:SetColorTexture(header.r, header.g, header.b, STYLE.sectionAccentA)
+            secAccent:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, curRowY - 4)
+            secAccent:SetSize(3, h - 8)
 
             local secTopLine = GetDiv()
             secTopLine:SetHeight(1)
@@ -1476,8 +1625,8 @@ PopulateSummary = function(panel)
             secFS:SetJustifyH("LEFT")
             secFS:SetJustifyV("MIDDLE")
             secFS:SetText(row.label)
-            secFS:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD + 4, curRowY)
-            secFS:SetSize(COL_LABEL - 4, h)
+            secFS:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD + 10, curRowY)
+            secFS:SetSize(COL_LABEL - 10, h)
             if row.action then
                 secBg:EnableMouse(true)
                 secBg:SetScript("OnMouseUp", function()
@@ -1488,11 +1637,15 @@ PopulateSummary = function(panel)
                     end
                 end)
                 secBg:SetScript("OnEnter", function(s_)
+                    ShowHover(rowTop, h - 1)
                     GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
                     GameTooltip:SetText(L.TOOLTIP_CLICK_TO_OPEN or "Click to open", 1, 1, 1)
                     GameTooltip:Show()
                 end)
-                secBg:SetScript("OnLeave", function() GameTooltip:Hide() end)
+                secBg:SetScript("OnLeave", function()
+                    HideHover()
+                    GameTooltip:Hide()
+                end)
             end
         else
             local rowBg = GetDiv()
@@ -1527,7 +1680,7 @@ PopulateSummary = function(panel)
             end
 
             local lblFS = GetLbl(row.iconID and 10 or 11, "")
-            if row.type == "crest" or row.type == "upgcost" then
+            if row.type == "crest" or row.type == "upgcost" or row.type == "quest" then
                 lblFS:SetTextColor(row.cr or th.r, row.cg or th.g, row.cb or th.b, 0.90)
             elseif row.type == "catalyst" or row.type == "sparks"
                 or row.type == "keys"     or row.type == "misc"
@@ -1551,6 +1704,7 @@ PopulateSummary = function(panel)
                 hit:SetSize(COL_LABEL - PAD, h - 1)
                 local _cid = tonumber(cID)
                 hit:SetScript("OnEnter", function(s_)
+                    ShowHover(rowTop, h - 1)
                     if not _cid then return end
                     GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
                     GameTooltip:SetCurrencyByID(_cid)
@@ -1561,6 +1715,14 @@ PopulateSummary = function(panel)
                 hit:SetScript("OnMouseUp", function(s_, button)
                     if button ~= "RightButton" then return end
                     ShowCurrencyHideMenu(s_, _cid)
+                end)
+            else
+                local hit = GetHit()
+                hit:ClearAllPoints()
+                hit:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, curRowY)
+                hit:SetSize(COL_LABEL - PAD, h - 1)
+                hit:SetScript("OnEnter", function()
+                    ShowHover(rowTop, h - 1)
                 end)
             end
         end
@@ -1772,6 +1934,7 @@ PopulateSummary = function(panel)
         local cellRowY = ROWS_TOP
         for ri, row in ipairs(rows) do
             local h = (row.type == "sechdr") and HDR_ROW_H or ROW_H
+            local rowTop = cellRowY
 
             if row.type ~= "sechdr" then
                 local cell = GetCell(col, ri)
@@ -1799,6 +1962,8 @@ PopulateSummary = function(panel)
                     RenderMiscCell(cell, row, sd, noSnap, alpha, th)
                 elseif rtype == "quest" then
                     RenderQuestCell(cell, row, sd, noSnap, alpha, th)
+                elseif rtype == "checkitem" then
+                    RenderChecklistItemCell(cell, row, char, alpha, th)
                 elseif rtype == "upgcost" then
                     RenderUpgradeCostCell(cell, row, snap, noSnap, alpha, th)
                 elseif rtype == "keystone" then
@@ -1809,12 +1974,34 @@ PopulateSummary = function(panel)
                     RenderWeapUpgCell(cell, row, sd, noSnap, alpha, th)
                 end
 
+                cell._fs:SetJustifyH("CENTER")
+
+                local existingOnEnter = cell:GetScript("OnEnter")
+                cell:SetScript("OnEnter", function(s_)
+                    ShowHover(rowTop, h - 1, colX, colW)
+                    if existingOnEnter then existingOnEnter(s_) end
+                end)
+
                 local hideCurrencyID = row.currencyID or (row.type == "misc" and row.miscID)
-                if hideCurrencyID then
+                local hideItemID = row.itemID
+                local hideQuestKey = row.questKey
+                if hideCurrencyID or hideItemID or hideQuestKey then
                     local _cid = hideCurrencyID
+                    local _itemID = hideItemID
+                    local _questKey = hideQuestKey
                     cell:SetScript("OnMouseUp", function(s_, button)
                         if button ~= "RightButton" then return end
-                        ShowCurrencyHideMenu(s_, _cid)
+                        if _cid then
+                            ShowCurrencyHideMenu(s_, _cid)
+                        elseif _itemID then
+                            ShowItemHideMenu(s_, _itemID)
+                        elseif _questKey then
+                            Addon:ShowContextMenu(s_, {
+                                { text = L.CONTEXT_HIDE_THIS_ROW or "Hide this row", onClick = function()
+                                    Addon:SetQuestHidden(_questKey, true)
+                                end },
+                            })
+                        end
                     end)
                 else
                     cell:SetScript("OnMouseUp", nil)

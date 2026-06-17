@@ -118,32 +118,6 @@ local function GetNpcIDFromUnit(unitToken)
     return GetNpcIDFromGUID(guid)
 end
 
-local function TextMatchesCrestExchange(text)
-    if type(text) ~= "string" then return false end
-    text = text:lower()
-    return text:find("crest exchange", 1, true) ~= nil
-end
-
-local function FontStringMatchesCrestExchange(fontString)
-    return fontString and fontString.GetText and TextMatchesCrestExchange(fontString:GetText())
-end
-
-local function IsCrestExchangeVendor()
-    local npcID = GetNpcIDFromUnit("npc")
-    local npcIDs = Addon.TRACKING and Addon.TRACKING.crestExchangeNpcIDs
-    if npcID and npcIDs then
-        for key, value in pairs(npcIDs) do
-            if tonumber(key) == npcID and value == true then return true end
-            if tonumber(value) == npcID then return true end
-        end
-    end
-
-    if FontStringMatchesCrestExchange(_G.MerchantFrameTitleText) then return true end
-    if MerchantFrame and FontStringMatchesCrestExchange(MerchantFrame.TitleText) then return true end
-
-    return false
-end
-
 -- Scans the open merchant and populates _found[ci] = merchantIndex for each
 -- crest conversion item that the vendor sells.
 local function ScanMerchant()
@@ -436,7 +410,6 @@ evFrame:SetScript("OnEvent", function(_, event)
         C_Timer.After(0.05, function()
             local prefs = Addon.EnsurePrefs and Addon:EnsurePrefs()
             if prefs and prefs.crestConvertDisabled then return end
-            if not IsCrestExchangeVendor() then return end
 
             ScanMerchant()
             local anyFound = false

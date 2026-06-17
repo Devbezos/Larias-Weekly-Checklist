@@ -291,7 +291,8 @@ function Addon.OptionsPane.BuildDisplay(parent, opts)
             local nCur   = Addon.GetHiddenCurrencyList and #Addon:GetHiddenCurrencyList() or 0
             local nGV    = Addon.GetHiddenGVBlockList  and #Addon:GetHiddenGVBlockList()  or 0
             local nQuest = Addon.GetHiddenQuestList    and #Addon:GetHiddenQuestList()    or 0
-            local n      = nCur + nGV + nQuest
+            local nItem  = Addon.GetHiddenItemList     and #Addon:GetHiddenItemList()     or 0
+            local n      = nCur + nGV + nQuest + nItem
             refs.restoreHiddenBtn:SetShown(n > 0)
             if n > 0 then
                 local L = Addon.L or {}

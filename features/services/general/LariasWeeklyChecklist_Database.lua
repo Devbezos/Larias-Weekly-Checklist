@@ -72,14 +72,18 @@ local function RefreshAfterHiddenChange(self)
     end
 end
 
+local function GetActiveCharKey(self)
+    return self._viewingChar or self:GetCurrentProfileKey()
+end
+
 local function ReadCharDB(self)
-    local key = self:GetCurrentProfileKey()
+    local key = GetActiveCharKey(self)
     local gdb = self.db and self.db.global
     return gdb and gdb.chars and gdb.chars[key]
 end
 
 local function GetOrCreateCharDB(self)
-    local key = self:GetCurrentProfileKey()
+    local key = GetActiveCharKey(self)
     if not (key and key ~= "") then return nil end
     local gdb = self.db and self.db.global
     if not gdb then
@@ -93,9 +97,7 @@ end
 
 function Addon:IsCurrencyHidden(currencyID)
     if not currencyID then return false end
-    local key = self:GetCurrentProfileKey()
-    local gdb = self.db and self.db.global
-    local cdb = gdb and gdb.chars and gdb.chars[key]
+    local cdb = ReadCharDB(self)
     return cdb and cdb.hiddenCurrencies and cdb.hiddenCurrencies[tostring(currencyID)] == true
 end
 
@@ -118,6 +120,23 @@ function Addon:SetQuestHidden(questKey, hidden)
     if not cdb then return end
     cdb.hiddenQuests = cdb.hiddenQuests or {}
     cdb.hiddenQuests[questKey] = hidden or nil
+    RefreshAfterHiddenChange(self)
+end
+
+function Addon:IsItemHidden(itemID)
+    itemID = tonumber(itemID)
+    if not itemID then return false end
+    local cdb = ReadCharDB(self)
+    return cdb and cdb.hiddenItems and cdb.hiddenItems[tostring(itemID)] == true
+end
+
+function Addon:SetItemHidden(itemID, hidden)
+    itemID = tonumber(itemID)
+    if not itemID then return end
+    local cdb = GetOrCreateCharDB(self)
+    if not cdb then return end
+    cdb.hiddenItems = cdb.hiddenItems or {}
+    cdb.hiddenItems[tostring(itemID)] = hidden or nil
     RefreshAfterHiddenChange(self)
 end
 
@@ -152,6 +171,24 @@ function Addon:GetHiddenCurrencyList()
                 local info = C_CurrencyInfo.GetCurrencyInfo(id)
                 if info and info.name then name = info.name end
             end
+            result[#result + 1] = { id = id, name = name }
+        end
+    end
+    table_sort(result, function(a, b) return a.name < b.name end)
+    return result
+end
+
+function Addon:GetHiddenItemList()
+    local cdb = ReadCharDB(self)
+    local hidden = cdb and cdb.hiddenItems
+    if not hidden then return {} end
+    local result = {}
+    for idStr in pairs(hidden) do
+        local id = tonumber(idStr)
+        if id then
+            local name = idStr
+            local itemName = GetItemInfo and GetItemInfo(id)
+            if itemName then name = itemName end
             result[#result + 1] = { id = id, name = name }
         end
     end
@@ -195,7 +232,7 @@ function Addon:EnsureDB()
         self:SetupAddonDB()
     end
 
-    local key = self._viewingChar or self:GetCurrentProfileKey()
+    local key = GetActiveCharKey(self)
     local chars = self.db.global.chars
     if not chars[key] then chars[key] = {} end
 

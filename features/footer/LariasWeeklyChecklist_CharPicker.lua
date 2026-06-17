@@ -107,6 +107,15 @@ function Addon:InitCharPickerUI(frame, styleFunc)
         if styleFunc then styleFunc(btn) end
         charPickerBtn              = btn
         frame._lariasCharPickerBtn = btn
+        -- Ensure text is left-aligned so the arrow glyph stays within the
+        -- button bounds and doesn't visually overlap the centered section title.
+        local tr = Addon.Controls.GetButtonFontString(btn)
+        if tr and tr.ClearAllPoints and tr.SetPoint then
+            tr:ClearAllPoints()
+            tr:SetPoint("LEFT",  btn, "LEFT",  6, 0)
+            tr:SetPoint("RIGHT", btn, "RIGHT", -4, 0)
+            if tr.SetJustifyH then tr:SetJustifyH("LEFT") end
+        end
         btn:SetScript("OnEnter", function(self_)
             local L = Addon.L or {}
             GameTooltip:SetOwner(self_, "ANCHOR_BOTTOMLEFT")

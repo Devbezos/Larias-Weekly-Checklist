@@ -32,6 +32,27 @@ local function SetPickerButtonTextColor(btn, color)
     end
 end
 
+local function RefreshPickerButtonVisual(btn)
+    if not btn then return end
+    local vs = Addon.VISUAL_STYLE or {}
+    local hcol = Addon.THEME and Addon.THEME.header or { r = 1, g = 0.82, b = 0 }
+    local tcol = Addon.THEME and Addon.THEME.text or { r = 1, g = 1, b = 1 }
+    local alpha = btn._selected and (vs.sectionAccentA or 0.32)
+               or btn._hovered and (vs.sectionBandA or 0.12)
+               or 0
+
+    if btn._hoverBg then
+        btn._hoverBg:SetColorTexture(hcol.r, hcol.g, hcol.b, alpha)
+        if alpha > 0 then btn._hoverBg:Show() else btn._hoverBg:Hide() end
+    end
+
+    if btn._selected or btn._hovered then
+        SetPickerButtonTextColor(btn, hcol)
+    else
+        SetPickerButtonTextColor(btn, tcol)
+    end
+end
+
 -- ── Addon:CreateHeader ────────────────────────────────────────────────────────
 -- Creates all header chrome (close/gear/change-week/ilvl-ref/char-picker),
 -- defines the week-picker popup, and wires LayoutHeaderButtons_.
@@ -153,8 +174,11 @@ function Addon:CreateHeader(frame)
             if btn.SetTextInsets then btn:SetTextInsets(10, 10, 0, 0) end
             local tr = Addon.Controls.GetButtonFontString(btn)
             if tr then
-                if tr.SetJustifyH then tr:SetJustifyH("LEFT") end
-                if tr.SetJustifyV then tr:SetJustifyV("MIDDLE") end
+                    -- Use the same font size/weight as section headers and center
+                    -- the text so the picker rows visually match the headers.
+                    if tr.SetJustifyH then tr:SetJustifyH("CENTER") end
+                    if tr.SetJustifyV then tr:SetJustifyV("MIDDLE") end
+                    if tr.SetFontObject then tr:SetFontObject("GameFontNormalLarge") end
             end
         end
         if picker.GetFrameLevel and btn.SetFrameLevel then
@@ -163,9 +187,25 @@ function Addon:CreateHeader(frame)
         if btn.Enable      then btn:Enable() end
         if btn.EnableMouse then btn:EnableMouse(true) end
         btn:Show()
-        SetPickerButtonTextColor(btn, Addon.THEME.text)
-        btn:SetScript("OnEnter", function() SetPickerButtonTextColor(btn, Addon.THEME.header) end)
-        btn:SetScript("OnLeave", function() SetPickerButtonTextColor(btn, Addon.THEME.text) end)
+        -- Create a hover background to match section header banding.
+        if not btn._hoverBg then
+            local bg = btn:CreateTexture(nil, "BACKGROUND")
+            bg:SetPoint("TOPLEFT", btn, "TOPLEFT", 0, 0)
+            bg:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", 0, 0)
+            bg:Hide()
+            btn._hoverBg = bg
+        end
+        btn._hovered = false
+        btn._selected = false
+        btn:SetScript("OnEnter", function()
+            btn._hovered = true
+            RefreshPickerButtonVisual(btn)
+        end)
+        btn:SetScript("OnLeave", function()
+            btn._hovered = false
+            RefreshPickerButtonVisual(btn)
+        end)
+        RefreshPickerButtonVisual(btn)
         return btn
     end
 
@@ -233,15 +273,25 @@ function Addon:CreateHeader(frame)
                 if type(section) == "table" then
                     local id        = section.id
                     local isCurrent = (tostring(id or "") == currentId)
-                    local label = ExtractMonthRangeLabel(section.title or id or "")
+                    -- Make picker labels match the header text shown above each week.
+                    local rawTitle = section.title or id or ""
+                    local display = tostring(rawTitle)
+                    -- Strip leading "... - " prefix (same as SetHeaderText)
+                    display = display:match("^.-%s%-%s(.+)$") or display
+                    -- Prepend DONE prefix when section is complete
+                    if Addon._IsSectionCompleteById and Addon._IsSectionCompleteById(id) then
+                        display = (L.DONE_PREFIX or "") .. display
+                    end
+                    local label = display
                     if label == "" then label = tostring(id or i) end
-                    if isCurrent then label = "> " .. label end
 
                     local btn = AcquirePickerButton(picker)
                     btn:ClearAllPoints()
                     btn:SetPoint("TOPLEFT", picker, "TOPLEFT", PICKER_PAD, posY)
                     btn:SetHeight(PICKER_ROW_HEIGHT)
                     btn:SetText(label)
+                    btn._selected = isCurrent
+                    RefreshPickerButtonVisual(btn)
                     btn:SetEnabled(true)
                     local capturedId    = id
                     local capturedTitle = section.title or label

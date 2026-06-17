@@ -118,6 +118,20 @@ local function IsItemEmbellished(itemLink)
     return false
 end
 
+local function GetCurrencyNameByID(currencyID)
+    local id = tonumber(currencyID)
+    if not (id and id > 0) then return nil end
+    local info = C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo and C_CurrencyInfo.GetCurrencyInfo(id)
+    return info and info.name
+end
+
+local function GetItemNameByID(itemID)
+    local id = tonumber(itemID)
+    if not (id and id > 0) then return nil end
+    local itemName = GetItemInfo and GetItemInfo(id)
+    return itemName
+end
+
 --  Snapshot / event API 
 function Addon:HasTrackingSnapshot()
     if not (self.db and self.db.global) then return false end
@@ -307,8 +321,8 @@ local function SetRightRowPair(i, rowLabel, rowValue, iconFileID, currencyID, to
         end
     end
     if row.frame then
-        local showX = showRow and currencyID and not itemID
-        row.frame._lariasRightClickCurrencyID = showX and currencyID or nil
+        row.frame._lariasRightClickCurrencyID = (showRow and currencyID) and currencyID or nil
+        row.frame._lariasRightClickItemID     = (showRow and itemID) and itemID or nil
         row.frame._lariasRightClickQuestKey   = (showRow and questKey) and questKey or nil
     end
 end
@@ -740,10 +754,17 @@ function Addon:CreateTrackingPanel(parentFrame)
             if button ~= "RightButton" then return end
             local id = self._lariasIconCurrencyID
             local qk = self._lariasIconQuestKey
+            local itemID = self._lariasIconItemID
             if id then
                 Addon:ShowContextMenu(self, {
-                    { text = L.CONTEXT_HIDE_THIS_CURRENCY or "Hide this currency", onClick = function()
+                    { text = (L.CONTEXT_HIDE_THIS_CURRENCY_FMT or "Hide %s"):format(GetCurrencyNameByID(id) or tostring(id)), onClick = function()
                         Addon:SetCurrencyHidden(id, true)
+                    end },
+                })
+            elseif itemID then
+                Addon:ShowContextMenu(self, {
+                    { text = (L.CONTEXT_HIDE_THIS_ITEM_FMT or "Hide %s"):format(GetItemNameByID(itemID) or tostring(itemID)), onClick = function()
+                        Addon:SetItemHidden(itemID, true)
                     end },
                 })
             elseif qk then
@@ -774,10 +795,17 @@ function Addon:CreateTrackingPanel(parentFrame)
             if button ~= "RightButton" then return end
             local id  = row._lariasRightClickCurrencyID
             local qk  = row._lariasRightClickQuestKey
+            local itemID = row._lariasRightClickItemID
             if id then
                 Addon:ShowContextMenu(row, {
-                    { text = L.CONTEXT_HIDE_THIS_CURRENCY or "Hide this currency", onClick = function()
+                    { text = (L.CONTEXT_HIDE_THIS_CURRENCY_FMT or "Hide %s"):format(GetCurrencyNameByID(id) or tostring(id)), onClick = function()
                         Addon:SetCurrencyHidden(id, true)
+                    end },
+                })
+            elseif itemID then
+                Addon:ShowContextMenu(row, {
+                    { text = (L.CONTEXT_HIDE_THIS_ITEM_FMT or "Hide %s"):format(GetItemNameByID(itemID) or tostring(itemID)), onClick = function()
+                        Addon:SetItemHidden(itemID, true)
                     end },
                 })
             elseif qk then
@@ -808,10 +836,17 @@ function Addon:CreateTrackingPanel(parentFrame)
             if button ~= "RightButton" then return end
             local id = self._lariasRightClickCurrencyID
             local qk = self._lariasRightClickQuestKey
+            local itemID = self._lariasRightClickItemID
             if id then
                 Addon:ShowContextMenu(self, {
-                    { text = L.CONTEXT_HIDE_THIS_CURRENCY or "Hide this currency", onClick = function()
+                    { text = (L.CONTEXT_HIDE_THIS_CURRENCY_FMT or "Hide %s"):format(GetCurrencyNameByID(id) or tostring(id)), onClick = function()
                         Addon:SetCurrencyHidden(id, true)
+                    end },
+                })
+            elseif itemID then
+                Addon:ShowContextMenu(self, {
+                    { text = (L.CONTEXT_HIDE_THIS_ITEM_FMT or "Hide %s"):format(GetItemNameByID(itemID) or tostring(itemID)), onClick = function()
+                        Addon:SetItemHidden(itemID, true)
                     end },
                 })
             elseif qk then
@@ -1264,9 +1299,14 @@ local function RenderSnapshotIntoPanel(snap)
                     local _, _, _, _, _, _, _, _, _, itemTexture = GetItemInfo(itemID)
                     iconID = itemTexture
                 end
+            elseif row.type == "weapupg" then
+                itemID = 268552
+                local _, _, _, _, _, _, _, _, _, itemTexture = GetItemInfo(itemID)
+                iconID = itemTexture
             end
             if (not currencyID or not Addon:IsCurrencyHidden(currencyID))
                     and (not questKey or not Addon:IsQuestHidden(questKey))
+                    and (not itemID or not Addon:IsItemHidden(itemID))
                     and (IsNonEmptyText(lbl) or IsNonEmptyText(val)) then
                 SetRightRowPair(idx, lbl, val, iconID, currencyID, nil, nil, itemID, questKey)
                 idx = idx + 1

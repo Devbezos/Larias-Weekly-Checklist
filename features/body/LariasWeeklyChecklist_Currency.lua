@@ -103,6 +103,32 @@ local QUALITY_HEX = {
     [6] = "ffe6cc80", [7] = "ff00ccff",
 }
 
+-- Some Midnight currencies/items currently report common quality through the
+-- runtime APIs even though they should read as epic in the UI.
+local CURRENCY_QUALITY_OVERRIDES = {
+    [3212] = 4, -- Radiant Spark Dust
+}
+
+local ITEM_QUALITY_OVERRIDES = {
+    [WEAP_UPG_COMBINED_ID] = 4, -- Upgrade Sigil
+}
+
+local function GetQualityHex(quality, fallbackHex)
+    return QUALITY_HEX[tonumber(quality) or 0] or fallbackHex or COLORS.white
+end
+
+local function GetItemDisplayQuality(itemID)
+    local quality = nil
+    if GetItemInfo and itemID then
+        quality = select(3, GetItemInfo(itemID))
+    end
+    quality = tonumber(quality)
+    if quality and quality > 1 then
+        return quality
+    end
+    return ITEM_QUALITY_OVERRIDES[tonumber(itemID) or 0] or quality
+end
+
 local function FormatCurrencyProgressParts(currencyID)
     if not currencyID or not C_CurrencyInfo or not C_CurrencyInfo.GetCurrencyInfo then return nil end
     local info = C_CurrencyInfo.GetCurrencyInfo(currencyID)
@@ -143,7 +169,7 @@ local function GetCurrencyStaticInfo(currencyID)
     if cached ~= nil then return cached or nil end
     if not (C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo) then return nil end
     local info = C_CurrencyInfo.GetCurrencyInfo(id)
-    if not info then _currencyStaticCache[id] = false; return nil end
+    if not info then return nil end
     local s = { name = info.name, iconFileID = info.iconFileID, quality = tonumber(info.quality) }
     _currencyStaticCache[id] = s
     return s
@@ -161,12 +187,19 @@ end
 
 local function GetCurrencyQualityColor(currencyID)
     local s = GetCurrencyStaticInfo(currencyID)
+    local id = tonumber(currencyID) or 0
+    local q = s and tonumber(s.quality) or nil
+    if q and q > 1 then
+        return GetQualityHex(q, COLORS.gold)
+    end
+    local overrideQ = CURRENCY_QUALITY_OVERRIDES[id]
+    if overrideQ then
+        return GetQualityHex(overrideQ, COLORS.gold)
+    end
     if not s then return COLORS.dim end
-    local q = s.quality
     -- Quality 0 (junk) and 1 (common/white) have no meaningful color for currency
     -- labels; fall back to gold so they read well on the panel background.
-    if not q or q <= 1 then return COLORS.gold end
-    return QUALITY_HEX[q] or COLORS.gold
+    return COLORS.gold
 end
 
 -- Returns (r, g, b) floats for SetTextColor from a currency's quality colour.
@@ -176,6 +209,13 @@ function Addon:GetCurrencyQualityColorRGB(id)
     return (tonumber(hex:sub(3,4), 16) or 204) / 255,
            (tonumber(hex:sub(5,6), 16) or 154) / 255,
            (tonumber(hex:sub(7,8), 16) or 40)  / 255
+end
+
+function Addon:GetItemQualityColorRGB(itemID)
+    local hex = GetQualityHex(GetItemDisplayQuality(itemID), COLORS.white)
+    return (tonumber(hex:sub(3,4), 16) or 255) / 255,
+           (tonumber(hex:sub(5,6), 16) or 255) / 255,
+           (tonumber(hex:sub(7,8), 16) or 255) / 255
 end
 
 -- Builds a table (keyed by currency ID) of the shortest distinguishing label
@@ -301,7 +341,7 @@ local function GetSparksParts()
     local id = Addon.TRACKING and Addon.TRACKING.sparkCurrencyID
     if not (id and tonumber(id) and tonumber(id) > 0) then return "", "" end
     local name  = GetCurrencyName(id) or L.TRACKING_SPARKS_LABEL or ""
-    local label = name
+    local label = ColorWrap(GetCurrencyQualityColor(id), name)
     local cur, cap = FormatCurrencyProgressParts(id)
     cur = tonumber(cur) or 0
     cap = tonumber(cap) or 0
@@ -870,18 +910,20 @@ function Addon:GetCurrencyPanelRows()
     if n < RIGHT_LINE_COUNT and not Addon:IsQuestHidden("delversBounty") then
         local bLbl, bVal = GetDelversBountyParts()
         if IsNonEmptyText(bLbl) or IsNonEmptyText(bVal) then
-            n = n + 1
             local bItemID = tracking and tracking.questItemIDs and tonumber(tracking.questItemIDs.delversBounty) or 0
-            local bIcon, bLblFinal = nil, bLbl
-            if bItemID > 0 then
-                local itemName, _, itemQuality, _, _, _, _, _, _, itemTexture = GetItemInfo(bItemID)
-                if itemTexture then bIcon = itemTexture end
-                if itemName then
-                    local qhex = QUALITY_HEX[itemQuality] or COLORS.white
-                    bLblFinal = ColorWrap(qhex, itemName)
+            if not (bItemID > 0 and Addon:IsItemHidden(bItemID)) then
+                n = n + 1
+                local bIcon, bLblFinal = nil, bLbl
+                if bItemID > 0 then
+                    local itemName, _, itemQuality, _, _, _, _, _, _, itemTexture = GetItemInfo(bItemID)
+                    if itemTexture then bIcon = itemTexture end
+                    if itemName then
+                        local qhex = GetQualityHex(itemQuality, COLORS.white)
+                        bLblFinal = ColorWrap(qhex, itemName)
+                    end
                 end
+                FillRow(n, bLblFinal, bVal, bIcon, nil, nil, nil, bItemID > 0 and bItemID or nil, "delversBounty")
             end
-            FillRow(n, bLblFinal, bVal, bIcon, nil, nil, nil, bItemID > 0 and bItemID or nil, "delversBounty")
         end
     end
 
@@ -889,18 +931,20 @@ function Addon:GetCurrencyPanelRows()
     if n < RIGHT_LINE_COUNT and not Addon:IsQuestHidden("nullaeusSpoils") then
         local sLbl, sVal = GetNullaeusSpoilsParts()
         if IsNonEmptyText(sLbl) or IsNonEmptyText(sVal) then
-            n = n + 1
             local sItemID = tracking and tracking.questItemIDs and tonumber(tracking.questItemIDs.nullaeusSpoils) or 0
-            local sIcon, sLblFinal = nil, sLbl
-            if sItemID > 0 then
-                local itemName, _, itemQuality, _, _, _, _, _, _, itemTexture = GetItemInfo(sItemID)
-                if itemTexture then sIcon = itemTexture end
-                if itemName then
-                    local qhex = QUALITY_HEX[itemQuality] or COLORS.white
-                    sLblFinal = ColorWrap(qhex, itemName)
+            if not (sItemID > 0 and Addon:IsItemHidden(sItemID)) then
+                n = n + 1
+                local sIcon, sLblFinal = nil, sLbl
+                if sItemID > 0 then
+                    local itemName, _, itemQuality, _, _, _, _, _, _, itemTexture = GetItemInfo(sItemID)
+                    if itemTexture then sIcon = itemTexture end
+                    if itemName then
+                        local qhex = GetQualityHex(itemQuality, COLORS.white)
+                        sLblFinal = ColorWrap(qhex, itemName)
+                    end
                 end
+                FillRow(n, sLblFinal, sVal, sIcon, nil, nil, nil, sItemID > 0 and sItemID or nil, "nullaeusSpoils")
             end
-            FillRow(n, sLblFinal, sVal, sIcon, nil, nil, nil, sItemID > 0 and sItemID or nil, "nullaeusSpoils")
         end
     end
 
@@ -916,6 +960,10 @@ function Addon:GetCurrencyPanelRows()
     -- Weapon/trinket upgrade items: one row showing combined-equivalent with 1 decimal
     -- e.g. 7 shards + 1 combined = 2.4 combined equivalent
     if n < RIGHT_LINE_COUNT then
+        if Addon:IsItemHidden(WEAP_UPG_COMBINED_ID) then
+            for i = n + 1, #_panelRowBuf do _panelRowBuf[i] = nil end
+            return _panelRowBuf
+        end
         local shardHeld    = (GetItemCount and GetItemCount(WEAP_UPG_SHARD_ID))    or 0
         local combinedHeld = (GetItemCount and GetItemCount(WEAP_UPG_COMBINED_ID)) or 0
         local needCount    = GetWeaponUpgradeNeedCount()
@@ -926,7 +974,7 @@ function Addon:GetCurrencyPanelRows()
         end
         local lbl
         if iName then
-            local qhex = QUALITY_HEX[iQuality] or COLORS.white
+            local qhex = GetQualityHex(GetItemDisplayQuality(WEAP_UPG_COMBINED_ID) or iQuality, COLORS.white)
             lbl = ColorWrap(qhex, iName)
         else
             lbl = ColorWrap(COLORS.gold, L.TRACKING_UPGRADE_SIGIL or "Upgrade Sigil")
@@ -1124,7 +1172,7 @@ function Addon:RenderCurrencySnapshotRow(row)
         local iName, _, iQuality = GetItemInfo and GetItemInfo(WEAP_UPG_COMBINED_ID) or nil
         local lbl
         if iName then
-            local qhex = QUALITY_HEX[iQuality] or COLORS.white
+            local qhex = GetQualityHex(GetItemDisplayQuality(WEAP_UPG_COMBINED_ID) or iQuality, COLORS.white)
             lbl = ColorWrap(qhex, iName)
         else
             lbl = ColorWrap(COLORS.gold, L.TRACKING_UPGRADE_SIGIL or "Upgrade Sigil")
