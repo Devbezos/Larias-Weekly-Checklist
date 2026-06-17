@@ -135,6 +135,9 @@ def main(csv_in: str, lua_out: str) -> None:
     out_path = Path(lua_out)
     nl = "\n"
 
+    if out_path.parent and not out_path.parent.exists():
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+
     if out_path.exists():
         existing_text = out_path.read_text(encoding="utf-8")
         nl = detect_newline(existing_text)

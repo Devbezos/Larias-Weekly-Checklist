@@ -60,32 +60,16 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Download Google Sheet
-        run: |
-          set -euo pipefail
-          SHEET_ID="1iK2SZUcz_ljnkdTG7KW6pqfzaUDuSgnlh1HupcLrkus"
-          GID="53744607"
-          mkdir -p data
-          curl -L "https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}" \
-            -o data/spreadsheet.csv
-
-      - name: Convert CSV to Lua
-        run: |
-          python scripts/sheet_to_lua.py data/spreadsheet.csv locales/enUS_Data.lua
-
       - name: Update .toc Interface versions (latest 3)
         run: |
           set -euo pipefail
           python scripts/update_toc_interface.py --toc LariasWeeklyChecklist.toc --count 3
 
-      - name: Check for release-worthy changes
-        id: check
-        env:
-          FORCE_DEPLOY: ${{ github.event.inputs.force || 'false' }}
+      - name: Detect TOC-only fast path
+        id: precheck
         run: |
           set -euo pipefail
           TOC="LariasWeeklyChecklist.toc"
-          DATA_FILE="locales/enUS_Data.lua"
 
           # Read the current version from the toc, stripping any pre-release suffix
           # so we always tag at a clean MAJOR.MINOR.PATCH.
@@ -96,19 +80,61 @@ jobs:
             echo "ERROR: could not parse version from toc: $RAW"; exit 1
           fi
 
-          # Normalize toc: strip any alpha suffix, ensure stable title.
+          # Normalize toc early so TOC_CHANGED reflects the final toc content.
           sed -i "s/^## Version:.*/## Version: $VERSION/" "$TOC"
           sed -i "s/^## Title:.*/## Title: Larias's Weekly Checklist/" "$TOC"
+
+          TOC_CHANGED=false
+          if ! git diff --quiet -- "$TOC"; then TOC_CHANGED=true; fi
+
+          FAST_TOC_ONLY=false
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "$TOC_CHANGED" = "true" ]; then
+            FAST_TOC_ONLY=true
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "toc_changed=$TOC_CHANGED" >> "$GITHUB_OUTPUT"
+          echo "fast_toc_only=$FAST_TOC_ONLY" >> "$GITHUB_OUTPUT"
+
+      - name: Download Google Sheet
+        if: steps.precheck.outputs.fast_toc_only != 'true'
+        run: |
+          set -euo pipefail
+          SHEET_ID="1iK2SZUcz_ljnkdTG7KW6pqfzaUDuSgnlh1HupcLrkus"
+          GID="53744607"
+          mkdir -p data
+          curl -L "https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}" \
+            -o data/spreadsheet.csv
+
+      - name: Convert CSV to Lua
+        if: steps.precheck.outputs.fast_toc_only != 'true'
+        run: |
+          python scripts/sheet_to_lua.py data/spreadsheet.csv Locales/enUS_Data.lua
+
+      - name: Check for release-worthy changes
+        id: check
+        env:
+          FORCE_DEPLOY: ${{ github.event.inputs.force || 'false' }}
+        run: |
+          set -euo pipefail
+          TOC="LariasWeeklyChecklist.toc"
+          DATA_FILE="Locales/enUS_Data.lua"
+          VERSION="${{ steps.precheck.outputs.version }}"
+          TOC_CHANGED="${{ steps.precheck.outputs.toc_changed }}"
+          FAST_TOC_ONLY="${{ steps.precheck.outputs.fast_toc_only }}"
 
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
           DATA_CHANGED=false
-          TOC_CHANGED=false
-          if ! git diff --quiet -- "$DATA_FILE"; then DATA_CHANGED=true; fi
-          if ! git diff --quiet -- "$TOC";       then TOC_CHANGED=true;  fi
+          if [ "$FAST_TOC_ONLY" != "true" ]; then
+            if ! git diff --quiet -- "$DATA_FILE"; then DATA_CHANGED=true; fi
+            if ! git diff --quiet -- "$TOC";       then TOC_CHANGED=true;  fi
+          fi
 
           SHOULD_RELEASE=false
-          if [ "${FORCE_DEPLOY:-false}" = "true" ]; then
+          if [ "$FAST_TOC_ONLY" = "true" ]; then
+            SHOULD_RELEASE=true
+          elif [ "${FORCE_DEPLOY:-false}" = "true" ]; then
             SHOULD_RELEASE=true
           elif [ "$DATA_CHANGED" = "true" ]; then
             SHOULD_RELEASE=true
@@ -139,7 +165,7 @@ jobs:
           else
             PATCH_VERSION="unknown"
           fi
-          git add locales/enUS_Data.lua LariasWeeklyChecklist.toc
+          git add Locales/enUS_Data.lua LariasWeeklyChecklist.toc
           git diff --cached --quiet || { git commit -m "Automated update addon version for patch ${PATCH_VERSION}"; git push; }
           echo "No release conditions met; done."
 
@@ -157,7 +183,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           # Commit data + toc at the stable version and tag it.
-          git add locales/enUS_Data.lua "$TOC"
+          git add Locales/enUS_Data.lua "$TOC"
           git diff --cached --quiet || git commit -m "Release $TAG"
           git tag -a "$TAG" -m "Release $TAG"
           git push --follow-tags
