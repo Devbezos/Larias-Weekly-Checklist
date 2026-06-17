@@ -1,6 +1,11 @@
 name: Deploy Stable
 
 on:
+  schedule:
+    # GitHub Actions cron uses UTC. We trigger at both 15:00 and 16:00 UTC,
+    # then gate the real job so it only proceeds at 11:00 in Toronto.
+    - cron: "0 15 * * *"
+    - cron: "0 16 * * *"
   workflow_dispatch:
     inputs:
       force:
@@ -13,7 +18,35 @@ permissions:
   contents: write
 
 jobs:
+  guard:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+
+    steps:
+      - name: Check Toronto schedule window
+        id: check
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" != "schedule" ]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          TORONTO_HOUR=$(TZ=America/Toronto date +%H)
+          if [ "$TORONTO_HOUR" = "11" ]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "Toronto local time is 11:00. Continuing."
+          else
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            echo "Toronto local time is not 11:00. Skipping this UTC cron slot."
+          fi
+
   update:
+    needs: guard
+    if: needs.guard.outputs.should_run == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -38,7 +71,7 @@ jobs:
 
       - name: Convert CSV to Lua
         run: |
-          python scripts/sheet_to_lua.py data/spreadsheet.csv Locales/enUS_Data.lua
+          python scripts/sheet_to_lua.py data/spreadsheet.csv locales/enUS_Data.lua
 
       - name: Update .toc Interface versions (latest 3)
         run: |
@@ -52,7 +85,7 @@ jobs:
         run: |
           set -euo pipefail
           TOC="LariasWeeklyChecklist.toc"
-          DATA_FILE="Locales/enUS_Data.lua"
+          DATA_FILE="locales/enUS_Data.lua"
 
           # Read the current version from the toc, stripping any pre-release suffix
           # so we always tag at a clean MAJOR.MINOR.PATCH.
@@ -80,16 +113,14 @@ jobs:
           elif [ "$DATA_CHANGED" = "true" ]; then
             SHOULD_RELEASE=true
           elif [ "$TOC_CHANGED" = "true" ]; then
-            # Release only on a WoW game-version major/minor bump, not a patch.
-            OLD_IFACE=$(git show HEAD:"$TOC" | sed -n 's/^## Interface:[[:space:]]*//p' | head -n 1 | cut -d',' -f1 | tr -d '[:space:]' || true)
-            NEW_IFACE=$(sed  -n 's/^## Interface:[[:space:]]*//p' "$TOC"           | head -n 1 | cut -d',' -f1 | tr -d '[:space:]' || true)
-            if [[ "$OLD_IFACE" =~ ^[0-9]+$ ]] && [[ "$NEW_IFACE" =~ ^[0-9]+$ ]]; then
-              OLD_MAJOR=$((OLD_IFACE / 10000)); OLD_MINOR=$(((OLD_IFACE / 100) % 100))
-              NEW_MAJOR=$((NEW_IFACE / 10000)); NEW_MINOR=$(((NEW_IFACE / 100) % 100))
-              if [ "$OLD_MAJOR" -ne "$NEW_MAJOR" ] || [ "$OLD_MINOR" -ne "$NEW_MINOR" ]; then
-                SHOULD_RELEASE=true
-              fi
-            fi
+            # Any Wago-driven Interface version bump should publish a release,
+            # including patch bumps like 12.0.5 -> 12.0.7.
+            SHOULD_RELEASE=true
+          fi
+
+          # Scheduled runs should only publish when the toc actually changed.
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "$TOC_CHANGED" != "true" ]; then
+            SHOULD_RELEASE=false
           fi
 
           echo "should_release=$SHOULD_RELEASE" >> "$GITHUB_OUTPUT"
@@ -102,8 +133,14 @@ jobs:
           set -euo pipefail
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Locales/enUS_Data.lua LariasWeeklyChecklist.toc
-          git diff --cached --quiet || { git commit -m "Auto-update data/toc (no release)"; git push; }
+          IFACE=$(sed -n 's/^## Interface:[[:space:]]*//p' LariasWeeklyChecklist.toc | head -n 1 | cut -d',' -f1 | tr -d '[:space:]')
+          if [[ "$IFACE" =~ ^[0-9]{6}$ ]]; then
+            PATCH_VERSION="$((IFACE / 10000)).$(((IFACE / 100) % 100)).$((IFACE % 100))"
+          else
+            PATCH_VERSION="unknown"
+          fi
+          git add locales/enUS_Data.lua LariasWeeklyChecklist.toc
+          git diff --cached --quiet || { git commit -m "Automated update addon version for patch ${PATCH_VERSION}"; git push; }
           echo "No release conditions met; done."
 
       - name: Tag at current version, then bump post-release
@@ -120,7 +157,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           # Commit data + toc at the stable version and tag it.
-          git add Locales/enUS_Data.lua "$TOC"
+          git add locales/enUS_Data.lua "$TOC"
           git diff --cached --quiet || git commit -m "Release $TAG"
           git tag -a "$TAG" -m "Release $TAG"
           git push --follow-tags
