@@ -14,11 +14,11 @@ local constantsKey = tostring(addonName or "") .. "_CONSTANTS"
 
 local tracking = {
     crestCurrencyIDs = {
-        3383,
-        3341,
-        3343,
-        3345,
-        3347,
+        3442, -- Adventurer Mistcrest
+        3443, -- Veteran Mistcrest
+        3444, -- Champion Mistcrest
+        3445, -- Hero Mistcrest
+        3446, -- Myth Mistcrest
     },
     crestAchievementIDs = {
         61809,
