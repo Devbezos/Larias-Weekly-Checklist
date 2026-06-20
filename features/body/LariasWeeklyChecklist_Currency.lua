@@ -37,12 +37,9 @@ local ColorForXY     = AU.ColorForXY
 
 local function IsAchievementCompleteSafe(achievementID)
     if not achievementID then return false end
-    if C_AchievementInfo and C_AchievementInfo.IsAchievementComplete then
-        return C_AchievementInfo.IsAchievementComplete(achievementID) and true or false
-    end
     if GetAchievementInfo then
-        local _, _, _, completed = GetAchievementInfo(achievementID)
-        return completed == true
+        local _, _, _, _, _, _, _, _, _, _, _, _, wasEarnedByMe = GetAchievementInfo(achievementID)
+        return wasEarnedByMe == true
     end
     return false
 end
@@ -324,20 +321,10 @@ local function ComputeCrestTradeup(cache, crestCount, batchLower, batchHigher)
     for i = 2, crestCount do
         local tradeFromPrev = 0
         if cache.unlocked[i - 1] then
-            -- If this tier is already at its weekly earned cap, conversion into it is blocked.
-            local thisEarned = cache.earned[i]    or 0
-            local thisWkMax  = cache.weeklyMax[i] or 0
-            local thisCapped = thisWkMax > 0 and thisEarned >= thisWkMax
-            if not thisCapped then
-                -- If the previous tier is at its weekly cap, lower crests can't funnel
-                -- through it; only the wallet balance is available to convert upward.
-                local prevEarned = cache.earned[i - 1]    or 0
-                local prevWkMax  = cache.weeklyMax[i - 1] or 0
-                local prevCapped = prevWkMax > 0 and prevEarned >= prevWkMax
-                local prevAmt    = prevCapped and (cache.cur[i - 1] or 0)
-                                              or (tonumber(effective[i - 1]) or 0)
-                tradeFromPrev = floor(prevAmt / batchLower) * batchHigher
-            end
+            -- Always cascade using the effective (potentially traded-up) amount from
+            -- the previous tier.  Crest trading at the vendor is based on wallet
+            -- balance, not weekly earn caps, so the weekly-cap check was removed.
+            tradeFromPrev = floor((effective[i - 1] or 0) / batchLower) * batchHigher
         end
         gained[i]    = tradeFromPrev
         effective[i] = (cache.cur[i] or 0) + tradeFromPrev
@@ -371,7 +358,7 @@ local function GetCrestLines()
                     xy = FormatXY(earned, wkMax)
                     color = (earned >= wkMax) and COLORS.green or (cache.unlocked[i] and COLORS.yellow or COLORS.red)
                 else
-                    xy = tostring(earned); color = COLORS.green
+                    xy = tostring(held); color = COLORS.green
                 end
                 local tipBonus = math.max(0, held - earned)
                 local tipTbl
@@ -392,10 +379,21 @@ local function GetCrestLines()
                     local n = tonumber(gained[i]) or 0
                     if n > 0 then
                         tradeUp = " " .. ColorWrap("ff4da6ff", "+" .. tostring(n))
+                        local thisEarned = cache.earned[i]    or 0
+                        local thisWkMax  = cache.weeklyMax[i] or 0
+                        local cappedN    = (thisWkMax > 0) and math.min(n, math.max(0, thisWkMax - thisEarned)) or n
+                        local tipTbl     = {}
+                        if cappedN ~= n then
+                            tipTbl[#tipTbl + 1] = { text = "Currently earnable: " .. cappedN }
+                            tipTbl[#tipTbl + 1] = { text = "Uncapped: "           .. n       }
+                        else
+                            tipTbl[#tipTbl + 1] = { text = "Earnable: "           .. n       }
+                        end
                         local convertTip = L.TRACKING_CONVERT_TOOLTIP or ""
                         if convertTip ~= "" then
-                            convertTooltipTexts[i] = convertTip
+                            tipTbl[#tipTbl + 1] = { text = convertTip, r = 0.7, g = 0.7, b = 0.7 }
                         end
+                        convertTooltipTexts[i] = tipTbl
                     end
                 end
                 local lbl = ColorWrap(GetCurrencyQualityColor(id), tostring(name)) .. tradeUp

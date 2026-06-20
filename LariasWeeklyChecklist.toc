@@ -1,9 +1,10 @@
-## Interface: 120001, 120000, 110207
+## Interface: 120007, 120005, 120001
 ## Title: Larias's Weekly Checklist
 ## Notes: Weekly checklist with collapsible weeks
 ## Author: Dev
 ## X-Credits: Larias (checklist content and data)
-## Version: 11.0.1
+## Author: Larias
+## Version: 2.1.38
 ## SavedVariables: LariasWeeklyChecklistDB
 ## OptionalDeps: LariasWeeklyChecklist_Localization
 ## IconTexture: Interface\AddOns\LariasWeeklyChecklist\assets\icon
@@ -57,4 +58,6 @@ features\body\LariasWeeklyChecklist_GreatVault.lua
 features\body\LariasWeeklyChecklist_Currency.lua
 features\body\LariasWeeklyChecklist_Overlay.lua
 features\services\LariasWeeklyChecklist_UpgradeWarning.lua
+features\services\LariasWeeklyChecklist_CraftingWarning.lua
+features\services\LariasWeeklyChecklist_BonusRollWarning.lua
 features\footer\LariasWeeklyChecklist_Footer.lua

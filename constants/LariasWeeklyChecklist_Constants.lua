@@ -23,11 +23,12 @@ local tracking = {
     crestAchievementIDs = {
         61809,
         42767,
-        72768,
+        42768,
         42769,
         42770,
     },
     sparkCurrencyID = 3212,
+    sparkItemID = 232875,          -- Spark of Radiance item (used for reagent slot detection)
     catalystCurrencyID = 3378,
     cofferKeysCurrencyID = 3310,
     cofferKeysDisplayCurrencyID = 3028,  -- Nightfall Key (icon/name source)

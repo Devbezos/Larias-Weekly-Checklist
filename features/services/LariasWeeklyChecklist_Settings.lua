@@ -232,6 +232,26 @@ local function BuildPanel()
             end,
         },
         {
+            label   = L.OPTIONS_DISABLE_CRAFT_WARN or "Hide Crafting Warnings",
+            tooltip = L.OPTIONS_TOOLTIP_DISABLE_CRAFT_WARN or "Hides the warning shown when crafting a weapon whose main stat doesn't match your specialisation.",
+            getVal   = function(d) return d.craftWarnDisabled and true or false end,
+            onChange = function(v)
+                Addon:EnsurePrefs().craftWarnDisabled = v
+                if Addon.CheckCraftingWarning then Addon:CheckCraftingWarning() end
+            end,
+        },
+        --[[ bonus roll warning option temporarily hidden
+        {
+            label   = L.OPTIONS_DISABLE_BONUS_ROLL_WARN or "Hide Bonus Roll Warnings",
+            tooltip = L.OPTIONS_TOOLTIP_DISABLE_BONUS_ROLL_WARN or "Hides the warning shown when the bonus roll window opens.",
+            getVal   = function(d) return d.bonusRollWarnDisabled and true or false end,
+            onChange = function(v)
+                Addon:EnsurePrefs().bonusRollWarnDisabled = v
+                if Addon.CheckBonusRollWarning then Addon:CheckBonusRollWarning() end
+            end,
+        },
+        --]]
+        {
             label   = L.OPTIONS_HIDE_MINIMAP_BTN or "Hide Minimap Button",
             tooltip = L.OPTIONS_TOOLTIP_HIDE_MINIMAP_BTN or "Hides the minimap button.\nYou can still open the checklist with /larias.",
             getVal   = function(_d)

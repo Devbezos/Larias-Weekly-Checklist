@@ -26,6 +26,9 @@ local STRINGS = {
 	OPTIONS_HIDE_SLIDERS         = "Hide Sliders",
 	OPTIONS_HIDE_UPDATE_NOTICE   = "Hide Update Warnings",
 	OPTIONS_DISABLE_UPGRADE_WARN = "Hide Upgrade Warnings",
+	OPTIONS_DISABLE_CRAFT_WARN   = "Hide Crafting Warnings",
+	-- Options checkbox tooltips (crafting stat warning)
+	OPTIONS_TOOLTIP_DISABLE_CRAFT_WARN = "Hides the warning shown when crafting a weapon whose main stat doesn't match your specialisation.",
 	OPTIONS_HIDE_MINIMAP_BTN     = "Hide Minimap Button",
 	-- Options checkbox tooltips
 	OPTIONS_TOOLTIP_HIDE_COMPLETED_TASKS = "Hides individual checked-off tasks from all weeks.",
@@ -61,6 +64,18 @@ local STRINGS = {
 	UPGRADE_WARN_MSG             = "Upgrading a 1/6 %s item is a waste of %d crests.\nYou should upgrade a %s item to 6/6 first to save crests",
 	UPGRADE_WARN_DISABLE_BTN     = "Hide Upgrade Warning",
 	UPGRADE_WARN_DISABLE_TOOLTIP = "Check Larias's guide for more information.",
+	-- Bonus roll warning (temporarily disabled)
+	-- BONUS_ROLL_WARN_MSG             = "|cffff6600Warning:|r Bonus rolls are currently bugged.\nIt is recommended to not use them.",
+	-- BONUS_ROLL_WARN_MSG             = "|cffff6600Warning:|r Are you sure you want to use a bonus roll?",
+	-- BONUS_ROLL_WARN_DISABLE_BTN     = "Hide Bonus Roll Warning",
+	-- BONUS_ROLL_WARN_DISABLE_TOOLTIP = "There is no duplicate protection.",
+	-- OPTIONS_DISABLE_BONUS_ROLL_WARN  = "Hide Bonus Roll Warnings",
+	-- OPTIONS_TOOLTIP_DISABLE_BONUS_ROLL_WARN = "Hides the warning shown when the bonus roll window opens.",
+	-- Crafting stat warning
+	CRAFT_WARN_MSG             = "Warning: %s has %s, but your spec uses %s.\nYou may be crafting the wrong weapon.",
+	CRAFT_WARN_UNKNOWN_ITEM    = "this item",
+	CRAFT_WARN_DISABLE_BTN     = "Hide Crafting Warning",
+	CRAFT_WARN_DISABLE_TOOLTIP = "Check Larias's guide for more information.",
 	-- Color picker swatch labels (gear popup)
 	COLOR_PICKER_BG             = "Background",
 	COLOR_PICKER_TEXT           = "Text",
