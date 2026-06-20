@@ -7,13 +7,36 @@ if not Addon then return end
 -- Returns a sorted list of all characters that have ever logged in with the addon.
 -- Primary source: AceDB's sv.profileKeys (populated on every login automatically).
 -- Secondary: global.chars keys (in case a char only has the new-format data).
+local function CountKeys(t)
+    if type(t) ~= "table" then return 0 end
+    local n = 0
+    for _ in pairs(t) do
+        n = n + 1
+    end
+    return n
+end
+
 function Addon:GetCharProfileKeys()
+    local sv = self.db and self.db.sv
+    local profileKeys = sv and sv.profileKeys
+    local chars = self.db and self.db.global and self.db.global.chars
+    local profileKeyCount = CountKeys(profileKeys)
+    local charCount = CountKeys(chars)
+
+    local cache = self._charProfileKeysCache
+    if cache
+       and cache.profileKeysRef == profileKeys
+       and cache.charsRef == chars
+       and cache.profileKeyCount == profileKeyCount
+       and cache.charCount == charCount then
+        return cache.keys
+    end
+
     local seen = {}
     local keys = {}
 
-    local sv = self.db and self.db.sv
-    if sv and sv.profileKeys then
-        for charKey in pairs(sv.profileKeys) do
+    if profileKeys then
+        for charKey in pairs(profileKeys) do
             if not seen[charKey] then
                 seen[charKey] = true
                 tinsert(keys, charKey)
@@ -22,7 +45,6 @@ function Addon:GetCharProfileKeys()
     end
 
     -- Also include any chars that exist in global.chars but not in sv.profileKeys.
-    local chars = self.db and self.db.global and self.db.global.chars
     if chars then
         for charKey in pairs(chars) do
             if not seen[charKey] then
@@ -33,6 +55,13 @@ function Addon:GetCharProfileKeys()
     end
 
     table.sort(keys)
+    self._charProfileKeysCache = {
+        profileKeysRef = profileKeys,
+        charsRef = chars,
+        profileKeyCount = profileKeyCount,
+        charCount = charCount,
+        keys = keys,
+    }
     return keys
 end
 

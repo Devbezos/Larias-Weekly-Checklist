@@ -16,7 +16,6 @@ local table_sort = table.sort
 -- Display-preference defaults live in db.global so they are shared across all
 -- characters; keys with false/nil defaults are intentionally omitted.
 local CHAR_DEFAULTS = {
-    debug            = false,
     startAtSectionId = "",
 }
 
@@ -87,7 +86,6 @@ local function GetOrCreateCharDB(self)
     if not (key and key ~= "") then return nil end
     local gdb = self.db and self.db.global
     if not gdb then
-        self:Debugf("db_nil", "[DB] db.global unavailable for key '%s'", tostring(key))
         return nil
     end
     gdb.chars      = gdb.chars      or {}

@@ -272,38 +272,38 @@ end
 local function EnsureWarnPanel()
     if _warn then return end
 
-    local PAD_W  = 10
-    local BODY_H = 34
-    local BTN_H  = 22
-    local GAP    = 6
-    local PANEL_H = PAD_W + BODY_H + GAP + BTN_H + PAD_W
+    local PAD_W   = 14
+    local BTN_H   = 24
+    local GAP     = 10
+    local PANEL_H = 108
 
     local holder = Addon:NewThemedFrame(nil, UIParent)
     holder:SetFrameStrata("DIALOG")
     holder:SetFrameLevel(200)
-    holder:SetSize(410, PANEL_H)
+    holder:SetSize(430, PANEL_H)
     holder:SetClampedToScreen(true)
     holder:EnableMouse(true)
 
-    Addon:ApplyOpaquePopupTheme(holder)
+    local bodyTop = Addon:ApplyWarningPanelTheme(holder, {
+        title = L.CRAFT_WARN_TITLE or "Crafting Check",
+        pad = PAD_W,
+        bodyTop = 52,
+    })
     holder:Hide()
 
-    -- Warning text: shown in red so it's hard to miss.
-    local label = holder:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    label:SetPoint("TOPLEFT",  holder, "TOPLEFT",  PAD_W, -PAD_W)
-    label:SetPoint("TOPRIGHT", holder, "TOPRIGHT", -PAD_W,-PAD_W)
+    local label = holder:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    label:SetPoint("TOPLEFT",  holder, "TOPLEFT",  PAD_W, -bodyTop)
+    label:SetPoint("TOPRIGHT", holder, "TOPRIGHT", -PAD_W, -bodyTop)
     label:SetJustifyH("CENTER")
-    label:SetTextColor(1, 0.4, 0.4)
+    label:SetSpacing(2)
+    label:SetTextColor(1.0, 0.9, 0.88)
     label:SetWordWrap(true)
+    label:SetShadowOffset(1, -1)
+    label:SetShadowColor(0, 0, 0, 0.65)
 
-    -- "Hide warning" button: sets craftWarnDisabled and refreshes options UI.
-    local btn = CreateFrame("Button", nil, holder, "UIPanelButtonTemplate")
-    btn:SetSize(180, BTN_H)
+    local btn = Addon.Controls.NewActionButton(holder, 220, BTN_H)
     btn:SetPoint("TOP", label, "BOTTOM", 0, -GAP)
     btn:SetText(L.CRAFT_WARN_DISABLE_BTN or "Hide Crafting Warning")
-    if Addon.Controls and Addon.Controls.StyleButton then
-        Addon.Controls.StyleButton(btn)
-    end
     btn:SetScript("OnClick", function()
         Addon:EnsurePrefs().craftWarnDisabled = true
         holder:Hide()

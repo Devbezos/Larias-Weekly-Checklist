@@ -18,13 +18,9 @@ local tonumber, tostring, type = tonumber, tostring, type
 local floor, max, abs = math.floor, math.max, math.abs
 local tinsert, tconcat = table.insert, table.concat
 
--- Forward declaration: ComputeSnapshotData is defined after all helpers.
-local ComputeSnapshotData
-
 --  Module-level state 
 Addon.TRACKING = Addon.TRACKING or {}
 
-local trackingEventFrame
 -- TrackingUI owns every sub-frame/FontString created by CreateTrackingPanel.
 local TrackingUI = { left = {}, right = {} }
 
@@ -90,34 +86,6 @@ local function IsMainFrameOnListTab()
     return (selectedTab == nil) or (selectedTab == 1)
 end
 
-local function SafeRegisterEvent(frame, eventName)
-    if not (frame and eventName) then return false end
-    local ok = pcall(frame.RegisterEvent, frame, eventName)
-    return ok
-end
-
-local function IsItemEmbellished(itemLink)
-    if not (itemLink and C_TooltipInfo and C_TooltipInfo.GetHyperlink) then
-        return false
-    end
-
-    local data = C_TooltipInfo.GetHyperlink(itemLink)
-    if not (data and data.lines) then return false end
-
-    for _, line in ipairs(data.lines) do
-        local leftText = line and line.leftText
-        local rightText = line and line.rightText
-        if leftText and tostring(leftText):lower():find("embellish", 1, true) then
-            return true
-        end
-        if rightText and tostring(rightText):lower():find("embellish", 1, true) then
-            return true
-        end
-    end
-
-    return false
-end
-
 local function GetCurrencyNameByID(currencyID)
     local id = tonumber(currencyID)
     if not (id and id > 0) then return nil end
@@ -130,102 +98,6 @@ local function GetItemNameByID(itemID)
     if not (id and id > 0) then return nil end
     local itemName = GetItemInfo and GetItemInfo(id)
     return itemName
-end
-
---  Snapshot / event API 
-function Addon:HasTrackingSnapshot()
-    if not (self.db and self.db.global) then return false end
-    local ownKey = self:GetCurrentProfileKey()
-    local cdb    = self.db.global.chars and self.db.global.chars[ownKey]
-    local snap   = cdb and cdb.trackingSnapshot
-    return snap ~= nil and (snap.leftLines ~= nil or snap.rightRows ~= nil)
-end
-
-function Addon:ConfigureTrackingEvents(parentFrame, showGreatVault, showCurrency)
-    trackingEventFrame = trackingEventFrame or CreateFrame("Frame")
-    trackingEventFrame:UnregisterAllEvents()
-    local shouldListen = (showGreatVault or showCurrency) and true or false
-    if not shouldListen then return end
-
-    trackingEventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-    if showGreatVault then
-        trackingEventFrame:RegisterEvent("WEEKLY_REWARDS_UPDATE")
-    end
-    if showCurrency then
-        trackingEventFrame:RegisterEvent("CURRENCY_DISPLAY_UPDATE")
-        trackingEventFrame:RegisterEvent("BAG_UPDATE_DELAYED")
-        trackingEventFrame:RegisterEvent("QUEST_TURNED_IN")
-        SafeRegisterEvent(trackingEventFrame, "CATALYST_CHARGES_UPDATED")
-        SafeRegisterEvent(trackingEventFrame, "CATALYST_UPDATE")
-        SafeRegisterEvent(trackingEventFrame, "ITEM_INTERACTION_ITEM_SELECTION_UPDATED")
-    end
-
-    trackingEventFrame:SetScript("OnEvent", function()
-        if IsFrameShown(parentFrame) and IsFrameShown(Addon._trackingFrame) then
-            Addon:RequestTrackingUpdate()
-        elseif not parentFrame then
-            -- Background mode (called from OnEnable with no UI frame): keep the
-            -- snapshot current silently so AltsSummary always has fresh data.
-            Addon:RequestBackgroundSnapshotUpdate()
-        end
-    end)
-end
-
-function Addon:RequestBackgroundSnapshotUpdate()
-    if self._bgSnapshotPending then return end
-    self._bgSnapshotPending = true
-    if not self._bgSnapshotRunner then
-        local addon = self
-        self._bgSnapshotRunner = function()
-            addon._bgSnapshotPending = nil
-            if addon.UpdateSnapshotBackground then addon:UpdateSnapshotBackground() end
-        end
-    end
-    if C_Timer and C_Timer.After then C_Timer.After(0.2, self._bgSnapshotRunner)
-    else self._bgSnapshotRunner() end
-end
-
-function Addon:UpdateSnapshotBackground()
-    -- Always snapshot the currently-logged-in character.  Temporarily clear
-    -- _viewingChar so EnsureDB targets the own key, not a viewed alt's key.
-    local wasViewing  = self._viewingChar
-    self._viewingChar = nil
-    local db          = self:EnsureDB()
-    self._viewingChar = wasViewing
-    if not db.trackingSnapshot or type(db.trackingSnapshot) ~= "table" then
-        db.trackingSnapshot = {}
-    end
-    local snap = db.trackingSnapshot
-    ComputeSnapshotData(snap)
-    snap.updatedAt = time()
-end
-
-function Addon:RequestTrackingUpdate()
-    if not self.RegisterBucketMessage then
-        local aceBucket = LibStub and LibStub("AceBucket-3.0", true)
-        if aceBucket then aceBucket:Embed(self) end
-    end
-    if self.RegisterBucketMessage and self.SendMessage then
-        if not self._trackingUpdateBucketRegistered then
-            self._trackingUpdateBucketRegistered = true
-            self:RegisterBucketMessage("LWMC_TRACKING_UPDATE", 0.2, function()
-                if Addon.UpdateTracking then Addon:UpdateTracking() end
-            end)
-        end
-        self:SendMessage("LWMC_TRACKING_UPDATE")
-        return
-    end
-    if self._trackingUpdatePending then return end
-    self._trackingUpdatePending = true
-    if not self._trackingUpdateRunner then
-        local addon = self
-        self._trackingUpdateRunner = function()
-            addon._trackingUpdatePending = nil
-            if addon.UpdateTracking then addon:UpdateTracking() end
-        end
-    end
-    if C_Timer and C_Timer.After then C_Timer.After(0.2, self._trackingUpdateRunner)
-    else self._trackingUpdateRunner() end
 end
 
 --  Rendering helpers 
@@ -907,9 +779,7 @@ function Addon:CreateTrackingPanel(parentFrame)
             Addon:RequestTrackingUpdate()
         end)
         trackingFrame:SetScript("OnHide", function()
-            if trackingEventFrame then
-                trackingEventFrame:UnregisterAllEvents()
-            end
+            Addon:SuspendTrackingUI()
         end)
     end
 
@@ -945,7 +815,7 @@ function Addon:ApplyTrackingPanelOptions()
 
     trackingFrame:SetShown(wantPanel)
     if not wantPanel then
-        if trackingEventFrame then trackingEventFrame:UnregisterAllEvents() end
+        self:SuspendTrackingUI()
         if self.ApplyScrollLayout then self:ApplyScrollLayout() end
         return
     end
@@ -999,246 +869,6 @@ function Addon:ApplyTrackingPanelOptions()
 end
 
 --  Snapshot 
-ComputeSnapshotData = function(snap)
-    -- Left column: Great Vault via the GreatVault module API.
-    local gridBlocks, gvLines = Addon:GetGVData()
-
-    snap.leftLines = snap.leftLines or {}
-    for i = 1, 9 do snap.leftLines[i] = (gvLines and gvLines[i]) or "" end
-
-    if gridBlocks then
-        snap.leftGrid = snap.leftGrid or {{},{},{}}
-        for bi = 1, 3 do
-            local src = gridBlocks[bi]
-            local dst = snap.leftGrid[bi]
-            if src and dst then
-                dst.available = src.available
-                dst.complete  = src.complete
-                dst.maxIlvl   = src.maxIlvl
-                dst.slots     = dst.slots or {{},{},{}}
-                for si = 1, 3 do
-                    if src.slots and src.slots[si] and dst.slots[si] then
-                        dst.slots[si].thresh = src.slots[si].thresh
-                        dst.slots[si].ilvl   = src.slots[si].ilvl
-                    end
-                end
-            end
-        end
-    end
-
-    -- Right column: currency data via the Currency module API.
-    Addon:FillCurrencySnapshot(snap)
-
-    -- Keystone: current M+ key held by the logged-in character.
-    do
-        local ksLevel = C_MythicPlus
-                        and type(C_MythicPlus.GetOwnedKeystoneLevel) == "function"
-                        and C_MythicPlus.GetOwnedKeystoneLevel() or nil
-        local ksMapID = C_MythicPlus
-                        and type(C_MythicPlus.GetOwnedKeystoneChallengeMapID) == "function"
-                        and C_MythicPlus.GetOwnedKeystoneChallengeMapID() or nil
-        local ksName
-        if ksMapID and C_ChallengeMode and type(C_ChallengeMode.GetMapUIInfo) == "function" then
-            ksName = C_ChallengeMode.GetMapUIInfo(ksMapID)
-        end
-        snap.keystone = snap.keystone or {}
-        snap.keystone.level = tonumber(ksLevel) or 0
-        snap.keystone.name  = ksName or ""
-    end
-
-    -- Equipment slots: full item data for the gear popup and upgrade-cost rows.
-    -- tier and rank are derived from the equipped item's ilvl using IlvlUtils.
-    snap.gearSlots = {}
-    local snapSlotIDs = (Addon.TRACKING and Addon.TRACKING.gearSlotIDs)
-                        or {1,2,3,5,6,7,8,9,10,11,12,13,14,15,16,17}
-    local maxRankCount = Addon.TRACKING and Addon.TRACKING.ilvlRankOffsets
-                         and #Addon.TRACKING.ilvlRankOffsets or 6
-    for _, sid in ipairs(snapSlotIDs) do
-        local link = GetInventoryItemLink and GetInventoryItemLink("player", sid)
-        -- GetDetailedItemLevelInfo parses upgrade bonus IDs from the link directly;
-        -- it is more reliable than GetInventoryItemLevel for upgraded items.
-        local ilvl = 0
-        if link and GetDetailedItemLevelInfo then
-            local effIlvl = GetDetailedItemLevelInfo(link)
-            ilvl = tonumber(effIlvl) or 0
-        end
-        -- Only fall back to GetInventoryItemLevel when we have a real item link.
-        -- Without this guard, GetInventoryItemLevel("player", 17) echoes the 2H
-        -- weapon ilvl for an empty off-hand slot, causing double upgrade cost.
-        if ilvl == 0 and link then
-            local rawIlvl = GetInventoryItemLevel and GetInventoryItemLevel("player", sid)
-            ilvl = tonumber(rawIlvl) or 0
-        end
-
-        local tierIdx, rank, maxRank
-        if ilvl > 0 and Addon.IlvlUtils then
-            tierIdx = Addon.IlvlUtils.GetTier(ilvl)
-            if tierIdx then
-                rank    = Addon.IlvlUtils.GetRank(ilvl, tierIdx)
-                maxRank = maxRankCount
-            end
-        end
-
-        snap.gearSlots[sid] = {
-            link          = link,
-            ilvl          = ilvl,
-            rank          = rank,
-            maxRank       = maxRank,
-            tierIdx       = tierIdx,
-            isEmbellished = IsItemEmbellished(link) or nil,
-        }
-    end
-
-    -- Weapon slot comparison: prefer 2H (slot 16 only) over dual-wield (slots 16+17)
-    -- when the 2H ilvl is >= the off-hand ilvl, OR when slot 17 has no real item.
-    -- The link-gated fallback above already keeps slot 17 at ilvl=0 for 2H users;
-    -- this block is a safety net in case any stray ilvl bled through.
-    do
-        local ws16 = snap.gearSlots[16]
-        local ws17 = snap.gearSlots[17]
-        if ws16 and ws17 then
-            local ilvl16 = ws16.ilvl or 0
-            local ilvl17 = ws17.ilvl or 0
-            -- If 2H is highest (slot 17 has no real link but echoed an ilvl), clear it.
-            if ilvl16 > 0 and ilvl16 >= ilvl17 and not ws17.link then
-                snap.gearSlots[17] = { link=nil, ilvl=0, rank=nil, maxRank=nil, tierIdx=nil }
-            end
-        end
-    end
-
-    -- Auto-detect per-tier upgrade cost and true max rank via C_ItemUpgrade.
-    -- WoW only returns reliable upgrade details in some contexts, so missing or
-    -- empty API data must not mark an item as capped.  When details are missing,
-    -- Alt Summary falls back to rank math and default crest costs.
-    snap.upgradeCostPerStep = {}
-    snap.upgradeDetailsAvailable = false
-    if C_ItemUpgrade and C_ItemUpgrade.SetItemUpgradeFromLocation
-            and C_ItemUpgrade.GetItemUpgradeItemInfo and ItemLocation then
-        local TRACKING = Addon.TRACKING
-        local crestIDs = TRACKING and TRACKING.crestCurrencyIDs
-        local checkedTiers = {}
-        for _, sid in ipairs(snapSlotIDs) do
-            local gs = snap.gearSlots[sid]
-            if gs and gs.link and gs.tierIdx and gs.rank and gs.maxRank then
-                local tierIdx = gs.tierIdx
-                local crestID = crestIDs and crestIDs[tierIdx]
-                pcall(function()
-                    C_ItemUpgrade.SetItemUpgradeFromLocation(
-                        ItemLocation:CreateFromEquipmentSlot(sid))
-                    local info = C_ItemUpgrade.GetItemUpgradeItemInfo()
-                    if info and type(info.upgradeLevelInfos) == "table" then
-                        snap.upgradeDetailsAvailable = true
-                        -- Read the next upgrade step once; reused for tier correction,
-                        -- embellished detection, and cost capture below.
-                        -- NOTE: #upgradeLevelInfos is REMAINING levels from current rank,
-                        -- not an absolute index.  The nextLevel index may be out of range
-                        -- if currUpgrade counts from the track start; the [1] fallback
-                        -- always gives us the next remaining upgrade.
-                        local nextLevel = (info.currUpgrade or 0) + 1
-                        local levelInfo = info.upgradeLevelInfos[nextLevel]
-                                      or info.upgradeLevelInfos[1]
-                        local costs = levelInfo and levelInfo.currencyCostsToUpgrade
-                        local remainingCrestCost, sawRemainingCrestCost = 0, false
-
-                        -- Correct tier BEFORE computing trueMaxRank.
-                        -- Items at rank 5/6 of tier N share ilvl values with rank 1/2
-                        -- of tier N+1, so GetTier() can assign the wrong tier.  A
-                        -- Champion rank-5 item (ilvl 259) appears as Hero rank-1 and
-                        -- would be falsely flagged embellished (trueMaxRank = 1+1 = 2 < 6)
-                        -- without this correction.  The upgrade currency resolves the
-                        -- ambiguity definitively.
-                        if costs and crestIDs then
-                            local actualTierIdx = nil
-                            for _, ce in ipairs(costs) do
-                                for ti, cid in ipairs(crestIDs) do
-                                    if ce.currencyID == cid then
-                                        actualTierIdx = ti; break
-                                    end
-                                end
-                                if actualTierIdx then break end
-                            end
-                            if actualTierIdx and actualTierIdx ~= tierIdx then
-                                local newRank = Addon.IlvlUtils
-                                    and Addon.IlvlUtils.GetRank(gs.ilvl, actualTierIdx)
-                                if newRank then
-                                    snap.gearSlots[sid].tierIdx = actualTierIdx
-                                    snap.gearSlots[sid].rank    = newRank
-                                    gs.tierIdx = actualTierIdx
-                                    gs.rank    = newRank
-                                    tierIdx    = actualTierIdx
-                                    crestID    = crestIDs[actualTierIdx]
-                                end
-                            end
-                        end
-
-                        -- Detect embellished/crafted caps using the now-corrected rank.
-                        -- Empty upgradeLevelInfos is not enough proof of a cap; WoW can
-                        -- return that when upgrade details are temporarily unavailable.
-                        local nLevels     = #info.upgradeLevelInfos
-                        local trueMaxRank = (nLevels > 0) and (gs.rank + nLevels) or nil
-                        if trueMaxRank and trueMaxRank < gs.maxRank then
-                            snap.gearSlots[sid].trueMaxRank = trueMaxRank
-                        end
-
-                        if crestID and nLevels > 0 then
-                            -- Sum the exact remaining crest cost reported by WoW for
-                            -- this slot. This captures crest discounts per item/tier,
-                            -- including fully discounted steps where no crest is due.
-                            for _, upgradeInfo in ipairs(info.upgradeLevelInfos) do
-                                local stepCosts = upgradeInfo and upgradeInfo.currencyCostsToUpgrade
-                                local stepHasCrest = false
-                                if stepCosts then
-                                    for _, ce in ipairs(stepCosts) do
-                                        if ce.currencyID == crestID then
-                                            stepHasCrest = true
-                                            sawRemainingCrestCost = true
-                                            remainingCrestCost = remainingCrestCost + (tonumber(ce.cost) or 0)
-                                            break
-                                        end
-                                    end
-                                end
-                                -- If WoW gives remaining upgrade levels but omits the
-                                -- crest currency on a step, treat that step as discounted
-                                -- to zero crests rather than capping the item.
-                                if not stepHasCrest then sawRemainingCrestCost = true end
-                            end
-                        end
-                        if sawRemainingCrestCost then
-                            snap.gearSlots[sid].upgradeCostRemaining = remainingCrestCost
-                        end
-
-                        -- Capture per-tier cost from the first upgradable slot found.
-                        if crestID and not checkedTiers[tierIdx]
-                                and snap.gearSlots[sid].rank < snap.gearSlots[sid].maxRank then
-                            if levelInfo and levelInfo.currencyCostsToUpgrade then
-                                for _, ce in ipairs(levelInfo.currencyCostsToUpgrade) do
-                                    if ce.currencyID == crestID then
-                                        snap.upgradeCostPerStep[tierIdx] = ce.cost
-                                        checkedTiers[tierIdx] = true
-                                        break
-                                    end
-                                end
-                            end
-                        end
-                    else
-                        -- No reliable item-upgrade details for this slot. Leave
-                        -- trueMaxRank unset so display code uses the normal tier cap.
-                        snap.gearSlots[sid].upgradeInfoUnavailable = true
-                    end
-                end)
-            end
-        end
-        if C_ItemUpgrade.ClearItemUpgrade then C_ItemUpgrade.ClearItemUpgrade() end
-    end
-end
-
-local function SaveTrackingSnapshot(db)
-    local snap = db.trackingSnapshot
-    if type(snap) ~= "table" then snap = {}; db.trackingSnapshot = snap end
-    ComputeSnapshotData(snap)
-    snap.updatedAt = time()  -- Unix timestamp; read by AltsSummary for "last updated" display.
-end
-
 local function RenderSnapshotIntoPanel(snap)
     -- Apply a stored snapshot into the tracking panel.
     ApplyGreatVaultGrid(snap.leftGrid or nil)
@@ -1352,7 +982,7 @@ function Addon:UpdateTracking()
     ApplyGreatVaultGrid(gridBlocks)
     ApplyRightColumnAsPairs()
     ResizeTrackingPanelToContent(self)
-    SaveTrackingSnapshot(db)
+    self:SaveTrackingSnapshot(db)
 end
 
 function Addon:ResizeTrackingCols()

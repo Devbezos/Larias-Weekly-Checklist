@@ -519,6 +519,25 @@ function Addon:CreateHeader(frame)
         local btn = changeWeekBtn
         if not (btn and btn.IsShown and btn:IsShown()) then return end
 
+        local function ApplyLabel(sectionId, fallbackLabel)
+            if sectionId ~= nil then
+                sectionId = tostring(sectionId)
+            end
+            if fallbackLabel == nil and sectionId ~= nil then
+                fallbackLabel = sectionId
+            end
+
+            local section   = sectionId and Addon._sectionsById and Addon._sectionsById[sectionId]
+            local extracted = ExtractMonthRangeLabel((section and section.title) or "")
+            local label     = (extracted ~= "") and extracted or (fallbackLabel or L.CHANGE_WEEK_BUTTON or "Change Week")
+            if btn._lariasVisibleWeekId == sectionId and btn._lariasVisibleWeekLabel == label then
+                return
+            end
+            btn._lariasVisibleWeekId    = sectionId
+            btn._lariasVisibleWeekLabel = label
+            btn:SetText(label)
+        end
+
         local sf       = Addon._scrollFrame
         local sections = Addon._activeSections or {}
 
@@ -535,10 +554,7 @@ function Addon:CreateHeader(frame)
                     end
                 end
                 if lastId then
-                    local section   = Addon._sectionsById and Addon._sectionsById[tostring(lastId)]
-                    local extracted = ExtractMonthRangeLabel((section and section.title) or tostring(lastId))
-                    local label     = (extracted ~= "") and extracted or (L.CHANGE_WEEK_BUTTON or "Change Week")
-                    btn:SetText(label)
+                    ApplyLabel(lastId)
                     return
                 end
             end
@@ -568,15 +584,14 @@ function Addon:CreateHeader(frame)
                 end
             end
             if bestId then
-                local section   = Addon._sectionsById and Addon._sectionsById[tostring(bestId)]
-                local extracted = ExtractMonthRangeLabel((section and section.title) or tostring(bestId))
-                local label     = (extracted ~= "") and extracted or (L.CHANGE_WEEK_BUTTON or "Change Week")
-                btn:SetText(label)
+                ApplyLabel(bestId)
                 return
             end
         end
 
-        if btn._lariasSelectedLabel then btn:SetText(btn._lariasSelectedLabel) end
+        if btn._lariasSelectedLabel then
+            ApplyLabel(nil, btn._lariasSelectedLabel)
+        end
     end
 
     -- ── CalcChangeWeekBtnWidth_ ───────────────────────────────────────────────
@@ -585,6 +600,12 @@ function Addon:CreateHeader(frame)
         if not (btn and frame) then return end
         local order = Addon._order or {}
         if #order == 0 then return end
+        local localeCode = (Addon.GetEffectiveLocaleCode and Addon:GetEffectiveLocaleCode()) or "enUS"
+        local widthSig = tostring(Addon._dataSig or "") .. "|" .. tostring(localeCode)
+        if btn._lariasWidthSig == widthSig and btn._lariasMeasuredWidth then
+            btn:SetWidth(btn._lariasMeasuredWidth)
+            return
+        end
 
         if not btn._lariasMeasureFS then
             local scratch = frame:CreateFontString(nil, "ARTWORK")
@@ -620,6 +641,8 @@ function Addon:CreateHeader(frame)
             end
             maxW = math.max(maxW, math.ceil(w) + PAD)
         end
+        btn._lariasWidthSig = widthSig
+        btn._lariasMeasuredWidth = maxW
         btn:SetWidth(maxW)
     end
 

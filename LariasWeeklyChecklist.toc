@@ -57,7 +57,9 @@ features\header\LariasWeeklyChecklist_Header.lua
 features\body\LariasWeeklyChecklist_ListData.lua
 features\body\LariasWeeklyChecklist_GreatVault.lua
 features\body\LariasWeeklyChecklist_Currency.lua
+features\services\general\LariasWeeklyChecklist_Snapshot.lua
 features\body\LariasWeeklyChecklist_Overlay.lua
+features\services\general\LariasWeeklyChecklist_Tracking.lua
 features\body\LariasWeeklyChecklist_AltsSummary.lua
 features\services\warnings\LariasWeeklyChecklist_UpgradeWarning.lua
 features\services\warnings\LariasWeeklyChecklist_CraftingWarning.lua

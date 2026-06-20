@@ -41,15 +41,6 @@ local function GetCrestShort(tierIdx)
     return Addon.IlvlUtils.GetEscapePrefix(tierIdx) .. name .. "|r"
 end
 
--- ── Guild check ─────────────────────────────────────────────────────────────
--- Special behaviour: members of <Refined> on Zul'jin-NA cannot proceed with
--- a bad upgrade, because they really should know better by now.
--- We match only on guild name; realm apostrophe encoding varies by client.
--- local function IsInRefinedGuild()
---     local guildName = GetGuildInfo("player")
---     return guildName == "Refined"
--- end
-
 -- ── Core check ────────────────────────────────────────────────────────────────
 
 --- Called whenever the item upgrade frame shows or a new item is slotted.
@@ -81,25 +72,13 @@ function Addon:CheckUpgradeWarning()
     local crestIDs = tracking and tracking.crestCurrencyIDs
     if not crestIDs then return end
 
-    local upgradeCurrencyID
-    local upgradeCount
     local lvlInfos = info.upgradeLevelInfos
     local step = lvlInfos and (lvlInfos[currentLevel + 1] or lvlInfos[currentLevel])
     local costs = step and step.currencyCostsToUpgrade
-    if costs and costs[1] then
-        upgradeCurrencyID = costs[1].currencyID
-        upgradeCount      = costs[1].cost
-    end
+    local tierIdx, upgradeCurrencyID, upgradeCount = self:GetCrestTierFromCosts(costs)
 
     local isDev = IsDevBuild()
     if not upgradeCurrencyID and not isDev then return end
-
-    local tierIdx
-    if upgradeCurrencyID then
-        for i, id in ipairs(crestIDs) do
-            if id == upgradeCurrencyID then tierIdx = i; break end
-        end
-    end
 
     -- In release mode only warn for tracks that have a cheaper previous track
     -- (Veteran and above). Adventurer has no previous track so nothing to save.
@@ -122,39 +101,39 @@ end
 
 local function SetupHooks()
     if ItemUpgradeFrame then
-        -- ── Warning panel (themed backdrop matching the addon's windows) ─────
-        local PAD_W   = 10
-        local BODY_H  = 34   -- two wrapped lines of GameFontNormal (~17px each)
-        local BTN_H   = 22
-        local PANEL_H = PAD_W + BODY_H + 6 + BTN_H + PAD_W
+        local PAD_W   = 14
+        local BTN_H   = 24
+        local GAP     = 10
+        local PANEL_H = 108
 
         local holder = Addon:NewThemedFrame(nil, UIParent)
         holder:SetFrameStrata("DIALOG")
         holder:SetFrameLevel(200)
-        holder:SetSize(410, PANEL_H)
+        holder:SetSize(430, PANEL_H)
         holder:SetClampedToScreen(true)
         holder:EnableMouse(true)
         -- Anchor directly below the ItemUpgradeFrame, horizontally centered.
         holder:SetPoint("TOP", ItemUpgradeFrame, "BOTTOM", 0, -6)
-        Addon:ApplyOpaquePopupTheme(holder)
+        local bodyTop = Addon:ApplyWarningPanelTheme(holder, {
+            title = L.UPGRADE_WARN_TITLE or "Upgrade Advice",
+            pad = PAD_W,
+            bodyTop = 52,
+        })
         holder:Hide()
 
-        -- Warning message (wraps to ~2 lines).
-        local label = holder:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        label:SetPoint("TOPLEFT",  holder, "TOPLEFT",  PAD_W,  -PAD_W)
-        label:SetPoint("TOPRIGHT", holder, "TOPRIGHT", -PAD_W, -PAD_W)
+        local label = holder:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        label:SetPoint("TOPLEFT",  holder, "TOPLEFT",  PAD_W,  -bodyTop)
+        label:SetPoint("TOPRIGHT", holder, "TOPRIGHT", -PAD_W, -bodyTop)
         label:SetJustifyH("CENTER")
-        label:SetTextColor(1, 0.4, 0.4)
+        label:SetSpacing(2)
+        label:SetTextColor(1.0, 0.9, 0.88)
         label:SetWordWrap(true)
+        label:SetShadowOffset(1, -1)
+        label:SetShadowColor(0, 0, 0, 0.65)
 
-        -- "Hide" button — clearly styled as a clickable button.
-        local disableBtn = CreateFrame("Button", nil, holder, "UIPanelButtonTemplate")
-        disableBtn:SetSize(160, BTN_H)
-        disableBtn:SetPoint("TOP", label, "BOTTOM", 0, -6)
+        local disableBtn = Addon.Controls.NewActionButton(holder, 220, BTN_H)
+        disableBtn:SetPoint("TOP", label, "BOTTOM", 0, -GAP)
         disableBtn:SetText(L.UPGRADE_WARN_DISABLE_BTN or "Hide Upgrade Warning")
-        if Addon.Controls and Addon.Controls.StyleButton then
-            Addon.Controls.StyleButton(disableBtn)
-        end
         disableBtn:SetScript("OnEnter", function(self)
             Addon.AddonUtils.SetTooltip(self, L.UPGRADE_WARN_DISABLE_TOOLTIP or "Check Larias's guide for more information.", "ANCHOR_BOTTOM")
         end)

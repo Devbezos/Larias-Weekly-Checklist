@@ -38,7 +38,6 @@ local COL_COUNT_X = 162   -- ratio "[30->10]" fits in 108..161
 
 -- ── Module state ──────────────────────────────────────────────────────────────
 local _panel          -- outer panel frame (created lazily on first merchant visit)
-local _titleFS        -- panel title FontString
 local _btns  = {}     -- [ci] = UIPanelButton for conversion tier ci (1-4)
 local _allBtn         -- "Convert All" button
 local _disableBtn     -- "Disable" button at the bottom of the panel
@@ -182,8 +181,12 @@ local function BuildPanel()
     holder:SetScript("OnDragStop",  holder.StopMovingOrSizing)
     holder:Hide()
 
-    -- Fully-opaque backdrop so the panel reads clearly over the merchant UI.
-    Addon:ApplyOpaquePopupTheme(holder)
+    Addon:ApplyWarningPanelTheme(holder, {
+        title = L.CREST_CONVERT_TITLE or "Crest Conversion",
+        pad = PAD,
+        bodyTop = 42,
+        titleTop = 10,
+    })
 
     -- Anchor to the right edge of MerchantFrame when it exists.
     if MerchantFrame then
@@ -191,14 +194,6 @@ local function BuildPanel()
     else
         holder:SetPoint("CENTER", UIParent, "CENTER", 350, 0)
     end
-
-    -- Title
-    local titleFS = holder:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    titleFS:SetPoint("TOP", holder, "TOP", 0, -PAD)
-    titleFS:SetText(L.CREST_CONVERT_TITLE or "Crest Conversion")
-    local hdrColor = Addon.THEME.header
-    titleFS:SetTextColor(hdrColor.r, hdrColor.g, hdrColor.b, 1)
-    _titleFS = titleFS
 
     -- Create one button per conversion tier (1-4); shown/positioned in Refresh.
     -- Each button uses 3 FontStrings at fixed x offsets so columns stay aligned

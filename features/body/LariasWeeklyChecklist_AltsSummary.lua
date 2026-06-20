@@ -558,14 +558,23 @@ local function GetSlotUpgradeCost(slotID, sd, snap, tierIdx, effectiveMax)
     return 0
 end
 
+local function GetUpgradeGearSlots(snap)
+    if type(snap) ~= "table" then return nil end
+    if type(snap.bestGearSlots) == "table" then
+        return snap.bestGearSlots
+    end
+    return snap.gearSlots
+end
+
 -- Compute the total crest cost to max all items of crest tier `tierIdx`,
 -- using the rank (x/y) stored in the snapshot.  No ilvl range math needed.
 -- Returns totalCost.
 local function CalcTierUpgradeCost(snap, tierIdx)
-    if not (snap and snap.gearSlots) then return 0 end
+    local gearSlots = GetUpgradeGearSlots(snap)
+    if not gearSlots then return 0 end
     local totalCost = 0
     for _, sid in ipairs(GEAR_SLOT_IDS) do
-        local sd = snap.gearSlots[sid]
+        local sd = gearSlots[sid]
         local effectiveMax = sd and GetSlotEffectiveMax(sd)
         if type(sd) == "table" and sd.tierIdx == tierIdx
                 and sd.rank and effectiveMax and sd.rank < effectiveMax
@@ -1152,9 +1161,10 @@ local function RenderUpgradeCostCell(cell, row, snap, noSnap, alpha, th)
     -- Check whether any gear was actually captured for this character.
     -- snap.gearSlots may be nil (old snapshot) or {} (capture failed / all empty).
     local hasGearData = false
-    if snap.gearSlots then
+    local upgradeGearSlots = GetUpgradeGearSlots(snap)
+    if upgradeGearSlots then
         for _, sid in ipairs(GEAR_SLOT_IDS) do
-            local sd = snap.gearSlots[sid]
+            local sd = upgradeGearSlots[sid]
             if type(sd) == "table" and sd.rank then
                 hasGearData = true; break
             end
@@ -1163,12 +1173,12 @@ local function RenderUpgradeCostCell(cell, row, snap, noSnap, alpha, th)
     if not hasGearData then
         cell._fs:SetText("?")
         cell._fs:SetTextColor(cr, cg, cb, A_DIM)
-        local _nil = not snap.gearSlots
+        local _nil = not upgradeGearSlots
         -- Count how many slots had ilvl data vs rank data for diagnostics.
         local _ilvlCount, _rankCount = 0, 0
-        if snap.gearSlots then
+        if upgradeGearSlots then
             for _, sid in ipairs(GEAR_SLOT_IDS) do
-                local sd = snap.gearSlots[sid]
+                local sd = upgradeGearSlots[sid]
                 if type(sd) == "table" then
                     if (sd.ilvl or 0) > 0 then _ilvlCount = _ilvlCount + 1 end
                     if sd.rank then _rankCount = _rankCount + 1 end
@@ -1224,10 +1234,11 @@ local function RenderUpgradeCostCell(cell, row, snap, noSnap, alpha, th)
             else
                 GameTooltip:AddLine((L.TRACKING_HELD_FMT or "Held: %d"):format(_held), 0.75, 0.75, 0.75)
             end
-            if _snap and _snap.gearSlots then
+            local tooltipGearSlots = GetUpgradeGearSlots(_snap)
+            if tooltipGearSlots then
                 local hasAny = false
                 for _, sid in ipairs(GEAR_SLOT_IDS) do
-                    local slotData = _snap.gearSlots[sid]
+                    local slotData = tooltipGearSlots[sid]
                     if type(slotData) ~= "table" or slotData.tierIdx ~= _tierIdx
                             or not slotData.rank then
                         -- skip

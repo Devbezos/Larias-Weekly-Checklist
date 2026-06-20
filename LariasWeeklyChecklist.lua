@@ -207,44 +207,6 @@ Addon.VISUAL_STYLE = Addon.VISUAL_STYLE or {
     trackingInnerA   = 0.18,
 }
 
-Addon._debugRate = Addon._debugRate or {}
-
--- Debug is an opt-in flag stored in per-character saved variables.
-function Addon:IsDebugEnabled()
-    if not (self.db and self.db.global) then return false end
-    local ownKey = self:GetCurrentProfileKey()
-    local cdb = self.db.global.chars and self.db.global.chars[ownKey]
-    return cdb and cdb.debug and true or false
-end
-
--- Rate-limited printf-style debug output.
--- rateKey: if provided, suppress repeats for ~2s.
-function Addon:Debugf(rateKey, fmt, ...)
-    if not self:IsDebugEnabled() then return end
-
-    local msg
-    if type(fmt) == "string" then
-        local ok, formatted = pcall(string.format, fmt, ...)
-        msg = ok and formatted or fmt
-    else
-        msg = tostring(fmt)
-    end
-
-    local now = (GetTime and GetTime()) or 0
-    if rateKey then
-        rateKey = tostring(rateKey)
-        local last = tonumber(self._debugRate[rateKey] or 0) or 0
-        if (now - last) < 2.0 then
-            return
-        end
-        self._debugRate[rateKey] = now
-    end
-
-    if self.Print then
-        self:Print("[debug] " .. msg)
-    end
-end
-
 local LOCALIZATION_ADDON_NAME = "LariasWeeklyChecklist_Localization"
 Addon.LOCALIZATION_COMPANION_HINT_TEXT = Addon.LOCALIZATION_COMPANION_HINT_TEXT
     or "Tip: For non-English translations, install the optional addon 'LariasWeeklyChecklist: Localization'."
@@ -588,13 +550,7 @@ function Addon:OnEnable()
         self:PruneObsoleteSavedState()
     end
 
-    -- Always register background tracking events so the snapshot is kept current
-    -- even when the addon window is never opened this session.  Previously this
-    -- was gated behind HasTrackingSnapshot(), which meant brand-new characters
-    -- (or those with no prior snapshot) never got their data saved.
-    if self.ConfigureTrackingEvents then
-        self:ConfigureTrackingEvents(nil, true, true)
-    end
+    if self.StartBackgroundTracking then self:StartBackgroundTracking() end
 
     -- Record this character's class and level immediately on login so they
     -- appear in AltsSummary even if the main window is never opened.
@@ -935,6 +891,72 @@ function Addon:ApplyOpaquePopupTheme(frameObj)
         frameObj:SetBackdropColor(bg.r, bg.g, bg.b, 1.0)
     end
     self:ApplyPopupBorder(frameObj)
+end
+
+function Addon:ApplyWarningPanelTheme(frameObj, opts)
+    if not frameObj then return 48 end
+    opts = opts or {}
+
+    self:ApplyOpaquePopupTheme(frameObj)
+
+    local hdr = self.THEME and self.THEME.header or { r = 1, g = 0.82, b = 0, a = 1 }
+    local txt = self.THEME and self.THEME.text or { r = 1, g = 1, b = 1, a = 1 }
+    local vs  = self.VISUAL_STYLE or {}
+    local pad = tonumber(opts.pad) or 14
+    local titleTop = tonumber(opts.titleTop) or 11
+    local bodyTop = tonumber(opts.bodyTop) or 50
+
+    if not frameObj._lariasWarnHeaderGlow and frameObj.CreateTexture then
+        local glow = frameObj:CreateTexture(nil, "ARTWORK", nil, 0)
+        glow:SetPoint("TOPLEFT", frameObj, "TOPLEFT", 0, 0)
+        glow:SetPoint("TOPRIGHT", frameObj, "TOPRIGHT", 0, 0)
+        glow:SetHeight(3)
+        frameObj._lariasWarnHeaderGlow = glow
+    end
+    if frameObj._lariasWarnHeaderGlow then
+        frameObj._lariasWarnHeaderGlow:SetColorTexture(hdr.r, hdr.g, hdr.b, vs.strongDividerA or 0.45)
+    end
+
+    if not frameObj._lariasWarnHeaderFill and frameObj.CreateTexture then
+        local fill = frameObj:CreateTexture(nil, "BACKGROUND", nil, 1)
+        fill:SetPoint("TOPLEFT", frameObj, "TOPLEFT", 1, -1)
+        fill:SetPoint("TOPRIGHT", frameObj, "TOPRIGHT", -1, -1)
+        fill:SetHeight(bodyTop - 10)
+        frameObj._lariasWarnHeaderFill = fill
+    end
+    if frameObj._lariasWarnHeaderFill then
+        frameObj._lariasWarnHeaderFill:SetColorTexture(hdr.r, hdr.g, hdr.b, 0.08)
+    end
+
+    if not frameObj._lariasWarnTitle and frameObj.CreateFontString then
+        local title = frameObj:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+        title:SetPoint("TOPLEFT", frameObj, "TOPLEFT", pad, -titleTop)
+        title:SetPoint("TOPRIGHT", frameObj, "TOPRIGHT", -pad, -titleTop)
+        title:SetJustifyH("CENTER")
+        title:SetJustifyV("MIDDLE")
+        title:SetShadowOffset(1, -1)
+        title:SetShadowColor(0, 0, 0, 0.7)
+        frameObj._lariasWarnTitle = title
+    end
+    if frameObj._lariasWarnTitle then
+        frameObj._lariasWarnTitle:SetText(opts.title or "Warning")
+        frameObj._lariasWarnTitle:SetTextColor(hdr.r, hdr.g, hdr.b, 1)
+    end
+
+    if not frameObj._lariasWarnDivider and frameObj.CreateTexture then
+        local div = frameObj:CreateTexture(nil, "ARTWORK", nil, 0)
+        div:SetPoint("TOPLEFT", frameObj, "TOPLEFT", pad, -bodyTop + 8)
+        div:SetPoint("TOPRIGHT", frameObj, "TOPRIGHT", -pad, -bodyTop + 8)
+        div:SetHeight(1)
+        frameObj._lariasWarnDivider = div
+    end
+    if frameObj._lariasWarnDivider then
+        frameObj._lariasWarnDivider:SetColorTexture(txt.r, txt.g, txt.b, vs.dividerA or 0.22)
+    end
+
+    frameObj._lariasWarnBodyTop = bodyTop
+    frameObj._lariasWarnPad = pad
+    return bodyTop
 end
 
 function Addon:ToggleGreatVault()
@@ -2658,18 +2680,6 @@ function Addon:ToggleCommand(input)
     local cmd, arg = input:match("^(%S+)%s*(.-)%s*$")
     cmd = tostring(cmd or ""):lower()
     arg = tostring(arg or ""):gsub("^%s+", ""):gsub("%s+$", "")
-
-    if cmd == "debug" then
-        local db = self:EnsureDB()
-        local v = arg:lower()
-        if v == "on" or v == "1" or v == "true" then
-            db.debug = true
-        elseif v == "off" or v == "0" or v == "false" then
-            db.debug = false
-        end
-        self:Print(("Debug: %s"):format(db.debug and "ON" or "OFF"))
-        return
-    end
 
     -- Unknown args: show help.
     self:Print(L.SLASH_USAGE_TOGGLE or "Usage: /larias or /lcl to toggle the checklist")

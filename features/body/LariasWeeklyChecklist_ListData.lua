@@ -166,7 +166,4 @@ function Addon:PruneObsoleteSavedState()
         end
     end
 
-    if (removedChecked > 0 or removedCollapsed > 0) and self.Debugf then
-        self:Debugf("sv_prune", "Pruned SV: checked=%d collapsed=%d", removedChecked, removedCollapsed)
-    end
 end

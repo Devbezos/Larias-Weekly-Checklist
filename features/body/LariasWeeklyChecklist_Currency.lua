@@ -496,8 +496,40 @@ function Addon:GetItemUpgradeHighWatermark(itemLink)
                     tonumber(accountHighWatermark) or 0)
 end
 
+-- Returns the highest crest tier present in an upgrade-cost list. Upgrade
+-- responses can contain multiple currencies, so consumers must not assume the
+-- first entry identifies the item's track.
+function Addon:GetCrestTierFromCosts(costs)
+    if type(costs) ~= "table" then return nil end
+
+    local crestIDs = self.TRACKING and self.TRACKING.crestCurrencyIDs
+    if type(crestIDs) ~= "table" then return nil end
+
+    local bestTier, bestCurrencyID, bestCost
+    for _, costInfo in ipairs(costs) do
+        local currencyID = costInfo and tonumber(costInfo.currencyID)
+        if currencyID then
+            for tierIdx, crestID in ipairs(crestIDs) do
+                if tonumber(crestID) == currencyID and (not bestTier or tierIdx > bestTier) then
+                    bestTier = tierIdx
+                    bestCurrencyID = currencyID
+                    bestCost = tonumber(costInfo.cost) or 0
+                    break
+                end
+            end
+        end
+    end
+    return bestTier, bestCurrencyID, bestCost
+end
+
 function Addon:GetCrestSlotUpgradeCost(_slotID, slotData, snap, tierIdx, effectiveMax)
     if not (type(slotData) == "table" and slotData.rank and effectiveMax) then return 0 end
+    local capturedCost = tonumber(slotData.upgradeCostRemaining)
+    if capturedCost ~= nil then
+        -- Prefer WoW's exact per-item remaining crest total when it is available.
+        return capturedCost
+    end
+
     local tracking = self.TRACKING or {}
     local rank = tonumber(slotData.rank)
     if not rank or rank >= effectiveMax then return 0 end
@@ -530,10 +562,6 @@ function Addon:GetCrestSlotUpgradeCost(_slotID, slotData, snap, tierIdx, effecti
         computedCost = computedCost + stepCost
     end
 
-    local capturedCost = tonumber(slotData.upgradeCostRemaining)
-    if capturedCost then
-        return math.min(capturedCost, computedCost)
-    end
     return computedCost
 end
 
@@ -997,7 +1025,7 @@ function Addon:GetCurrencyPanelRows()
 end
 
 --- Populates snap.rightRows with structured (type-tagged) snapshot data.
---- Called from the Overlay's ComputeSnapshotData.
+--- Called from Overlay's BuildTrackingSnapshot API.
 function Addon:FillCurrencySnapshot(snap)
     if snap.rightRows then Wipe(snap.rightRows) else snap.rightRows = {} end
     local tracking = self.TRACKING
