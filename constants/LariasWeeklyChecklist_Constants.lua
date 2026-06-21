@@ -55,12 +55,12 @@ local tracking = { -- https://www.wowhead.com/currencies/season-1
         3418,  -- wowhead.com/currency=3418  Resonance Crystals
     },
     questIDs = {
-        delversBounty  = 86371,  -- wowhead.com/quest=86371   (unverified: not found on Wowhead; may be A Gnawing Void of Curiosity)
+        delversBounty  = 0,
         weeklyPrey     = 0,
         nullaeusSpoils = 0,      -- TODO: fill in quest ID for Spoils of Nullaeus
     },
     questItemIDs = {
-        delversBounty  = 252415,  -- wowhead.com/item=252415   Trovehunter's Bounty
+        delversBounty  = 0,
         weeklyPrey     = 0,
         nullaeusSpoils = 254253,  -- wowhead.com/item=254253   Spoils of Nullaeus
     },

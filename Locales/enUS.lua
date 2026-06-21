@@ -26,10 +26,7 @@ local STRINGS = {
 	OPTIONS_HIDE_SLIDERS         = "Hide Sliders",
 	OPTIONS_HIDE_UPDATE_NOTICE   = "Hide Update Warnings",
 	OPTIONS_DISABLE_UPGRADE_WARN = "Hide Upgrade Warnings",
-	OPTIONS_DISABLE_CRAFT_WARN        = "Hide Crafting Warnings",
 	OPTIONS_DISABLE_CREST_CONVERT     = "Hide Crest Conversion Panel",
-	-- Options checkbox tooltips (crafting stat warning)
-	OPTIONS_TOOLTIP_DISABLE_CRAFT_WARN = "Hides the warning shown when crafting a weapon whose main stat doesn't match your specialisation.",
 	OPTIONS_HIDE_MINIMAP_BTN     = "Hide Minimap Button",
 	OPTIONS_HIDE_ALT_SUMMARY     = "Hide Alt Summary Button",
 	-- Options checkbox tooltips
@@ -72,11 +69,6 @@ local STRINGS = {
 	UPGRADE_WARN_MSG             = "Upgrading a 1/6 %s item is a waste of %d crests.\nYou should upgrade a %s item to 6/6 first to save crests",
 	UPGRADE_WARN_DISABLE_BTN     = "Hide Upgrade Warning",
 	UPGRADE_WARN_DISABLE_TOOLTIP = "Check Larias's guide for more information.",
-	-- Crafting stat warning
-	CRAFT_WARN_MSG             = "Warning: %s has %s, but your spec uses %s.\nYou may be crafting the wrong weapon.",
-	CRAFT_WARN_UNKNOWN_ITEM    = "this item",
-	CRAFT_WARN_DISABLE_BTN     = "Hide Crafting Warning",
-	CRAFT_WARN_DISABLE_TOOLTIP = "Check Larias's guide for more information.",
 	-- Color picker swatch labels (gear popup)
 	COLOR_PICKER_BG             = "Background",
 	COLOR_PICKER_TEXT           = "Text",

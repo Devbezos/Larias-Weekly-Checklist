@@ -23,8 +23,6 @@ local BTN_ROW_H  = BTN_H + 8  -- = 26: button strip height at bottom of panel
 local NUM_CRESTS = 5
 local CREST_ABBREV = { "Adv", "Vet", "Chp", "Hero", "Myth" }
 local GV_NAMES     = { "Raid", "M+ / Delve", "World" }
-local BONUS_ROLLS_SECTION_ID = "599ab6a0"
-local BONUS_ROLLS_ITEM_ID    = "90409a11"
 local GV_THRESHOLDS = { {2,4,6}, {1,4,8}, {2,4,8} }
 
 -- Read from TRACKING so Overlay.lua (which captures the data) uses the same list.
@@ -595,6 +593,21 @@ local function AnyVisibleCharNeedsUpgradeCost(chars, tierIdx)
     return false
 end
 
+local function AnyVisibleCharNeedsWeapUpg(chars)
+    if not chars then return false end
+    for _, char in ipairs(chars) do
+        local snap = char and char.snap
+        if snap and type(snap.rightRows) == "table" then
+            for _, row in ipairs(snap.rightRows) do
+                if row.type == ST.WEAPUPG and (tonumber(row.need) or 0) > 0 then
+                    return true
+                end
+            end
+        end
+    end
+    return false
+end
+
 local function GetCrestAvailabilityForTier(snap, tierIdx)
     local TRACKING = Addon.TRACKING
     local crestID = TRACKING and TRACKING.crestCurrencyIDs and TRACKING.crestCurrencyIDs[tierIdx]
@@ -635,26 +648,6 @@ local function BuildRowDefs(tracking, LAYOUT, chars)
         if not Addon:IsCurrencyHidden(crestID) then
             addRow("crest", name, { crestIdx = i, cr = cr, cg = cg, cb = cb,
                                     iconID = GetCurrencyIcon(crestID), currencyID = crestID })
-        end
-    end
-
-    -- Build upgrade-cost rows only for tiers at least one visible character needs.
-    do
-        local firstUpgradeCostRow = #rows + 1
-        for i = 1, NUM_CRESTS do
-            if AnyVisibleCharNeedsUpgradeCost(chars, i) then
-                if firstUpgradeCostRow == #rows + 1 then
-                    addSec(L.ALT_SUMMARY_SECTION_UPGRADE_COST or "Upgrade Cost", nil)
-                end
-                local name, cr, cg, cb = CrestTierInfo(i)
-                rows[#rows + 1] = { type = "upgcost", label = name, tierIdx = i, cr = cr, cg = cg, cb = cb }
-            end
-        end
-        if firstUpgradeCostRow ~= #rows + 1 then
-            addRow("checkitem", L.ALT_SUMMARY_BONUS_ROLLS or "Bonus Rolls", {
-                sectionID = BONUS_ROLLS_SECTION_ID,
-                itemID = BONUS_ROLLS_ITEM_ID,
-            })
         end
     end
 
@@ -707,22 +700,40 @@ local function BuildRowDefs(tracking, LAYOUT, chars)
     addQuestRow("nullaeusSpoils", "TRACKING_QUEST_NULLAEUS_SPOILS", "Spoils of Nullaeus")
     addQuestRow("weeklyPrey",     "TRACKING_QUEST_WEEKLY_PREY",     "Weekly Prey")
 
-    -- Weapon/trinket upgrade items (289 → 298): single row showing combined-equivalent
-    if not Addon:IsItemHidden(268552) then
-        local _, _, _, _, _, _, _, _, _, combinedTex = GetItemInfo and GetItemInfo(268552) or nil
-        if not combinedTex and C_Item and C_Item.GetItemIconByID then
-            combinedTex = C_Item.GetItemIconByID(268552)
+    -- Build upgrade-cost rows only for tiers at least one visible character needs.
+    do
+        local addedUpgradeRows = false
+        for i = 1, NUM_CRESTS do
+            if AnyVisibleCharNeedsUpgradeCost(chars, i) then
+                if not addedUpgradeRows then
+                    addSec(L.ALT_SUMMARY_SECTION_UPGRADE_COST or "Upgrade Cost", nil)
+                    addedUpgradeRows = true
+                end
+                local name, cr, cg, cb = CrestTierInfo(i)
+                rows[#rows + 1] = { type = "upgcost", label = name, tierIdx = i, cr = cr, cg = cg, cb = cb }
+            end
         end
-        local combinedName = GetItemInfo and select(1, GetItemInfo(268552))
-        local wr, wg, wb = nil, nil, nil
-        if Addon.GetItemQualityColorRGB then
-            wr, wg, wb = Addon:GetItemQualityColorRGB(268552)
+
+        if not Addon:IsItemHidden(268552) and AnyVisibleCharNeedsWeapUpg(chars) then
+            if not addedUpgradeRows then
+                addSec(L.ALT_SUMMARY_SECTION_UPGRADE_COST or "Upgrade Cost", nil)
+                addedUpgradeRows = true
+            end
+            local _, _, _, _, _, _, _, _, _, combinedTex = GetItemInfo and GetItemInfo(268552) or nil
+            if not combinedTex and C_Item and C_Item.GetItemIconByID then
+                combinedTex = C_Item.GetItemIconByID(268552)
+            end
+            local combinedName = GetItemInfo and select(1, GetItemInfo(268552))
+            local wr, wg, wb = nil, nil, nil
+            if Addon.GetItemQualityColorRGB then
+                wr, wg, wb = Addon:GetItemQualityColorRGB(268552)
+            end
+            addRow("weapupg", combinedName or (L.TRACKING_UPGRADE_SIGIL or "Upgrade Sigil"), {
+                itemID = 268552,
+                iconID = combinedTex,
+                cr = wr, cg = wg, cb = wb,
+            })
         end
-        addRow("weapupg", combinedName or (L.TRACKING_UPGRADE_SIGIL or "Upgrade Sigil"), {
-            itemID = 268552,
-            iconID = combinedTex,
-            cr = wr, cg = wg, cb = wb,
-        })
     end
 
     addSec(L.TRACKING_GREAT_VAULT_TITLE or "Great Vault", "greatvault")
@@ -1030,8 +1041,8 @@ local function RenderWeapUpgCell(cell, row, sd, noSnap, alpha, th)
         return
     end
     if need == 0 then
-        cell._fs:SetText(("%.1f"):format(total))
-        cell._fs:SetTextColor(th.r, th.g, th.b, alpha * (total > 0 and A_FULL or A_DIM))
+        SetPlaceholder(cell, th, alpha * A_DIM)
+        cell:SetScript("OnEnter", nil)
     else
         local str = ("%.1f"):format(total) .. "/" .. need
         if     total >= need       then cell._fs:SetTextColor(0.3,  1.0,  0.3,  alpha)

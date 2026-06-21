@@ -62,7 +62,6 @@ features\body\LariasWeeklyChecklist_Overlay.lua
 features\services\general\LariasWeeklyChecklist_Tracking.lua
 features\body\LariasWeeklyChecklist_AltsSummary.lua
 features\services\warnings\LariasWeeklyChecklist_UpgradeWarning.lua
-features\services\warnings\LariasWeeklyChecklist_CraftingWarning.lua
 features\services\general\LariasWeeklyChecklist_CrestConvert.lua
 features\footer\LariasWeeklyChecklist_CharPicker.lua
 features\footer\LariasWeeklyChecklist_Footer.lua

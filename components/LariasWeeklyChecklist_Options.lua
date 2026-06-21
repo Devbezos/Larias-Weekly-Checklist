@@ -169,17 +169,6 @@ Addon.OptionsPane.WARNING_ROWS = {
         end,
     },
     {
-        field    = "cbDisableCraftWarn",
-        labelKey = "OPTIONS_DISABLE_CRAFT_WARN",    default = "Hide Crafting Warnings",
-        tipKey   = "OPTIONS_TOOLTIP_DISABLE_CRAFT_WARN",
-        getVal   = function(d) return d.craftWarnDisabled and true or false end,
-        onChange = function(v)
-            Addon:EnsurePrefs().craftWarnDisabled = v or nil
-            _applyAll()
-            if Addon.CheckCraftingWarning then Addon:CheckCraftingWarning() end
-        end,
-    },
-    {
         field    = "cbDisableCrestConvert",
         labelKey = "OPTIONS_DISABLE_CREST_CONVERT", default = "Hide Crest Conversion Panel",
         tipKey   = nil,
