@@ -70,7 +70,6 @@ local STYLE = {
     headerLineA    = VS.strongDividerA or 0.22,
     sectionBandA   = 0.045,
     sectionLineA   = VS.sectionAccentA or 0.16,
-    sectionAccentA = 0.42,
     rowLightA      = 0.018,
     rowDarkA       = 0.044,
     rowLineA       = 0.030,
@@ -1554,11 +1553,6 @@ PopulateSummary = function(panel)
             secBg:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -1, curRowY)
             secBg:SetHeight(h)
 
-            local secAccent = GetDiv()
-            secAccent:SetColorTexture(header.r, header.g, header.b, STYLE.sectionAccentA * chromeA)
-            secAccent:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, curRowY - 4)
-            secAccent:SetSize(3, h - 8)
-
             local secTopLine = GetDiv()
             secTopLine:SetHeight(1)
             secTopLine:SetColorTexture(header.r, header.g, header.b, STYLE.sectionLineA * chromeA)
@@ -1576,8 +1570,8 @@ PopulateSummary = function(panel)
             secFS:SetJustifyH("LEFT")
             secFS:SetJustifyV("MIDDLE")
             secFS:SetText(row.label)
-            secFS:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD + 10, curRowY)
-            secFS:SetSize(COL_LABEL - 10, h)
+            secFS:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD + 4, curRowY)
+            secFS:SetSize(COL_LABEL - 4, h)
             if row.action then
                 secBg:EnableMouse(true)
                 secBg:SetScript("OnMouseUp", function()
