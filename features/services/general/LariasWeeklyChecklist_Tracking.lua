@@ -7,7 +7,6 @@ if not Addon then return end
 local trackingEventFrame
 local trackingUIParent
 local backgroundTrackingEnabled
-local trackingBucketRegistered
 local scheduledUpdates = {}
 
 local function SafeRegisterEvent(frame, eventName)
@@ -46,6 +45,7 @@ function Addon:ConfigureTrackingEvents(parentFrame, showGreatVault, showCurrency
     end
     if trackCurrency then
         trackingEventFrame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
+        SafeRegisterEvent(trackingEventFrame, "UNIT_INVENTORY_CHANGED")
         trackingEventFrame:RegisterEvent("CURRENCY_DISPLAY_UPDATE")
         trackingEventFrame:RegisterEvent("BAG_UPDATE_DELAYED")
         trackingEventFrame:RegisterEvent("QUEST_TURNED_IN")
@@ -54,7 +54,8 @@ function Addon:ConfigureTrackingEvents(parentFrame, showGreatVault, showCurrency
         SafeRegisterEvent(trackingEventFrame, "ITEM_INTERACTION_ITEM_SELECTION_UPDATED")
     end
 
-    trackingEventFrame:SetScript("OnEvent", function()
+    trackingEventFrame:SetScript("OnEvent", function(_, eventName, unit)
+        if eventName == "UNIT_INVENTORY_CHANGED" and unit ~= "player" then return end
         if IsShown(trackingUIParent) and IsShown(Addon._trackingFrame) then
             Addon:RequestTrackingUpdate()
         else
@@ -118,6 +119,7 @@ function Addon:SaveTrackingSnapshot(db)
     end
     self:BuildTrackingSnapshot(snap)
     snap.updatedAt = time()
+    if self.MarkAltsSummaryDirty then self:MarkAltsSummaryDirty() end
     return snap
 end
 
@@ -132,21 +134,6 @@ function Addon:UpdateSnapshotBackground()
 end
 
 function Addon:RequestTrackingUpdate()
-    if not self.RegisterBucketMessage then
-        local aceBucket = LibStub and LibStub("AceBucket-3.0", true)
-        if aceBucket then aceBucket:Embed(self) end
-    end
-    if self.RegisterBucketMessage and self.SendMessage then
-        if not trackingBucketRegistered then
-            trackingBucketRegistered = true
-            self:RegisterBucketMessage("LWMC_TRACKING_UPDATE", 0.2, function()
-                if Addon.UpdateTracking then Addon:UpdateTracking() end
-            end)
-        end
-        self:SendMessage("LWMC_TRACKING_UPDATE")
-        return
-    end
-
     ScheduleOnce("panel", function(addon)
         if addon.UpdateTracking then addon:UpdateTracking() end
     end)

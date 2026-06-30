@@ -79,20 +79,6 @@ local function GetBonusRollProgress()
     }
 end
 
-local function GetSlotEffectiveMax(slotData)
-    if type(slotData) ~= "table" then return nil end
-    local trueMax = tonumber(slotData.trueMaxRank)
-    if trueMax and trueMax > 0 then return trueMax end
-    return tonumber(slotData.maxRank)
-end
-
-local function IsLimitedCraftedSlot(slotData, effectiveMax)
-    if type(slotData) ~= "table" then return false end
-    if slotData.isEmbellished then return true end
-    effectiveMax = effectiveMax or GetSlotEffectiveMax(slotData)
-    return effectiveMax and slotData.maxRank and effectiveMax < slotData.maxRank
-end
-
 local function GetCurrentSnapshot()
     if not (Addon.EnsureDB and Addon.SaveTrackingSnapshot) then return nil end
 
@@ -108,7 +94,8 @@ local function HasWatermarkedUpgradeNeed()
     local snap = GetCurrentSnapshot()
     if type(snap) ~= "table" then return true end
 
-    local gearSlots = type(snap.bestGearSlots) == "table" and snap.bestGearSlots or snap.gearSlots
+    local gearSlots = Addon.GetUpgradeGearSlots and Addon:GetUpgradeGearSlots(snap)
+                   or (type(snap.bestGearSlots) == "table" and snap.bestGearSlots or snap.gearSlots)
     if type(gearSlots) ~= "table" then return true end
 
     local slotIDs = Addon.TRACKING and Addon.TRACKING.gearSlotIDs
@@ -117,12 +104,13 @@ local function HasWatermarkedUpgradeNeed()
     local sawGear = false
     for _, slotID in ipairs(slotIDs) do
         local slotData = gearSlots[slotID]
-        local effectiveMax = GetSlotEffectiveMax(slotData)
+        local effectiveMax = Addon.GetSlotEffectiveMax and Addon:GetSlotEffectiveMax(slotData)
         local rank = type(slotData) == "table" and tonumber(slotData.rank) or nil
         if rank and effectiveMax then
             sawGear = true
             local tierIdx = tonumber(slotData.tierIdx)
-            if tierIdx and rank < effectiveMax and not IsLimitedCraftedSlot(slotData, effectiveMax) then
+            local isLimited = Addon.IsSlotLimitedCrafted and Addon:IsSlotLimitedCrafted(slotData, effectiveMax)
+            if tierIdx and rank < effectiveMax and not isLimited then
                 local cost = Addon.GetCrestSlotUpgradeCost
                     and Addon:GetCrestSlotUpgradeCost(slotID, slotData, snap, tierIdx, effectiveMax)
                     or 0

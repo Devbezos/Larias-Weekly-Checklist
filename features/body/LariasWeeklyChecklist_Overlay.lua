@@ -51,6 +51,8 @@ local Wipe           = AU.Wipe
 local IsNonEmptyText = AU.IsNonEmptyText
 local FormatXY       = AU.FormatXY
 local ColorForXY     = AU.ColorForXY
+local GetCurrencyName = AU.GetCurrencyName
+local GetItemName     = AU.GetItemName
 
 local function SetTextIfChanged(fs, text)
     if not fs then return end
@@ -84,20 +86,6 @@ local function IsMainFrameOnListTab()
     local main = _G and _G["LariasWeeklyChecklistFrame"]
     local selectedTab = main and tonumber(main._lariasSelectedTab)
     return (selectedTab == nil) or (selectedTab == 1)
-end
-
-local function GetCurrencyNameByID(currencyID)
-    local id = tonumber(currencyID)
-    if not (id and id > 0) then return nil end
-    local info = C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo and C_CurrencyInfo.GetCurrencyInfo(id)
-    return info and info.name
-end
-
-local function GetItemNameByID(itemID)
-    local id = tonumber(itemID)
-    if not (id and id > 0) then return nil end
-    local itemName = GetItemInfo and GetItemInfo(id)
-    return itemName
 end
 
 --  Rendering helpers 
@@ -629,13 +617,13 @@ function Addon:CreateTrackingPanel(parentFrame)
             local itemID = self._lariasIconItemID
             if id then
                 Addon:ShowContextMenu(self, {
-                    { text = (L.CONTEXT_HIDE_THIS_CURRENCY_FMT or "Hide %s"):format(GetCurrencyNameByID(id) or tostring(id)), onClick = function()
+                    { text = (L.CONTEXT_HIDE_THIS_CURRENCY_FMT or "Hide %s"):format(GetCurrencyName(id) or tostring(id)), onClick = function()
                         Addon:SetCurrencyHidden(id, true)
                     end },
                 })
             elseif itemID then
                 Addon:ShowContextMenu(self, {
-                    { text = (L.CONTEXT_HIDE_THIS_ITEM_FMT or "Hide %s"):format(GetItemNameByID(itemID) or tostring(itemID)), onClick = function()
+                    { text = (L.CONTEXT_HIDE_THIS_ITEM_FMT or "Hide %s"):format(GetItemName(itemID) or tostring(itemID)), onClick = function()
                         Addon:SetItemHidden(itemID, true)
                     end },
                 })
@@ -670,13 +658,13 @@ function Addon:CreateTrackingPanel(parentFrame)
             local itemID = row._lariasRightClickItemID
             if id then
                 Addon:ShowContextMenu(row, {
-                    { text = (L.CONTEXT_HIDE_THIS_CURRENCY_FMT or "Hide %s"):format(GetCurrencyNameByID(id) or tostring(id)), onClick = function()
+                    { text = (L.CONTEXT_HIDE_THIS_CURRENCY_FMT or "Hide %s"):format(GetCurrencyName(id) or tostring(id)), onClick = function()
                         Addon:SetCurrencyHidden(id, true)
                     end },
                 })
             elseif itemID then
                 Addon:ShowContextMenu(row, {
-                    { text = (L.CONTEXT_HIDE_THIS_ITEM_FMT or "Hide %s"):format(GetItemNameByID(itemID) or tostring(itemID)), onClick = function()
+                    { text = (L.CONTEXT_HIDE_THIS_ITEM_FMT or "Hide %s"):format(GetItemName(itemID) or tostring(itemID)), onClick = function()
                         Addon:SetItemHidden(itemID, true)
                     end },
                 })
@@ -711,13 +699,13 @@ function Addon:CreateTrackingPanel(parentFrame)
             local itemID = self._lariasRightClickItemID
             if id then
                 Addon:ShowContextMenu(self, {
-                    { text = (L.CONTEXT_HIDE_THIS_CURRENCY_FMT or "Hide %s"):format(GetCurrencyNameByID(id) or tostring(id)), onClick = function()
+                    { text = (L.CONTEXT_HIDE_THIS_CURRENCY_FMT or "Hide %s"):format(GetCurrencyName(id) or tostring(id)), onClick = function()
                         Addon:SetCurrencyHidden(id, true)
                     end },
                 })
             elseif itemID then
                 Addon:ShowContextMenu(self, {
-                    { text = (L.CONTEXT_HIDE_THIS_ITEM_FMT or "Hide %s"):format(GetItemNameByID(itemID) or tostring(itemID)), onClick = function()
+                    { text = (L.CONTEXT_HIDE_THIS_ITEM_FMT or "Hide %s"):format(GetItemName(itemID) or tostring(itemID)), onClick = function()
                         Addon:SetItemHidden(itemID, true)
                     end },
                 })
@@ -904,7 +892,7 @@ local function RenderSnapshotIntoPanel(snap)
             end
         end
 
-        -- Remaining rows (catalyst, sparks, cofferkeys, quests).
+        -- Remaining rows (catalyst, sparks, misc currencies, quests).
         for _, row in ipairs(nonCrestRows) do
             local lbl, val
             if row.type then
@@ -916,7 +904,7 @@ local function RenderSnapshotIntoPanel(snap)
             local currencyID = nil
             local itemID = nil
             local questKey = nil
-            if row.type == "sparks" or row.type == "cofferkeys" or row.type == "misc" then
+            if row.type == "sparks" or row.type == "misc" then
                 currencyID = row.id
                 iconID = Addon:GetCurrencyIcon(currencyID)
             elseif row.type == "catalyst" then

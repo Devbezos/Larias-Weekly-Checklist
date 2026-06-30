@@ -8,6 +8,9 @@
 --   IsNonEmptyText(txt) - true when string contains visible characters.
 --   FormatXY(cur, cap)  - formats progress as "cur/cap" or "cur".
 --   ColorForXY(cur, cap)- returns red/yellow/green based on progress.
+--   GetCurrencyName(id) - safe currency name lookup.
+--   GetCurrencyIcon(id) - safe currency icon lookup.
+--   GetItemName(id)     - safe item name lookup.
 --
 -- Also exposes Addon.RIGHT_LINE_COUNT (initial right-panel row count used by Overlay).
 
@@ -59,6 +62,28 @@ function AddonUtils.ColorForXY(cur, cap)
     if cur <= 0 then return COLORS.red end
     if cap > 0 and cur >= cap then return COLORS.green end
     return COLORS.yellow
+end
+
+function AddonUtils.GetCurrencyInfo(id)
+    id = tonumber(id)
+    if not (id and id > 0) then return nil end
+    return C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo and C_CurrencyInfo.GetCurrencyInfo(id)
+end
+
+function AddonUtils.GetCurrencyName(id)
+    local info = AddonUtils.GetCurrencyInfo(id)
+    return info and info.name
+end
+
+function AddonUtils.GetCurrencyIcon(id)
+    local info = AddonUtils.GetCurrencyInfo(id)
+    return info and info.iconFileID
+end
+
+function AddonUtils.GetItemName(id)
+    id = tonumber(id)
+    if not (id and id > 0) then return nil end
+    return GetItemInfo and GetItemInfo(id) or nil
 end
 
 function AddonUtils.SetTooltip(frame, text, anchor)

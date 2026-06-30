@@ -71,6 +71,18 @@ local function GetSlotWatermarkScore(slotData)
     return ilvl, tierIdx, rank, trueMaxRank, maxRank
 end
 
+local function HasSlotStateChanged(current, previous)
+    if type(current) ~= "table" or type(previous) ~= "table" then return false end
+    if (current.link or "") ~= (previous.link or "") then return true end
+    if (current.isEmbellished and true or false) ~= (previous.isEmbellished and true or false) then return true end
+    if current.upgradeCostRemaining ~= nil
+            and tonumber(current.upgradeCostRemaining) ~= tonumber(previous.upgradeCostRemaining) then
+        return true
+    end
+    if previous.upgradeInfoUnavailable and not current.upgradeInfoUnavailable then return true end
+    return false
+end
+
 local function ShouldReplaceWatermarkSlot(current, previous)
     if type(current) ~= "table" then return false end
     if type(previous) ~= "table" then return true end
@@ -82,6 +94,7 @@ local function ShouldReplaceWatermarkSlot(current, previous)
     if cr ~= pr then return cr > pr end
     if ctm ~= ptm then return ctm > ptm end
     if cm ~= pm then return cm > pm end
+    if HasSlotStateChanged(current, previous) then return true end
     if current.link and not previous.link then return true end
     return false
 end
@@ -328,7 +341,7 @@ function Addon:BuildTrackingSnapshot(snap)
         local currentSlot = snap.gearSlots[sid]
         local previousSlot = previousBestGearSlots and previousBestGearSlots[sid]
         if ShouldReplaceWatermarkSlot(currentSlot, previousSlot) then
-            snap.bestGearSlots[sid] = CopySlotData(currentSlot)
+            snap.bestGearSlots[sid] = currentSlot
         else
             snap.bestGearSlots[sid] = CopySlotData(previousSlot) or CopySlotData(currentSlot)
         end

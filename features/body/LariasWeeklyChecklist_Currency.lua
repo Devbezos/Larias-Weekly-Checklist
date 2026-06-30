@@ -1,5 +1,5 @@
 -- LariasWeeklyChecklist_Currency.lua
--- Currency data module.  Computes crest/catalyst/sparks/coffer-key rows from
+-- Currency data module.  Computes crest/catalyst/sparks/currency rows from
 -- WoW APIs and exposes them to the Overlay for rendering.
 --
 -- Public methods
@@ -34,7 +34,6 @@ Addon.SNAP_TYPES = {
     CREST      = "crest",
     CATALYST   = "catalyst",
     SPARKS     = "sparks",
-    COFFERKEYS = "cofferkeys",
     MISC       = "misc",
     QUEST      = "quest",
     WEAPUPG    = "weapupg",  -- weapon/trinket upgrade items (289→298)
@@ -50,11 +49,12 @@ local WEAP_UPG_COMBINED_ID = 268552
 local WEAP_UPG_MAX_ILVL    = 298
 local WEAP_UPG_SHARDS_PER  = 5   -- shards required per combined sigil
 local WEAP_UPG_SLOTS       = { 13, 14, 16, 17 }
+local GEAR_SLOT_IDS        = (Addon.TRACKING and Addon.TRACKING.gearSlotIDs)
 
 -- Returns the number of weapon/trinket slots the current character still needs
 -- to upgrade (ilvl > 0 and ilvl < WEAP_UPG_MAX_ILVL, slot 17 only counted when
 -- there is a real item link — i.e. dual-wield rather than 2H).
-local function GetUpgradeGearSlots(snap)
+function Addon:GetUpgradeGearSlots(snap)
     if type(snap) ~= "table" then return nil end
     if type(snap.bestGearSlots) == "table" then return snap.bestGearSlots end
     if type(snap.gearSlots) == "table" then return snap.gearSlots end
@@ -77,7 +77,7 @@ local function GetWeaponUpgradeNeedFromGearSlots(gearSlots)
 end
 
 local function GetWeaponUpgradeNeedCount(snap)
-    local snapshotNeed = GetWeaponUpgradeNeedFromGearSlots(GetUpgradeGearSlots(snap))
+    local snapshotNeed = GetWeaponUpgradeNeedFromGearSlots(Addon:GetUpgradeGearSlots(snap))
     if snapshotNeed ~= nil then return snapshotNeed end
 
     if not (GetInventoryItemLink and GetDetailedItemLevelInfo) then return 0 end
@@ -595,6 +595,61 @@ function Addon:GetCrestSlotUpgradeCost(_slotID, slotData, snap, tierIdx, effecti
     return computedCost
 end
 
+function Addon:GetSlotEffectiveMax(slotData)
+    if type(slotData) ~= "table" then return nil end
+    if slotData.trueMaxRank ~= nil then
+        if slotData.trueMaxRank >= (slotData.rank or 0) then return slotData.trueMaxRank end
+        slotData.trueMaxRank = nil
+    end
+    return slotData.maxRank
+end
+
+function Addon:IsSlotLimitedCrafted(slotData, effectiveMax)
+    if type(slotData) ~= "table" then return false end
+    if slotData.isEmbellished then return true end
+    effectiveMax = effectiveMax or self:GetSlotEffectiveMax(slotData)
+    return effectiveMax and slotData.maxRank and effectiveMax < slotData.maxRank
+end
+
+function Addon:CalcTierUpgradeCost(snap, tierIdx)
+    local gearSlots = self:GetUpgradeGearSlots(snap)
+    if type(gearSlots) ~= "table" then return 0 end
+
+    local totalCost = 0
+    local function addSlotCost(slotID)
+        local slotData = gearSlots[slotID]
+        local effectiveMax = self:GetSlotEffectiveMax(slotData)
+        if type(slotData) == "table" and slotData.tierIdx == tierIdx
+                and slotData.rank and effectiveMax and slotData.rank < effectiveMax
+                and not self:IsSlotLimitedCrafted(slotData, effectiveMax) then
+            totalCost = totalCost + self:GetCrestSlotUpgradeCost(slotID, slotData, snap, tierIdx, effectiveMax)
+        end
+    end
+
+    if type(GEAR_SLOT_IDS) == "table" then
+        for _, slotID in ipairs(GEAR_SLOT_IDS) do addSlotCost(slotID) end
+    else
+        for slotID in pairs(gearSlots) do addSlotCost(slotID) end
+    end
+    return totalCost
+end
+
+function Addon:GetCrestAvailabilityForTier(snap, tierIdx)
+    local tracking = self.TRACKING
+    local crestID = tracking and tracking.crestCurrencyIDs and tracking.crestCurrencyIDs[tierIdx]
+    local heldQty, tradeupQty = 0, 0
+    if crestID and snap and type(snap.rightRows) == "table" then
+        for _, row in ipairs(snap.rightRows) do
+            if row.type == SNAP_TYPES.CREST and row.id == crestID then
+                heldQty    = tonumber(row.qty) or 0
+                tradeupQty = tonumber(row.tradeup) or 0
+                break
+            end
+        end
+    end
+    return heldQty, tradeupQty, heldQty + tradeupQty
+end
+
 local function ComputeCrestTradeup(cache, crestCount, batchLower, batchHigher)
     local highestTradeTarget
     for i = crestCount, 2, -1 do
@@ -625,26 +680,14 @@ local function ComputeCrestsNeededByTier(tracking)
     local ownKey = Addon.GetCurrentProfileKey and Addon:GetCurrentProfileKey()
     local snap   = ownKey and db and db.chars and db.chars[ownKey]
                    and db.chars[ownKey].trackingSnapshot
-    local gearSlots = snap and type(snap.gearSlots) == "table" and snap.gearSlots
-    if not gearSlots then return nil end
+    if type(Addon:GetUpgradeGearSlots(snap)) ~= "table" then return nil end
 
-    local needed    = {}
-
-    for slotID, gs in pairs(gearSlots) do
-        local tierIdx = gs and tonumber(gs.tierIdx)
-        local rank    = gs and tonumber(gs.rank)
-        local cap     = gs and (tonumber(gs.trueMaxRank) or tonumber(gs.maxRank))
-        local maxRank = gs and tonumber(gs.maxRank)
-        local limitedCrafted = cap and maxRank and cap < maxRank
-        if tierIdx and rank and cap and gs.link and not limitedCrafted then
-            if needed[tierIdx] == nil then needed[tierIdx] = 0 end
-            if rank < cap then
-                needed[tierIdx] = needed[tierIdx]
-                    + (Addon.GetCrestSlotUpgradeCost
-                       and Addon:GetCrestSlotUpgradeCost(slotID, gs, snap, tierIdx, cap) or 0)
-            end
-        end
+    local needed = {}
+    local _, crestCount = GetCrestIDsAndCount(tracking or {})
+    for tierIdx = 1, crestCount do
+        needed[tierIdx] = Addon:CalcTierUpgradeCost(snap, tierIdx)
     end
+
     return needed
 end
 
@@ -804,44 +847,6 @@ local function GetCatalystParts()
     return ColorWrap(catColor, catName), ColorWrap(catValColor, ("%d"):format(cur)), catTip
 end
 
---  Coffer Keys 
-local function GetCofferKeysParts()
-    local tracking  = Addon.TRACKING
-    local shardsID  = tracking and tonumber(tracking.cofferKeysCurrencyID)
-    if not (shardsID and shardsID > 0) then return "", "" end
-    local name  = GetCurrencyName(shardsID) or (L.TRACKING_KEYS_LABEL or "Coffer Keys")
-    local label = ColorWrap(GetCurrencyQualityColor(shardsID), name)
-    -- Progress: keys earned+used this week vs total possible keys this week
-    local getCurrency = C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo
-    local shardInfo   = getCurrency and getCurrency(shardsID)
-    local earned    = (shardInfo and tonumber(shardInfo.quantityEarnedThisWeek)) or 0
-    local weeklyCap = (shardInfo and tonumber(shardInfo.maxWeeklyQuantity))      or 0
-    local current   = math.floor(earned    / 100)
-    local total     = math.floor(weeklyCap / 100)
-    -- Show key-equivalent progress from the shard currency only.
-    local rawShards = (shardInfo and tonumber(shardInfo.quantity)) or 0
-    local balance   = math.floor(rawShards / 100)
-    local bonus = math.max(0, balance - current)
-    local tipLines = {}
-    if total > 0 then
-        local earnable = math.max(0, total - current)
-        tipLines[#tipLines + 1] = { text = (L.TRACKING_EARNED_THIS_WEEK_FMT or "Earned this week: %d/%d"):format(current, total) }
-        if earnable > 0 then
-            tipLines[#tipLines + 1] = { text = (L.TRACKING_STILL_EARNABLE_FMT or "Still earnable: %d"):format(earnable), r = 1.0, g = 0.82, b = 0.0 }
-        else
-            tipLines[#tipLines + 1] = { text = L.TRACKING_WEEKLY_CAP_REACHED or "Weekly cap reached", r = 0.3, g = 1.0, b = 0.3 }
-        end
-    end
-    if bonus > 0 then
-        tipLines[#tipLines + 1] = { text = (L.TRACKING_BONUS_KEYS_FMT or "Bonus keys: +%d"):format(bonus), r = 0.6, g = 0.8, b = 1.0 }
-    end
-    local balColor = (total > 0 and current >= total) and COLORS.green
-                  or (current > 0)                     and COLORS.yellow
-                  or COLORS.red
-    tipLines[#tipLines + 1] = { text = (L.TRACKING_HELD_FMT or "Held: %d"):format(balance), r = 0.75, g = 0.75, b = 0.75 }
-    return label, ColorWrap(balColor, tostring(balance)), (#tipLines > 0) and tipLines or nil
-end
-
 --  Public API 
 
 -- Reusable buffers for GetCurrencyPanelRows – avoids allocating new tables on
@@ -909,16 +914,6 @@ function Addon:GetCurrencyPanelRows()
         end
     end
 
-    -- Coffer Keys
-    if n < RIGHT_LINE_COUNT then
-        local kCurrencyID = tracking and tracking.cofferKeysCurrencyID
-        local kLbl, kVal, kTip = GetCofferKeysParts()
-        if (IsNonEmptyText(kLbl) or IsNonEmptyText(kVal)) and not Addon:IsCurrencyHidden(kCurrencyID) then
-            n = n + 1
-            FillRow(n, kLbl, kVal, GetCurrencyIconID(kCurrencyID), kCurrencyID, nil, kTip)
-        end
-    end
-
     -- Misc currencies (miscCurrencyIDs in constants)
     if n < RIGHT_LINE_COUNT then
         local miscIDs = tracking and tracking.miscCurrencyIDs
@@ -934,8 +929,10 @@ function Addon:GetCurrencyPanelRows()
                     local held    = (rawInfo and tonumber(rawInfo.quantity))    or 0
                     local name = GetCurrencyName(id) or tostring(id)
                     local lbl = ColorWrap(GetCurrencyQualityColor(id), name)
-                    local miscColor = (cap > 0 and earned >= cap) and COLORS.dim
-                                   or (earned > 0)                 and COLORS.green
+                    local canEarnMore = cap > 0 and earned < cap
+                    local miscColor = canEarnMore and COLORS.yellow
+                                   or (cap > 0 and earned >= cap) and COLORS.green
+                                   or (held > 0)                  and COLORS.yellow
                                    or COLORS.dim
                     local val = ColorWrap(miscColor, tostring(held))
                     local miscTip
@@ -1095,22 +1092,6 @@ function Addon:FillCurrencySnapshot(snap)
         end
         snap.rightRows[#snap.rightRows + 1] = { type = SNAP_TYPES.SPARKS, id = sparkID, qty = tonumber(sQty) or 0, held = sHeld, cap = sCapAdj, questDone = sparkQDone }
     end
-    local cofferShardsID  = tracking and tonumber(tracking.cofferKeysCurrencyID)
-    if cofferShardsID and cofferShardsID > 0 then
-        local getCurrency  = C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo
-        local shardInfo    = getCurrency and getCurrency(cofferShardsID)
-        local kEarned    = (shardInfo and tonumber(shardInfo.quantityEarnedThisWeek)) or 0
-        local kWeeklyCap = (shardInfo and tonumber(shardInfo.maxWeeklyQuantity))      or 0
-        local kHeld      = (shardInfo and tonumber(shardInfo.quantity))               or 0
-        -- Convert shard units (100 shards = 1 key) to key units, matching GetCofferKeysParts display.
-        snap.rightRows[#snap.rightRows + 1] = {
-            type = SNAP_TYPES.COFFERKEYS,
-            id = cofferShardsID,
-            qty = math.floor(kEarned / 100),
-            held = math.floor(kHeld / 100),
-            cap = math.floor(kWeeklyCap / 100),
-        }
-    end
     local miscIDs = tracking and tracking.miscCurrencyIDs
     if type(miscIDs) == "table" then
         for _, rawID in ipairs(miscIDs) do
@@ -1205,17 +1186,6 @@ function Addon:RenderCurrencySnapshotRow(row)
             return lbl, ColorWrap(color, tostring(held))
         end
         return lbl, ColorWrap((qty <= 0) and COLORS.dim or COLORS.yellow, tostring(held))
-    elseif t == "cofferkeys" then
-        local earned = tonumber(row.qty) or 0
-        local cap    = tonumber(row.cap) or 0
-        local id     = tonumber(row.id) or (self.TRACKING and tonumber(self.TRACKING.cofferKeysCurrencyID))
-        local name = (id and id > 0 and GetCurrencyName(id)) or (L.TRACKING_KEYS_LABEL or "Coffer Keys")
-        local lbl  = ColorWrap(GetCurrencyQualityColor(id), name)
-        local current = math.floor(earned)
-        local total   = math.floor(cap)
-        local held = tonumber(row.held) or current
-        if total > 0 then return lbl, ColorWrap(ColorForXY(current, total), tostring(held)) end
-        return lbl, ColorWrap((current <= 0) and COLORS.red or COLORS.green, tostring(held))
     elseif t == "misc" then
         local id  = tonumber(row.id)
         local qty = tonumber(row.qty) or 0
@@ -1228,9 +1198,10 @@ function Addon:RenderCurrencySnapshotRow(row)
         end
         local held = tonumber(row.held) or qty
         if cap > 0 then
-            return lbl, ColorWrap(ColorForXY(qty, cap), ("%d"):format(held))
+            local color = (qty < cap) and COLORS.yellow or COLORS.green
+            return lbl, ColorWrap(color, ("%d"):format(held))
         end
-        return lbl, ColorWrap((qty <= 0) and COLORS.red or COLORS.green, tostring(held))
+        return lbl, ColorWrap((held <= 0) and COLORS.dim or COLORS.yellow, tostring(held))
     elseif t == "quest" then
         local key  = row.key
         local done = row.done

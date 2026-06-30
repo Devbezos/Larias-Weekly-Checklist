@@ -7,12 +7,7 @@
 -- Design goal: keep runtime behavior event-driven and avoid per-frame work.
 local addonName = ...
 
--- NOTE: AceComm-3.0 and AceBucket-3.0 are intentionally NOT listed here.
--- Embedding them at NewAddon time causes a hard Lua error if the library is
--- missing or overshadowed by another addon's Ace3 build that omits them,
--- which prevents the entire file from loading (including slash commands).
--- AceComm is embedded conditionally in CommsOnEnable instead.
-local Addon = LibStub("AceAddon-3.0"):NewAddon(addonName, "AceEvent-3.0", "AceConsole-3.0", "AceTimer-3.0")
+local Addon = LibStub("AceAddon-3.0"):NewAddon(addonName, "AceEvent-3.0", "AceConsole-3.0")
 _G[addonName] = Addon
 
 -- Shared global registry used by both the main addon and the optional
@@ -98,12 +93,12 @@ do
         self._ACCOUNT_DB_NAME = self._ACCOUNT_DB_NAME or names.accountDbName
 
         self.CONSTANTS.theme = self.CONSTANTS.theme or self.THEME or {
-            bg      = { r = 0.10, g = 0.10, b = 0.10, a = 0.65 },
-            border  = { r = 0.30, g = 0.30, b = 0.30, a = 0.90 },
-            header  = { r = 1.00, g = 0.82, b = 0.00, a = 1.00 },
-            text    = { r = 1.00, g = 1.00, b = 1.00, a = 1.00 },
-            textDim = { r = 1.00, g = 1.00, b = 1.00, a = 0.85 },
-            check   = { r = 0.19, g = 0.83, b = 0.19, a = 1.00 },  -- checkmark tick
+            bg      = { r = 0.035, g = 0.052, b = 0.060, a = 0.72 },
+            border  = { r = 0.14,  g = 0.28,  b = 0.23,  a = 0.86 },
+            header  = { r = 0.23,  g = 0.96,  b = 0.55,  a = 1.00 },
+            text    = { r = 0.88,  g = 0.94,  b = 0.91,  a = 1.00 },
+            textDim = { r = 0.58,  g = 0.66,  b = 0.63,  a = 0.88 },
+            check   = { r = 0.23,  g = 0.96,  b = 0.55,  a = 1.00 },  -- checkmark tick
         }
         self.THEME = self.THEME or self.CONSTANTS.theme
         -- Ensure check color exists for sessions that loaded before it was added.
@@ -193,18 +188,20 @@ local tinsert, tremove, tconcat = table.insert, table.remove, table.concat
 local CreateFrame = CreateFrame
 
 Addon.VISUAL_STYLE = Addon.VISUAL_STYLE or {
-    panelBorderA     = 0.62,
-    popupBorderA     = 0.56,
-    buttonBgA        = 0.30,
-    buttonBorderA    = 0.48,
-    buttonHighlightA = 0.05,
-    iconButtonBgA    = 0.72,
-    dividerA         = 0.24,
-    strongDividerA   = 0.40,
-    sectionBandA     = 0.10,
-    sectionAccentA   = 0.32,
-    trackingBorderA  = 0.38,
-    trackingInnerA   = 0.18,
+    panelBorderA     = 0.70,
+    popupBorderA     = 0.64,
+    buttonBgA        = 0.34,
+    buttonBorderA    = 0.40,
+    buttonHighlightA = 0.08,
+    iconButtonBgA    = 0.58,
+    dividerA         = 0.16,
+    strongDividerA   = 0.28,
+    sectionBandA     = 0.055,
+    sectionAccentA   = 0.58,
+    trackingBorderA  = 0.26,
+    trackingInnerA   = 0.10,
+    surfaceTopA      = 0.045,
+    surfaceBottomA   = 0.12,
 }
 
 local LOCALIZATION_ADDON_NAME = "LariasWeeklyChecklist_Localization"
@@ -905,6 +902,20 @@ function Addon:EnsureWindowSurface(frameObj)
         bg:SetAllPoints(frameObj)
         frameObj._lariaBgTex = bg
     end
+    if not frameObj._lariasSurfaceTop then
+        local top = frameObj:CreateTexture(nil, "BORDER", nil, -7)
+        top:SetPoint("TOPLEFT", frameObj, "TOPLEFT", 1, -1)
+        top:SetPoint("TOPRIGHT", frameObj, "TOPRIGHT", -1, -1)
+        top:SetHeight(54)
+        frameObj._lariasSurfaceTop = top
+    end
+    if not frameObj._lariasSurfaceBottom then
+        local bottom = frameObj:CreateTexture(nil, "BORDER", nil, -7)
+        bottom:SetPoint("BOTTOMLEFT", frameObj, "BOTTOMLEFT", 1, 1)
+        bottom:SetPoint("BOTTOMRIGHT", frameObj, "BOTTOMRIGHT", -1, 1)
+        bottom:SetHeight(84)
+        frameObj._lariasSurfaceBottom = bottom
+    end
     return bg
 end
 
@@ -931,6 +942,14 @@ function Addon:ApplyWindowSurface(frameObj, opts)
     if bgTex then
         bgTex:SetColorTexture(bg.r, bg.g, bg.b, 1)
         bgTex:SetAlpha(alpha)
+        local vs = self.VISUAL_STYLE or {}
+        local hdr = self.THEME and self.THEME.header or bg
+        if frameObj._lariasSurfaceTop then
+            frameObj._lariasSurfaceTop:SetColorTexture(hdr.r, hdr.g, hdr.b, (vs.surfaceTopA or 0.04) * alpha)
+        end
+        if frameObj._lariasSurfaceBottom then
+            frameObj._lariasSurfaceBottom:SetColorTexture(0, 0, 0, (vs.surfaceBottomA or 0.10) * alpha)
+        end
         if frameObj.SetBackdropColor then
             frameObj:SetBackdropColor(0, 0, 0, 0)
         end
@@ -1145,9 +1164,14 @@ function Addon:ApplyThemeColors()
         end
     end
 
-    loadColor(self.THEME.bg,     "bgR",     "bgG",     "bgB",     0.10, 0.10, 0.10)
-    loadColor(self.THEME.text,   "textR",   "textG",   "textB",   1.00, 1.00, 1.00)
-    loadColor(self.THEME.header, "headerR", "headerG", "headerB", 1.00, 0.82, 0.00)
+    loadColor(self.THEME.bg,     "bgR",     "bgG",     "bgB",     0.035, 0.052, 0.060)
+    loadColor(self.THEME.text,   "textR",   "textG",   "textB",   0.88,  0.94,  0.91)
+    loadColor(self.THEME.header, "headerR", "headerG", "headerB", 0.23,  0.96,  0.55)
+    if self.THEME.check and self.THEME.header then
+        self.THEME.check.r = self.THEME.header.r
+        self.THEME.check.g = self.THEME.header.g
+        self.THEME.check.b = self.THEME.header.b
+    end
     -- (Close button × glyph uses fixed colors — not refreshed here.)
 
     ApplyThemeBackdrops(self)
