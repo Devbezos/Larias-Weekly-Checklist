@@ -263,19 +263,19 @@ function Addon:CreateInFrameScaleSlider(parentFrame)
 
     local function GetOpacityVal()
         local gdb = Addon.db and Addon.db.global
-        return (gdb and tonumber(gdb.uiOpacityPct)) or 65
+        return math.max(50, (gdb and tonumber(gdb.uiOpacityPct)) or 65)
     end
 
     local opacSync = Addon:CreateSliderWidget(opacityPane, {
         titleLabel = L.UI_OPACITY_LABEL or "Opacity",
-        minV = 10, maxV = 100, stepV = 5,
+        minV = 50, maxV = 100, stepV = 5,
         getVal  = GetOpacityVal,
         applyFn = function(pct)
             local gdb = Addon.db and Addon.db.global
-            if gdb then gdb.uiOpacityPct = pct end
+            if gdb then gdb.uiOpacityPct = math.max(50, pct) end
             if Addon.ApplyOpacity then Addon:ApplyOpacity() end
         end,
-        minLabel   = L.UI_OPACITY_MIN_LABEL or "10%",
+        minLabel   = L.UI_OPACITY_MIN_LABEL or "50%",
         maxLabel   = L.UI_OPACITY_MAX_LABEL or "100%",
         fmtFn      = function(v) return math.floor(v + 0.5) .. "%" end,
         liveApply  = true,

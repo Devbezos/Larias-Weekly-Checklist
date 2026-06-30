@@ -39,15 +39,61 @@ local COL_COUNT_X = 162   -- ratio "[30->10]" fits in 108..161
 -- ── Module state ──────────────────────────────────────────────────────────────
 local _panel          -- outer panel frame (created lazily on first merchant visit)
 local _btns  = {}     -- [ci] = UIPanelButton for conversion tier ci (1-4)
+local _modeBtn        -- toggles upgrade/downgrade display
 local _allBtn         -- "Convert All" button
 local _disableBtn     -- "Disable" button at the bottom of the panel
-local _found = {}     -- [ci] = merchantIndex for the current merchant visit
+local _actions = { upgrade = {}, downgrade = {} }
+local _mode = "upgrade"
 local _pendingConvert -- callback stored while the confirm dialog is open
 
 -- ── Helpers ───────────────────────────────────────────────────────────────────
 
 local function GetConvertItemIDs()
     return (Addon.TRACKING and Addon.TRACKING.crestConvertItemIDs) or {}
+end
+
+local function BuildItemIndex(values)
+    if type(values) ~= "table" then return nil end
+    local byItemID = {}
+    local count = 0
+    for idx, value in ipairs(values) do
+        local n = tonumber(value)
+        if n then
+            byItemID[n] = idx
+            count = count + 1
+        end
+    end
+    return count > 0 and byItemID or nil
+end
+
+local function ClearActions()
+    for _, list in pairs(_actions) do
+        for k in pairs(list) do list[k] = nil end
+    end
+end
+
+local function GetNpcIDFromGUID(guid)
+    if type(guid) ~= "string" then return nil end
+    local id = guid:match("^%w+%-%d+%-%d+%-%d+%-%d+%-(%d+)%-")
+    return tonumber(id)
+end
+
+local function GetNpcIDFromUnit(unitToken)
+    if not (UnitGUID and unitToken) then return nil end
+    local ok, guid = pcall(UnitGUID, unitToken)
+    if not ok then return nil end
+    return GetNpcIDFromGUID(guid)
+end
+
+local function IsCrestExchangeVendor()
+    local npcID = GetNpcIDFromUnit("npc") or GetNpcIDFromUnit("target")
+    local allowed = Addon.TRACKING and Addon.TRACKING.crestExchangeNpcIDs
+    if not (npcID and type(allowed) == "table") then return false end
+
+    for _, allowedID in ipairs(allowed) do
+        if npcID == tonumber(allowedID) then return true end
+    end
+    return false
 end
 
 -- Returns a tier-coloured short crest name for use in warning text.
@@ -68,20 +114,34 @@ local function GetCrestHeld(tierIdx)
     return info and (tonumber(info.quantity) or 0) or 0
 end
 
--- Returns how many source crests each single purchase of the conversion item costs.
--- Reads the merchant's extended-cost data for accuracy; falls back to the addon's
--- crestTradeBatch[1] constant (default 30) if the API is unavailable.
-local function GetCostPerPurchase(merchantIdx)
+local function GetCrestTierByCurrencyID(currencyID)
+    local ids = Addon.TRACKING and Addon.TRACKING.crestCurrencyIDs
+    local id = tonumber(currencyID)
+    if not (id and type(ids) == "table") then return nil end
+    for tierIdx, crestID in ipairs(ids) do
+        if tonumber(crestID) == id then return tierIdx end
+    end
+    return nil
+end
+
+local function GetCurrencyIDFromLink(link)
+    if type(link) ~= "string" then return nil end
+    return tonumber(link:match("currency:(%d+)"))
+end
+
+local function GetMerchantCostDetails(merchantIdx)
+    local costPer, costTier
     if merchantIdx and GetMerchantItemCostInfo and GetMerchantItemCostItem then
         local n = GetMerchantItemCostInfo(merchantIdx) or 0
         for j = 1, n do
-            local _, qty = GetMerchantItemCostItem(merchantIdx, j)
+            local _, qty, link = GetMerchantItemCostItem(merchantIdx, j)
             qty = tonumber(qty)
-            if qty and qty > 0 then return qty end
+            if qty and qty > 0 and not costPer then costPer = qty end
+            costTier = costTier or GetCrestTierByCurrencyID(GetCurrencyIDFromLink(link))
         end
     end
     local tb = Addon.TRACKING and Addon.TRACKING.crestTradeBatch
-    return (tb and tonumber(tb[1])) or 30
+    return costPer or (tb and tonumber(tb[1])) or 30, costTier
 end
 
 -- Returns how many target crests each purchase produces (from crestTradeBatch[2]).
@@ -91,47 +151,80 @@ local function GetGainPerPurchase()
 end
 
 -- Returns the maximum number of conversion-item purchases given current holdings.
-local function GetMaxConv(ci, merchantIdx)
-    local held    = GetCrestHeld(ci)
-    local costPer = GetCostPerPurchase(merchantIdx or _found[ci])
+local function GetMaxConv(action)
+    if type(action) ~= "table" then return 0 end
+    local held    = GetCrestHeld(action.sourceTier)
+    local costPer = tonumber(action.costPer) or 0
     if costPer <= 0 then return 0 end
     return math.floor(held / costPer)
 end
 
-local function GetNpcIDFromGUID(guid)
-    if not guid then return nil end
-
-    local ok, npcID = pcall(function()
-        if type(guid) ~= "string" then return nil end
-        local id = string.match(guid, "^%w+%-%d+%-%d+%-%d+%-%d+%-(%d+)%-")
-        return tonumber(id)
-    end)
-
-    return ok and npcID or nil
+local function AddAction(mode, action)
+    local list = _actions[mode]
+    if not (list and action and action.destTier) then return end
+    list[#list + 1] = action
 end
 
-local function GetNpcIDFromUnit(unitToken)
-    if not (UnitGUID and unitToken) then return nil end
-    local ok, guid = pcall(UnitGUID, unitToken)
-    if not ok then return nil end
-    return GetNpcIDFromGUID(guid)
+local function GetCurrentActions()
+    return _actions[_mode] or _actions.upgrade
 end
 
--- Scans the open merchant and populates _found[ci] = merchantIndex for each
--- crest conversion item that the vendor sells.
+local function HasAnyActions()
+    return #(_actions.upgrade or {}) > 0 or #(_actions.downgrade or {}) > 0
+end
+
+local function GetModeLabel()
+    if _mode == "downgrade" then
+        return L.CREST_CONVERT_MODE_DOWNGRADE or "Mode: Downgrade"
+    end
+    return L.CREST_CONVERT_MODE_UPGRADE or "Mode: Upgrade"
+end
+
+local function ToggleMode()
+    _mode = (_mode == "upgrade") and "downgrade" or "upgrade"
+    Addon:RefreshCrestConvertPanel()
+end
+
+local function SelectAvailableMode()
+    if #GetCurrentActions() > 0 then return end
+    if #(_actions.upgrade or {}) > 0 then
+        _mode = "upgrade"
+    elseif #(_actions.downgrade or {}) > 0 then
+        _mode = "downgrade"
+    end
+end
+
+-- Scans the open merchant and groups conversion rows by direction.
 local function ScanMerchant()
-    for k in pairs(_found) do _found[k] = nil end
+    ClearActions()
     local convertItemIDs = GetConvertItemIDs()
+    local tierByItemID = BuildItemIndex(convertItemIDs)
+    if not tierByItemID then return end
     local n = GetMerchantNumItems and GetMerchantNumItems() or 0
     for i = 1, n do
         local link = GetMerchantItemLink and GetMerchantItemLink(i)
         if link then
             local itemID = tonumber(link:match("item:(%d+)"))
-            if itemID then
-                for ci, wantID in ipairs(convertItemIDs) do
-                    if itemID == wantID and not _found[ci] then
-                        _found[ci] = i
-                    end
+            local itemTierIdx = itemID and tierByItemID[itemID]
+            local outputTier = itemTierIdx and itemTierIdx + 1
+            if outputTier then
+                local costPer, costTier = GetMerchantCostDetails(i)
+                if (not costTier) or costTier < outputTier then
+                    AddAction("upgrade", {
+                        merchantIdx = i,
+                        sourceTier  = costTier or itemTierIdx,
+                        destTier    = outputTier,
+                        costPer     = costPer,
+                        gainPer     = GetGainPerPurchase(),
+                    })
+                elseif costTier and costTier > outputTier then
+                    AddAction("downgrade", {
+                        merchantIdx = i,
+                        sourceTier  = costTier,
+                        destTier    = outputTier,
+                        costPer     = 1,
+                        gainPer     = 1,
+                    })
                 end
             end
         end
@@ -195,7 +288,17 @@ local function BuildPanel()
         holder:SetPoint("CENTER", UIParent, "CENTER", 350, 0)
     end
 
-    -- Create one button per conversion tier (1-4); shown/positioned in Refresh.
+    local modeBtn = Addon.Controls.NewActionButton(holder, BTN_W, BTN_H)
+    modeBtn:SetText(GetModeLabel())
+    modeBtn:SetScript("OnClick", ToggleMode)
+    modeBtn:SetScript("OnEnter", function(self_)
+        Addon.AddonUtils.SetTooltip(self_, L.CREST_CONVERT_MODE_TOOLTIP or "Toggle between upgrading crests and downgrading crests.")
+    end)
+    modeBtn:SetScript("OnLeave", Addon.AddonUtils.HideTooltip)
+    modeBtn:Hide()
+    _modeBtn = modeBtn
+
+    -- Create one button per visible conversion row; shown/positioned in Refresh.
     -- Each button uses 3 FontStrings at fixed x offsets so columns stay aligned
     -- regardless of tier-name length (proportional font requires this approach).
     local convertItemIDs = GetConvertItemIDs()
@@ -221,17 +324,16 @@ local function BuildPanel()
         btn._fs2 = fs2
         btn._fs3 = fs3
         btn:Hide()
-        -- Capture the tier index in the closure so each button knows its tier.
-        local capturedCI = ci
+        local capturedRow = ci
         btn:SetScript("OnClick", function()
-            local merchantIdx = _found[capturedCI]
-            if not merchantIdx then return end
-            local maxConv = GetMaxConv(capturedCI, merchantIdx)
+            local action = GetCurrentActions()[capturedRow]
+            if not action then return end
+            local maxConv = GetMaxConv(action)
             if maxConv <= 0 then return end
-            local costPer   = GetCostPerPurchase(merchantIdx)
-            local gainPer   = GetGainPerPurchase()
-            local srcName   = GetCrestShort(capturedCI)
-            local dstName   = GetCrestShort(capturedCI + 1)
+            local costPer   = action.costPer
+            local gainPer   = action.gainPer
+            local srcName   = GetCrestShort(action.sourceTier)
+            local dstName   = GetCrestShort(action.destTier)
             local totalCost = maxConv * costPer
             local totalGain = maxConv * gainPer
             local fmt = L.CREST_CONVERT_WARN_SINGLE
@@ -239,7 +341,7 @@ local function BuildPanel()
             local warnText = string.format(fmt, totalCost, srcName, totalGain, dstName)
             ShowConfirm(warnText, function()
                 if BuyMerchantItem then
-                    BuyMerchantItem(merchantIdx, maxConv)
+                    BuyMerchantItem(action.merchantIdx, maxConv)
                 end
                 C_Timer.After(0.4, function()
                     Addon:RefreshCrestConvertPanel()
@@ -254,25 +356,19 @@ local function BuildPanel()
     allBtn:SetText(L.CREST_CONVERT_ALL_BTN or "Convert All")
     allBtn:Hide()
     allBtn:SetScript("OnClick", function()
-        local gainPer = GetGainPerPurchase()
         local plan    = {}
         local lines   = {}
-        local convertItemIDs = GetConvertItemIDs()
-        for ci = 1, #convertItemIDs do
-            local merchantIdx = _found[ci]
-            if merchantIdx then
-                local costPer = GetCostPerPurchase(merchantIdx)
-                local maxConv = GetMaxConv(ci, merchantIdx)
-                if maxConv > 0 then
-                    table.insert(plan, { merchantIdx = merchantIdx, count = maxConv })
-                    local srcName   = GetCrestShort(ci)
-                    local dstName   = GetCrestShort(ci + 1)
-                    local totalCost = maxConv * costPer
-                    local totalGain = maxConv * gainPer
-                    table.insert(lines, string.format(
-                        "%s -> %s  (%d -> %d)", srcName, dstName, totalCost, totalGain
-                    ))
-                end
+        for _, action in ipairs(GetCurrentActions()) do
+            local maxConv = GetMaxConv(action)
+            if maxConv > 0 then
+                table.insert(plan, { merchantIdx = action.merchantIdx, count = maxConv })
+                local srcName   = GetCrestShort(action.sourceTier)
+                local dstName   = GetCrestShort(action.destTier)
+                local totalCost = maxConv * action.costPer
+                local totalGain = maxConv * action.gainPer
+                table.insert(lines, string.format(
+                    "%s -> %s  (%d -> %d)", srcName, dstName, totalCost, totalGain
+                ))
             end
         end
         if #plan == 0 then return end
@@ -301,9 +397,8 @@ local function BuildPanel()
         _panel:Hide()
         if Addon.SyncGearPopup then Addon:SyncGearPopup() end
     end)
-    local disableTip = "Hides this panel permanently.\nTo re-enable it, open the addon settings\nand uncheck 'Hide Crest Conversion Panel'\nin the Warnings tab."
     disableBtn:SetScript("OnEnter", function(self_)
-        Addon.AddonUtils.SetTooltip(self_, disableTip)
+        Addon.AddonUtils.SetTooltip(self_, L.CREST_CONVERT_DISABLE_TOOLTIP or "")
     end)
     disableBtn:SetScript("OnLeave", Addon.AddonUtils.HideTooltip)
     _disableBtn = disableBtn
@@ -317,22 +412,17 @@ end
 function Addon:RefreshCrestConvertPanel()
     if not _panel then return end
 
-    -- Collect which tier conversions this vendor offers.
-    local visible = {}
+    local visible = GetCurrentActions()
     local convertItemIDs = GetConvertItemIDs()
-    for ci = 1, #convertItemIDs do
-        if _found[ci] then
-            table.insert(visible, ci)
-        end
-    end
 
     -- Hide every button first.
     for ci = 1, #convertItemIDs do
         if _btns[ci] then _btns[ci]:Hide() end
     end
     if _allBtn then _allBtn:Hide() end
+    if _modeBtn then _modeBtn:Hide() end
 
-    if #visible == 0 then
+    if not HasAnyActions() then
         _panel:Hide()
         return
     end
@@ -341,14 +431,20 @@ function Addon:RefreshCrestConvertPanel()
     local anyAvail = false
     local yOff     = -(PAD + TITLE_H + SEP)
 
-    for _, ci in ipairs(visible) do
-        local btn         = _btns[ci]
-        local merchantIdx = _found[ci]
-        local maxConv     = GetMaxConv(ci, merchantIdx)
-        local srcName     = GetCrestShort(ci)
-        local dstName     = GetCrestShort(ci + 1)
-        local costPer  = GetCostPerPurchase(merchantIdx)
-        local gainPer  = GetGainPerPurchase()
+    _modeBtn:ClearAllPoints()
+    _modeBtn:SetPoint("TOP", _panel, "TOP", 0, yOff)
+    _modeBtn:SetText(GetModeLabel())
+    _modeBtn:Show()
+    yOff = yOff - (BTN_H + SEP)
+
+    for rowIdx, action in ipairs(visible) do
+        local btn      = _btns[rowIdx]
+        if not btn then break end
+        local maxConv  = GetMaxConv(action)
+        local srcName  = GetCrestShort(action.sourceTier)
+        local dstName  = GetCrestShort(action.destTier)
+        local costPer  = action.costPer
+        local gainPer  = action.gainPer
         local timesStr = "\195\151"   -- ×
         if maxConv > 0 then anyAvail = true end
         btn:ClearAllPoints()
@@ -394,7 +490,7 @@ evFrame:RegisterEvent("MERCHANT_SHOW")
 evFrame:RegisterEvent("MERCHANT_CLOSED")
 evFrame:SetScript("OnEvent", function(_, event)
     if event == "MERCHANT_SHOW" then
-        for k in pairs(_found) do _found[k] = nil end
+        ClearActions()
         if _panel then _panel:Hide() end
         if _pendingConvert then
             StaticPopup_Hide("LWMC_CREST_CONVERT")
@@ -405,14 +501,11 @@ evFrame:SetScript("OnEvent", function(_, event)
         C_Timer.After(0.05, function()
             local prefs = Addon.EnsurePrefs and Addon:EnsurePrefs()
             if prefs and prefs.crestConvertDisabled then return end
+            if not IsCrestExchangeVendor() then return end
 
             ScanMerchant()
-            local anyFound = false
-            local convertItemIDs = GetConvertItemIDs()
-            for ci = 1, #convertItemIDs do
-                if _found[ci] then anyFound = true; break end
-            end
-            if anyFound then
+            if HasAnyActions() then
+                SelectAvailableMode()
                 BuildPanel()
                 Addon:RefreshCrestConvertPanel()
             elseif _panel then
@@ -421,7 +514,7 @@ evFrame:SetScript("OnEvent", function(_, event)
         end)
 
     elseif event == "MERCHANT_CLOSED" then
-        for k in pairs(_found) do _found[k] = nil end
+        ClearActions()
         if _panel then _panel:Hide() end
         if _pendingConvert then
             StaticPopup_Hide("LWMC_CREST_CONVERT")

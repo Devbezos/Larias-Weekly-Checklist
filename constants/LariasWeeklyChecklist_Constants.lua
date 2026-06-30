@@ -1,4 +1,4 @@
--- Constants for Larias's Weekly Checklist.
+-- Constants for Larias' Weekly Checklist.
 --
 -- This file is the single source of truth for tracking IDs.
 -- Edit values here as you discover new IDs; the addon reads them during startup.
@@ -50,7 +50,6 @@ local tracking = { -- https://www.wowhead.com/currencies/season-1
     sparkQuestID                 = 95245,  -- wowhead.com/quest=95245    Midnight: World Tour
     catalystCurrencyID           = 3378,   -- wowhead.com/currency=3378  Dawnlight Manaflux
     cofferKeysCurrencyID         = 3310,   -- wowhead.com/currency=3310  Coffer Key Shards
-    cofferKeysDisplayCurrencyID  = 3028,   -- wowhead.com/currency=3028  Restored Coffer Key (icon/name source)
     miscCurrencyIDs = {
         3418,  -- wowhead.com/currency=3418  Resonance Crystals
     },

@@ -16,7 +16,50 @@ local function CountKeys(t)
     return n
 end
 
+local function IsCharacterProfileKey(charKey)
+    if type(charKey) ~= "string" then return false end
+    local name, realm = charKey:match("^%s*(.-)%s%-%s(.-)%s*$")
+    return name ~= nil and realm ~= nil and name ~= "" and realm ~= ""
+end
+
+local function PruneInvalidCharacterKeys(self)
+    local db = self.db
+    if not db then return end
+
+    local currentKey = self.GetCurrentProfileKey and self:GetCurrentProfileKey() or nil
+    local removedAny = false
+
+    local function ShouldKeep(charKey)
+        if charKey == currentKey then return true end
+        return IsCharacterProfileKey(charKey)
+    end
+
+    local function PruneMap(map)
+        if type(map) ~= "table" then return end
+        for charKey in pairs(map) do
+            if not ShouldKeep(charKey) then
+                map[charKey] = nil
+                removedAny = true
+            end
+        end
+    end
+
+    local gdb = db.global
+    local sv = db.sv
+    PruneMap(sv and sv.profileKeys)
+    PruneMap(gdb and gdb.chars)
+    PruneMap(gdb and gdb.charClasses)
+    PruneMap(gdb and gdb.charLevels)
+    PruneMap(gdb and gdb.hiddenChars)
+
+    if removedAny then
+        self._charProfileKeysCache = nil
+    end
+end
+
 function Addon:GetCharProfileKeys()
+    PruneInvalidCharacterKeys(self)
+
     local sv = self.db and self.db.sv
     local profileKeys = sv and sv.profileKeys
     local chars = self.db and self.db.global and self.db.global.chars
@@ -65,6 +108,51 @@ function Addon:GetCharProfileKeys()
     return keys
 end
 
+local function GetMaxCharacterLevel()
+    if type(GetMaxPlayerLevel) == "function" then
+        local lvl = tonumber(GetMaxPlayerLevel())
+        if lvl and lvl > 0 then return lvl end
+    end
+    if type(GetMaxLevelForLatestExpansion) == "function" then
+        local lvl = tonumber(GetMaxLevelForLatestExpansion())
+        if lvl and lvl > 0 then return lvl end
+    end
+    local lvl = tonumber(MAX_PLAYER_LEVEL)
+    if lvl and lvl > 0 then return lvl end
+    return nil
+end
+
+local function IsOwnProfileKey(profileKey, ownKey)
+    if not (profileKey and ownKey) then return false end
+    return profileKey == ownKey or profileKey:lower() == ownKey:lower()
+end
+
+function Addon:IsMaxLevelChar(profileKey)
+    if not profileKey then return false end
+    local gdb = self.db and self.db.global
+    local lvl = gdb and gdb.charLevels and tonumber(gdb.charLevels[profileKey])
+    local maxLevel = GetMaxCharacterLevel()
+    if not (lvl and maxLevel) then return false end
+    return lvl >= maxLevel
+end
+
+local function SnapshotHasUsableData(snap)
+    if type(snap) ~= "table" then return false end
+    if snap.leftLines ~= nil then return true end
+    if type(snap.rightRows) ~= "table" then return false end
+    for _, row in ipairs(snap.rightRows) do
+        if row.qty and row.qty > 0 then return true end
+    end
+    return false
+end
+
+local function IsPickableChar(self, profileKey, ownKey, gdb)
+    if IsOwnProfileKey(profileKey, ownKey) then return false end
+    if gdb and gdb.hiddenChars and gdb.hiddenChars[profileKey] then return false end
+    if not self:IsMaxLevelChar(profileKey) then return false end
+    return true
+end
+
 -- Switches the viewed character.  profileKey=nil means own character.
 -- Character data lives in db.global.chars[key] so no profile switching is
 -- needed \u2014 just update _viewingChar and refresh the UI.
@@ -96,22 +184,10 @@ function Addon:HasPickableChars()
     local ownKey = self:GetCurrentProfileKey()
     local gdb    = self.db and self.db.global
     for _, charKey in ipairs(self:GetCharProfileKeys()) do
-        local isOwn    = (charKey == ownKey) or (charKey:lower() == ownKey:lower())
-        local isHidden = gdb and gdb.hiddenChars and gdb.hiddenChars[charKey]
-        if not isOwn and not isHidden then
+        if IsPickableChar(self, charKey, ownKey, gdb) then
             local classToken = gdb and gdb.charClasses and gdb.charClasses[charKey]
             local snap = gdb and gdb.chars and gdb.chars[charKey] and gdb.chars[charKey].trackingSnapshot
-            local usable = snap and (
-                snap.leftLines ~= nil or
-                (function()
-                    if type(snap.rightRows) ~= "table" then return false end
-                    for _, row in ipairs(snap.rightRows) do
-                        if row.qty and row.qty > 0 then return true end
-                    end
-                    return false
-                end)()
-            )
-            if classToken and usable then return true end
+            if classToken and SnapshotHasUsableData(snap) then return true end
         end
     end
     return false
@@ -263,18 +339,7 @@ function Addon:InitCharPickerUI(frame, styleFunc)
     local function hasUsableData(charKey)
         local gdb = Addon.db and Addon.db.global
         local cdb = gdb and gdb.chars and gdb.chars[charKey]
-        if not cdb then return false end
-        local snap = cdb.trackingSnapshot
-        if not snap then return false end
-        -- Weekly-task tracking lines present → definitely has data.
-        if snap.leftLines ~= nil then return true end
-        -- Currency rows present, but only count if at least one is non-zero.
-        if type(snap.rightRows) == "table" then
-            for _, row in ipairs(snap.rightRows) do
-                if row.qty and row.qty > 0 then return true end
-            end
-        end
-        return false
+        return cdb and SnapshotHasUsableData(cdb.trackingSnapshot) or false
     end
 
     -- ── Right-click context menu (hide / show a character) ────────────────────
@@ -342,7 +407,7 @@ function Addon:InitCharPickerUI(frame, styleFunc)
 
         -- When viewing another character, show a "back to me" entry first.
         if Addon._viewingChar then
-            local myName = (UnitName and UnitName("player")) or "My character"
+            local myName = (UnitName and UnitName("player")) or (L.CHAR_PICKER_MY_CHARACTER or "My character")
             local btn = AcquireBtn(p)
             btn:ClearAllPoints()
             btn:SetPoint("TOPLEFT",  p, "TOPLEFT",  0, posY)
@@ -369,15 +434,8 @@ function Addon:InitCharPickerUI(frame, styleFunc)
         end
 
         for _, profileKey in ipairs(allKeys) do
-            -- Skip own character.
-            local isOwn     = (profileKey == ownKey)
-            -- Also compare case-insensitively for safety (realm capitalisation).
-            if not isOwn then
-                isOwn = (profileKey:lower() == ownKey:lower())
-            end
             local isViewing = (profileKey == Addon._viewingChar)
-            local isHidden  = (gdb and gdb.hiddenChars and gdb.hiddenChars[profileKey]) and true or false
-            if not isOwn and not isHidden then
+            if IsPickableChar(Addon, profileKey, ownKey, gdb) then
                 local classToken = classFor(profileKey)
                 -- Skip chars with no class entry or no saved snapshot data.
                 if classToken and hasUsableData(profileKey) then

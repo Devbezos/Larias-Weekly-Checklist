@@ -93,7 +93,7 @@ def strip_version_line(text: str) -> str:
 def build_enus_data_header(sheet_version: str = "") -> list[str]:
     lines = [
         "--[[",
-        "English (enUS) checklist data for Larias's Weekly Checklist",
+        "English (enUS) checklist data for Larias' Weekly Checklist",
         "",
         "NOTE: This is the canonical enUS dataset; other locales must keep IDs identical",
         "so completion tracking stays consistent across locales.",

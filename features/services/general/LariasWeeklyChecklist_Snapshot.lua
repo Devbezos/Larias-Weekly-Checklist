@@ -113,9 +113,6 @@ function Addon:BuildTrackingSnapshot(snap)
         end
     end
 
-    -- Right column: currency data via the Currency module API.
-    Addon:FillCurrencySnapshot(snap)
-
     -- Keystone: current M+ key held by the logged-in character.
     do
         local ksLevel = API.MythicPlus
@@ -224,7 +221,9 @@ function Addon:BuildTrackingSnapshot(snap)
                         -- not an absolute index.  The nextLevel index may be out of range
                         -- if currUpgrade counts from the track start; the [1] fallback
                         -- always gives us the next remaining upgrade.
-                        local nextLevel = (info.currUpgrade or 0) + 1
+                        local currentUpgrade = tonumber(info.currUpgrade) or 0
+                        local maxUpgrade = tonumber(info.maxUpgrade) or 0
+                        local nextLevel = currentUpgrade + 1
                         local levelInfo = info.upgradeLevelInfos[nextLevel]
                                       or info.upgradeLevelInfos[1]
                         local costs = levelInfo and levelInfo.currencyCostsToUpgrade
@@ -260,6 +259,14 @@ function Addon:BuildTrackingSnapshot(snap)
                         local trueMaxRank = (nLevels > 0) and (gs.rank + nLevels) or nil
                         if trueMaxRank and trueMaxRank < gs.maxRank then
                             snap.gearSlots[sid].trueMaxRank = trueMaxRank
+                        end
+                        -- Void-upgraded / otherwise capped items can share ilvls with the
+                        -- first ranks of the next crest track. When WoW reports the item
+                        -- is already at its upgrade cap, trust that over ilvl-derived
+                        -- track math so the item does not appear crest-upgradeable.
+                        if maxUpgrade > 0 and currentUpgrade > 0 and currentUpgrade >= maxUpgrade and nLevels == 0 then
+                            snap.gearSlots[sid].trueMaxRank = gs.rank
+                            snap.gearSlots[sid].upgradeCostRemaining = 0
                         end
 
                         if crestID and nLevels > 0 then
@@ -326,4 +333,7 @@ function Addon:BuildTrackingSnapshot(snap)
             snap.bestGearSlots[sid] = CopySlotData(previousSlot) or CopySlotData(currentSlot)
         end
     end
+
+    -- Right-column rows can depend on the gear watermark, so save them last.
+    Addon:FillCurrencySnapshot(snap)
 end

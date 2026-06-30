@@ -291,7 +291,7 @@ function Addon:CreateTrackingPanel(parentFrame)
     trackingFrame:SetPoint("BOTTOMLEFT",  parentFrame, "BOTTOMLEFT",  UI.sectionInsetX,  trackingBottomY)
     trackingFrame:SetPoint("BOTTOMRIGHT", parentFrame, "BOTTOMRIGHT", -UI.sectionInsetX, trackingBottomY)
     trackingFrame:SetHeight(UI.trackH)
-    self:ApplyTheme(trackingFrame)
+    self:RegisterWindowSurface(trackingFrame, { opacityMode = "ui", borderStyle = "panel" })
 
     local title = trackingFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", 10, -8)

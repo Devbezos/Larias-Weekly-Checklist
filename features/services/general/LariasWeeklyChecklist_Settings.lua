@@ -89,7 +89,7 @@ local function BuildPanel()
     local L = Addon.L or {}
 
     panelFrame      = CreateFrame("Frame")
-    panelFrame.name = L.DISPLAY_NAME or "Larias's Weekly Checklist"
+    panelFrame.name = L.DISPLAY_NAME or "Larias' Weekly Checklist"
 
     -- Inner canvas — WoW's Settings API sizes this for us; we just place widgets.
     local canvas = CreateFrame("Frame", nil, panelFrame)
@@ -114,7 +114,7 @@ local function BuildPanel()
     local hdr     = Addon.THEME and Addon.THEME.header or { r = 1, g = 0.82, b = 0, a = 1 }
     local titleFS = canvas:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
     titleFS:SetPoint("TOPLEFT", canvas, "TOPLEFT", PAD, curY)
-    titleFS:SetText(L.DISPLAY_NAME or "Larias's Weekly Checklist")
+    titleFS:SetText(L.DISPLAY_NAME or "Larias' Weekly Checklist")
     titleFS:SetTextColor(hdr.r, hdr.g, hdr.b, 1)
     curY = curY - 32
 

@@ -46,6 +46,8 @@ local GEAR_SLOT_NAMES = {
     [16]=L.ALT_SUMMARY_GEAR_SLOT_MAIN_HAND or "Main Hand",
     [17]=L.ALT_SUMMARY_GEAR_SLOT_OFF_HAND or "Off Hand",
 }
+local WEAP_UPG_MAX_ILVL = 298
+local WEAP_UPG_SLOTS    = { 13, 14, 16, 17 }
 
 -- ── Alpha constants ────────────────────────────────────────────────────
 local A_FULL    = 1.00   -- present, data available
@@ -76,6 +78,13 @@ local STYLE = {
     hoverColA      = 0.045,
 }
 local PLACEHOLDER_DASH = Addon.PLACEHOLDER_DASH or "\226\128\148"
+
+local function GetPanelChromeAlpha()
+    if Addon and Addon.GetUIOpacityAlpha then
+        return Addon:GetUIOpacityAlpha()
+    end
+    return 1.0
+end
 
 local function SetPlaceholder(cell, th, alpha)
     th = th or (Addon.THEME and Addon.THEME.text) or { r = 1, g = 1, b = 1 }
@@ -412,19 +421,13 @@ local function EnsurePanel()
     f:SetScript("OnDragStop",  function(self_) self_:StopMovingOrSizing(); self_._wasMoved = true end)
     f:Hide()
     Addon._altsSummaryFrame = f
+    Addon:RegisterWindowSurface(f, { opacityMode = "ui", borderStyle = "panel" })
 
     local th = Addon.THEME
-    local bgTex = f:CreateTexture(nil, "BORDER", nil, -8)
-    bgTex:SetAllPoints(f)
-    bgTex:SetColorTexture(th.bg.r, th.bg.g, th.bg.b, 1)
-    f._lariaBgTex = bgTex
-    if f.SetBackdropColor then
-        f:SetBackdropColor(0, 0, 0, 0)
-    end
 
     -- Title strip.
     local titleBgTex = f:CreateTexture(nil, "BACKGROUND")
-    titleBgTex:SetColorTexture(th.header.r, th.header.g, th.header.b, STYLE.sectionBandA)
+    titleBgTex:SetColorTexture(th.header.r, th.header.g, th.header.b, STYLE.sectionBandA * GetPanelChromeAlpha())
     titleBgTex:SetPoint("TOPLEFT",  f, "TOPLEFT",  1, -1)
     titleBgTex:SetPoint("TOPRIGHT", f, "TOPRIGHT", -1, -1)
     titleBgTex:SetHeight(TITLE_H + 2)
@@ -564,6 +567,22 @@ local function GetUpgradeGearSlots(snap)
     return snap.gearSlots
 end
 
+local function CalcWeaponUpgradeNeed(snap)
+    local gearSlots = GetUpgradeGearSlots(snap)
+    if type(gearSlots) ~= "table" then return nil end
+    local count = 0
+    local sawGear = false
+    for _, sid in ipairs(WEAP_UPG_SLOTS) do
+        local sd = gearSlots[sid]
+        local ilvl = type(sd) == "table" and tonumber(sd.ilvl) or 0
+        if ilvl > 0 then sawGear = true end
+        if ilvl > 0 and ilvl < WEAP_UPG_MAX_ILVL then
+            count = count + 1
+        end
+    end
+    return sawGear and count or nil
+end
+
 -- Compute the total crest cost to max all items of crest tier `tierIdx`,
 -- using the rank (x/y) stored in the snapshot.  No ilvl range math needed.
 -- Returns totalCost.
@@ -597,7 +616,10 @@ local function AnyVisibleCharNeedsWeapUpg(chars)
     if not chars then return false end
     for _, char in ipairs(chars) do
         local snap = char and char.snap
-        if snap and type(snap.rightRows) == "table" then
+        local watermarkNeed = CalcWeaponUpgradeNeed(snap)
+        if watermarkNeed ~= nil then
+            if watermarkNeed > 0 then return true end
+        elseif snap and type(snap.rightRows) == "table" then
             for _, row in ipairs(snap.rightRows) do
                 if row.type == ST.WEAPUPG and (tonumber(row.need) or 0) > 0 then
                     return true
@@ -641,7 +663,7 @@ local function BuildRowDefs(tracking, LAYOUT, chars)
         return name, cr, cg, cb
     end
 
-    addSec(L.ALT_SUMMARY_SECTION_CRESTS or "Crests", "currency")
+    addSec(L.ALT_SUMMARY_SECTION_CURRENCIES or "Currencies", "currency")
     for i = 1, NUM_CRESTS do
         local name, cr, cg, cb = CrestTierInfo(i)
         local crestID = tracking and tracking.crestCurrencyIDs and tracking.crestCurrencyIDs[i]
@@ -651,7 +673,6 @@ local function BuildRowDefs(tracking, LAYOUT, chars)
         end
     end
 
-    addSec(L.ALT_SUMMARY_SECTION_CURRENCIES or "Currencies", "currency")
     local _catID = tracking and tracking.catalystCurrencyID
     if not Addon:IsCurrencyHidden(_catID) then
         local _cr, _cg, _cb = Addon:GetCurrencyQualityColorRGB(_catID)
@@ -665,8 +686,16 @@ local function BuildRowDefs(tracking, LAYOUT, chars)
         local _cr, _cg, _cb = Addon:GetCurrencyQualityColorRGB(_sprkID)
         local _sprkName = (_sprkID and GetCurrencyNameByID(_sprkID)) or L.TRACKING_SPARKS_LABEL or "Sparks"
         addRow("sparks",   _sprkName, { iconID = GetCurrencyIcon(_sprkID),
-                                                 currencyID = _sprkID,
-                                                 cr = _cr, cg = _cg, cb = _cb })
+                                                  currencyID = _sprkID,
+                                                  cr = _cr, cg = _cg, cb = _cb })
+    end
+    local _keyID = tracking and tracking.cofferKeysCurrencyID
+    if not Addon:IsCurrencyHidden(_keyID) then
+        local _cr, _cg, _cb = Addon:GetCurrencyQualityColorRGB(_keyID)
+        local _keyName = (_keyID and GetCurrencyNameByID(_keyID)) or L.TRACKING_KEYS_LABEL or "Coffer Keys"
+        addRow("keys", _keyName, { iconID = GetCurrencyIcon(_keyID),
+                                   currencyID = _keyID,
+                                   cr = _cr, cg = _cg, cb = _cb })
     end
     for mi, mID in ipairs(LAYOUT.miscIDs) do
         if not Addon:IsCurrencyHidden(tonumber(mID)) then
@@ -807,6 +836,7 @@ local function ExtractSnapData(snap, crestIDs, LAYOUT)
             d.weapUpgNeed        = tonumber(r_.need)        or 0
         end
     end
+    d.weapUpgNeed = CalcWeaponUpgradeNeed(snap) or d.weapUpgNeed
     return d
 end
 
@@ -938,9 +968,13 @@ end
 
 local function RenderSparksCell(cell, row, sd, noSnap, alpha, th)
     local sprkQty, sprkCap, sprkQD = sd.sprkQty, sd.sprkCap, sd.sprkQD
-    local sqr, sqg, sqb = 0.64, 0.21, 0.93   -- epic purple; overridden by quest state
-    if     sprkQD == true  then sqr, sqg, sqb = 0.3, 1.0, 0.3
-    elseif sprkQD == false then sqr, sqg, sqb = 1.0, 0.5, 0.5
+    local sqr, sqg, sqb = 0.64, 0.21, 0.93
+    if sprkCap > 0 and sprkQty >= sprkCap and sprkQD == true then
+        sqr, sqg, sqb = 0.3, 1.0, 0.3
+    elseif sprkQD == false then
+        sqr, sqg, sqb = 1.0, 0.5, 0.5
+    elseif sprkQty > 0 then
+        sqr, sqg, sqb = 1.0, 0.82, 0.0
     end
     local sprkStr = (sprkCap > 0) and (sprkQty .. "/" .. sprkCap) or tostring(sprkQty)
     if noSnap then
@@ -1044,7 +1078,8 @@ local function RenderWeapUpgCell(cell, row, sd, noSnap, alpha, th)
         SetPlaceholder(cell, th, alpha * A_DIM)
         cell:SetScript("OnEnter", nil)
     else
-        local str = ("%.1f"):format(total) .. "/" .. need
+        local displayTotal = (total >= need) and need or total
+        local str = ("%.1f"):format(displayTotal) .. "/" .. need
         if     total >= need       then cell._fs:SetTextColor(0.3,  1.0,  0.3,  alpha)
         elseif total >= need * 0.5 then cell._fs:SetTextColor(1.0,  0.82, 0.0,  alpha)
         else                            cell._fs:SetTextColor(th.r, th.g, th.b, alpha)
@@ -1222,7 +1257,8 @@ local function RenderUpgradeCostCell(cell, row, snap, noSnap, alpha, th)
         -- Availability is per crest type: wallet balance plus this tier's own
         -- trade-up amount from lower crests, if that conversion is unlocked.
         local heldQty, tradeupQty, availableQty = GetCrestAvailabilityForTier(snap, targetTier)
-        cell._fs:SetText(availableQty .. "/" .. totalCost)
+        local displayAvailable = math.min(availableQty, totalCost)
+        cell._fs:SetText(displayAvailable .. "/" .. totalCost)
         if availableQty >= totalCost then
             cell._fs:SetTextColor(0.3, 1.0, 0.3, alpha)
         elseif availableQty >= totalCost * 0.5 then
@@ -1403,13 +1439,16 @@ PopulateSummary = function(panel)
         if not isInline then
             -- Refresh title strip & label with the current header color.
             local h = Addon.THEME.header
-            if panel._altsTitleBgTex then panel._altsTitleBgTex:SetColorTexture(h.r, h.g, h.b, STYLE.sectionBandA) end
+            if panel._altsTitleBgTex then
+                panel._altsTitleBgTex:SetColorTexture(h.r, h.g, h.b, STYLE.sectionBandA * GetPanelChromeAlpha())
+            end
             if panel._altsTitleFS    then panel._altsTitleFS:SetTextColor(h.r, h.g, h.b, 1)          end
         end
     end
     if Addon.ApplyOpacity then Addon:ApplyOpacity() end
 
     local CONTENT_TOP = isInline and -PAD or -(TITLE_H + 4)
+    local chromeA = GetPanelChromeAlpha()
     local COL_HDR_TOP = CONTENT_TOP
     local ROWS_TOP    = COL_HDR_TOP - COL_HDR_H - 2
     local BTNS_TOP    = ROWS_TOP - totalContentH - 4
@@ -1579,7 +1618,7 @@ PopulateSummary = function(panel)
 
     -- ── Column-header background strip ───────────────────────────────────────
     local hdrBg = GetDiv()
-    hdrBg:SetColorTexture(brd.r, brd.g, brd.b, STYLE.headerBandA)
+    hdrBg:SetColorTexture(brd.r, brd.g, brd.b, STYLE.headerBandA * chromeA)
     hdrBg:SetPoint("TOPLEFT",  panel, "TOPLEFT",  1,  COL_HDR_TOP)
     hdrBg:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -1, COL_HDR_TOP)
     hdrBg:SetHeight(COL_HDR_H + 2)
@@ -1587,20 +1626,20 @@ PopulateSummary = function(panel)
     -- Horizontal divider below column headers.
     local hdrDiv = GetDiv()
     hdrDiv:SetHeight(1)
-    hdrDiv:SetColorTexture(brd.r, brd.g, brd.b, STYLE.headerLineA)
+    hdrDiv:SetColorTexture(brd.r, brd.g, brd.b, STYLE.headerLineA * chromeA)
     hdrDiv:SetPoint("TOPLEFT",  panel, "TOPLEFT",  PAD, ROWS_TOP)
     hdrDiv:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -PAD, ROWS_TOP)
 
     -- ── Button strip background (above footer checkbox) ───────────────────────
     local btnsBg = GetDiv()
-    btnsBg:SetColorTexture(brd.r, brd.g, brd.b, STYLE.footerBandA)
+    btnsBg:SetColorTexture(brd.r, brd.g, brd.b, STYLE.footerBandA * chromeA)
     btnsBg:SetPoint("TOPLEFT",  panel, "TOPLEFT",  1, BTNS_TOP)
     btnsBg:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -1, BTNS_TOP)
     btnsBg:SetHeight(BTN_ROW_H)
 
     local btnsDiv = GetDiv()
     btnsDiv:SetHeight(1)
-    btnsDiv:SetColorTexture(brd.r, brd.g, brd.b, STYLE.headerLineA)
+    btnsDiv:SetColorTexture(brd.r, brd.g, brd.b, STYLE.headerLineA * chromeA)
     btnsDiv:SetPoint("TOPLEFT",  panel, "TOPLEFT",  PAD, BTNS_TOP)
     btnsDiv:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -PAD, BTNS_TOP)
 
@@ -1608,7 +1647,7 @@ PopulateSummary = function(panel)
     -- Vertical divider separating labels from data columns.
     local lblDiv = GetDiv()
     lblDiv:SetWidth(1)
-    lblDiv:SetColorTexture(brd.r, brd.g, brd.b, STYLE.colLineA)
+    lblDiv:SetColorTexture(brd.r, brd.g, brd.b, STYLE.colLineA * chromeA)
     lblDiv:SetPoint("TOPLEFT",    panel, "TOPLEFT", PAD + COL_LABEL - 1, ROWS_TOP)
     lblDiv:SetPoint("BOTTOMLEFT", panel, "TOPLEFT", PAD + COL_LABEL - 1, FOOTER_TOP)
 
@@ -1620,25 +1659,25 @@ PopulateSummary = function(panel)
 
         if row.type == "sechdr" then
             local secBg = GetDiv()
-            secBg:SetColorTexture(header.r, header.g, header.b, STYLE.sectionBandA)
+            secBg:SetColorTexture(header.r, header.g, header.b, STYLE.sectionBandA * chromeA)
             secBg:SetPoint("TOPLEFT",  panel, "TOPLEFT",   1, curRowY)
             secBg:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -1, curRowY)
             secBg:SetHeight(h)
 
             local secAccent = GetDiv()
-            secAccent:SetColorTexture(header.r, header.g, header.b, STYLE.sectionAccentA)
+            secAccent:SetColorTexture(header.r, header.g, header.b, STYLE.sectionAccentA * chromeA)
             secAccent:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, curRowY - 4)
             secAccent:SetSize(3, h - 8)
 
             local secTopLine = GetDiv()
             secTopLine:SetHeight(1)
-            secTopLine:SetColorTexture(header.r, header.g, header.b, STYLE.sectionLineA)
+            secTopLine:SetColorTexture(header.r, header.g, header.b, STYLE.sectionLineA * chromeA)
             secTopLine:SetPoint("TOPLEFT",  panel, "TOPLEFT",   1, curRowY)
             secTopLine:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -1, curRowY)
 
             local secBottomLine = GetDiv()
             secBottomLine:SetHeight(1)
-            secBottomLine:SetColorTexture(header.r, header.g, header.b, STYLE.sectionLineA)
+            secBottomLine:SetColorTexture(header.r, header.g, header.b, STYLE.sectionLineA * chromeA)
             secBottomLine:SetPoint("TOPLEFT",  panel, "TOPLEFT",   1, curRowY - h + 1)
             secBottomLine:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -1, curRowY - h + 1)
 
@@ -1672,9 +1711,9 @@ PopulateSummary = function(panel)
         else
             local rowBg = GetDiv()
             if (ri % 2) == 0 then
-                rowBg:SetColorTexture(1, 1, 1, STYLE.rowLightA)
+                rowBg:SetColorTexture(1, 1, 1, STYLE.rowLightA * chromeA)
             else
-                rowBg:SetColorTexture(0, 0, 0, STYLE.rowDarkA)
+                rowBg:SetColorTexture(0, 0, 0, STYLE.rowDarkA * chromeA)
             end
             rowBg:SetPoint("TOPLEFT",  panel, "TOPLEFT",   1, curRowY)
             rowBg:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -1, curRowY)
@@ -1682,7 +1721,7 @@ PopulateSummary = function(panel)
 
             local rowSep = GetDiv()
             rowSep:SetHeight(1)
-            rowSep:SetColorTexture(brd.r, brd.g, brd.b, STYLE.rowLineA)
+            rowSep:SetColorTexture(brd.r, brd.g, brd.b, STYLE.rowLineA * chromeA)
             rowSep:SetPoint("TOPLEFT",  panel, "TOPLEFT",   PAD, curRowY - h + 1)
             rowSep:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -PAD, curRowY - h + 1)
 
@@ -1755,7 +1794,7 @@ PopulateSummary = function(panel)
     -- Footer divider + checkbox.
     local footerDiv = GetDiv()
     footerDiv:SetHeight(1)
-    footerDiv:SetColorTexture(brd.r, brd.g, brd.b, STYLE.headerLineA)
+    footerDiv:SetColorTexture(brd.r, brd.g, brd.b, STYLE.headerLineA * chromeA)
     footerDiv:SetPoint("TOPLEFT",  panel, "TOPLEFT",   PAD, FOOTER_TOP)
     footerDiv:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -PAD, FOOTER_TOP)
 
@@ -1790,7 +1829,7 @@ PopulateSummary = function(panel)
         if ci > 1 then
             local colSep = GetDiv()
             colSep:SetWidth(1)
-            colSep:SetColorTexture(brd.r, brd.g, brd.b, STYLE.colLineA)
+            colSep:SetColorTexture(brd.r, brd.g, brd.b, STYLE.colLineA * chromeA)
             colSep:SetPoint("TOPLEFT",    panel, "TOPLEFT", colX - 1, COL_HDR_TOP)
             colSep:SetPoint("BOTTOMLEFT", panel, "TOPLEFT", colX - 1, FOOTER_TOP)
         end

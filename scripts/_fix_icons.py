@@ -1,20 +1,32 @@
-path = r'c:\Users\Devastation\source\repos\Larias-Weekly-Midnight-Checklist\Modules\LariasWeeklyChecklist_CharPicker.lua'
-with open(path, encoding='utf-8') as f:
-    content = f.read()
+#!/usr/bin/env python3
 
-# The file stores the literal 6-char escape sequences \u2716 / \u2714 (not real codepoints).
-old_x     = r'        btn:SetText("|cffff4040\u2716|r")'
-new_x     =  '        btn:SetText("|TInterface\\\\RaidFrame\\\\ReadyCheck-NotReady:12:12|t")'
-old_check = r'        local CHECK = "|cff00ff00\u2714|r"'
-new_check =  '        local CHECK = "|TInterface\\\\RaidFrame\\\\ReadyCheck-Ready:12:12|t"'
+from pathlib import Path
 
-print('X found:',     old_x     in content)
-print('CHECK found:', old_check in content)
 
-content = content.replace(old_x,     new_x)
-content = content.replace(old_check, new_check)
+def main() -> int:
+    repo_root = Path(__file__).resolve().parents[1]
+    path = repo_root / "features" / "footer" / "LariasWeeklyChecklist_CharPicker.lua"
+    content = path.read_text(encoding="utf-8")
 
-with open(path, 'w', encoding='utf-8') as f:
-    f.write(content)
+    replacements = {
+        r'        btn:SetText("|cffff4040\u2716|r")':
+            '        btn:SetText("|TInterface\\\\RaidFrame\\\\ReadyCheck-NotReady:12:12|t")',
+        r'        local CHECK = "|cff00ff00\u2714|r"':
+            '        local CHECK = "|TInterface\\\\RaidFrame\\\\ReadyCheck-Ready:12:12|t"',
+    }
 
-print('Done.')
+    updated = content
+    for old, new in replacements.items():
+        updated = updated.replace(old, new)
+
+    if updated == content:
+        print("No icon replacements needed.")
+        return 0
+
+    path.write_text(updated, encoding="utf-8")
+    print(f"Updated {path.relative_to(repo_root)}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -11,7 +11,8 @@ reg.strings["enUS"] = reg.strings["enUS"] or {}
 local L = reg.strings["enUS"]
 
 local STRINGS = {
-	DISPLAY_NAME = "Larias's Weekly Checklist",
+	DISPLAY_NAME = "Larias' Weekly Checklist",
+	ADDON_WARNING_CONSTANTS_MISSING = "Warning: constants file missing; tracking IDs not loaded.",
 
 	-- Update popup
 	UPDATE_AVAILABLE_TEXT = "New version available",
@@ -26,6 +27,7 @@ local STRINGS = {
 	OPTIONS_HIDE_SLIDERS         = "Hide Sliders",
 	OPTIONS_HIDE_UPDATE_NOTICE   = "Hide Update Warnings",
 	OPTIONS_DISABLE_UPGRADE_WARN = "Hide Upgrade Warnings",
+	OPTIONS_DISABLE_RAID_BONUS_ROLL_REMINDER = "Hide Raid Bonus Roll Reminder",
 	OPTIONS_DISABLE_CREST_CONVERT     = "Hide Crest Conversion Panel",
 	OPTIONS_HIDE_MINIMAP_BTN     = "Hide Minimap Button",
 	OPTIONS_HIDE_ALT_SUMMARY     = "Hide Alt Summary Button",
@@ -38,6 +40,7 @@ local STRINGS = {
 	OPTIONS_TOOLTIP_HIDE_ILVL_REF_BTN    = "Hides the item level reference popup button in the header.",
 	OPTIONS_TOOLTIP_HIDE_UPDATE_NOTICE   = "Hides the banner shown when a new spreadsheet version is available.",
 	OPTIONS_TOOLTIP_DISABLE_UPGRADE_WARN = "Hides the popup warning shown when upgrading an item at 1/6 instead of 5/6.",
+	OPTIONS_TOOLTIP_DISABLE_RAID_BONUS_ROLL_REMINDER = "Hides the popup reminder shown when you enter a raid before capping your bonus-roll currency for the week.",
 	OPTIONS_TOOLTIP_HIDE_MINIMAP_BTN     = "Hides the minimap button.\nYou can still open the checklist with /larias.",
 	RESET_BUTTON = "Reset List",
 	RESTORE_HIDDEN_BUTTON_FMT = "Restore %s",
@@ -47,7 +50,7 @@ local STRINGS = {
 	UI_SCALE_MIN_LABEL   = "50%",
 	UI_SCALE_MAX_LABEL   = "150%",
 	UI_OPACITY_LABEL     = "Opacity",
-	UI_OPACITY_MIN_LABEL = "10%",
+	UI_OPACITY_MIN_LABEL = "50%",
 	UI_OPACITY_MAX_LABEL = "100%",
 	-- Settings panel section headers
 	SETTINGS_SECTION_ACTIONS = "Actions",
@@ -58,6 +61,7 @@ local STRINGS = {
 	SETTINGS_TAB_DISPLAY = "Display",
 	SETTINGS_TAB_WARNINGS = "Warnings",
 	SETTINGS_TAB_APPEARANCE = "Appearance",
+	WARNING_PANEL_TITLE = "Warning",
 	-- Settings panel color-row labels
 	SETTINGS_COLOR_RESET       = "Reset",
 	SETTINGS_COLOR_BACKGROUND  = "Background",
@@ -66,9 +70,14 @@ local STRINGS = {
 	-- Settings panel language override
 	SETTINGS_LANGUAGE_AUTO     = "Auto (Client Default)",
 	-- Upgrade warning
+	UPGRADE_WARN_TITLE           = "Upgrade Advice",
 	UPGRADE_WARN_MSG             = "Upgrading a 1/6 %s item is a waste of %d crests.\nYou should upgrade a %s item to 6/6 first to save crests",
 	UPGRADE_WARN_DISABLE_BTN     = "Hide Upgrade Warning",
-	UPGRADE_WARN_DISABLE_TOOLTIP = "Check Larias's guide for more information.",
+	UPGRADE_WARN_DISABLE_TOOLTIP = "Check Larias' guide for more information.",
+	RAID_BONUS_ROLL_REMINDER_TITLE = "Bonus Rolls",
+	RAID_BONUS_ROLL_REMINDER_MSG = "You have bonus rolls available for purchase.",
+	RAID_BONUS_ROLL_REMINDER_DISABLE_BTN = "Hide Raid Reminder",
+	RAID_BONUS_ROLL_REMINDER_DISABLE_TOOLTIP = "Disable future raid-entry bonus-roll currency reminders.",
 	-- Color picker swatch labels (gear popup)
 	COLOR_PICKER_BG             = "Background",
 	COLOR_PICKER_TEXT           = "Text",
@@ -155,6 +164,7 @@ local STRINGS = {
 	MINIMAP_TOOLTIP_RIGHT_CLICK_OPTIONS = "Right-click: Show Options",
 	MINIMAP_TOOLTIP_MIDDLE_CLICK_ILVL = "Middle-click: Show Alt Summary",
 	MINIMAP_TOOLTIP_SHIFT_MIDDLE = "Shift+Middle: Show Item Level Ref",
+	LOCALIZATION_COMPANION_HINT_TEXT = "Tip: For non-English translations, install the optional addon 'LariasWeeklyChecklist: Localization'.",
 	-- Main window
 	TAB_OPTIONS = "Options",
 	CLOSE               = "Close",
@@ -177,6 +187,7 @@ local STRINGS = {
 	CHAR_PICKER_SHOW_FMT = "Show %s",
 	CHAR_PICKER_HIDE_FMT = "Hide %s",
 	CHAR_PICKER_BACK_FMT = "<< %s",
+	CHAR_PICKER_MY_CHARACTER = "My character",
 
 	-- Week picker
 	PICKER_HEADER_TOOLTIP       = "Click to change week",
@@ -248,6 +259,10 @@ local STRINGS = {
 	CREST_CONVERT_ALL_BTN        = "Convert All",
 	CREST_CONVERT_CONFIRM_BTN    = "Convert",
 	CREST_CONVERT_DISABLE_BTN    = "Disable Conversion Panel",
+	CREST_CONVERT_DISABLE_TOOLTIP = "Hides this panel permanently.\nTo re-enable it, open the addon settings\nand uncheck 'Hide Crest Conversion Panel'\nin the Warnings tab.",
+	CREST_CONVERT_MODE_UPGRADE   = "Mode: Upgrade",
+	CREST_CONVERT_MODE_DOWNGRADE = "Mode: Downgrade",
+	CREST_CONVERT_MODE_TOOLTIP   = "Toggle between upgrading crests and downgrading crests.",
 	CREST_CONVERT_WARN_SINGLE    = "|cffff9900Warning:|r\n\nThis will convert %d %s crests into %d %s crests.\n\nThis cannot be undone.",
 	CREST_CONVERT_WARN_ALL_HDR   = "|cffff9900Warning:|r\n\nThe following conversions will be performed:\n\n",
 	CREST_CONVERT_WARN_FOOTER    = "These actions cannot be undone.",

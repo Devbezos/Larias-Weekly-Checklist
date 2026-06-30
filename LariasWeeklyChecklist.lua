@@ -169,7 +169,7 @@ do
             if not self._warnedMissingConstants then
                 self._warnedMissingConstants = true
                 if self.Print then
-                    self:Print("Warning: constants file missing; tracking IDs not loaded.")
+                    self:Print(locale.ADDON_WARNING_CONSTANTS_MISSING or "Warning: constants file missing; tracking IDs not loaded.")
                 end
             end
         end
@@ -209,7 +209,7 @@ Addon.VISUAL_STYLE = Addon.VISUAL_STYLE or {
 
 local LOCALIZATION_ADDON_NAME = "LariasWeeklyChecklist_Localization"
 Addon.LOCALIZATION_COMPANION_HINT_TEXT = Addon.LOCALIZATION_COMPANION_HINT_TEXT
-    or "Tip: For non-English translations, install the optional addon 'LariasWeeklyChecklist: Localization'."
+    or L.LOCALIZATION_COMPANION_HINT_TEXT
 
 function Addon:IsLocalizationCompanionLoaded()
     if type(C_AddOns) == "table" and type(C_AddOns.IsAddOnLoaded) == "function" then
@@ -294,7 +294,7 @@ local function SetupMinimapIcon()
 
             if Addon.ShouldShowLocalizationCompanionHint and Addon:ShouldShowLocalizationCompanionHint() then
                 tooltip:AddLine(" ")
-                tooltip:AddLine(Addon.LOCALIZATION_COMPANION_HINT_TEXT, 0.9, 0.9, 0.9)
+                tooltip:AddLine(L.LOCALIZATION_COMPANION_HINT_TEXT or Addon.LOCALIZATION_COMPANION_HINT_TEXT, 0.9, 0.9, 0.9)
             end
         end,
     })
@@ -410,13 +410,35 @@ end
 -- Lightweight right-click context menu.  items = {{text=string, onClick=fn}, ...}
 -- Re-uses a single singleton popup panel so only one menu is open at a time.
 local _rcCtxPanel
+local _rcCtxBlocker
 local _rcCtxBtns = {}
+
+local function HideContextMenu()
+    if _rcCtxPanel then _rcCtxPanel:Hide() end
+    if _rcCtxBlocker then _rcCtxBlocker:Hide() end
+end
+
 function Addon:ShowContextMenu(anchor, items)
     if not (items and #items > 0) then return end
     if not _rcCtxPanel then
         _rcCtxPanel = Addon.Controls.NewPopupPanel("DIALOG", 0.10)
         _rcCtxPanel:SetWidth(180)
+        _rcCtxPanel:SetScript("OnHide", function()
+            if _rcCtxBlocker then _rcCtxBlocker:Hide() end
+        end)
     end
+    if not _rcCtxBlocker then
+        _rcCtxBlocker = CreateFrame("Button", nil, UIParent)
+        _rcCtxBlocker:SetAllPoints(UIParent)
+        _rcCtxBlocker:SetFrameStrata("DIALOG")
+        _rcCtxBlocker:EnableMouse(true)
+        _rcCtxBlocker:RegisterForClicks("AnyUp")
+        _rcCtxBlocker:SetScript("OnClick", HideContextMenu)
+    end
+    local panelLevel = math.max(1, _rcCtxPanel:GetFrameLevel() or 1)
+    _rcCtxPanel:SetFrameLevel(panelLevel)
+    _rcCtxBlocker:SetFrameLevel(panelLevel - 1)
+    _rcCtxBlocker:Show()
     for _, b in ipairs(_rcCtxBtns) do b:Hide() end
     _rcCtxBtns = {}
     local ROW_H = 22
@@ -433,7 +455,7 @@ function Addon:ShowContextMenu(anchor, items)
         end
         local _cb = item.onClick
         btn:SetScript("OnClick", function()
-            _rcCtxPanel:Hide()
+            HideContextMenu()
             if _cb then _cb() end
         end)
         btn:Show()
@@ -875,6 +897,69 @@ function Addon:ApplyTheme(frameObj)
     frameObj:SetBackdropBorderColor(Addon.THEME.border.r, Addon.THEME.border.g, Addon.THEME.border.b, borderA)
 end
 
+function Addon:EnsureWindowSurface(frameObj)
+    if not (frameObj and frameObj.CreateTexture) then return nil end
+    local bg = frameObj._lariaBgTex
+    if not bg then
+        bg = frameObj:CreateTexture(nil, "BORDER", nil, -8)
+        bg:SetAllPoints(frameObj)
+        frameObj._lariaBgTex = bg
+    end
+    return bg
+end
+
+function Addon:ApplyWindowSurface(frameObj, opts)
+    if not frameObj then return end
+    opts = opts or frameObj._lariasWindowSurfaceOpts or {}
+    frameObj._lariasWindowSurfaceOpts = opts
+
+    self:ApplyTheme(frameObj)
+
+    local bg = self.THEME and self.THEME.bg
+    if not bg then return end
+
+    local alpha
+    if opts.opacityMode == "opaque" then
+        alpha = 1.0
+    elseif self.GetUIOpacityAlpha then
+        alpha = self:GetUIOpacityAlpha()
+    else
+        alpha = math.max(0, math.min(1.0, ((tonumber(bg.a) or 1.0))))
+    end
+
+    local bgTex = self:EnsureWindowSurface(frameObj)
+    if bgTex then
+        bgTex:SetColorTexture(bg.r, bg.g, bg.b, 1)
+        bgTex:SetAlpha(alpha)
+        if frameObj.SetBackdropColor then
+            frameObj:SetBackdropColor(0, 0, 0, 0)
+        end
+    elseif frameObj.SetBackdropColor then
+        frameObj:SetBackdropColor(bg.r, bg.g, bg.b, alpha)
+    end
+
+    if opts.borderStyle == "popup" then
+        self:ApplyPopupBorder(frameObj)
+    end
+end
+
+function Addon:RegisterWindowSurface(frameObj, opts)
+    if not frameObj then return end
+    self._windowSurfaceRegistry = self._windowSurfaceRegistry or {}
+    self._windowSurfaceRegistry[frameObj] = opts or frameObj._lariasWindowSurfaceOpts or {}
+    self:ApplyWindowSurface(frameObj, self._windowSurfaceRegistry[frameObj])
+end
+
+function Addon:RefreshWindowSurfaces()
+    local reg = self._windowSurfaceRegistry
+    if not reg then return end
+    for frameObj, opts in pairs(reg) do
+        if frameObj then
+            self:ApplyWindowSurface(frameObj, opts)
+        end
+    end
+end
+
 function Addon:ApplyPopupBorder(frameObj)
     if not frameObj or not frameObj.SetBackdropBorderColor then return end
     local bdr = Addon.THEME and Addon.THEME.border
@@ -885,12 +970,7 @@ end
 
 function Addon:ApplyOpaquePopupTheme(frameObj)
     if not frameObj then return end
-    self:ApplyTheme(frameObj)
-    local bg = Addon.THEME and Addon.THEME.bg
-    if bg and frameObj.SetBackdropColor then
-        frameObj:SetBackdropColor(bg.r, bg.g, bg.b, 1.0)
-    end
-    self:ApplyPopupBorder(frameObj)
+    self:RegisterWindowSurface(frameObj, { opacityMode = "opaque", borderStyle = "popup" })
 end
 
 function Addon:ApplyWarningPanelTheme(frameObj, opts)
@@ -939,7 +1019,7 @@ function Addon:ApplyWarningPanelTheme(frameObj, opts)
         frameObj._lariasWarnTitle = title
     end
     if frameObj._lariasWarnTitle then
-        frameObj._lariasWarnTitle:SetText(opts.title or "Warning")
+        frameObj._lariasWarnTitle:SetText(opts.title or L.WARNING_PANEL_TITLE or "Warning")
         frameObj._lariasWarnTitle:SetTextColor(hdr.r, hdr.g, hdr.b, 1)
     end
 
@@ -986,14 +1066,7 @@ end
 -- Hardcoded defaults here must match the initial values in CONSTANTS.theme.
 --- Pushes new backdrop/border colors into all open themed frames.
 local function ApplyThemeBackdrops(self)
-    if self._mainFrame then
-        self:ApplyTheme(self._mainFrame)
-        if self._mainFrame._lariaBgTex then
-            local bg = self.THEME.bg
-            self._mainFrame._lariaBgTex:SetColorTexture(bg.r, bg.g, bg.b, 1)
-        end
-    end
-    if self._trackingFrame then self:ApplyTheme(self._trackingFrame) end
+    self:RefreshWindowSurfaces()
     -- Alt summary: both inline and standalone use the theme bg at uiOpacityPct alpha.
     -- Standalone also refreshes its title strip; inline hides the title strip.
     local _asf = self._altsSummaryFrame
@@ -1016,7 +1089,9 @@ local function ApplyThemeBackdrops(self)
         if not _asf._inline then
             local h = self.THEME.header
             local vs = self.VISUAL_STYLE or {}
-            if _asf._altsTitleBgTex then _asf._altsTitleBgTex:SetColorTexture(h.r, h.g, h.b, vs.sectionBandA or 0.09) end
+            if _asf._altsTitleBgTex then
+                _asf._altsTitleBgTex:SetColorTexture(h.r, h.g, h.b, (vs.sectionBandA or 0.09) * bgA)
+            end
             if _asf._altsTitleFS    then _asf._altsTitleFS:SetTextColor(h.r, h.g, h.b, 1)          end
         end
     end
@@ -1941,6 +2016,9 @@ local function OnCheckboxClick(selfBtn)
     if Addon.UpdateCompletionEasterEgg then
         Addon:UpdateCompletionEasterEgg(database)
     end
+    if Addon.UpdateRaidBonusRollReminder then
+        Addon:UpdateRaidBonusRollReminder()
+    end
 end
 
 -- ── Guide-link helpers ──────────────────────────────────────────────────────
@@ -2556,21 +2634,7 @@ function Addon:CreateFrame()
     -- the protected SetPropagateKeyboardInput (which triggers ADDON_ACTION_BLOCKED).
     tinsert(UISpecialFrames, "LariasWeeklyChecklistFrame")
 
-    self:ApplyTheme(frame)
-    -- Replace the backdrop fill with a dedicated texture so opacity changes only
-    -- affect the background, not child widgets. The backdrop edge/border is kept.
-    do
-        -- Use BORDER layer (above BACKGROUND) so external UI elements don't bleed
-        -- between the bg texture and the frame content when dragging.
-        local bg = frame:CreateTexture(nil, "BORDER", nil, -8)
-        bg:SetAllPoints(frame)
-        bg:SetColorTexture(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, 1)
-        frame._lariaBgTex = bg
-        -- Suppress the backdrop bgFile fill; use our texture instead.
-        if frame.SetBackdropColor then
-            frame:SetBackdropColor(0, 0, 0, 0)
-        end
-    end
+    self:RegisterWindowSurface(frame, { opacityMode = "ui", borderStyle = "panel" })
     -- Header: close/gear/change-week/ilvl-ref/char-picker buttons + week-picker popup.
     -- Defined in features/header/LariasWeeklyChecklist_Header.lua.
     self:CreateHeader(frame)

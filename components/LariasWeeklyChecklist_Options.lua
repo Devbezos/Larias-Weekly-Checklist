@@ -169,6 +169,17 @@ Addon.OptionsPane.WARNING_ROWS = {
         end,
     },
     {
+        field    = "cbDisableRaidBonusRollReminder",
+        labelKey = "OPTIONS_DISABLE_RAID_BONUS_ROLL_REMINDER", default = "Hide Raid Bonus Roll Reminder",
+        tipKey   = "OPTIONS_TOOLTIP_DISABLE_RAID_BONUS_ROLL_REMINDER",
+        getVal   = function(d) return d.raidBonusRollReminderDisabled and true or false end,
+        onChange = function(v)
+            Addon:EnsurePrefs().raidBonusRollReminderDisabled = v or nil
+            _applyAll()
+            if Addon.UpdateRaidBonusRollReminder then Addon:UpdateRaidBonusRollReminder() end
+        end,
+    },
+    {
         field    = "cbDisableCrestConvert",
         labelKey = "OPTIONS_DISABLE_CREST_CONVERT", default = "Hide Crest Conversion Panel",
         tipKey   = nil,
@@ -403,17 +414,17 @@ function Addon.OptionsPane.BuildAppearance(parent, opts)
     opacFrame:SetSize(SLIDER_W, SROW_H)
     opacFrame:EnableMouse(true)
     refs.opacSync = Addon:CreateSliderWidget(opacFrame, {
-        minV       = 10, maxV = 100, stepV = 5,
+        minV       = 50, maxV = 100, stepV = 5,
         getVal     = function()
             local gdb = Addon.db and Addon.db.global
-            return (gdb and tonumber(gdb.uiOpacityPct)) or 65
+            return math.max(50, (gdb and tonumber(gdb.uiOpacityPct)) or 65)
         end,
         applyFn    = function(pct)
             local gdb = Addon.db and Addon.db.global
-            if gdb then gdb.uiOpacityPct = pct end
+            if gdb then gdb.uiOpacityPct = math.max(50, pct) end
             if Addon.ApplyOpacity then Addon:ApplyOpacity() end
         end,
-        minLabel   = (Addon.L or {}).UI_OPACITY_MIN_LABEL or "10%",
+        minLabel   = (Addon.L or {}).UI_OPACITY_MIN_LABEL or "50%",
         maxLabel   = (Addon.L or {}).UI_OPACITY_MAX_LABEL or "100%",
         fmtFn      = function(v) return math.floor(v + 0.5) .. "%" end,
         titleLabel = (Addon.L or {}).UI_OPACITY_LABEL     or "Opacity",

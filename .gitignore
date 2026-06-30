@@ -10,3 +10,4 @@ lib/
 .gitattributes
 data/spreadsheet.csv
 LLM.md
+codex.md
