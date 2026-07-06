@@ -103,13 +103,93 @@ local _layout      = nil
 local _cachedRows  = nil
 local _rowsDirty   = true
 local _panelDirty  = true
+local _summaryRefreshQueued = false
 local _gearPopupFrame   = nil   -- lazily-created gear popup; one shared instance
 local _gearClickCatcher = nil   -- full-screen dismiss layer shown behind the popup
+local _rowCurrencyMetaCache = {}
+local _rowItemMetaCache = {}
 -- Convenience alias: snapshot type-tag strings (defined in Currency.lua, published on Addon).
 -- AltsSummary reads this rather than repeating magic strings.
 local ST  -- assigned in PopulateSummary after Currency.lua has loaded
 local PopulateSummary  -- forward declaration
 local ShowGearPopup    -- forward declaration
+
+local function GetCachedCurrencyRowMeta(currencyID, fallbackLabel)
+    local id = tonumber(currencyID)
+    if not id then
+        return fallbackLabel, nil, nil, nil, nil
+    end
+
+    local cached = _rowCurrencyMetaCache[id]
+    if cached then
+        return cached.name or fallbackLabel, cached.icon, cached.cr, cached.cg, cached.cb
+    end
+
+    local name = GetCurrencyName(id) or fallbackLabel
+    local icon = GetCurrencyIcon(id)
+    local cr, cg, cb = Addon:GetCurrencyQualityColorRGB(id)
+    _rowCurrencyMetaCache[id] = {
+        name = name,
+        icon = icon,
+        cr = cr,
+        cg = cg,
+        cb = cb,
+    }
+    return name, icon, cr, cg, cb
+end
+
+local function GetCachedItemRowMeta(itemID)
+    local id = tonumber(itemID)
+    if not id then
+        return nil, nil, nil, nil, nil
+    end
+
+    local cached = _rowItemMetaCache[id]
+    if cached and cached.name and cached.icon then
+        return cached.name, cached.icon, cached.cr, cached.cg, cached.cb
+    end
+
+    local name = GetItemName(id)
+    local icon
+    if GetItemInfo then
+        _, _, _, _, _, _, _, _, _, icon = GetItemInfo(id)
+    end
+    if not icon and C_Item and C_Item.GetItemIconByID then
+        icon = C_Item.GetItemIconByID(id)
+    end
+    local cr, cg, cb = GetItemLabelColorRGB(id)
+
+    if name or icon then
+        _rowItemMetaCache[id] = {
+            name = name,
+            icon = icon,
+            cr = cr,
+            cg = cg,
+            cb = cb,
+        }
+    end
+
+    return name, icon, cr, cg, cb
+end
+
+local function ScheduleSummaryRefresh()
+    if _summaryRefreshQueued then return end
+    if not (altSummaryFrame and altSummaryFrame.IsShown and altSummaryFrame:IsShown()) then return end
+
+    _summaryRefreshQueued = true
+    local function run()
+        _summaryRefreshQueued = false
+        if altSummaryFrame and altSummaryFrame.IsShown and altSummaryFrame:IsShown() then
+            PopulateSummary(altSummaryFrame)
+        end
+    end
+
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0.05, run)
+    else
+        run()
+    end
+end
 
 -- ── Gear popup ───────────────────────────────────────────────────────────────
 -- Shows a small frame listing ilvl per gear slot for a character.
@@ -604,35 +684,30 @@ local function BuildRowDefs(tracking, LAYOUT, chars)
         local name, cr, cg, cb = CrestTierInfo(i)
         local crestID = tracking and tracking.crestCurrencyIDs and tracking.crestCurrencyIDs[i]
         if not Addon:IsCurrencyHidden(crestID) then
+            local _, iconID = GetCachedCurrencyRowMeta(crestID, name)
             addRow("crest", name, { crestIdx = i, cr = cr, cg = cg, cb = cb,
-                                    iconID = GetCurrencyIcon(crestID), currencyID = crestID })
+                                    iconID = iconID, currencyID = crestID })
         end
     end
 
     local _catID = tracking and tracking.catalystCurrencyID
     if not Addon:IsCurrencyHidden(_catID) then
-        local _cr, _cg, _cb = Addon:GetCurrencyQualityColorRGB(_catID)
-        local _catName = (_catID and GetCurrencyName(_catID)) or L.TRACKING_CATALYST_LABEL or "Catalyst"
-        addRow("catalyst", _catName, { iconID = GetCurrencyIcon(_catID),
-                                                 currencyID = _catID,
-                                                 cr = _cr, cg = _cg, cb = _cb })
+        local fallback = L.TRACKING_CATALYST_LABEL or "Catalyst"
+        local _catName, _icon, _cr, _cg, _cb = GetCachedCurrencyRowMeta(_catID, fallback)
+        addRow("catalyst", _catName, { iconID = _icon, currencyID = _catID, cr = _cr, cg = _cg, cb = _cb })
     end
     local _sprkID = tracking and tracking.sparkCurrencyID
     if not Addon:IsCurrencyHidden(_sprkID) then
-        local _cr, _cg, _cb = Addon:GetCurrencyQualityColorRGB(_sprkID)
-        local _sprkName = (_sprkID and GetCurrencyName(_sprkID)) or L.TRACKING_SPARKS_LABEL or "Sparks"
-        addRow("sparks",   _sprkName, { iconID = GetCurrencyIcon(_sprkID),
-                                                  currencyID = _sprkID,
-                                                  cr = _cr, cg = _cg, cb = _cb })
+        local fallback = L.TRACKING_SPARKS_LABEL or "Sparks"
+        local _sprkName, _icon, _cr, _cg, _cb = GetCachedCurrencyRowMeta(_sprkID, fallback)
+        addRow("sparks", _sprkName, { iconID = _icon, currencyID = _sprkID, cr = _cr, cg = _cg, cb = _cb })
     end
     for mi, mID in ipairs(LAYOUT.miscIDs) do
-        if not Addon:IsCurrencyHidden(tonumber(mID)) then
-            local info = C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo
-                         and C_CurrencyInfo.GetCurrencyInfo(tonumber(mID))
-            local _cr, _cg, _cb = Addon:GetCurrencyQualityColorRGB(tonumber(mID))
-            addRow("misc", (info and info.name) or ((L.ALT_SUMMARY_MISC_CURRENCY_FMT or "Currency %d"):format(mID)),
-                   { miscIdx = mi, miscID = mID, iconID = GetCurrencyIcon(mID),
-                     cr = _cr, cg = _cg, cb = _cb })
+        local mIDNum = tonumber(mID)
+        if not Addon:IsCurrencyHidden(mIDNum) then
+            local fallback = (L.ALT_SUMMARY_MISC_CURRENCY_FMT or "Currency %d"):format(mID)
+            local name, iconID, _cr, _cg, _cb = GetCachedCurrencyRowMeta(mIDNum, fallback)
+            addRow("misc", name, { miscIdx = mi, miscID = mID, iconID = iconID, cr = _cr, cg = _cg, cb = _cb })
         end
     end
 
@@ -648,9 +723,7 @@ local function BuildRowDefs(tracking, LAYOUT, chars)
         local icon
         local qr, qg, qb
         if iID > 0 then
-            local _, _, _, _, _, _, _, _, _, tex = GetItemInfo(iID)
-            if tex then icon = tex end
-            qr, qg, qb = GetItemLabelColorRGB(iID)
+            _, icon, qr, qg, qb = GetCachedItemRowMeta(iID)
         end
         addRow("quest", L[labelKey] or fallback, { questKey = key, itemID = iID > 0 and iID or nil, iconID = icon, cr = qr, cg = qg, cb = qb })
     end
@@ -676,15 +749,7 @@ local function BuildRowDefs(tracking, LAYOUT, chars)
                 addSec(L.ALT_SUMMARY_SECTION_UPGRADE_COST or "Upgrade Cost", nil)
                 addedUpgradeRows = true
             end
-            local _, _, _, _, _, _, _, _, _, combinedTex = GetItemInfo and GetItemInfo(268552) or nil
-            if not combinedTex and C_Item and C_Item.GetItemIconByID then
-                combinedTex = C_Item.GetItemIconByID(268552)
-            end
-            local combinedName = GetItemInfo and select(1, GetItemInfo(268552))
-            local wr, wg, wb = nil, nil, nil
-            if Addon.GetItemQualityColorRGB then
-                wr, wg, wb = Addon:GetItemQualityColorRGB(268552)
-            end
+            local combinedName, combinedTex, wr, wg, wb = GetCachedItemRowMeta(268552)
             addRow("weapupg", combinedName or (L.TRACKING_UPGRADE_SIGIL or "Upgrade Sigil"), {
                 itemID = 268552,
                 iconID = combinedTex,
@@ -1971,17 +2036,17 @@ function Addon:RefreshAltsSummary()
     if altSummaryFrame and altSummaryFrame.IsShown and altSummaryFrame:IsShown() then
         _rowsDirty = true  -- currency/GV hidden state may have changed
         _panelDirty = true
-        PopulateSummary(altSummaryFrame)
+        ScheduleSummaryRefresh()
     else
         _rowsDirty = true
         _panelDirty = true
     end
 end
 
-function Addon:MarkAltsSummaryDirty()
-    _rowsDirty = true
-    _panelDirty = true
-    if altSummaryFrame and altSummaryFrame.IsShown and altSummaryFrame:IsShown() then
-        PopulateSummary(altSummaryFrame)
+function Addon:MarkAltsSummaryDirty(structureChanged)
+    if structureChanged then
+        _rowsDirty = true
     end
+    _panelDirty = true
+    ScheduleSummaryRefresh()
 end

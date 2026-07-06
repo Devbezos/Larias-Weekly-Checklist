@@ -29,15 +29,10 @@ local function PruneInvalidCharacterKeys(self)
     local currentKey = self.GetCurrentProfileKey and self:GetCurrentProfileKey() or nil
     local removedAny = false
 
-    local function ShouldKeep(charKey)
-        if charKey == currentKey then return true end
-        return IsCharacterProfileKey(charKey)
-    end
-
     local function PruneMap(map)
         if type(map) ~= "table" then return end
         for charKey in pairs(map) do
-            if not ShouldKeep(charKey) then
+            if charKey ~= currentKey and not IsCharacterProfileKey(charKey) then
                 map[charKey] = nil
                 removedAny = true
             end
@@ -45,9 +40,6 @@ local function PruneInvalidCharacterKeys(self)
     end
 
     local gdb = db.global
-    local sv = db.sv
-    PruneMap(sv and sv.profileKeys)
-    PruneMap(gdb and gdb.chars)
     PruneMap(gdb and gdb.charClasses)
     PruneMap(gdb and gdb.charLevels)
     PruneMap(gdb and gdb.hiddenChars)
@@ -80,7 +72,7 @@ function Addon:GetCharProfileKeys()
 
     if profileKeys then
         for charKey in pairs(profileKeys) do
-            if not seen[charKey] then
+            if IsCharacterProfileKey(charKey) and not seen[charKey] then
                 seen[charKey] = true
                 tinsert(keys, charKey)
             end
@@ -90,7 +82,7 @@ function Addon:GetCharProfileKeys()
     -- Also include any chars that exist in global.chars but not in sv.profileKeys.
     if chars then
         for charKey in pairs(chars) do
-            if not seen[charKey] then
+            if IsCharacterProfileKey(charKey) and not seen[charKey] then
                 seen[charKey] = true
                 tinsert(keys, charKey)
             end

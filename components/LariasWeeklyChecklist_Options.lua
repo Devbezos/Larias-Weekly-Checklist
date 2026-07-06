@@ -471,6 +471,13 @@ function Addon.OptionsPane.BuildAppearance(parent, opts)
             frFR = "Français",  itIT = "Italiano", koKR = "한국어",
             ptBR = "Português", ruRU = "Русский",  trTR = "Türkçe",
         }
+        LOCALE_NATIVE.esES = "Español"
+        LOCALE_NATIVE.esMX = "Español"
+        LOCALE_NATIVE.frFR = "Français"
+        LOCALE_NATIVE.koKR = "한국어"
+        LOCALE_NATIVE.ptBR = "Português"
+        LOCALE_NATIVE.ruRU = "Русский"
+        LOCALE_NATIVE.trTR = "Türkçe"
         local langDivY    = swatchStartY + #Addon.THEME_COLOR_DEFS * SWATCH_RH + 8
         local langDivider = Addon.Controls.NewDivider(parent, -langDivY, pad, pad)
         langDivider:Hide()

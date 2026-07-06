@@ -9,7 +9,7 @@ local Addon = _G[addonName]
 if not Addon then return end
 
 local type, tostring = type, tostring
-local pairs = pairs
+local pairs, next = pairs, next
 local table_sort = table.sort
 
 -- Default values applied to each character's data block on first access.
@@ -18,6 +18,77 @@ local table_sort = table.sort
 local CHAR_DEFAULTS = {
     startAtSectionId = "",
 }
+
+local function HasLegacyProfilePayload(profile)
+    if type(profile) ~= "table" then return false end
+    if type(profile.checked) == "table" and next(profile.checked) then return true end
+    if type(profile.collapsedSections) == "table" and next(profile.collapsedSections) then return true end
+    if type(profile.trackingSnapshot) == "table" and next(profile.trackingSnapshot) then return true end
+    if type(profile.startAtSectionId) == "string" and profile.startAtSectionId ~= "" then return true end
+    for _, key in ipairs({
+        "hideCompletedSections", "showGreatVault", "showCurrency",
+        "showChangeWeekBtn", "showIlvlRefBtn", "debug",
+    }) do
+        if profile[key] ~= nil then return true end
+    end
+    return false
+end
+
+local function MigrateProfileDataToGlobalChars(self)
+    if not (self and self.db and self.db.global) then return end
+
+    local ownKey = self:GetCurrentProfileKey()
+    if ownKey == "" then return end
+
+    local chars = self.db.global.chars
+    if type(chars) ~= "table" then return end
+
+    chars[ownKey] = chars[ownKey] or {}
+    local cdb = chars[ownKey]
+    if cdb._migrated then return end
+    cdb._migrated = true
+
+    local oldProf = self.db and self.db.profile
+    if not HasLegacyProfilePayload(oldProf) then return end
+
+    local function shallowCopy(src, dest)
+        if type(src) ~= "table" then return end
+        for k, v in pairs(src) do dest[k] = v end
+    end
+
+    if type(oldProf.checked) == "table" and next(oldProf.checked) then
+        cdb.checked = {}
+        shallowCopy(oldProf.checked, cdb.checked)
+    end
+    if type(oldProf.collapsedSections) == "table" and next(oldProf.collapsedSections) then
+        cdb.collapsedSections = {}
+        shallowCopy(oldProf.collapsedSections, cdb.collapsedSections)
+    end
+    if type(oldProf.startAtSectionId) == "string" and oldProf.startAtSectionId ~= "" then
+        cdb.startAtSectionId = oldProf.startAtSectionId
+    end
+    if type(oldProf.trackingSnapshot) == "table" and next(oldProf.trackingSnapshot) then
+        cdb.trackingSnapshot = {}
+        shallowCopy(oldProf.trackingSnapshot, cdb.trackingSnapshot)
+    end
+    for _, key in ipairs({
+        "hideCompletedSections", "showGreatVault", "showCurrency",
+        "showChangeWeekBtn", "showIlvlRefBtn", "debug",
+    }) do
+        if oldProf[key] ~= nil then cdb[key] = oldProf[key] end
+    end
+
+    oldProf.checked = nil
+    oldProf.collapsedSections = nil
+    oldProf.startAtSectionId = nil
+    oldProf.trackingSnapshot = nil
+    oldProf.hideCompletedSections = nil
+    oldProf.showGreatVault = nil
+    oldProf.showCurrency = nil
+    oldProf.showChangeWeekBtn = nil
+    oldProf.showIlvlRefBtn = nil
+    oldProf.debug = nil
+end
 
 function Addon:SetupAddonDB()
     if self.db then return end
@@ -60,6 +131,7 @@ function Addon:SetupAddonDB()
     -- AceDB still gives each character a profile slot for profileKeys
     -- enumeration, but all actual addon data lives in global.chars.
     self.db = LibStub("AceDB-3.0"):New(addonName .. "DB", defaults)
+    MigrateProfileDataToGlobalChars(self)
 end
 
 local function RefreshAfterHiddenChange(self)

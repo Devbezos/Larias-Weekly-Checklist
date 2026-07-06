@@ -216,6 +216,21 @@ local function BuildPanel()
         { code = "trTR", name = "Türkçe"         },
     }
 
+    local localeNameFixups = {
+        esES = "Español (EU)",
+        esMX = "Español (MX)",
+        frFR = "Français",
+        koKR = "한국어",
+        ptBR = "Português (BR)",
+        ruRU = "Русский",
+        trTR = "Türkçe",
+    }
+    for _, opt in ipairs(LOCALE_OPTIONS) do
+        if localeNameFixups[opt.code] then
+            opt.name = localeNameFixups[opt.code]
+        end
+    end
+
     local function GetLocaleFriendlyName(code)
         for _, opt in ipairs(LOCALE_OPTIONS) do
             if opt.code == code then return opt.name end

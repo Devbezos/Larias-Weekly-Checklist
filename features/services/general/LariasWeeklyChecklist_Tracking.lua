@@ -119,7 +119,7 @@ function Addon:SaveTrackingSnapshot(db)
     end
     self:BuildTrackingSnapshot(snap)
     snap.updatedAt = time()
-    if self.MarkAltsSummaryDirty then self:MarkAltsSummaryDirty() end
+    if self.MarkAltsSummaryDirty then self:MarkAltsSummaryDirty(false) end
     return snap
 end
 
