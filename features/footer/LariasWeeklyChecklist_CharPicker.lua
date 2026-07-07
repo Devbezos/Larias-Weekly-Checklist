@@ -43,6 +43,7 @@ local function PruneInvalidCharacterKeys(self)
     PruneMap(gdb and gdb.charClasses)
     PruneMap(gdb and gdb.charLevels)
     PruneMap(gdb and gdb.hiddenChars)
+    PruneMap(gdb and gdb.trackedLootChars)
 
     if removedAny then
         self._charProfileKeysCache = nil

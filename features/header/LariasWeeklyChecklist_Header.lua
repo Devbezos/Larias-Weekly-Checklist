@@ -356,15 +356,27 @@ function Addon:CreateHeader(frame)
         if Addon._inLayoutHeaderButtons then return end
         Addon._inLayoutHeaderButtons = true
         local dbLocal = Addon:EnsurePrefs()
+        local db0     = Addon:EnsureDB()
         local showCW  = false  -- Change Week button removed
         local showIR  = dbLocal.showIlvlRefBtn    ~= false
+        local allComplete = true
+
+        do
+            local order = Addon._order or {}
+            for i = 1, #order do
+                if Addon._IsSectionCompleteById and
+                   not Addon._IsSectionCompleteById(order[i], db0) then
+                    allComplete = false
+                    break
+                end
+            end
+        end
 
         -- changeWeekBtn: top-left of the frame.
         if showCW then
             local btn = EnsureChangeWeekBtn_()
             local cwWeekLabel
             do
-                local db0 = Addon:EnsureDB()
                 local storedStart = tostring(db0.startAtSectionId or "")
                 local currentId
                 if storedStart ~= "" then
@@ -380,7 +392,6 @@ function Addon:CreateHeader(frame)
                 end
                 if not currentId then
                     local order = Addon._order or {}
-                    local allComplete = true
                     for i = 1, #order do
                         if Addon._IsSectionCompleteById and
                            not Addon._IsSectionCompleteById(order[i], db0) then
@@ -448,7 +459,7 @@ function Addon:CreateHeader(frame)
 
         -- charPickerBtn: top-left of the frame (where Change Week was).
         -- Defined by InitCharPickerUI in LariasWeeklyChecklist_CharPicker.lua.
-        local showCP = dbLocal.showCharPickerBtn ~= false
+        local showCP = (dbLocal.showAltSummaryBtn ~= false) and not allComplete
         local cp = Addon.CharPicker
         if cp and cp.EnsureBtn then
             local cpBtn = cp.EnsureBtn()
@@ -457,23 +468,33 @@ function Addon:CreateHeader(frame)
             cpBtn:SetPoint("TOPLEFT", frame, "TOPLEFT", cwPadX, -(Addon.UI.padOuterTop or 10) - 2)
             if showCP then
                 cpBtn:RegisterForClicks("AnyUp")
+                cpBtn:SetText(L.ALT_SUMMARY_TITLE or "Alt Summary")
+                local cpText = Addon.Controls.GetButtonFontString and Addon.Controls.GetButtonFontString(cpBtn)
+                if cpText then
+                    Addon.Controls.ApplyThemeTextColor(cpText)
+                end
+                cpBtn:SetScript("OnEnter", function(self_)
+                    Addon.AddonUtils.SetTooltip(self_, L.CHAR_PICKER_ALT_SUMMARY_TOOLTIP or "Opens an account-wide summary for all tracked characters.", "ANCHOR_BOTTOMLEFT")
+                end)
+                cpBtn:SetScript("OnLeave", Addon.AddonUtils.HideTooltip)
                 cpBtn:SetScript("OnClick", function(self_, button)
                     if button == "RightButton" then
                         Addon:ShowContextMenu(self_, {
-                            { text = L.CONTEXT_DISABLE_SWAP_PROFILE or "Disable Swap Profile", onClick = function()
+                            { text = L.OPTIONS_HIDE_ALT_SUMMARY or "Hide Alt Summary Button", onClick = function()
                                 local db = Addon:EnsurePrefs()
-                                db.showCharPickerBtn = false
+                                db.showAltSummaryBtn = false
                                 if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
                                 if Addon.SyncGearPopup       then Addon:SyncGearPopup()       end
                             end },
                         })
                         return
                     end
-                    if cp.OnClick then cp.OnClick() end
+                    if cp.Close then cp.Close() end
+                    if Addon.ToggleAltsSummary then Addon:ToggleAltsSummary(cpBtn) end
                 end)
-                if cp.UpdateLabel then cp.UpdateLabel() end
                 cpBtn:Show()
             else
+                if cp.Close then cp.Close() end
                 cpBtn:Hide()
             end
         end
@@ -494,7 +515,7 @@ function Addon:CreateHeader(frame)
 
         -- Enforce minimum frame width based on visible button footprint.
         local _insetX = (Addon.UI.padOuterX or 14) + (Addon.UI.sectionInsetX or 14)
-        local _leftW  = (Addon.UI.padOuterX or 14) + (showCW and (108 + 6) or 0)
+        local _leftW  = (Addon.UI.padOuterX or 14) + ((showCW or showCP) and (108 + 6) or 0)
         local _rightW = (Addon.UI.closeInset or 4) + 32 + 2 + 20
         if showIR then _rightW = _rightW + 4 + 140 end
         local _minW   = _leftW + 20 + _rightW

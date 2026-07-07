@@ -601,6 +601,13 @@ end
 local function BuildCharList(gdb, ownKey, allKeys, maxLvl)
     local th    = Addon.THEME.text
     local chars = {}
+    local orderMap = {}
+    do
+        local savedOrder = Addon.GetAltSummaryCharOrder and Addon:GetAltSummaryCharOrder() or {}
+        for i = 1, #savedOrder do
+            orderMap[savedOrder[i]] = i
+        end
+    end
     for _, charKey in ipairs(allKeys) do
         local isHidden   = gdb and gdb.hiddenChars and gdb.hiddenChars[charKey] and true or false
         local classToken = gdb and gdb.charClasses  and gdb.charClasses[charKey]
@@ -622,16 +629,39 @@ local function BuildCharList(gdb, ownKey, allKeys, maxLvl)
                 cr = cr, cg = cg, cb = cb,
                 alpha = isHidden and 0.45 or 1.0,
                 ilvl  = cdb and cdb.ilvl,
-
+                sortIdx = orderMap[charKey],
             }
         end
     end
-    -- Own character leftmost, then descending ilvl
+    -- Manual reordering wins when present; otherwise sort strictly by ilvl.
     table.sort(chars, function(a, b)
-        if a.isOwn ~= b.isOwn then return a.isOwn end
-        return (tonumber(a.ilvl) or 0) > (tonumber(b.ilvl) or 0)
+        if a.sortIdx ~= b.sortIdx then
+            if a.sortIdx == nil then return false end
+            if b.sortIdx == nil then return true end
+            return a.sortIdx < b.sortIdx
+        end
+        local aIlvl = tonumber(a.ilvl) or 0
+        local bIlvl = tonumber(b.ilvl) or 0
+        if aIlvl ~= bIlvl then
+            return aIlvl > bIlvl
+        end
+        return tostring(a.key) < tostring(b.key)
     end)
     return chars
+end
+
+local function HasHiddenSummaryChars(gdb, ownKey, allKeys, maxLvl)
+    for _, charKey in ipairs(allKeys or {}) do
+        local isHidden   = gdb and gdb.hiddenChars and gdb.hiddenChars[charKey] and true or false
+        local classToken = gdb and gdb.charClasses and gdb.charClasses[charKey]
+        local isOwn      = (charKey == ownKey) or (ownKey and charKey:lower() == ownKey:lower())
+        local charLevel  = gdb and gdb.charLevels and gdb.charLevels[charKey]
+        local isMaxLevel = isOwn or (charLevel and charLevel >= maxLvl)
+        if isHidden and not isOwn and isMaxLevel and classToken then
+            return true
+        end
+    end
+    return false
 end
 
 -- upgrade vendor, which causes every item to appear embellished (nLevels = 0 →
@@ -652,6 +682,14 @@ local function CalcWeaponUpgradeNeed(snap)
         end
     end
     return sawGear and count or nil
+end
+
+local function FormatSigilAmount(value)
+    value = tonumber(value) or 0
+    if value == math.floor(value) then
+        return tostring(math.floor(value))
+    end
+    return ("%.1f"):format(value)
 end
 
 -- Compute the total crest cost to max all items of crest tier `tierIdx`,
@@ -1065,7 +1103,7 @@ local function RenderWeapUpgCell(cell, row, sd, noSnap, alpha, th)
         cell:SetScript("OnEnter", nil)
     else
         local displayTotal = (total >= need) and need or total
-        local str = ("%.1f"):format(displayTotal) .. "/" .. need
+        local str = FormatSigilAmount(displayTotal) .. "/" .. need
         if     total >= need       then cell._fs:SetTextColor(0.3,  1.0,  0.3,  alpha)
         elseif total >= need * 0.5 then cell._fs:SetTextColor(1.0,  0.82, 0.0,  alpha)
         else                            cell._fs:SetTextColor(th.r, th.g, th.b, alpha)
@@ -1077,7 +1115,8 @@ local function RenderWeapUpgCell(cell, row, sd, noSnap, alpha, th)
         GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
         GameTooltip:SetText(row.label or (L.TRACKING_UPGRADE_SIGIL or "Upgrade Sigil"), 1, 0.82, 0)
         if _need > 0 then
-            GameTooltip:AddLine((L.ALT_SUMMARY_SIGIL_NEEDED_FMT or "%.1f / %d needed"):format(_total, _need), 1, 1, 1)
+            local neededFmt = L.ALT_SUMMARY_SIGIL_NEEDED_FMT or "%s / %d needed"
+            GameTooltip:AddLine(neededFmt:format(FormatSigilAmount(_total), _need), 1, 1, 1)
             GameTooltip:AddLine((L.ALT_SUMMARY_SIGIL_BREAKDOWN_FMT or "%d sigils + %d shards"):format(_combined, _shards), 0.7, 0.7, 0.7)
         else
             GameTooltip:AddLine(L.ALT_SUMMARY_NO_SLOTS_NEED_UPGRADING or "No slots need upgrading", 0.5, 1.0, 0.5)
@@ -1415,6 +1454,10 @@ PopulateSummary = function(panel)
     local brd      = Addon.THEME.border
     local header   = Addon.THEME.header
     local maxLvl   = (GetMaxPlayerLevel and GetMaxPlayerLevel()) or 80
+    local hasHiddenChars = HasHiddenSummaryChars(gdb, ownKey, allKeys, maxLvl)
+    if not hasHiddenChars then
+        _showHidden = false
+    end
 
     -- ── Collect visible characters ────────────────────────────────────────────
     local chars    = BuildCharList(gdb, ownKey, allKeys, maxLvl)
@@ -1785,14 +1828,24 @@ PopulateSummary = function(panel)
 
     local chk = panel._summaryChk
     if chk then
-        chk:ClearAllPoints()
-        chk:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD + 4, CONTENT_TOP - 4)
-        chk:SetSize(14, 14)
-        if chk._hit then
-            chk._hit:ClearAllPoints()
-            chk._hit:SetPoint("LEFT",  chk, "LEFT",  -2, 0)
-            chk._hit:SetPoint("RIGHT", chk, "RIGHT", 160, 0)
-            chk._hit:SetHeight(18)
+        if hasHiddenChars then
+            chk:ClearAllPoints()
+            chk:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD + 4, CONTENT_TOP - 4)
+            chk:SetSize(14, 14)
+            chk:SetChecked(_showHidden)
+            chk:Show()
+            if chk._label then chk._label:Show() end
+            if chk._hit then
+                chk._hit:ClearAllPoints()
+                chk._hit:SetPoint("LEFT",  chk, "LEFT",  -2, 0)
+                chk._hit:SetPoint("RIGHT", chk, "RIGHT", 160, 0)
+                chk._hit:SetHeight(18)
+                chk._hit:Show()
+            end
+        else
+            chk:Hide()
+            if chk._label then chk._label:Hide() end
+            if chk._hit then chk._hit:Hide() end
         end
     end
 
@@ -1878,6 +1931,7 @@ PopulateSummary = function(panel)
                 end
                 GameTooltip:AddLine(" ")
                 GameTooltip:AddLine(L.ALT_SUMMARY_LEFT_CLICK_GEAR or "Left-click to display gear", 0.5, 0.5, 0.5)
+                GameTooltip:AddLine(L.ALT_SUMMARY_ALT_LEFT_CLICK_REORDER or "Alt+Left-click to move this character to the front", 0.5, 0.5, 0.5)
                 if not _isOwn then
                     local actionText = _isHidden and (L.CHAR_PICKER_SHOW or "Show") or (L.CHAR_PICKER_HIDE or "Hide")
                     GameTooltip:AddLine((L.ALT_SUMMARY_RIGHT_CLICK_ACTION_FMT or "Right-click: %s"):format(actionText), 0.5, 0.5, 0.5)
@@ -1886,11 +1940,17 @@ PopulateSummary = function(panel)
             end)
             col.hdrHit:SetScript("OnClick", function(s_, button)
                 if button == "LeftButton" then
-                    if _gearPopupFrame and _gearPopupFrame:IsShown()
-                       and _gearPopupFrame._charKey == _ck then
-                        _gearPopupFrame:Hide()
+                    if IsAltKeyDown and IsAltKeyDown() then
+                        if Addon.SetAltSummaryCharOrderTop then
+                            Addon:SetAltSummaryCharOrderTop(_ck)
+                        end
                     else
-                        ShowGearPopup(s_, _ck, _name, _cr, _cg, _cb, _snap)
+                        if _gearPopupFrame and _gearPopupFrame:IsShown()
+                           and _gearPopupFrame._charKey == _ck then
+                            _gearPopupFrame:Hide()
+                        else
+                            ShowGearPopup(s_, _ck, _name, _cr, _cg, _cb, _snap)
+                        end
                     end
                 elseif button == "RightButton" and not _isOwn then
                     if Addon.HideContextMenu then

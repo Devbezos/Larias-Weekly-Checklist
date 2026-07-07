@@ -13,6 +13,46 @@ if not Addon then return end
 
 local LOCALE_REGISTRY_KEY = Addon.LOCALE_REGISTRY_KEY
 
+local TRACKED_ALT_LOOT_SECTION_ID = "larias_tracked_alt_loot"
+
+local function BuildTrackedAltLootSection(self)
+    if type(self.GetTrackedLootCharKeys) ~= "function" then return nil end
+
+    local L = self.L or {}
+    local trackedKeys = self:GetTrackedLootCharKeys()
+    if #trackedKeys == 0 then return nil end
+
+    local gdb = self.db and self.db.global
+    local items = {}
+
+    for _, profileKey in ipairs(trackedKeys) do
+        local cdb = gdb and gdb.chars and gdb.chars[profileKey]
+        local charName = (profileKey:match("^(.-)%s*%-") or profileKey):gsub("^%s+", ""):gsub("%s+$", "")
+        if charName == "" then charName = profileKey end
+        local ilvl = tonumber(cdb and cdb.ilvl) or 0
+
+        local text
+        if ilvl > 0 then
+            text = (L.TRACKED_ALT_LOOT_ITEM_ILVL_FMT or "Max loot on %s (ilvl %d)"):format(charName, math.floor(ilvl))
+        else
+            text = (L.TRACKED_ALT_LOOT_ITEM_FMT or "Max loot on %s"):format(charName)
+        end
+
+        items[#items + 1] = {
+            id = profileKey,
+            text = text,
+        }
+    end
+
+    if #items == 0 then return nil end
+
+    return {
+        id = TRACKED_ALT_LOOT_SECTION_ID,
+        title = L.TRACKED_ALT_LOOT_SECTION_TITLE or "Tracked Alt Loot",
+        items = items,
+    }
+end
+
 -- Return the checklist dataset for the current effective locale.
 -- Cached by locale code because the dataset is static per session.
 function Addon:GetListData()
@@ -23,21 +63,48 @@ function Addon:GetListData()
     local localeCode = self:GetEffectiveLocaleCode()
 
     if self._cachedListLocaleCode == localeCode and type(self._cachedListData) == "table" then
-        return self._cachedListData
+        local trackedSection = BuildTrackedAltLootSection(self)
+        if not trackedSection then
+            return self._cachedListData
+        end
+        local merged = {}
+        for i, section in ipairs(self._cachedListData) do
+            merged[i] = section
+        end
+        merged[#merged + 1] = trackedSection
+        return merged
     end
 
     local data = dataByLocale[localeCode]
     if type(data) == "table" then
         self._cachedListLocaleCode = localeCode
         self._cachedListData = data
-        return data
+        local trackedSection = BuildTrackedAltLootSection(self)
+        if not trackedSection then
+            return data
+        end
+        local merged = {}
+        for i, section in ipairs(data) do
+            merged[i] = section
+        end
+        merged[#merged + 1] = trackedSection
+        return merged
     end
 
     data = dataByLocale.enUS
     if type(data) == "table" then
         self._cachedListLocaleCode = "enUS"
         self._cachedListData = data
-        return data
+        local trackedSection = BuildTrackedAltLootSection(self)
+        if not trackedSection then
+            return data
+        end
+        local merged = {}
+        for i, section in ipairs(data) do
+            merged[i] = section
+        end
+        merged[#merged + 1] = trackedSection
+        return merged
     end
 
     return {}

@@ -111,6 +111,8 @@ function Addon:SetupAddonDB()
             charClasses   = {},  -- [profileKey] = classToken (e.g. "WARRIOR")
             charLevels    = {},  -- [profileKey] = player level at last login
             hiddenChars   = {},  -- [profileKey] = true
+            trackedLootChars = {}, -- [profileKey] = true
+            altSummaryCharOrder = {}, -- ordered profileKeys for manual Alt Summary priority
             -- Account-wide display preferences.
             hideCompletedSections = true,
             showGreatVault        = true,
@@ -142,6 +144,22 @@ local function RefreshAfterHiddenChange(self)
     if self.SyncGearPopup         then self:SyncGearPopup()         end
     if self._restoreHiddenFrame and self._restoreHiddenFrame:IsShown() then
         self:OpenRestoreHiddenCurrencies(nil)
+    end
+end
+
+local function RefreshAfterTrackedLootChange(self)
+    if self.RequestRefresh then self:RequestRefresh()
+    elseif self.Refresh then self:Refresh() end
+    if self.RefreshAltsSummary then self:RefreshAltsSummary() end
+end
+
+local function RefreshAfterAltSummaryOrderChange(self)
+    if self.RefreshAltsSummary then
+        self:RefreshAltsSummary()
+    elseif self.RequestRefresh then
+        self:RequestRefresh()
+    elseif self.Refresh then
+        self:Refresh()
     end
 end
 
@@ -266,6 +284,85 @@ function Addon:GetHiddenItemList()
     end
     table_sort(result, function(a, b) return a.name < b.name end)
     return result
+end
+
+function Addon:IsLootCharTracked(profileKey)
+    if not profileKey then return false end
+    local gdb = self.db and self.db.global
+    return gdb and gdb.trackedLootChars and gdb.trackedLootChars[profileKey] == true or false
+end
+
+function Addon:SetLootCharTracked(profileKey, tracked)
+    if type(profileKey) ~= "string" or profileKey == "" then return end
+    local ownKey = self.GetCurrentProfileKey and self:GetCurrentProfileKey() or nil
+    if ownKey and profileKey:lower() == ownKey:lower() then return end
+    local gdb = self.db and self.db.global
+    if not gdb then return end
+    gdb.trackedLootChars = gdb.trackedLootChars or {}
+    gdb.trackedLootChars[profileKey] = tracked and true or nil
+    RefreshAfterTrackedLootChange(self)
+end
+
+function Addon:GetTrackedLootCharKeys()
+    local gdb = self.db and self.db.global
+    local tracked = gdb and gdb.trackedLootChars
+    if type(tracked) ~= "table" then return {} end
+
+    local ownKey = self.GetCurrentProfileKey and self:GetCurrentProfileKey() or nil
+    local keys = {}
+    for profileKey, enabled in pairs(tracked) do
+        if enabled == true and (not ownKey or profileKey:lower() ~= ownKey:lower()) then
+            keys[#keys + 1] = profileKey
+        end
+    end
+
+    table_sort(keys, function(a, b)
+        local aDb = gdb and gdb.chars and gdb.chars[a]
+        local bDb = gdb and gdb.chars and gdb.chars[b]
+        local aIlvl = tonumber(aDb and aDb.ilvl) or 0
+        local bIlvl = tonumber(bDb and bDb.ilvl) or 0
+        if aIlvl ~= bIlvl then return aIlvl > bIlvl end
+        return tostring(a) < tostring(b)
+    end)
+
+    return keys
+end
+
+function Addon:GetAltSummaryCharOrder()
+    local gdb = self.db and self.db.global
+    local order = gdb and gdb.altSummaryCharOrder
+    if type(order) ~= "table" then return {} end
+
+    local seen = {}
+    local result = {}
+    for i = 1, #order do
+        local key = order[i]
+        if type(key) == "string" and key ~= "" and not seen[key] then
+            seen[key] = true
+            result[#result + 1] = key
+        end
+    end
+    return result
+end
+
+function Addon:SetAltSummaryCharOrderTop(profileKey)
+    if type(profileKey) ~= "string" or profileKey == "" then return end
+    local gdb = self.db and self.db.global
+    if not gdb then return end
+
+    gdb.altSummaryCharOrder = gdb.altSummaryCharOrder or {}
+    local order = gdb.altSummaryCharOrder
+    local nextOrder = { profileKey }
+
+    for i = 1, #order do
+        local key = order[i]
+        if type(key) == "string" and key ~= "" and key ~= profileKey then
+            nextOrder[#nextOrder + 1] = key
+        end
+    end
+
+    gdb.altSummaryCharOrder = nextOrder
+    RefreshAfterAltSummaryOrderChange(self)
 end
 
 local GV_BLOCK_NAMES = { "Raid", "Dungeons", "World" }

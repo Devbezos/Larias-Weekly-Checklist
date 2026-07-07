@@ -182,6 +182,14 @@ local function FormatCurrencyProgressParts(currencyID)
     return held, 0
 end
 
+local function FormatSigilAmount(value)
+    value = tonumber(value) or 0
+    if value == math.floor(value) then
+        return tostring(math.floor(value))
+    end
+    return ("%.1f"):format(value)
+end
+
 -- Returns a cached table of static currency fields {name, iconFileID, quality}.
 -- Call this instead of GetCurrencyInfo when you only need data that never
 -- changes within a session.  FormatCurrencyProgressParts must still go direct
@@ -1031,10 +1039,10 @@ function Addon:GetCurrencyPanelRows()
         end
         local val
         if needCount > 0 then
-            local valStr = ("%.1f"):format(total) .. "/" .. needCount
+            local valStr = FormatSigilAmount(total) .. "/" .. needCount
             val = ColorWrap(ColorForXY(total, needCount), valStr)
         else
-            val = ColorWrap(COLORS.green, ("%.1f"):format(total))
+            val = ColorWrap(COLORS.green, FormatSigilAmount(total))
         end
         n = n + 1
         FillRow(n, lbl, val, iTex, nil, nil, nil, WEAP_UPG_COMBINED_ID)
@@ -1228,10 +1236,10 @@ function Addon:RenderCurrencySnapshotRow(row)
             lbl = ColorWrap(COLORS.gold, L.TRACKING_UPGRADE_SIGIL or "Upgrade Sigil")
         end
         if need > 0 then
-            local valStr = ("%.1f"):format(total) .. "/" .. need
+            local valStr = FormatSigilAmount(total) .. "/" .. need
             return lbl, ColorWrap(ColorForXY(total, need), valStr)
         end
-        return lbl, ColorWrap(COLORS.green, ("%.1f"):format(total))
+        return lbl, ColorWrap(COLORS.green, FormatSigilAmount(total))
     end
     return "", ""
 end

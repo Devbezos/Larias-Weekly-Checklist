@@ -191,6 +191,9 @@ local STRINGS = {
 	CHAR_PICKER_ALT_SUMMARY_TOOLTIP = "Opens an account-wide summary for all tracked characters.",
 	CHAR_PICKER_LEVEL_CLASS_FMT = "%s %d %s",
 	CHAR_PICKER_ITEM_LEVEL_FMT = "Item Level %d",
+	TRACKED_ALT_LOOT_SECTION_TITLE = "Tracked Alt Loot",
+	TRACKED_ALT_LOOT_ITEM_FMT = "Max loot on %s",
+	TRACKED_ALT_LOOT_ITEM_ILVL_FMT = "Max loot on %s (ilvl %d)",
 
 	-- Week picker
 	PICKER_HEADER_TOOLTIP       = "Click to change week",
@@ -299,6 +302,7 @@ local STRINGS = {
 	ALT_SUMMARY_NO_SNAPSHOT = "No snapshot data",
 	ALT_SUMMARY_CLICK_VIEW_GEAR = "Click to view gear",
 	ALT_SUMMARY_LEFT_CLICK_GEAR = "Left-click to display gear",
+	ALT_SUMMARY_ALT_LEFT_CLICK_REORDER = "Alt+Left-click to move this character to the front",
 	ALT_SUMMARY_RIGHT_CLICK_ACTION_FMT = "Right-click: %s",
 	ALT_SUMMARY_NO_GEAR_DATA = "No gear data",
 	ALT_SUMMARY_SNAPSHOT_PREDATES_RANK = "Snapshot predates rank capture.",
@@ -315,7 +319,7 @@ local STRINGS = {
 	ALT_SUMMARY_HELD_TRADEUP_FMT = "Held: %d  +  Trade-up: %d",
 	ALT_SUMMARY_LIMITED_CRAFTED_IGNORED = "(Embellished crafted - ignored)",
 	ALT_SUMMARY_NO_SLOTS_NEED_UPGRADING = "No slots need upgrading",
-	ALT_SUMMARY_SIGIL_NEEDED_FMT = "%.1f / %d needed",
+	ALT_SUMMARY_SIGIL_NEEDED_FMT = "%s / %d needed",
 	ALT_SUMMARY_SIGIL_BREAKDOWN_FMT = "%d sigils + %d shards",
 	ALT_SUMMARY_SLOTS_UNLOCKED_FMT = "Slots unlocked: %d/3",
 	ALT_SUMMARY_SLOT_ILVL_FMT = "Slot %d: %d ilvl",
