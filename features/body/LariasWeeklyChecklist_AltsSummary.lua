@@ -1647,7 +1647,8 @@ PopulateSummary = function(panel)
                 return
             end
             state.active = true
-            HideHover()
+            if panel._hoverRowTex then panel._hoverRowTex:Hide() end
+            if panel._hoverColTex then panel._hoverColTex:Hide() end
             OnCellLeave()
             ApplyDraggedColumnVisual(state)
         end
