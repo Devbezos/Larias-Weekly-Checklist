@@ -70,7 +70,10 @@ function Addon:CreateHeader(frame)
     frame._lariasCloseBtn = closeBtn
 
     -- ── Gear / settings button ────────────────────────────────────────────────
-    local gearBtn = C.NewIconButton(frame, "Interface\\Buttons\\UI-OptionsButton", nil, L.TAB_OPTIONS or "Options")
+    local gearBtn = C.NewIconButton(frame, "Interface\\Buttons\\UI-OptionsButton", nil, L.TAB_OPTIONS or "Options", {
+        useHeaderColorAtRest = true,
+        restAlpha = 1,
+    })
     gearBtn:SetPoint("RIGHT", closeBtn, "LEFT", -2, 0)
     gearBtn:SetScript("OnClick", function()
         if Addon.ToggleGearPopup then Addon:ToggleGearPopup(gearBtn, true) end
@@ -422,7 +425,6 @@ function Addon:CreateHeader(frame)
                     return
                 end
                 local p = EnsureHeaderPicker()
-                if p and p._lariasClosedAt and (GetTime() - p._lariasClosedAt) < 0.20 then p._lariasClosedAt = nil; return end
                 if p and p.IsShown and p:IsShown() then
                     p:Hide()
                     return

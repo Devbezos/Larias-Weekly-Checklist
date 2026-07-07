@@ -136,6 +136,8 @@ end
 
 local function RefreshAfterHiddenChange(self)
     if self.RequestTrackingUpdate then self:RequestTrackingUpdate() end
+    if self.RequestRefresh then self:RequestRefresh()
+    elseif self.Refresh then self:Refresh() end
     if self.RefreshAltsSummary    then self:RefreshAltsSummary()    end
     if self.SyncGearPopup         then self:SyncGearPopup()         end
     if self._restoreHiddenFrame and self._restoreHiddenFrame:IsShown() then

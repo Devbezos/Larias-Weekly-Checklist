@@ -32,6 +32,7 @@ Locales\enUS_Data.lua
 # Core
 constants\LariasWeeklyChecklist_Constants.lua
 LariasWeeklyChecklist.lua
+features\services\general\LariasWeeklyChecklist_DevMetadata.lua
 features\services\general\LariasWeeklyChecklist_Database.lua
 
 # Reusable UI components (must follow main file)

@@ -37,16 +37,8 @@ function C.NewPopupPanel(strata, fadeTime)
     catcher:SetFrameStrata(st)
     catcher:SetFrameLevel((p.GetFrameLevel and p:GetFrameLevel() or 200) - 1)
     catcher:EnableMouse(true)
-    -- Note: SetPropagateMouseClicks is protected and cannot be called by addons.
-    -- The _lariasClosedAt timestamp handles the toggle-button re-click case instead.
     catcher:Hide()
     catcher:SetScript("OnMouseDown", function()
-        -- Record the time the panel was closed via the outside-click catcher so
-        -- that the propagated click arriving at the toggle button does not
-        -- immediately reopen it.  A 200 ms window covers the full mouse-down →
-        -- mouse-up (OnClick) duration of a normal human click, while a stale
-        -- timestamp (>200 ms old) never silently blocks a later toggle click.
-        p._lariasClosedAt = GetTime()
         p:Hide()
     end)
 

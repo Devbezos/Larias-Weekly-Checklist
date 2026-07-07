@@ -13,6 +13,7 @@ local L = reg.strings["enUS"]
 local STRINGS = {
 	DISPLAY_NAME = "Larias' Weekly Checklist",
 	ADDON_WARNING_CONSTANTS_MISSING = "Warning: constants file missing; tracking IDs not loaded.",
+	DEV_DEPLOY_TIMESTAMP_LABEL_FMT = "Deployed %s",
 
 	-- Update popup
 	UPDATE_AVAILABLE_TEXT = "New version available",
@@ -177,6 +178,7 @@ local STRINGS = {
 	-- Character picker
 	CHAR_PICKER_BUTTON          = "Swap Profile",
 	CHAR_PICKER_TOOLTIP_REMOVE  = "To remove a character, use the Options menu.",
+	CHAR_PICKER_BUTTON_TOOLTIP  = "Click to switch to another character view.",
 	CHAR_PICKER_TOOLTIP_ACTIONS = "Click to view  |  Right-click to hide",
 	CHAR_PICKER_CURRENTLY_VIEWING = "Currently viewing",
 	CHAR_PICKER_SHOW = "Show",
@@ -184,7 +186,11 @@ local STRINGS = {
 	CHAR_PICKER_SHOW_FMT = "Show %s",
 	CHAR_PICKER_HIDE_FMT = "Hide %s",
 	CHAR_PICKER_BACK_FMT = "<< %s",
+	CHAR_PICKER_BACK_TOOLTIP = "Returns to your current character's checklist.",
 	CHAR_PICKER_MY_CHARACTER = "My character",
+	CHAR_PICKER_ALT_SUMMARY_TOOLTIP = "Opens an account-wide summary for all tracked characters.",
+	CHAR_PICKER_LEVEL_CLASS_FMT = "%s %d %s",
+	CHAR_PICKER_ITEM_LEVEL_FMT = "Item Level %d",
 
 	-- Week picker
 	PICKER_HEADER_TOOLTIP       = "Click to change week",
@@ -274,6 +280,7 @@ local STRINGS = {
 	ALT_SUMMARY_SECTION_CURRENCIES = "Currencies",
 	ALT_SUMMARY_MISC_CURRENCY_FMT = "Currency %d",
 	ALT_SUMMARY_SHOW_HIDDEN = "Show hidden",
+	ALT_SUMMARY_SHOW_HIDDEN_TOOLTIP = "Includes characters you have hidden from the default view.",
 	ALT_SUMMARY_NO_CHARACTERS = "No characters found",
 	ALT_SUMMARY_LOADING = "Loading...",
 	ALT_SUMMARY_EMPTY = "Empty",
@@ -291,6 +298,7 @@ local STRINGS = {
 	ALT_SUMMARY_LAST_UPDATED_FMT = "Last updated: %s",
 	ALT_SUMMARY_NO_SNAPSHOT = "No snapshot data",
 	ALT_SUMMARY_CLICK_VIEW_GEAR = "Click to view gear",
+	ALT_SUMMARY_LEFT_CLICK_GEAR = "Left-click to display gear",
 	ALT_SUMMARY_RIGHT_CLICK_ACTION_FMT = "Right-click: %s",
 	ALT_SUMMARY_NO_GEAR_DATA = "No gear data",
 	ALT_SUMMARY_SNAPSHOT_PREDATES_RANK = "Snapshot predates rank capture.",

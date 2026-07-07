@@ -414,28 +414,24 @@ local function HideContextMenu()
     if _rcCtxPanel then _rcCtxPanel:Hide() end
     if _rcCtxBlocker then _rcCtxBlocker:Hide() end
 end
+Addon.HideContextMenu = HideContextMenu
 
 function Addon:ShowContextMenu(anchor, items)
     if not (items and #items > 0) then return end
     if not _rcCtxPanel then
         _rcCtxPanel = Addon.Controls.NewPopupPanel("DIALOG", 0.10)
         _rcCtxPanel:SetWidth(180)
-        _rcCtxPanel:SetScript("OnHide", function()
+        _rcCtxPanel:HookScript("OnHide", function()
             if _rcCtxBlocker then _rcCtxBlocker:Hide() end
         end)
     end
-    if not _rcCtxBlocker then
-        _rcCtxBlocker = CreateFrame("Button", nil, UIParent)
-        _rcCtxBlocker:SetAllPoints(UIParent)
-        _rcCtxBlocker:SetFrameStrata("DIALOG")
-        _rcCtxBlocker:EnableMouse(true)
-        _rcCtxBlocker:RegisterForClicks("AnyUp")
-        _rcCtxBlocker:SetScript("OnClick", HideContextMenu)
+    local anchorStrata = anchor and anchor.GetFrameStrata and anchor:GetFrameStrata() or "DIALOG"
+    local anchorLevel = anchor and anchor.GetFrameLevel and anchor:GetFrameLevel() or 1
+    local panelLevel = math.max(anchorLevel + 20, _rcCtxPanel:GetFrameLevel() or 1, 1)
+    if _rcCtxPanel.SetFrameStrata then
+        _rcCtxPanel:SetFrameStrata(anchorStrata)
     end
-    local panelLevel = math.max(1, _rcCtxPanel:GetFrameLevel() or 1)
     _rcCtxPanel:SetFrameLevel(panelLevel)
-    _rcCtxBlocker:SetFrameLevel(panelLevel - 1)
-    _rcCtxBlocker:Show()
     for _, b in ipairs(_rcCtxBtns) do b:Hide() end
     _rcCtxBtns = {}
     local ROW_H = 22
@@ -447,6 +443,9 @@ function Addon:ShowContextMenu(anchor, items)
         btn:SetPoint("TOPRIGHT", _rcCtxPanel, "TOPRIGHT", -PAD, y)
         btn:SetHeight(ROW_H)
         btn:SetText(item.text or "")
+        if btn.RegisterForClicks then
+            btn:RegisterForClicks("LeftButtonUp")
+        end
         if Addon.Controls and Addon.Controls.StyleButton then
             Addon.Controls.StyleButton(btn)
         end
@@ -1191,6 +1190,12 @@ function Addon:ApplyThemeColors()
     if _mf and self._styleActionButton then
         if _mf._lariasChangeWeekBtn then self._styleActionButton(_mf._lariasChangeWeekBtn) end
         if _mf._lariasIlvlRefBtn    then self._styleActionButton(_mf._lariasIlvlRefBtn)    end
+    end
+    if _mf and _mf._lariasGearBtn and _mf._lariasGearBtn._lariasRefreshIconTint then
+        _mf._lariasGearBtn:_lariasRefreshIconTint()
+    end
+    if self.UpdateCharPickerBtnLabel then
+        self:UpdateCharPickerBtnLabel()
     end
 
     -- Refresh gear popup checkbox labels immediately (works whether the popup is shown or not).
@@ -2394,9 +2399,6 @@ local function ApplySectionVisuals(want, haveBefore, dataChanged, database, chil
                 local p = (Addon._EnsureHeaderPicker and Addon._EnsureHeaderPicker())
                        or (frame and frame._lariasHeaderPicker)
                 if not p then return end
-                if p._lariasClosedAt and (GetTime() - p._lariasClosedAt) < 0.20 then
-                    p._lariasClosedAt = nil; return
-                end
                 if p.IsShown and p:IsShown() then p:Hide(); return end
                 p:ClearAllPoints()
                 p:SetPoint("TOPLEFT", _capturedSF._header, "BOTTOMLEFT", 0, -4)
@@ -2423,9 +2425,6 @@ local function ApplySectionVisuals(want, haveBefore, dataChanged, database, chil
                     local p = (Addon._EnsureHeaderPicker and Addon._EnsureHeaderPicker())
                            or (frame and frame._lariasHeaderPicker)
                     if not p then return end
-                    if p._lariasClosedAt and (GetTime() - p._lariasClosedAt) < 0.20 then
-                        p._lariasClosedAt = nil; return
-                    end
                     if p.IsShown and p:IsShown() then p:Hide(); return end
                     p:ClearAllPoints()
                     p:SetPoint("TOPLEFT", _capturedSF._header, "BOTTOMLEFT", 0, -4)

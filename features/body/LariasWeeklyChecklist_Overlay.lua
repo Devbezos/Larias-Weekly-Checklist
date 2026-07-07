@@ -610,7 +610,7 @@ function Addon:CreateTrackingPanel(parentFrame)
             end
         end)
         icon:SetScript("OnLeave", function() GameTooltip:Hide() end)
-        icon:SetScript("OnMouseUp", function(self, button)
+        icon:SetScript("OnMouseDown", function(self, button)
             if button ~= "RightButton" then return end
             local id = self._lariasIconCurrencyID
             local qk = self._lariasIconQuestKey
@@ -651,7 +651,7 @@ function Addon:CreateTrackingPanel(parentFrame)
             end
         end)
         valueHit:SetScript("OnLeave", AU.HideTooltip)
-        valueHit:SetScript("OnMouseUp", function(_, button)
+        valueHit:SetScript("OnMouseDown", function(_, button)
             if button ~= "RightButton" then return end
             local id  = row._lariasRightClickCurrencyID
             local qk  = row._lariasRightClickQuestKey
@@ -692,7 +692,7 @@ function Addon:CreateTrackingPanel(parentFrame)
         row:SetScript("OnLeave", function(self)
             AU.HideTooltip()
         end)
-        row:SetScript("OnMouseUp", function(self, button)
+        row:SetScript("OnMouseDown", function(self, button)
             if button ~= "RightButton" then return end
             local id = self._lariasRightClickCurrencyID
             local qk = self._lariasRightClickQuestKey
@@ -838,9 +838,17 @@ function Addon:ApplyTrackingPanelOptions()
         local fullW = max(10, floor(tfW - padL - padR2))
         trackingFrame._lariasShowBoth = false
         if showGreatVault then
-            if leftCol then leftCol:SetWidth(fullW); leftCol:SetPoint("TOP", trackingFrame, "TOP", 0, -32) end
+            if leftCol then
+                leftCol:ClearAllPoints()
+                leftCol:SetWidth(fullW)
+                leftCol:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", padL, -32)
+            end
         else
-            if rightCol then rightCol:SetWidth(fullW); rightCol:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", padL, -32) end
+            if rightCol then
+                rightCol:ClearAllPoints()
+                rightCol:SetWidth(fullW)
+                rightCol:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", padL, -32)
+            end
         end
     end
 
@@ -985,7 +993,7 @@ function Addon:ResizeTrackingCols()
     local rightCol = tf._lariasRightCol
     local leftShown  = leftCol  and leftCol.IsShown  and leftCol:IsShown()  or false
     local rightShown = rightCol and rightCol.IsShown and rightCol:IsShown() or false
-    local bothShown  = leftShown and rightShown
+    local bothShown  = tf._lariasShowBoth and leftShown and rightShown
 
     local newColW
     if bothShown then
@@ -999,6 +1007,12 @@ function Addon:ResizeTrackingCols()
     if bothShown and leftCol and rightCol then
         rightCol:ClearAllPoints()
         rightCol:SetPoint("TOPLEFT", leftCol, "TOPRIGHT", colGap, 0)
+    elseif leftShown and leftCol then
+        leftCol:ClearAllPoints()
+        leftCol:SetPoint("TOPLEFT", tf, "TOPLEFT", padL, -32)
+    elseif rightShown and rightCol then
+        rightCol:ClearAllPoints()
+        rightCol:SetPoint("TOPLEFT", tf, "TOPLEFT", padL, -32)
     end
 
     for _, k in ipairs(LEFT_LINE_KEYS) do

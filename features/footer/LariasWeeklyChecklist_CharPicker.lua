@@ -149,6 +149,12 @@ end
 -- Character data lives in db.global.chars[key] so no profile switching is
 -- needed \u2014 just update _viewingChar and refresh the UI.
 function Addon:SetViewingChar(profileKey)
+    -- Clear any shared popup blockers before rebuilding the view.
+    if self.HideSummaryOverlays then
+        self:HideSummaryOverlays()
+    elseif self.HideContextMenu then
+        self:HideContextMenu()
+    end
     local ownKey = self:GetCurrentProfileKey()
     if profileKey == nil or profileKey == ownKey then
         self._viewingChar = nil
@@ -217,7 +223,7 @@ function Addon:InitCharPickerUI(frame, styleFunc)
             local L = Addon.L or {}
             GameTooltip:SetOwner(self_, "ANCHOR_BOTTOMLEFT")
             GameTooltip:SetText(L.CHAR_PICKER_BUTTON or "Swap Profile", 1, 1, 1)
-            GameTooltip:AddLine(L.CHAR_PICKER_TOOLTIP_REMOVE or "To remove a character, use the Options menu.", 1, 1, 1, true)
+            GameTooltip:AddLine(L.CHAR_PICKER_BUTTON_TOOLTIP or "Click to switch to another character view.", 0.7, 0.7, 0.7, true)
             GameTooltip:Show()
         end)
         btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -412,10 +418,15 @@ function Addon:InitCharPickerUI(frame, styleFunc)
             btn:SetScript("OnEnter", function(self_)
                 local fs = Addon.Controls.GetButtonFontString(self_)
                 if fs then fs:SetTextColor(1, 1, 0, 1) end
+                GameTooltip:SetOwner(self_, "ANCHOR_RIGHT")
+                GameTooltip:SetText(L.CHAR_PICKER_MY_CHARACTER or "My character", 1, 1, 1)
+                GameTooltip:AddLine(L.CHAR_PICKER_BACK_TOOLTIP or "Returns to your current character's checklist.", 0.7, 0.7, 0.7, true)
+                GameTooltip:Show()
             end)
             btn:SetScript("OnLeave", function(self_)
                 local fs = Addon.Controls.GetButtonFontString(self_)
                 if fs then fs:SetTextColor(th.r, th.g, th.b, 0.7) end
+                GameTooltip:Hide()
             end)
             btn:SetScript("OnClick", function()
                 p:Hide()
@@ -448,8 +459,10 @@ function Addon:InitCharPickerUI(frame, styleFunc)
                 -- Helper: build and show a tooltip for a character button.
                 local function ShowCharTooltip(self_, pk, isCurrentlyViewing)
                     local gdb2  = Addon.db and Addon.db.global
+                    local cdb   = gdb2 and gdb2.chars and gdb2.chars[pk]
                     local cls   = gdb2 and gdb2.charClasses and gdb2.charClasses[pk]
                     local lvl   = gdb2 and gdb2.charLevels  and gdb2.charLevels[pk]
+                    local ilvl  = cdb and tonumber(cdb.ilvl) or 0
                     local realm = pk:match("%s*%-%s*(.+)$") or ""
                     local cname = (pk:match("^(.-)%s*%-") or pk):gsub("^%s+",""):gsub("%s+$","")
                     if cname == "" then cname = pk end
@@ -463,9 +476,20 @@ function Addon:InitCharPickerUI(frame, styleFunc)
                         GameTooltip:AddLine(realm, 0.7, 0.7, 0.7)
                     end
                     if cls then
-                        local clsName = cls:sub(1,1) .. cls:sub(2):lower()
-                        local lvlStr  = (lvl and lvl > 0) and ("Level " .. lvl .. " ") or ""
-                        GameTooltip:AddLine(lvlStr .. clsName, 0.85, 0.85, 0.85)
+                        local clsName = (LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[cls])
+                                     or (LOCALIZED_CLASS_NAMES_FEMALE and LOCALIZED_CLASS_NAMES_FEMALE[cls])
+                                     or (cls:sub(1,1) .. cls:sub(2):lower())
+                        if lvl and lvl > 0 then
+                            local lvlFmt = L.CHAR_PICKER_LEVEL_CLASS_FMT or "%s %d %s"
+                            local lvlLabel = _G.LEVEL or "Level"
+                            GameTooltip:AddLine(lvlFmt:format(lvlLabel, lvl, clsName), 0.85, 0.85, 0.85)
+                        else
+                            GameTooltip:AddLine(clsName, 0.85, 0.85, 0.85)
+                        end
+                    end
+                    if ilvl > 0 then
+                        local ilvlFmt = L.CHAR_PICKER_ITEM_LEVEL_FMT or "Item Level %d"
+                        GameTooltip:AddLine(ilvlFmt:format(math.floor(ilvl)), 0.90, 0.82, 0.55)
                     end
                     if isCurrentlyViewing then
                         GameTooltip:AddLine(L.CHAR_PICKER_CURRENTLY_VIEWING or "Currently viewing", 0.3, 1, 0.3)
@@ -534,10 +558,15 @@ function Addon:InitCharPickerUI(frame, styleFunc)
             smBtn:SetScript("OnEnter", function(self_)
                 local fs = Addon.Controls.GetButtonFontString(self_)
                 if fs then fs:SetTextColor(1, 1, 0.6, 1) end
+                GameTooltip:SetOwner(self_, "ANCHOR_RIGHT")
+                GameTooltip:SetText(L.ALT_SUMMARY_TITLE or "Alt Summary", 1, 1, 1)
+                GameTooltip:AddLine(L.CHAR_PICKER_ALT_SUMMARY_TOOLTIP or "Opens an account-wide summary for all tracked characters.", 0.7, 0.7, 0.7, true)
+                GameTooltip:Show()
             end)
             smBtn:SetScript("OnLeave", function(self_)
                 local fs = Addon.Controls.GetButtonFontString(self_)
                 if fs then fs:SetTextColor(0.70, 0.70, 1, 1) end
+                GameTooltip:Hide()
             end)
             smBtn:SetScript("OnClick", function()
                 p:Hide()
@@ -576,7 +605,6 @@ function Addon:InitCharPickerUI(frame, styleFunc)
     -- ── OnClick for the header button ─────────────────────────────────────────
     local function OnPickerBtnClick()
         local p = EnsurePanel()
-        if p and p._lariasClosedAt and (GetTime() - p._lariasClosedAt) < 0.20 then p._lariasClosedAt = nil; return end
         if p and p.IsShown and p:IsShown() then
             p:Hide()
             return

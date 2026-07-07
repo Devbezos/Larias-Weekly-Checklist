@@ -18,9 +18,6 @@ local HDR_ROW_H  = 27          -- height of section label rows
 local COL_LABEL  = 124         -- width of the left-side row label column (wider for icon+text)
 local COL_W      = 104         -- width of each character column (slightly thinner)
 local ICON_SIZE  = 15          -- currency icon width/height in row labels
-local HIDE_BTN_W  = 74          -- compact per-character footer button
-local HIDE_BTN_H  = 18
-
 local COL_HDR_H  = 36          -- class bar + name + ilvl; date lives in the tooltip
 
 local NUM_CRESTS = 5
@@ -108,6 +105,7 @@ local _gearPopupFrame   = nil   -- lazily-created gear popup; one shared instanc
 local _gearClickCatcher = nil   -- full-screen dismiss layer shown behind the popup
 local _rowCurrencyMetaCache = {}
 local _rowItemMetaCache = {}
+local GetItemLabelColorRGB
 -- Convenience alias: snapshot type-tag strings (defined in Currency.lua, published on Addon).
 -- AltsSummary reads this rather than repeating magic strings.
 local ST  -- assigned in PopulateSummary after Currency.lua has loaded
@@ -399,7 +397,7 @@ local function HexToRGB(hex)
 end
 
 -- ── Currency icon helper ──────────────────────────────────────────────────────
-local function GetItemLabelColorRGB(id)
+GetItemLabelColorRGB = function(id)
     if Addon.GetItemQualityColorRGB then
         return Addon:GetItemQualityColorRGB(id)
     end
@@ -408,6 +406,19 @@ end
 
 -- ── Shared tooltip leave ──────────────────────────────────────────────────────
 local function OnCellLeave() GameTooltip:Hide() end
+
+local function HideSummaryOverlays()
+    if _gearPopupFrame and _gearPopupFrame.IsShown and _gearPopupFrame:IsShown() then
+        _gearPopupFrame:Hide()
+    end
+    if _gearClickCatcher then
+        _gearClickCatcher:Hide()
+    end
+    if Addon.HideContextMenu then
+        Addon:HideContextMenu()
+    end
+end
+Addon.HideSummaryOverlays = HideSummaryOverlays
 
 local function ShowCurrencyHideMenu(anchor, currencyID)
     local cid = tonumber(currencyID)
@@ -544,12 +555,24 @@ local function EnsurePanel()
     end, 14)
     chk:SetChecked(_showHidden)
     chk._label:SetText(L.ALT_SUMMARY_SHOW_HIDDEN or "Show hidden")
-    f._footerChk = chk
+    local function ShowHiddenTooltip(self_)
+        GameTooltip:SetOwner(self_, "ANCHOR_TOPLEFT")
+        GameTooltip:SetText(L.ALT_SUMMARY_SHOW_HIDDEN or "Show hidden", 1, 1, 1)
+        GameTooltip:AddLine(L.ALT_SUMMARY_SHOW_HIDDEN_TOOLTIP or "Includes characters you have hidden from the default view.", 0.7, 0.7, 0.7, true)
+        GameTooltip:Show()
+    end
+    chk:SetScript("OnEnter", ShowHiddenTooltip)
+    chk:SetScript("OnLeave", OnCellLeave)
+    if chk._hit then
+        chk._hit:SetScript("OnEnter", ShowHiddenTooltip)
+        chk._hit:SetScript("OnLeave", OnCellLeave)
+    end
+    f._summaryChk = chk
 
     -- Close the gear popup whenever the summary panel is hidden (close button,
     -- ESC via UISpecialFrames, or any other dismiss path).
     f:SetScript("OnHide", function()
-        if _gearPopupFrame then _gearPopupFrame:Hide() end
+        HideSummaryOverlays()
     end)
 
     -- Pool tables for reuse.
@@ -1299,8 +1322,25 @@ local function RenderGVCell(cell, row, snap, noSnap, alpha)
 
     cell._fs:SetFont(FONT_FACE, 11, FONT_FLAGS)
 
+    local function FormatGVSlotToken(text, colorCode)
+        local token = tostring(text or PLACEHOLDER_DASH)
+        if #token < 3 then
+            token = (" "):rep(math.floor((3 - #token) / 2)) .. token
+                 .. (" "):rep(math.ceil((3 - #token) / 2))
+        end
+        if colorCode and colorCode ~= "" then
+            return "|c" .. colorCode .. token .. "|r"
+        end
+        return token
+    end
+
     if noSnap or not block then
-        SetPlaceholder(cell, Addon.THEME and Addon.THEME.text, alpha * A_DIM)
+        cell._fs:SetText(table.concat({
+            FormatGVSlotToken(PLACEHOLDER_DASH, "ff555555"),
+            FormatGVSlotToken(PLACEHOLDER_DASH, "ff555555"),
+            FormatGVSlotToken(PLACEHOLDER_DASH, "ff555555"),
+        }, " "))
+        cell._fs:SetTextColor(1, 1, 1, alpha * A_DIM)
     else
         local parts = {}
         for si = 1, 3 do
@@ -1310,12 +1350,12 @@ local function RenderGVCell(cell, row, snap, noSnap, alpha)
             if unlocked then
                 if ilvl > 0 then
                     local hex = (Addon.IlvlUtils and Addon.IlvlUtils.GetColorHex(ilvl)) or "ffffffff"
-                    parts[si] = "|c" .. hex .. ilvl .. "|r"
+                    parts[si] = FormatGVSlotToken(ilvl, hex)
                 else
-                    parts[si] = "|cff55aa55" .. PLACEHOLDER_DASH .. "|r"
+                    parts[si] = FormatGVSlotToken(PLACEHOLDER_DASH, "ff55aa55")
                 end
             else
-                parts[si] = "|cff555555" .. PLACEHOLDER_DASH .. "|r"
+                parts[si] = FormatGVSlotToken(PLACEHOLDER_DASH, "ff555555")
             end
         end
         cell._fs:SetText(table.concat(parts, " "))
@@ -1361,6 +1401,7 @@ end
 
 PopulateSummary = function(panel)
     if not panel then return end
+    HideSummaryOverlays()
     _panelDirty = false
     panel._lariasAltSummaryPopulated = true
     ST = ST or Addon.SNAP_TYPES or {}  -- lazy-bind once Currency.lua has registered SNAP_TYPES
@@ -1442,7 +1483,6 @@ PopulateSummary = function(panel)
         if col.ilvlFS     then col.ilvlFS:Hide()     end
         if col.classBar   then col.classBar:Hide()   end
         if col.hdrHit     then col.hdrHit:Hide()     end
-        if col.hideBtn    then col.hideBtn:Hide()    end
         for _, c in pairs(col.cells) do c:Hide() end
     end
 
@@ -1535,15 +1575,17 @@ PopulateSummary = function(panel)
     local function GetCol()
         colCursor = colCursor + 1
         if not panel._colPool[colCursor] then
-            local hdrHit = CreateFrame("Frame", nil, panel)
+            local hdrHit = CreateFrame("Button", nil, panel)
             hdrHit:EnableMouse(true)
+            if hdrHit.RegisterForClicks then
+                hdrHit:RegisterForClicks("AnyUp")
+            end
             hdrHit:SetScript("OnLeave", OnCellLeave)
             panel._colPool[colCursor] = {
                 nameFS    = MakeFS(panel, 11, ""),
                 ilvlFS    = MakeFS(panel, 10, ""),
                 classBar  = panel:CreateTexture(nil, "ARTWORK"),
                 hdrHit    = hdrHit,
-                hideBtn   = Addon.Controls.NewActionButton(panel, HIDE_BTN_W, HIDE_BTN_H),
                 cells     = {},
             }
         end
@@ -1552,8 +1594,10 @@ PopulateSummary = function(panel)
         if col.ilvlFS     then col.ilvlFS:ClearAllPoints()     end
         if col.hdrHit     then
             col.hdrHit:ClearAllPoints()
+            col.hdrHit:SetFrameStrata(panel:GetFrameStrata())
+            col.hdrHit:SetFrameLevel((panel:GetFrameLevel() or 1) + 20)
             col.hdrHit:SetScript("OnEnter", nil)
-            col.hdrHit:SetScript("OnMouseUp", nil)
+            col.hdrHit:SetScript("OnClick", nil)
             col.hdrHit:SetScript("OnLeave", function()
                 HideHover()
                 OnCellLeave()
@@ -1564,7 +1608,6 @@ PopulateSummary = function(panel)
         if col.ilvlFS     then col.ilvlFS:Show()     end
         if col.hdrHit     then col.hdrHit:Show()     end
         col.classBar:Show()
-        if col.hideBtn    then col.hideBtn:Hide()    end
         return col
     end
     local function GetCell(col, rowIdx)
@@ -1740,17 +1783,10 @@ PopulateSummary = function(panel)
         curRowY = curRowY - h
     end
 
-    -- Footer divider + checkbox.
-    local footerDiv = GetDiv()
-    footerDiv:SetHeight(1)
-    footerDiv:SetColorTexture(brd.r, brd.g, brd.b, STYLE.headerLineA * chromeA)
-    footerDiv:SetPoint("TOPLEFT",  panel, "TOPLEFT",   PAD, FOOTER_TOP)
-    footerDiv:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -PAD, FOOTER_TOP)
-
-    local chk = panel._footerChk
+    local chk = panel._summaryChk
     if chk then
         chk:ClearAllPoints()
-        chk:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD + 4, FOOTER_TOP - 4)
+        chk:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD + 4, CONTENT_TOP - 4)
         chk:SetSize(14, 14)
         if chk._hit then
             chk._hit:ClearAllPoints()
@@ -1841,14 +1877,14 @@ PopulateSummary = function(panel)
                     GameTooltip:AddLine(L.ALT_SUMMARY_NO_SNAPSHOT or "No snapshot data", 0.5, 0.5, 0.5)
                 end
                 GameTooltip:AddLine(" ")
-                GameTooltip:AddLine(L.ALT_SUMMARY_CLICK_VIEW_GEAR or "Click to view gear", 0.5, 0.5, 0.5)
+                GameTooltip:AddLine(L.ALT_SUMMARY_LEFT_CLICK_GEAR or "Left-click to display gear", 0.5, 0.5, 0.5)
                 if not _isOwn then
                     local actionText = _isHidden and (L.CHAR_PICKER_SHOW or "Show") or (L.CHAR_PICKER_HIDE or "Hide")
                     GameTooltip:AddLine((L.ALT_SUMMARY_RIGHT_CLICK_ACTION_FMT or "Right-click: %s"):format(actionText), 0.5, 0.5, 0.5)
                 end
                 GameTooltip:Show()
             end)
-            col.hdrHit:SetScript("OnMouseUp", function(s_, button)
+            col.hdrHit:SetScript("OnClick", function(s_, button)
                 if button == "LeftButton" then
                     if _gearPopupFrame and _gearPopupFrame:IsShown()
                        and _gearPopupFrame._charKey == _ck then
@@ -1857,37 +1893,12 @@ PopulateSummary = function(panel)
                         ShowGearPopup(s_, _ck, _name, _cr, _cg, _cb, _snap)
                     end
                 elseif button == "RightButton" and not _isOwn then
-                    local menuText = _isHidden
-                        and ((L.CHAR_PICKER_SHOW_FMT or "Show %s"):format(_name))
-                        or  ((L.CHAR_PICKER_HIDE_FMT or "Hide %s"):format(_name))
-                    Addon:ShowContextMenu(s_, {
-                        { text = menuText, onClick = function()
-                            SetCharHiddenFromSummary(panel, gdb, _ck, not _isHidden)
-                        end },
-                    })
+                    if Addon.HideContextMenu then
+                        Addon:HideContextMenu()
+                    end
+                    SetCharHiddenFromSummary(panel, gdb, _ck, not _isHidden)
                 end
             end)
-        end
-
-        if col.hideBtn and not char.isOwn then
-            local _ck, _name, _isHidden = char.key, charName, char.isHidden
-            col.hideBtn:ClearAllPoints()
-            col.hideBtn:SetPoint("TOP", panel, "TOPLEFT", colX + (colW / 2), FOOTER_TOP - 4)
-            col.hideBtn:SetSize(HIDE_BTN_W, HIDE_BTN_H)
-            col.hideBtn:SetText(_isHidden and (L.CHAR_PICKER_SHOW or "Show") or (L.CHAR_PICKER_HIDE or "Hide"))
-            col.hideBtn:SetScript("OnClick", function()
-                SetCharHiddenFromSummary(panel, gdb, _ck, not _isHidden)
-            end)
-            col.hideBtn:SetScript("OnEnter", function(s_)
-                GameTooltip:SetOwner(s_, "ANCHOR_TOP")
-                local tip = _isHidden
-                    and ((L.CHAR_PICKER_SHOW_FMT or "Show %s"):format(_name))
-                    or  ((L.CHAR_PICKER_HIDE_FMT or "Hide %s"):format(_name))
-                GameTooltip:SetText(tip, 1, 1, 1, 1, true)
-                GameTooltip:Show()
-            end)
-            col.hideBtn:SetScript("OnLeave", OnCellLeave)
-            col.hideBtn:Show()
         end
 
         -- Pre-extract all snapshot data.

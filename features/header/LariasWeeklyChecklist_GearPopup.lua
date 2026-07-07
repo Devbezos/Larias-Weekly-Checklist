@@ -21,8 +21,6 @@ end
 
 function Addon:ToggleGearPopup(anchor, growRight)
     local p = self._gearPopup
-    -- Guard: suppress reopen if the outside-click catcher closed us within 200 ms.
-    if p and p._lariasClosedAt and (GetTime() - p._lariasClosedAt) < 0.20 then p._lariasClosedAt = nil; return end
     if p and p.IsShown and p:IsShown() then
         p:Hide()
         return
@@ -137,6 +135,7 @@ function Addon:ToggleGearPopup(anchor, growRight)
             local _ver     = (_getMeta and _getMeta(addonName, "Version")) or ""
             local _locReg  = _G["LARIASWEEKLYCHECKLIST_LOCALE_REGISTRY"]
             local _dataVer = (_locReg and type(_locReg.sheet_version) == "string" and _locReg.sheet_version) or ""
+            local _deployTs = (type(Addon.DEV_DEPLOY_TIMESTAMP) == "string" and Addon.DEV_DEPLOY_TIMESTAMP) or ""
 
             local creditLabel = p:CreateFontString(nil, "OVERLAY")
             creditLabel:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
@@ -153,6 +152,7 @@ function Addon:ToggleGearPopup(anchor, growRight)
                 local parts = {}
                 if _ver     ~= "" then parts[#parts + 1] = (L.VERSION_LABEL_FMT or "v%s"):format(_ver) end
                 if _dataVer ~= "" then parts[#parts + 1] = (L.SPREADSHEET_VERSION_LABEL_FMT or "Spreadsheet v%s"):format(_dataVer) end
+                if _deployTs ~= "" then parts[#parts + 1] = (L.DEV_DEPLOY_TIMESTAMP_LABEL_FMT or "Deployed %s"):format(_deployTs) end
                 verLabel:SetText(table.concat(parts, "  \226\128\162  "))
             end
             verLabel:SetTextColor(0.45, 0.45, 0.45, 0.6)
