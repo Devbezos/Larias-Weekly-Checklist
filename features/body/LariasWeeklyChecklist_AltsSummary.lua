@@ -56,6 +56,7 @@ local A_DIM     = 0.45   -- no data / placeholder
 local A_ILVL    = 0.85   -- ilvl label (slightly dimmed)
 local FONT_SM   = 11     -- small font: ilvl, sub-labels
 local FONT_CELL = 12     -- standard cell font
+local DRAG_THRESHOLD = 10
 local FONT_FACE  = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local FONT_FLAGS = "OUTLINE"
 
@@ -590,6 +591,16 @@ local function EnsurePanel()
     hoverCol:Hide()
     f._hoverColTex = hoverCol
 
+    local dragInsert = f:CreateTexture(nil, "OVERLAY")
+    dragInsert:Hide()
+    f._dragInsertTex = dragInsert
+
+    f:SetScript("OnUpdate", function(self_)
+        if self_._dragUpdate then
+            self_._dragUpdate(self_)
+        end
+    end)
+
     altSummaryFrame = f
     -- Register with UISpecialFrames so ESC closes this window.
     tinsert(UISpecialFrames, "LariasAltsSummaryFrame")
@@ -648,6 +659,40 @@ local function BuildCharList(gdb, ownKey, allKeys, maxLvl)
         return tostring(a.key) < tostring(b.key)
     end)
     return chars
+end
+
+local function BuildCharOrderKeys(chars)
+    local keys = {}
+    for i = 1, #(chars or {}) do
+        local key = chars[i] and chars[i].key
+        if type(key) == "string" and key ~= "" then
+            keys[#keys + 1] = key
+        end
+    end
+    return keys
+end
+
+local function MoveOrderKey(orderKeys, fromIdx, toIdx)
+    local count = #orderKeys
+    if count == 0 then return orderKeys end
+    fromIdx = math.max(1, math.min(count, tonumber(fromIdx) or 1))
+    toIdx   = math.max(1, math.min(count, tonumber(toIdx)   or fromIdx))
+    if fromIdx == toIdx then return orderKeys end
+
+    local moved = orderKeys[fromIdx]
+    table.remove(orderKeys, fromIdx)
+    table.insert(orderKeys, toIdx, moved)
+    return orderKeys
+end
+
+local function GetPanelCursorX(panel)
+    if not (panel and GetCursorPosition and panel.GetEffectiveScale) then return nil end
+    local cursorX = select(1, GetCursorPosition())
+    local left = panel:GetLeft()
+    if not (cursorX and left) then return nil end
+    local scale = panel:GetEffectiveScale()
+    if not scale or scale == 0 then scale = 1 end
+    return (cursorX / scale) - left
 end
 
 local function HasHiddenSummaryChars(gdb, ownKey, allKeys, maxLvl)
@@ -1479,9 +1524,70 @@ PopulateSummary = function(panel)
 
     local isInline = panel._inline
     local colW = COL_W
+    local CONTENT_TOP, COL_HDR_TOP, ROWS_TOP, FOOTER_TOP, TOTAL_H
     if panel._altsTitleBgTex then panel._altsTitleBgTex:SetShown(not isInline) end
     if panel._altsTitleFS    then panel._altsTitleFS:SetShown(not isInline)    end
     if panel._altsCloseBtn   then panel._altsCloseBtn:SetShown(not isInline)   end
+
+    local function HideDragIndicator()
+        if panel._dragInsertTex then
+            panel._dragInsertTex:Hide()
+        end
+    end
+
+    local function RestoreDraggedColumnVisual(state)
+        local col = state and state.col
+        if not col then return end
+        if col.nameFS then
+            col.nameFS:SetAlpha(1)
+        end
+        if col.ilvlFS then
+            col.ilvlFS:SetAlpha(1)
+        end
+        if col.classBar then
+            col.classBar:SetAlpha(1)
+        end
+    end
+
+    local function ApplyDraggedColumnVisual(state)
+        local col = state and state.col
+        if not col then return end
+        if col.nameFS then
+            col.nameFS:SetAlpha(0.35)
+        end
+        if col.ilvlFS then
+            col.ilvlFS:SetAlpha(0.35)
+        end
+        if col.classBar then
+            col.classBar:SetAlpha(0.35)
+        end
+    end
+
+    local function GetDropIndex(cursorPanelX)
+        if numChars <= 0 then return nil end
+        local relativeX = (cursorPanelX or 0) - (PAD + COL_LABEL)
+        local idx = math.floor((relativeX + (colW * 0.5)) / colW) + 1
+        return math.max(1, math.min(numChars, idx))
+    end
+
+    local function ShowDragIndicator(targetIdx)
+        if not panel._dragInsertTex then return end
+        local lineX = PAD + COL_LABEL + ((targetIdx - 1) * colW)
+        panel._dragInsertTex:SetColorTexture(header.r, header.g, header.b, 0.9)
+        panel._dragInsertTex:ClearAllPoints()
+        panel._dragInsertTex:SetPoint("TOPLEFT", panel, "TOPLEFT", lineX - 1, COL_HDR_TOP)
+        panel._dragInsertTex:SetSize(2, math.abs(FOOTER_TOP - COL_HDR_TOP))
+        panel._dragInsertTex:Show()
+    end
+
+    local function ClearDragState()
+        local state = panel._dragState
+        if state then
+            RestoreDraggedColumnVisual(state)
+        end
+        panel._dragState = nil
+        HideDragIndicator()
+    end
 
     -- Use the same theme colors as the main frame.  ApplyOpacity below supplies
     -- the saved background alpha so the Alt Summary matches the main window.
@@ -1504,15 +1610,51 @@ PopulateSummary = function(panel)
     end
     if Addon.ApplyOpacity then Addon:ApplyOpacity() end
 
-    local CONTENT_TOP = isInline and -PAD or -(TITLE_H + 4)
+    CONTENT_TOP = isInline and -PAD or -(TITLE_H + 4)
     local chromeA = GetPanelChromeAlpha()
-    local COL_HDR_TOP = CONTENT_TOP
-    local ROWS_TOP    = COL_HDR_TOP - COL_HDR_H - 2
-    local FOOTER_TOP  = ROWS_TOP - totalContentH - 8
-    local TOTAL_H     = math.abs(FOOTER_TOP) + 20 + PAD
+    COL_HDR_TOP = CONTENT_TOP
+    ROWS_TOP    = COL_HDR_TOP - COL_HDR_H - 2
+    FOOTER_TOP  = ROWS_TOP - totalContentH - 8
+    TOTAL_H     = math.abs(FOOTER_TOP) + 20 + PAD
     local TOTAL_W     = PAD + COL_LABEL + numChars * colW + PAD
 
     panel:SetSize(math.max(300, TOTAL_W), math.max(120, TOTAL_H))
+    panel._dragUpdate = function(self_)
+        local state = self_._dragState
+        if not state then return end
+
+        local leftDown = IsMouseButtonDown and IsMouseButtonDown("LeftButton")
+        if not leftDown then
+            local targetIdx = state.targetIdx or state.sourceIdx
+            if state.active and targetIdx and targetIdx ~= state.sourceIdx then
+                local orderKeys = BuildCharOrderKeys(chars)
+                MoveOrderKey(orderKeys, state.sourceIdx, targetIdx)
+                ClearDragState()
+                if Addon.SetAltSummaryCharOrder then
+                    Addon:SetAltSummaryCharOrder(orderKeys)
+                end
+                return
+            end
+            ClearDragState()
+            return
+        end
+
+        local cursorX = GetPanelCursorX(self_)
+        if not cursorX then return end
+
+        if not state.active then
+            if math.abs(cursorX - state.startX) < DRAG_THRESHOLD then
+                return
+            end
+            state.active = true
+            HideHover()
+            OnCellLeave()
+            ApplyDraggedColumnVisual(state)
+        end
+
+        state.targetIdx = GetDropIndex(cursorX) or state.sourceIdx
+        ShowDragIndicator(state.targetIdx)
+    end
 
     -- Hide all pooled widgets from previous call.
     for _, t in ipairs(panel._divTexPool)  do t:Hide() end
@@ -1641,6 +1783,8 @@ PopulateSummary = function(panel)
             col.hdrHit:SetFrameLevel((panel:GetFrameLevel() or 1) + 20)
             col.hdrHit:SetScript("OnEnter", nil)
             col.hdrHit:SetScript("OnClick", nil)
+            col.hdrHit:SetScript("OnMouseDown", nil)
+            col.hdrHit:SetScript("OnMouseUp", nil)
             col.hdrHit:SetScript("OnLeave", function()
                 HideHover()
                 OnCellLeave()
@@ -1931,20 +2075,34 @@ PopulateSummary = function(panel)
                 end
                 GameTooltip:AddLine(" ")
                 GameTooltip:AddLine(L.ALT_SUMMARY_LEFT_CLICK_GEAR or "Left-click to display gear", 0.5, 0.5, 0.5)
-                GameTooltip:AddLine(L.ALT_SUMMARY_ALT_LEFT_CLICK_REORDER or "Alt+Left-click to move this character to the front", 0.5, 0.5, 0.5)
+                GameTooltip:AddLine(L.ALT_SUMMARY_ALT_LEFT_CLICK_REORDER or "Alt+drag to reorder", 0.5, 0.5, 0.5)
                 if not _isOwn then
                     local actionText = _isHidden and (L.CHAR_PICKER_SHOW or "Show") or (L.CHAR_PICKER_HIDE or "Hide")
                     GameTooltip:AddLine((L.ALT_SUMMARY_RIGHT_CLICK_ACTION_FMT or "Right-click: %s"):format(actionText), 0.5, 0.5, 0.5)
                 end
                 GameTooltip:Show()
             end)
-            col.hdrHit:SetScript("OnClick", function(s_, button)
+            col.hdrHit:SetScript("OnMouseDown", function(s_, button)
+                if button ~= "LeftButton" then return end
+                if not (IsAltKeyDown and IsAltKeyDown()) then return end
+                ClearDragState()
+                local startX = GetPanelCursorX(panel)
+                if not startX then return end
+                panel._dragState = {
+                    active = false,
+                    startX = startX,
+                    sourceIdx = ci,
+                    targetIdx = ci,
+                    charKey = _ck,
+                    char = char,
+                    col = col,
+                }
+            end)
+            col.hdrHit:SetScript("OnMouseUp", function(s_, button)
                 if button == "LeftButton" then
-                    if IsAltKeyDown and IsAltKeyDown() then
-                        if Addon.SetAltSummaryCharOrderTop then
-                            Addon:SetAltSummaryCharOrderTop(_ck)
-                        end
-                    else
+                    local state = panel._dragState
+                    if state and state.charKey == _ck and not state.active then
+                        ClearDragState()
                         if _gearPopupFrame and _gearPopupFrame:IsShown()
                            and _gearPopupFrame._charKey == _ck then
                             _gearPopupFrame:Hide()

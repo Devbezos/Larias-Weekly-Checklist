@@ -345,19 +345,30 @@ function Addon:GetAltSummaryCharOrder()
     return result
 end
 
-function Addon:SetAltSummaryCharOrderTop(profileKey)
-    if type(profileKey) ~= "string" or profileKey == "" then return end
+function Addon:SetAltSummaryCharOrder(orderKeys)
+    if type(orderKeys) ~= "table" then return end
     local gdb = self.db and self.db.global
     if not gdb then return end
 
-    gdb.altSummaryCharOrder = gdb.altSummaryCharOrder or {}
-    local order = gdb.altSummaryCharOrder
-    local nextOrder = { profileKey }
+    local seen = {}
+    local nextOrder = {}
 
-    for i = 1, #order do
-        local key = order[i]
-        if type(key) == "string" and key ~= "" and key ~= profileKey then
+    for i = 1, #orderKeys do
+        local key = orderKeys[i]
+        if type(key) == "string" and key ~= "" and not seen[key] then
+            seen[key] = true
             nextOrder[#nextOrder + 1] = key
+        end
+    end
+
+    local existing = gdb.altSummaryCharOrder
+    if type(existing) == "table" then
+        for i = 1, #existing do
+            local key = existing[i]
+            if type(key) == "string" and key ~= "" and not seen[key] then
+                seen[key] = true
+                nextOrder[#nextOrder + 1] = key
+            end
         end
     end
 

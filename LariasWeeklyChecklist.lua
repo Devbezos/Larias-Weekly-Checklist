@@ -94,11 +94,11 @@ do
 
         self.CONSTANTS.theme = self.CONSTANTS.theme or self.THEME or {
             bg      = { r = 0.035, g = 0.052, b = 0.060, a = 0.72 },
-            border  = { r = 0.14,  g = 0.28,  b = 0.23,  a = 0.86 },
-            header  = { r = 0.23,  g = 0.96,  b = 0.55,  a = 1.00 },
-            text    = { r = 0.88,  g = 0.94,  b = 0.91,  a = 1.00 },
-            textDim = { r = 0.58,  g = 0.66,  b = 0.63,  a = 0.88 },
-            check   = { r = 0.23,  g = 0.96,  b = 0.55,  a = 1.00 },  -- checkmark tick
+            border  = { r = 0.30,  g = 0.30,  b = 0.30,  a = 0.90 },
+            header  = { r = 1.00,  g = 0.82,  b = 0.00,  a = 1.00 },
+            text    = { r = 1.00,  g = 1.00,  b = 1.00,  a = 1.00 },
+            textDim = { r = 1.00,  g = 1.00,  b = 1.00,  a = 0.85 },
+            check   = { r = 0.19,  g = 0.83,  b = 0.19,  a = 1.00 },  -- checkmark tick
         }
         self.THEME = self.THEME or self.CONSTANTS.theme
         -- Ensure check color exists for sessions that loaded before it was added.
@@ -1164,8 +1164,8 @@ function Addon:ApplyThemeColors()
     end
 
     loadColor(self.THEME.bg,     "bgR",     "bgG",     "bgB",     0.035, 0.052, 0.060)
-    loadColor(self.THEME.text,   "textR",   "textG",   "textB",   0.88,  0.94,  0.91)
-    loadColor(self.THEME.header, "headerR", "headerG", "headerB", 0.23,  0.96,  0.55)
+    loadColor(self.THEME.text,   "textR",   "textG",   "textB",   1.00,  1.00,  1.00)
+    loadColor(self.THEME.header, "headerR", "headerG", "headerB", 1.00,  0.82,  0.00)
     if self.THEME.check and self.THEME.header then
         self.THEME.check.r = self.THEME.header.r
         self.THEME.check.g = self.THEME.header.g
