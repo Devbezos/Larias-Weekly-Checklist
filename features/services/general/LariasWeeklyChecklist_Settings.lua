@@ -1,12 +1,12 @@
 -- LariasWeeklyChecklist_Settings.lua
--- Registers a panel under Interface → AddOns using WoW's native Settings API
+-- Registers a panel under Interface -> AddOns using WoW's native Settings API
 -- (retail 10.x+) with InterfaceOptions_AddCategory as a classic fallback.
 -- No extra libraries required. Mirrors every option from the in-world gear popup.
 local addonName = ...
 local Addon = _G[addonName]
 if not Addon then return end
 
--- ── Internal state ────────────────────────────────────────────────────────────
+-- Internal state
 local panelFrame        -- outer canvas WoW hosts
 local _displaySync      -- shared pane sync closure (Display tab)
 local _warningsSync     -- shared pane sync closure (Warnings tab)
@@ -83,7 +83,7 @@ end
 
 -- (MakeSwatch removed; use Addon.Controls.NewSwatch(parent, 22) instead.)
 
--- ── Build the panel (lazy, called once) ───────────────────────────────────────
+-- Build the panel (lazy, called once)
 local function BuildPanel()
     if panelFrame then return panelFrame end
     local L = Addon.L or {}
@@ -91,12 +91,12 @@ local function BuildPanel()
     panelFrame      = CreateFrame("Frame")
     panelFrame.name = L.DISPLAY_NAME or "Larias' Weekly Checklist"
 
-    -- Inner canvas — WoW's Settings API sizes this for us; we just place widgets.
+    -- Inner canvas - WoW's Settings API sizes this for us; we just place widgets.
     local canvas = CreateFrame("Frame", nil, panelFrame)
     canvas:SetPoint("TOPLEFT")
     canvas:SetPoint("TOPRIGHT")
 
-    -- Layout constants — intentionally match the GearPopup for visual parity.
+    -- Layout constants - intentionally match the GearPopup for visual parity.
     local PAD         = 10
     local BTN_H       = 22
     local TILE_H      = 28
@@ -110,7 +110,7 @@ local function BuildPanel()
 
     local curY = -PAD   -- running Y (negative = downward from top)
 
-    -- ── Page title ────────────────────────────────────────────────────────────
+    -- Page title
     local hdr     = Addon.THEME and Addon.THEME.header or { r = 1, g = 0.82, b = 0, a = 1 }
     local titleFS = canvas:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
     titleFS:SetPoint("TOPLEFT", canvas, "TOPLEFT", PAD, curY)
@@ -118,7 +118,7 @@ local function BuildPanel()
     titleFS:SetTextColor(hdr.r, hdr.g, hdr.b, 1)
     curY = curY - 32
 
-    -- ── Tab buttons ───────────────────────────────────────────────────────────
+    -- Tab buttons
     local TAB_LABELS = {
         L.SETTINGS_TAB_DISPLAY    or "Display",
         L.SETTINGS_TAB_WARNINGS   or "Warnings",
@@ -144,7 +144,7 @@ local function BuildPanel()
     end
     curY = curY - TAB_BTN_H - TAB_GAP
 
-    -- ── Tab pane frames ───────────────────────────────────────────────────────
+    -- Tab pane frames
     for i = 1, NUM_TABS do
         local pane = CreateFrame("Frame", nil, canvas)
         pane:SetSize(PANE_W, PANE_H)
@@ -153,7 +153,7 @@ local function BuildPanel()
         panes[i] = pane
     end
 
-    -- ── ShowTab helper ────────────────────────────────────────────────────────
+    -- ShowTab helper
     local _activeTab = 1
     local function ShowTab(idx)
         _activeTab = idx
@@ -177,7 +177,7 @@ local function BuildPanel()
         tabs[i]:SetScript("OnClick", function() ShowTab(_i) end)
     end
 
-    -- ── Build pane content using shared builders ──────────────────────────────
+    -- Build pane content using shared builders
     local paneOpts = { pad = PAD, btnH = BTN_H, tileH = TILE_H, width = PANE_W,
                        restoreClickFn = function() Addon:ToggleRestoreHiddenCurrencies(panes[1]) end }
     local dr = Addon.OptionsPane.BuildDisplay(panes[1], paneOpts)
@@ -186,13 +186,13 @@ local function BuildPanel()
     local wr = Addon.OptionsPane.BuildWarnings(panes[2], { pad = PAD, tileH = TILE_H, width = PANE_W })
     _warningsSync = wr.sync
 
-    -- Appearance pane has no compact lang toggle — language has its own section below.
+    -- Appearance pane has no compact lang toggle - language has its own section below.
     local ar = Addon.OptionsPane.BuildAppearance(panes[3], { pad = PAD, btnH = BTN_H, width = PANE_W })
     _appearanceSync = ar.sync
 
     curY = curY - PANE_H
 
-    -- ── Language section ──────────────────────────────────────────────────────
+    -- Language section
     Addon.Controls.NewDivider(canvas, curY, PAD, PAD)
     curY = curY - 8
 
@@ -204,16 +204,16 @@ local function BuildPanel()
     -- Ordered list of locales with friendly display names.
     local LOCALE_OPTIONS = {
         { code = "auto", name = L.SETTINGS_LANGUAGE_AUTO or "Auto (Client Default)" },
-        { code = "enUS", name = "English"        },
-        { code = "deDE", name = "Deutsch"        },
-        { code = "esES", name = "Español (EU)"   },
-        { code = "esMX", name = "Español (MX)"   },
-        { code = "frFR", name = "Français"       },
-        { code = "itIT", name = "Italiano"       },
-        { code = "koKR", name = "한국어"           },
-        { code = "ptBR", name = "Português (BR)" },
-        { code = "ruRU", name = "Русский"        },
-        { code = "trTR", name = "Türkçe"         },
+        { code = "enUS", name = "English"         },
+        { code = "deDE", name = "Deutsch"         },
+        { code = "esES", name = "Español (EU)"    },
+        { code = "esMX", name = "Español (MX)"    },
+        { code = "frFR", name = "Français"        },
+        { code = "itIT", name = "Italiano"        },
+        { code = "koKR", name = "한국어"          },
+        { code = "ptBR", name = "Português (BR)"  },
+        { code = "ruRU", name = "Русский"         },
+        { code = "trTR", name = "Türkçe"          },
     }
 
     local localeNameFixups = {
@@ -293,7 +293,7 @@ local function BuildPanel()
 
     curY = curY - BTN_H - 14
 
-    -- ── Support links ────────────────────────────────────────────────────────
+    -- Support links
     Addon.Controls.NewDivider(canvas, curY, PAD, PAD)
     curY = curY - 8
 
@@ -310,7 +310,7 @@ local function BuildPanel()
 
     canvas:SetHeight(math.abs(curY) + PAD)
 
-    -- ── Sync all controls every time the panel is shown ──────────────────────
+    -- Sync all controls every time the panel is shown
     panelFrame:SetScript("OnShow", function()
         if _displaySync    then _displaySync()    end
         if _warningsSync   then _warningsSync()   end
@@ -328,10 +328,10 @@ local function BuildPanel()
     return panelFrame
 end
 
--- ── Public API ────────────────────────────────────────────────────────────────
+-- Public API
 
 --- Refreshes all color swatch buttons in the Settings panel to match the
---- current saved (or default) theme colors.  Safe to call at any time;
+--- current saved (or default) theme colors. Safe to call at any time;
 --- no-op if the panel hasn't been built yet.
 function Addon:RefreshSettingsSwatches()
     if _appearanceSync then _appearanceSync() end
