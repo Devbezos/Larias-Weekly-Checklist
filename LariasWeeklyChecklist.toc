@@ -1,5 +1,5 @@
-## Interface: 120005, 120001, 120000
-## Title: Larias' Weekly Checklist
+## Interface: 120007, 120005, 120001
+## Title: Larias's Weekly Checklist
 ## Notes: Weekly checklist with collapsible weeks
 ## Author: Dev
 ## X-Credits: Larias (checklist content and data)
