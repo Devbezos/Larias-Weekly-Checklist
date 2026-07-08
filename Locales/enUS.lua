@@ -202,7 +202,7 @@ local STRINGS = {
 	PICKER_GO_TO_WEEK_TOOLTIP   = "Go to week:",
 
 	-- Item level reference popup
-	ILVLREF_WINDOW_TITLE  = "Midnight Season 1 Item Level Reference",
+	ILVLREF_WINDOW_TITLE  = "Midnight Season 2 Item Level Reference",
 
 	ILVLREF_SEC_TRACKS    = "Upgrade Tracks  (20 crests per step)",
 	ILVLREF_SEC_CRAFTED   = "Crafted Item Levels",

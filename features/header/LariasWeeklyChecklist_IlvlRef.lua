@@ -1,4 +1,4 @@
--- IlvlRef module: standalone popup window with Midnight Season 1 item-level reference tables.
+-- IlvlRef module: standalone popup window with Midnight Season 2 item-level reference tables.
 -- Opened/closed via the "Item Levels" button in the main frame.
 
 local addonName = ...
@@ -176,28 +176,34 @@ end
 local function BuildIlvlRefWindow()
     local Locale = Addon.L
 
-    -- ilvl at rank r = ilvlBase + RANK_OFFSETS[r]
-    -- Starting points and rank offsets are defined in LariasWeeklyChecklist_Constants.lua
-    -- and loaded into Addon.TRACKING. The literals below are fallbacks only.
+    -- Season 2 popup data uses the Midnight season-2 base item levels.
+    -- Keep this local to the popup so the reference can be updated safely
+    -- without changing unrelated gameplay math elsewhere in the addon.
     local tracking     = Addon.TRACKING or {}
-    local ilvlBase      = tracking.ilvlBase      or 220
-    local ilvlTrackStep = tracking.ilvlTrackStep or 13
-    local RANK_OFFSETS  = tracking.ilvlRankOffsets or { 0, 4, 7, 10, 13, 17 }
+    local ilvlBase      = 266
+    local ilvlTrackStep = 13
+    local RANK_OFFSETS  = { 0, 4, 7, 10, 13, 17 }
+    local MYTH_EXTRA_ILVLS = { 338, 341, 344 }
 
     local TIERS = {
         { id="ADV",   color=ADV,   ilvlBase=ilvlBase + ilvlTrackStep * 0,
+          trackName  = (Addon.IlvlUtils and Addon.IlvlUtils.GetCrestTrackName and Addon.IlvlUtils.GetCrestTrackName(1)) or "Adventurer",
           crest      = Locale.ILVLREF_CREST_ADV,
           crestShort = Locale.ILVLREF_CREST_ADV },
         { id="VET",   color=VET,   ilvlBase=ilvlBase + ilvlTrackStep * 1,
+          trackName  = (Addon.IlvlUtils and Addon.IlvlUtils.GetCrestTrackName and Addon.IlvlUtils.GetCrestTrackName(2)) or "Veteran",
           crest      = Locale.ILVLREF_CREST_VET,
           crestShort = Locale.ILVLREF_CREST_VET },
         { id="CHAMP", color=CHAMP, ilvlBase=ilvlBase + ilvlTrackStep * 2,
+          trackName  = (Addon.IlvlUtils and Addon.IlvlUtils.GetCrestTrackName and Addon.IlvlUtils.GetCrestTrackName(3)) or "Champion",
           crest      = Locale.ILVLREF_CREST_CHAMP,
           crestShort = Locale.ILVLREF_CREST_CHAMP },
         { id="HERO",  color=HERO,  ilvlBase=ilvlBase + ilvlTrackStep * 3,
+          trackName  = (Addon.IlvlUtils and Addon.IlvlUtils.GetCrestTrackName and Addon.IlvlUtils.GetCrestTrackName(4)) or "Hero",
           crest      = Locale.ILVLREF_CREST_HERO,
           crestShort = Locale.ILVLREF_CREST_HERO },
         { id="MYTH",  color=MYTH,  ilvlBase=ilvlBase + ilvlTrackStep * 4,
+          trackName  = (Addon.IlvlUtils and Addon.IlvlUtils.GetCrestTrackName and Addon.IlvlUtils.GetCrestTrackName(5)) or "Myth",
           crest      = Locale.ILVLREF_CREST_MYTH,
           crestShort = Locale.ILVLREF_CREST_MYTH },
     }
@@ -222,12 +228,10 @@ local function BuildIlvlRefWindow()
         local nameCell
         if isOverlap then
             local nextRank = rank - 4
-            local lKey     = "ILVLREF_TRACK_" .. tier.id .. rank .. "_" .. nextTier.id .. nextRank
-            local fb       = tier.crest .. " " .. rank .. " / " .. nextTier.crest .. " " .. nextRank
-            nameCell = DualTrack(Locale[lKey] or fb, tier.color, nextTier.color)
+            local fb = tier.trackName .. " " .. rank .. "/6" .. " / " .. nextTier.trackName .. " " .. nextRank .. "/6"
+            nameCell = DualTrack(fb, tier.color, nextTier.color)
         else
-            local lKey = "ILVLREF_TRACK_" .. tier.id .. rank
-            nameCell   = tier.color .. (Locale[lKey] or tier.crest .. " " .. rank) .. COLOR_RESET
+            nameCell = tier.color .. tier.trackName .. " " .. rank .. "/6" .. COLOR_RESET
         end
 
         local crestCell
@@ -248,6 +252,15 @@ local function BuildIlvlRefWindow()
         for rank = startRank, 6 do
             table.insert(TRACKS, makeTrackRow(tier, rank, nextTier))
         end
+    end
+    for extraRank = 1, #MYTH_EXTRA_ILVLS do
+        local displayRank = 6 + extraRank
+        local ilvl = MYTH_EXTRA_ILVLS[extraRank]
+        table.insert(TRACKS, {
+            MYTH .. ilvl .. COLOR_RESET,
+            MYTH .. TIERS[5].trackName .. " " .. displayRank .. "/6" .. COLOR_RESET,
+            MYTH .. TIERS[5].crest .. COLOR_RESET,
+        })
     end
 
     -- Crafted item levels  (quality n = tier base + RANK_OFFSETS[n])
