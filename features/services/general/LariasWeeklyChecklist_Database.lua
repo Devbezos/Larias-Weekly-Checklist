@@ -173,7 +173,7 @@ local function BuildDefaultTrackedCurrencyConfig(self)
         id = tonumber(id)
         if not (id and id > 0) or seen[id] then return end
         seen[id] = true
-        out[#out + 1] = { id = id, enabled = true }
+        out[#out + 1] = { id = id, enabled = true, source = "builtin" }
         if #out >= MAX_TRACKED_CURRENCIES then return true end
         return false
     end
@@ -199,6 +199,36 @@ local function BuildDefaultTrackedCurrencyConfig(self)
     return out
 end
 
+local function IsBuiltInTrackedCurrencyID(self, currencyID)
+    local id = tonumber(currencyID)
+    if not id then return false end
+
+    local tracking = self and self.TRACKING or {}
+    local crestIDs = tracking.crestCurrencyIDs
+    if type(crestIDs) == "table" then
+        for i = 1, #crestIDs do
+            if tonumber(crestIDs[i]) == id then return true end
+        end
+    end
+
+    if tonumber(tracking.catalystCurrencyID) == id then return true end
+    if tonumber(tracking.sparkCurrencyID) == id then return true end
+    if tonumber(tracking.cofferKeysDisplayCurrencyID) == id then return true end
+
+    local miscIDs = tracking.miscCurrencyIDs
+    if type(miscIDs) == "table" then
+        for i = 1, #miscIDs do
+            if tonumber(miscIDs[i]) == id then return true end
+        end
+    end
+
+    return false
+end
+
+function Addon:IsBuiltInTrackedCurrencyID(currencyID)
+    return IsBuiltInTrackedCurrencyID(self, currencyID)
+end
+
 local function NormalizeTrackedCurrencyConfig(self, entries, allowEmpty)
     local out = {}
     local seen = {}
@@ -211,11 +241,17 @@ local function NormalizeTrackedCurrencyConfig(self, entries, allowEmpty)
                 or tonumber(entry)
             if id and id > 0 and not seen[id] then
                 seen[id] = true
+                local source = "custom"
+                if type(entry) == "table" and entry.source == "custom" then
+                    source = "custom"
+                elseif IsBuiltInTrackedCurrencyID(self, id) then
+                    source = "builtin"
+                end
                 out[#out + 1] = {
                     id = id,
                     enabled = not (type(entry) == "table" and entry.enabled == false),
+                    source = source,
                 }
-                if #out >= MAX_TRACKED_CURRENCIES then break end
             end
         end
     end
@@ -225,6 +261,34 @@ local function NormalizeTrackedCurrencyConfig(self, entries, allowEmpty)
     end
 
     return out
+end
+
+local function RestoreMissingBuiltInTrackedCurrencies(self, entries)
+    if type(entries) ~= "table" then return entries end
+
+    local seen = {}
+    for i = 1, #entries do
+        local id = tonumber(entries[i] and entries[i].id)
+        if id and id > 0 then
+            seen[id] = true
+        end
+    end
+
+    local builtIns = BuildDefaultTrackedCurrencyConfig(self)
+    for i = 1, #builtIns do
+        local entry = builtIns[i]
+        local id = tonumber(entry and entry.id)
+        if id and id > 0 and not seen[id] then
+            entries[#entries + 1] = {
+                id = id,
+                enabled = false,
+                source = "builtin",
+            }
+            seen[id] = true
+        end
+    end
+
+    return entries
 end
 
 local function RefreshAfterAltSummaryOrderChange(self)
@@ -406,18 +470,34 @@ function Addon:GetTrackedCurrencyLimit()
     return MAX_TRACKED_CURRENCIES
 end
 
+function Addon:GetTrackedCurrencyEnabledCount(entries)
+    local cfg = entries
+    if type(cfg) ~= "table" then
+        cfg = self:GetTrackedCurrencyConfig()
+    end
+
+    local count = 0
+    for i = 1, #cfg do
+        if cfg[i] and cfg[i].enabled ~= false then
+            count = count + 1
+        end
+    end
+    return count
+end
+
 function Addon:GetTrackedCurrencyConfig()
     local gdb = self:EnsurePrefs()
     if type(gdb.trackedCurrencyConfig) ~= "table" then
         gdb.trackedCurrencyConfig = NormalizeTrackedCurrencyConfig(self, nil, false)
     else
         gdb.trackedCurrencyConfig = NormalizeTrackedCurrencyConfig(self, gdb.trackedCurrencyConfig, true)
+        gdb.trackedCurrencyConfig = RestoreMissingBuiltInTrackedCurrencies(self, gdb.trackedCurrencyConfig)
     end
 
     if not gdb._trackedCurrencyConfigMigratedCofferKeys then
         gdb._trackedCurrencyConfigMigratedCofferKeys = true
         local cofferID = tonumber(self.TRACKING and self.TRACKING.cofferKeysDisplayCurrencyID)
-        if cofferID and cofferID > 0 and #gdb.trackedCurrencyConfig < MAX_TRACKED_CURRENCIES then
+        if cofferID and cofferID > 0 then
             local found = false
             for i = 1, #gdb.trackedCurrencyConfig do
                 if tonumber(gdb.trackedCurrencyConfig[i].id) == cofferID then
@@ -441,6 +521,7 @@ function Addon:GetTrackedCurrencyConfig()
         out[i] = {
             id = entry.id,
             enabled = entry.enabled ~= false,
+            source = entry.source,
         }
     end
     return out
