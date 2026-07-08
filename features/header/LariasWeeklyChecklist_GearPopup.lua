@@ -201,13 +201,6 @@ end
 function Addon:OpenRestoreHiddenCurrencies(anchor)
     -- Build a unified list: hidden currencies, items, vault blocks, and quests.
     local combined = {}
-    for _, e in ipairs(self:GetHiddenCurrencyList()) do
-        local _id = e.id
-        combined[#combined + 1] = {
-            name      = e.name,
-            onRestore = function() Addon:SetCurrencyHidden(_id, false) end,
-        }
-    end
     for _, e in ipairs(self.GetHiddenItemList and self:GetHiddenItemList() or {}) do
         local _id = e.id
         combined[#combined + 1] = {

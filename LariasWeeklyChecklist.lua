@@ -943,11 +943,19 @@ function Addon:ApplyWindowSurface(frameObj, opts)
         bgTex:SetAlpha(alpha)
         local vs = self.VISUAL_STYLE or {}
         local hdr = self.THEME and self.THEME.header or bg
+        local surfaceTopA = opts.surfaceTopA
+        if surfaceTopA == nil then
+            surfaceTopA = vs.surfaceTopA or 0.04
+        end
         if frameObj._lariasSurfaceTop then
-            frameObj._lariasSurfaceTop:SetColorTexture(hdr.r, hdr.g, hdr.b, (vs.surfaceTopA or 0.04) * alpha)
+            frameObj._lariasSurfaceTop:SetColorTexture(hdr.r, hdr.g, hdr.b, surfaceTopA * alpha)
+        end
+        local surfaceBottomA = opts.surfaceBottomA
+        if surfaceBottomA == nil then
+            surfaceBottomA = vs.surfaceBottomA or 0.10
         end
         if frameObj._lariasSurfaceBottom then
-            frameObj._lariasSurfaceBottom:SetColorTexture(0, 0, 0, (vs.surfaceBottomA or 0.10) * alpha)
+            frameObj._lariasSurfaceBottom:SetColorTexture(0, 0, 0, surfaceBottomA * alpha)
         end
         if frameObj.SetBackdropColor then
             frameObj:SetBackdropColor(0, 0, 0, 0)
@@ -2401,7 +2409,8 @@ local function ApplySectionVisuals(want, haveBefore, dataChanged, database, chil
                 if not p then return end
                 if p.IsShown and p:IsShown() then p:Hide(); return end
                 p:ClearAllPoints()
-                p:SetPoint("TOPLEFT", _capturedSF._header, "BOTTOMLEFT", 0, -4)
+                local anchor = _capturedSF._expandBtn or _capturedSF._header
+                p:SetPoint("TOPRIGHT", anchor, "BOTTOMRIGHT", 0, -4)
                 p:Show()
                 if C_Timer and C_Timer.After then
                     C_Timer.After(0, Addon._PopulateHeaderPicker)
@@ -2427,7 +2436,7 @@ local function ApplySectionVisuals(want, haveBefore, dataChanged, database, chil
                     if not p then return end
                     if p.IsShown and p:IsShown() then p:Hide(); return end
                     p:ClearAllPoints()
-                    p:SetPoint("TOPLEFT", _capturedSF._header, "BOTTOMLEFT", 0, -4)
+                    p:SetPoint("TOPRIGHT", btn, "BOTTOMRIGHT", 0, -4)
                     p:Show()
                     if C_Timer and C_Timer.After then
                         C_Timer.After(0, Addon._PopulateHeaderPicker)

@@ -12,6 +12,8 @@ local type, tostring = type, tostring
 local pairs, next = pairs, next
 local table_sort = table.sort
 
+local MAX_TRACKED_CURRENCIES = 12
+
 -- Default values applied to each character's data block on first access.
 -- Display-preference defaults live in db.global so they are shared across all
 -- characters; keys with false/nil defaults are intentionally omitted.
@@ -151,6 +153,78 @@ local function RefreshAfterTrackedLootChange(self)
     if self.RequestRefresh then self:RequestRefresh()
     elseif self.Refresh then self:Refresh() end
     if self.RefreshAltsSummary then self:RefreshAltsSummary() end
+end
+
+local function RefreshAfterTrackedCurrencyConfigChange(self)
+    if self.RequestTrackingUpdate then self:RequestTrackingUpdate() end
+    if self.RequestRefresh then self:RequestRefresh()
+    elseif self.Refresh then self:Refresh() end
+    if self.RefreshAltsSummary      then self:RefreshAltsSummary()      end
+    if self.SyncGearPopup           then self:SyncGearPopup()           end
+    if self.RefreshCurrencyConfigPopup then self:RefreshCurrencyConfigPopup() end
+end
+
+local function BuildDefaultTrackedCurrencyConfig(self)
+    local tracking = self and self.TRACKING or {}
+    local out = {}
+    local seen = {}
+
+    local function push(id)
+        id = tonumber(id)
+        if not (id and id > 0) or seen[id] then return end
+        seen[id] = true
+        out[#out + 1] = { id = id, enabled = true }
+        if #out >= MAX_TRACKED_CURRENCIES then return true end
+        return false
+    end
+
+    local crestIDs = tracking and tracking.crestCurrencyIDs
+    if type(crestIDs) == "table" then
+        for i = 1, #crestIDs do
+            if push(crestIDs[i]) then return out end
+        end
+    end
+
+    if push(tracking and tracking.catalystCurrencyID) then return out end
+    if push(tracking and tracking.sparkCurrencyID)    then return out end
+    if push(tracking and tracking.cofferKeysDisplayCurrencyID) then return out end
+
+    local miscIDs = tracking and tracking.miscCurrencyIDs
+    if type(miscIDs) == "table" then
+        for i = 1, #miscIDs do
+            if push(miscIDs[i]) then return out end
+        end
+    end
+
+    return out
+end
+
+local function NormalizeTrackedCurrencyConfig(self, entries, allowEmpty)
+    local out = {}
+    local seen = {}
+
+    if type(entries) == "table" then
+        for i = 1, #entries do
+            local entry = entries[i]
+            local id = type(entry) == "table"
+                and tonumber(entry.id or entry.currencyID)
+                or tonumber(entry)
+            if id and id > 0 and not seen[id] then
+                seen[id] = true
+                out[#out + 1] = {
+                    id = id,
+                    enabled = not (type(entry) == "table" and entry.enabled == false),
+                }
+                if #out >= MAX_TRACKED_CURRENCIES then break end
+            end
+        end
+    end
+
+    if #out == 0 and not allowEmpty then
+        return BuildDefaultTrackedCurrencyConfig(self)
+    end
+
+    return out
 end
 
 local function RefreshAfterAltSummaryOrderChange(self)
@@ -326,6 +400,56 @@ function Addon:GetTrackedLootCharKeys()
     end)
 
     return keys
+end
+
+function Addon:GetTrackedCurrencyLimit()
+    return MAX_TRACKED_CURRENCIES
+end
+
+function Addon:GetTrackedCurrencyConfig()
+    local gdb = self:EnsurePrefs()
+    if type(gdb.trackedCurrencyConfig) ~= "table" then
+        gdb.trackedCurrencyConfig = NormalizeTrackedCurrencyConfig(self, nil, false)
+    else
+        gdb.trackedCurrencyConfig = NormalizeTrackedCurrencyConfig(self, gdb.trackedCurrencyConfig, true)
+    end
+
+    if not gdb._trackedCurrencyConfigMigratedCofferKeys then
+        gdb._trackedCurrencyConfigMigratedCofferKeys = true
+        local cofferID = tonumber(self.TRACKING and self.TRACKING.cofferKeysDisplayCurrencyID)
+        if cofferID and cofferID > 0 and #gdb.trackedCurrencyConfig < MAX_TRACKED_CURRENCIES then
+            local found = false
+            for i = 1, #gdb.trackedCurrencyConfig do
+                if tonumber(gdb.trackedCurrencyConfig[i].id) == cofferID then
+                    found = true
+                    break
+                end
+            end
+            if not found then
+                local insertAt = math.min(#gdb.trackedCurrencyConfig + 1, 8)
+                table.insert(gdb.trackedCurrencyConfig, insertAt, {
+                    id = cofferID,
+                    enabled = true,
+                })
+            end
+        end
+    end
+
+    local out = {}
+    for i = 1, #gdb.trackedCurrencyConfig do
+        local entry = gdb.trackedCurrencyConfig[i]
+        out[i] = {
+            id = entry.id,
+            enabled = entry.enabled ~= false,
+        }
+    end
+    return out
+end
+
+function Addon:SetTrackedCurrencyConfig(entries)
+    local gdb = self:EnsurePrefs()
+    gdb.trackedCurrencyConfig = NormalizeTrackedCurrencyConfig(self, entries, true)
+    RefreshAfterTrackedCurrencyConfigChange(self)
 end
 
 function Addon:GetAltSummaryCharOrder()

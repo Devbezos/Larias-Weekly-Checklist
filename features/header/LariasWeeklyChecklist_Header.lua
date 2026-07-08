@@ -290,7 +290,8 @@ function Addon:CreateHeader(frame)
 
                     local btn = AcquirePickerButton(picker)
                     btn:ClearAllPoints()
-                    btn:SetPoint("TOPLEFT", picker, "TOPLEFT", PICKER_PAD, posY)
+                    btn:SetPoint("TOPLEFT",  picker, "TOPLEFT",  PICKER_PAD, posY)
+                    btn:SetPoint("TOPRIGHT", picker, "TOPRIGHT", -PICKER_PAD, posY)
                     btn:SetHeight(PICKER_ROW_HEIGHT)
                     btn:SetText(label)
                     btn._selected = isCurrent
@@ -337,14 +338,7 @@ function Addon:CreateHeader(frame)
                 end
                 local newW = math.max(160, math.min(520, math.ceil(bestW + PICKER_PAD * 4 + 24)))
                 picker:SetWidth(newW)
-                for _, b in ipairs(picker._buttons) do
-                    if b.SetWidth then b:SetWidth(newW - PICKER_PAD * 2) end
-                end
             end)
-        end
-
-        for _, b in ipairs(picker._buttons) do
-            if b.SetWidth then b:SetWidth(PICKER_ROW_WIDTH) end
         end
     end
 

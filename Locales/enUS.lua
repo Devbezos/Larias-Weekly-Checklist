@@ -90,6 +90,7 @@ local STRINGS = {
 	-- Tracking panel header tooltips
 	TOOLTIP_OPEN_GREAT_VAULT  = "Click to open the Great Vault",
 	TOOLTIP_OPEN_CURRENCIES   = "Click to open the Currency panel",
+	TOOLTIP_CONFIGURE_CURRENCIES = "Right-click to configure tracked currencies",
 
 	-- Tracking panel
 	TRACKING_GREAT_VAULT_TITLE = "Great Vault",
@@ -341,6 +342,16 @@ local STRINGS = {
 	ALT_SUMMARY_GEAR_SLOT_BACK = "Back",
 	ALT_SUMMARY_GEAR_SLOT_MAIN_HAND = "Main Hand",
 	ALT_SUMMARY_GEAR_SLOT_OFF_HAND = "Off Hand",
+	CURRENCY_CONFIG_TITLE = "Configure Currencies",
+	CURRENCY_CONFIG_HELP = "Add by currency ID, toggle rows on or off, then reorder them.",
+	CURRENCY_CONFIG_COUNT_FMT = "%d/%d configured",
+	CURRENCY_CONFIG_ADD_LABEL = "Currency ID",
+	CURRENCY_CONFIG_ADD_BUTTON = "Add",
+	CURRENCY_CONFIG_REMOVE_BUTTON = "Remove",
+	CURRENCY_CONFIG_INVALID_ID = "Enter a valid currency ID.",
+	CURRENCY_CONFIG_DUPLICATE = "That currency is already configured.",
+	CURRENCY_CONFIG_LIMIT_FMT = "You can only configure %d currencies.",
+	CURRENCY_CONFIG_CURRENCY_FMT = "Currency %d",
 	RESTORE_HIDDEN_TITLE = "Restore Hidden Currencies",
 	RESTORE_HIDDEN_BTN = "Restore",
 	RESTORE_HIDDEN_VAULT_SUFFIX = "(Vault)",

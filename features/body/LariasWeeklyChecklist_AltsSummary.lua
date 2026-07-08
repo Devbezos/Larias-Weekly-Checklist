@@ -12,6 +12,7 @@ local GetItemName = AU.GetItemName
 
 -- ── Layout constants ──────────────────────────────────────────────────────────
 local PAD        = 8
+local RIGHT_PAD  = 2
 local TITLE_H    = 28
 local ROW_H      = 23          -- height of each data row
 local HDR_ROW_H  = 27          -- height of section label rows
@@ -110,6 +111,10 @@ local GetItemLabelColorRGB
 -- Convenience alias: snapshot type-tag strings (defined in Currency.lua, published on Addon).
 -- AltsSummary reads this rather than repeating magic strings.
 local ST  -- assigned in PopulateSummary after Currency.lua has loaded
+local function GetSnapTypes()
+    ST = ST or Addon.SNAP_TYPES or {}
+    return ST
+end
 local PopulateSummary  -- forward declaration
 local ShowGearPopup    -- forward declaration
 
@@ -361,9 +366,15 @@ end
 
 -- ── Dynamic layout ────────────────────────────────────────────────────────────
 local function ComputeLayout()
-    local tracking = Addon.TRACKING
-    local miscIDs  = (tracking and type(tracking.miscCurrencyIDs) == "table")
-                     and tracking.miscCurrencyIDs or {}
+    local snapTypes = GetSnapTypes()
+    local miscIDs = {}
+    if Addon.GetTrackedCurrencyEntries then
+        for _, entry in ipairs(Addon:GetTrackedCurrencyEntries(false)) do
+            if entry.type == snapTypes.MISC then
+                miscIDs[#miscIDs + 1] = entry.id
+            end
+        end
+    end
     local numMisc  = #miscIDs
     return {
         numMisc = numMisc,
@@ -420,18 +431,6 @@ local function HideSummaryOverlays()
     end
 end
 Addon.HideSummaryOverlays = HideSummaryOverlays
-
-local function ShowCurrencyHideMenu(anchor, currencyID)
-    local cid = tonumber(currencyID)
-    if not cid then return end
-    local currencyName = GetCurrencyName(cid) or tostring(cid)
-    local menuText = (L.CONTEXT_HIDE_THIS_CURRENCY_FMT or "Hide %s"):format(currencyName)
-    Addon:ShowContextMenu(anchor, {
-        { text = menuText, onClick = function()
-            Addon:SetCurrencyHidden(cid, true)
-        end },
-    })
-end
 
 local function ShowItemHideMenu(anchor, itemID)
     local id = tonumber(itemID)
@@ -751,6 +750,7 @@ local function AnyVisibleCharNeedsUpgradeCost(chars, tierIdx)
 end
 
 local function AnyVisibleCharNeedsWeapUpg(chars)
+    local snapTypes = GetSnapTypes()
     if not chars then return false end
     for _, char in ipairs(chars) do
         local snap = char and char.snap
@@ -759,7 +759,7 @@ local function AnyVisibleCharNeedsWeapUpg(chars)
             if watermarkNeed > 0 then return true end
         elseif snap and type(snap.rightRows) == "table" then
             for _, row in ipairs(snap.rightRows) do
-                if row.type == ST.WEAPUPG and (tonumber(row.need) or 0) > 0 then
+                if row.type == snapTypes.WEAPUPG and (tonumber(row.need) or 0) > 0 then
                     return true
                 end
             end
@@ -769,6 +769,7 @@ local function AnyVisibleCharNeedsWeapUpg(chars)
 end
 
 local function BuildRowDefs(tracking, LAYOUT, chars)
+    local snapTypes = GetSnapTypes()
     local rows = {}
     local function addSec(lbl, action)  rows[#rows + 1] = { type = "sechdr", label = lbl, action = action } end
     local function addRow(t, lbl, extra)
@@ -786,34 +787,54 @@ local function BuildRowDefs(tracking, LAYOUT, chars)
     end
 
     addSec(L.ALT_SUMMARY_SECTION_CURRENCIES or "Currencies", "currency")
-    for i = 1, NUM_CRESTS do
-        local name, cr, cg, cb = CrestTierInfo(i)
-        local crestID = tracking and tracking.crestCurrencyIDs and tracking.crestCurrencyIDs[i]
-        if not Addon:IsCurrencyHidden(crestID) then
-            local _, iconID = GetCachedCurrencyRowMeta(crestID, name)
-            addRow("crest", name, { crestIdx = i, cr = cr, cg = cg, cb = cb,
-                                    iconID = iconID, currencyID = crestID })
-        end
-    end
-
-    local _catID = tracking and tracking.catalystCurrencyID
-    if not Addon:IsCurrencyHidden(_catID) then
-        local fallback = L.TRACKING_CATALYST_LABEL or "Catalyst"
-        local _catName, _icon, _cr, _cg, _cb = GetCachedCurrencyRowMeta(_catID, fallback)
-        addRow("catalyst", _catName, { iconID = _icon, currencyID = _catID, cr = _cr, cg = _cg, cb = _cb })
-    end
-    local _sprkID = tracking and tracking.sparkCurrencyID
-    if not Addon:IsCurrencyHidden(_sprkID) then
-        local fallback = L.TRACKING_SPARKS_LABEL or "Sparks"
-        local _sprkName, _icon, _cr, _cg, _cb = GetCachedCurrencyRowMeta(_sprkID, fallback)
-        addRow("sparks", _sprkName, { iconID = _icon, currencyID = _sprkID, cr = _cr, cg = _cg, cb = _cb })
-    end
-    for mi, mID in ipairs(LAYOUT.miscIDs) do
-        local mIDNum = tonumber(mID)
-        if not Addon:IsCurrencyHidden(mIDNum) then
-            local fallback = (L.ALT_SUMMARY_MISC_CURRENCY_FMT or "Currency %d"):format(mID)
-            local name, iconID, _cr, _cg, _cb = GetCachedCurrencyRowMeta(mIDNum, fallback)
-            addRow("misc", name, { miscIdx = mi, miscID = mID, iconID = iconID, cr = _cr, cg = _cg, cb = _cb })
+    if Addon.GetTrackedCurrencyEntries then
+        for _, entry in ipairs(Addon:GetTrackedCurrencyEntries(false)) do
+            local currencyID = tonumber(entry.id)
+            if currencyID then
+                if entry.type == snapTypes.CREST then
+                    local crestIdx = tonumber(entry.crestIdx)
+                    local name, cr, cg, cb = CrestTierInfo(crestIdx)
+                    local _, iconID = GetCachedCurrencyRowMeta(currencyID, name)
+                    addRow("crest", name, {
+                        crestIdx = crestIdx,
+                        cr = cr, cg = cg, cb = cb,
+                        iconID = iconID,
+                        currencyID = currencyID,
+                    })
+                elseif entry.type == snapTypes.CATALYST then
+                    local fallback = L.TRACKING_CATALYST_LABEL or "Catalyst"
+                    local catName, iconID, cr, cg, cb = GetCachedCurrencyRowMeta(currencyID, fallback)
+                    addRow("catalyst", catName, {
+                        iconID = iconID,
+                        currencyID = currencyID,
+                        cr = cr, cg = cg, cb = cb,
+                    })
+                elseif entry.type == snapTypes.SPARKS then
+                    local fallback = L.TRACKING_SPARKS_LABEL or "Sparks"
+                    local sprkName, iconID, cr, cg, cb = GetCachedCurrencyRowMeta(currencyID, fallback)
+                    addRow("sparks", sprkName, {
+                        iconID = iconID,
+                        currencyID = currencyID,
+                        cr = cr, cg = cg, cb = cb,
+                    })
+                elseif entry.type == snapTypes.COFFERKEYS then
+                    local fallback = L.TRACKING_COFFER_KEYS_LABEL or "Coffer Keys"
+                    local keyName, iconID, cr, cg, cb = GetCachedCurrencyRowMeta(currencyID, fallback)
+                    addRow("cofferkeys", keyName, {
+                        iconID = iconID,
+                        currencyID = currencyID,
+                        cr = cr, cg = cg, cb = cb,
+                    })
+                else
+                    local fallback = (L.ALT_SUMMARY_MISC_CURRENCY_FMT or "Currency %d"):format(currencyID)
+                    local name, iconID, cr, cg, cb = GetCachedCurrencyRowMeta(currencyID, fallback)
+                    addRow("misc", name, {
+                        currencyID = currencyID,
+                        iconID = iconID,
+                        cr = cr, cg = cg, cb = cb,
+                    })
+                end
+            end
         end
     end
 
@@ -850,7 +871,7 @@ local function BuildRowDefs(tracking, LAYOUT, chars)
             end
         end
 
-        if not Addon:IsItemHidden(268552) and AnyVisibleCharNeedsWeapUpg(chars) then
+        if not Addon:IsItemHidden(268552) then
             if not addedUpgradeRows then
                 addSec(L.ALT_SUMMARY_SECTION_UPGRADE_COST or "Upgrade Cost", nil)
                 addedUpgradeRows = true
@@ -882,6 +903,7 @@ local function NewSnapData()
     return {
         catQty = 0, catCap = 0,
         sprkQty = 0, sprkCap = 0, sprkQD = nil,
+        keysQty = 0, keysCap = 0, keysHeld = 0,
         miscQtys   = {}, miscCaps      = {},
         crestQtys  = {}, crestEarneds  = {}, crestCaps = {}, crestTradeups = {},
         questsDone = {},
@@ -892,11 +914,12 @@ local function NewSnapData()
 end
 
 local function ExtractSnapData(snap, crestIDs, LAYOUT)
+    local snapTypes = GetSnapTypes()
     local d = NewSnapData()
     if not (snap and snap.rightRows) then return d end
     for _, r_ in ipairs(snap.rightRows) do
         local t = r_.type
-        if t == ST.CREST then
+        if t == snapTypes.CREST then
             local rid = tonumber(r_.id)
             for ii = 1, NUM_CRESTS do
                 if crestIDs[ii] == rid then
@@ -907,25 +930,26 @@ local function ExtractSnapData(snap, crestIDs, LAYOUT)
                     break
                 end
             end
-        elseif t == ST.CATALYST then
+        elseif t == snapTypes.CATALYST then
             d.catQty = tonumber(r_.qty) or 0
             d.catCap = tonumber(r_.cap) or 0
-        elseif t == ST.SPARKS then
+        elseif t == snapTypes.SPARKS then
             d.sprkQty = tonumber(r_.qty) or 0
             d.sprkCap = tonumber(r_.cap) or 0
             d.sprkQD  = r_.questDone
-        elseif t == ST.MISC then
+        elseif t == snapTypes.COFFERKEYS then
+            d.keysQty = tonumber(r_.qty) or 0
+            d.keysCap = tonumber(r_.cap) or 0
+            d.keysHeld = tonumber(r_.held) or d.keysQty
+        elseif t == snapTypes.MISC then
             local rid = tonumber(r_.id)
-            for mi, mID in ipairs(LAYOUT.miscIDs) do
-                if tonumber(mID) == rid then
-                    d.miscQtys[mi] = tonumber(r_.qty) or 0
-                    d.miscCaps[mi] = tonumber(r_.cap) or 0
-                    break
-                end
+            if rid then
+                d.miscQtys[rid] = tonumber(r_.qty) or 0
+                d.miscCaps[rid] = tonumber(r_.cap) or 0
             end
-        elseif t == ST.QUEST then
+        elseif t == snapTypes.QUEST then
             d.questsDone[r_.key] = r_.done
-        elseif t == ST.WEAPUPG then
+        elseif t == snapTypes.WEAPUPG then
             d.weapUpgShardQty    = tonumber(r_.shardQty)    or 0
             d.weapUpgCombinedQty = tonumber(r_.combinedQty) or 0
             d.weapUpgNeed        = tonumber(r_.need)        or 0
@@ -1101,8 +1125,9 @@ local function RenderSparksCell(cell, row, sd, noSnap, alpha, th)
 end
 
 local function RenderMiscCell(cell, row, sd, noSnap, alpha, th)
-    local mQty = sd.miscQtys[row.miscIdx] or 0
-    local mCap = sd.miscCaps[row.miscIdx] or 0
+    local cid = tonumber(row.currencyID)
+    local mQty = (cid and sd.miscQtys[cid]) or 0
+    local mCap = (cid and sd.miscCaps[cid]) or 0
     if noSnap then
         SetPlaceholder(cell, th, alpha * A_DIM)
     elseif mCap > 0 then
@@ -1131,6 +1156,40 @@ local function RenderMiscCell(cell, row, sd, noSnap, alpha, th)
             GameTooltip:Show()
         end)
     end
+end
+
+local function RenderCofferKeysCell(cell, row, sd, noSnap, alpha, th)
+    local keysQty = sd.keysQty or 0
+    local keysCap = sd.keysCap or 0
+    local keysHeld = sd.keysHeld or keysQty
+    if noSnap then
+        SetPlaceholder(cell, th, alpha * A_DIM)
+        cell:SetScript("OnEnter", nil)
+        return
+    end
+    if keysCap > 0 then
+        cell._fs:SetText(keysHeld .. "/" .. keysCap)
+        if keysQty >= keysCap then
+            cell._fs:SetTextColor(0.3, 1.0, 0.3, alpha)
+        elseif keysHeld > 0 then
+            cell._fs:SetTextColor(1.0, 0.82, 0.0, alpha)
+        else
+            cell._fs:SetTextColor(th.r, th.g, th.b, alpha)
+        end
+    else
+        cell._fs:SetText(tostring(keysHeld))
+        cell._fs:SetTextColor(th.r, th.g, th.b, alpha * (keysHeld > 0 and A_FULL or A_DIM))
+    end
+    local _earned, _cap, _held, _lbl = keysQty, keysCap, keysHeld, row.label
+    cell:SetScript("OnEnter", function(s_)
+        GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
+        GameTooltip:SetText(_lbl or (L.TRACKING_COFFER_KEYS_LABEL or "Coffer Keys"), 1, 0.82, 0)
+        if _cap > 0 then
+            GameTooltip:AddLine((L.TRACKING_EARNED_FMT or "Earned: %d/%d"):format(_earned, _cap), 1, 1, 1)
+        end
+        GameTooltip:AddLine((L.TRACKING_HELD_FMT or "Held: %d"):format(_held), 0.75, 0.75, 0.75)
+        GameTooltip:Show()
+    end)
 end
 
 local function RenderWeapUpgCell(cell, row, sd, noSnap, alpha, th)
@@ -1616,9 +1675,9 @@ PopulateSummary = function(panel)
     ROWS_TOP    = COL_HDR_TOP - COL_HDR_H - 2
     FOOTER_TOP  = ROWS_TOP - totalContentH - 8
     TOTAL_H     = math.abs(FOOTER_TOP) + 20 + PAD
-    local TOTAL_W     = PAD + COL_LABEL + numChars * colW + PAD
+    local TOTAL_W     = PAD + COL_LABEL + numChars * colW + RIGHT_PAD
 
-    panel:SetSize(math.max(300, TOTAL_W), math.max(120, TOTAL_H))
+    panel:SetSize(math.max(260, TOTAL_W), math.max(120, TOTAL_H))
     panel._dragUpdate = function(self_)
         local state = self_._dragState
         if not state then return end
@@ -1924,7 +1983,7 @@ PopulateSummary = function(panel)
             if row.type == "crest" or row.type == "upgcost" or row.type == "quest" then
                 lblFS:SetTextColor(row.cr or th.r, row.cg or th.g, row.cb or th.b, 0.90)
             elseif row.type == "catalyst" or row.type == "sparks"
-                or row.type == "keys"     or row.type == "misc"
+                or row.type == "cofferkeys" or row.type == "misc"
                 or row.type == "weapupg" then
                 lblFS:SetTextColor(row.cr or 1, row.cg or 0.82, row.cb or 0, 0.85)
             else
@@ -1937,7 +1996,7 @@ PopulateSummary = function(panel)
             lblFS:SetSize(textW, h)
 
             -- Transparent hit frame so hovering the label shows the currency tooltip.
-            local cID = row.currencyID or (row.type == "misc" and row.miscID)
+            local cID = row.currencyID
             if cID then
                 local hit = GetHit()
                 hit:ClearAllPoints()
@@ -1949,14 +2008,9 @@ PopulateSummary = function(panel)
                     if not _cid then return end
                     GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
                     GameTooltip:SetCurrencyByID(_cid)
-                    GameTooltip:AddLine(" ")
-                    GameTooltip:AddLine(L.CONTEXT_RIGHT_CLICK_HIDE or "Right-click to hide", 0.5, 0.5, 0.5)
                     GameTooltip:Show()
                 end)
-                hit:SetScript("OnMouseUp", function(s_, button)
-                    if button ~= "RightButton" then return end
-                    ShowCurrencyHideMenu(s_, _cid)
-                end)
+                hit:SetScript("OnMouseUp", nil)
             else
                 local hit = GetHit()
                 hit:ClearAllPoints()
@@ -2102,8 +2156,14 @@ PopulateSummary = function(panel)
             col.hdrHit:SetScript("OnMouseUp", function(s_, button)
                 if button == "LeftButton" then
                     local state = panel._dragState
+                    local shouldOpenGear = not state
                     if state and state.charKey == _ck and not state.active then
+                        shouldOpenGear = true
+                    end
+                    if state then
                         ClearDragState()
+                    end
+                    if shouldOpenGear then
                         if _gearPopupFrame and _gearPopupFrame:IsShown()
                            and _gearPopupFrame._charKey == _ck then
                             _gearPopupFrame:Hide()
@@ -2155,6 +2215,8 @@ PopulateSummary = function(panel)
                     RenderCatalystCell(cell, row, sd, noSnap, alpha, th)
                 elseif rtype == "sparks" then
                     RenderSparksCell(cell, row, sd, noSnap, alpha, th)
+                elseif rtype == "cofferkeys" then
+                    RenderCofferKeysCell(cell, row, sd, noSnap, alpha, th)
                 elseif rtype == "misc" then
                     RenderMiscCell(cell, row, sd, noSnap, alpha, th)
                 elseif rtype == "quest" then
@@ -2179,18 +2241,14 @@ PopulateSummary = function(panel)
                     if existingOnEnter then existingOnEnter(s_) end
                 end)
 
-                local hideCurrencyID = row.currencyID or (row.type == "misc" and row.miscID)
                 local hideItemID = row.itemID
                 local hideQuestKey = row.questKey
-                if hideCurrencyID or hideItemID or hideQuestKey then
-                    local _cid = hideCurrencyID
+                if hideItemID or hideQuestKey then
                     local _itemID = hideItemID
                     local _questKey = hideQuestKey
                     cell:SetScript("OnMouseUp", function(s_, button)
                         if button ~= "RightButton" then return end
-                        if _cid then
-                            ShowCurrencyHideMenu(s_, _cid)
-                        elseif _itemID then
+                        if _itemID then
                             ShowItemHideMenu(s_, _itemID)
                         elseif _questKey then
                             Addon:ShowContextMenu(s_, {

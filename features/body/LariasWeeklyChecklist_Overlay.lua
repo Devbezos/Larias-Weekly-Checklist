@@ -269,6 +269,276 @@ local function EnsureTrackingPanelCreatedIfNeeded(wantPanel)
     end
 end
 
+local _currencyConfigPopup
+
+local function GetConfiguredCurrencyLabel(currencyID)
+    local id = tonumber(currencyID)
+    if not id then return tostring(currencyID or "") end
+    local name = Addon.GetCurrencyName and Addon:GetCurrencyName(id)
+    if name and name ~= "" then
+        return name .. " (" .. id .. ")"
+    end
+    local fmt = (Addon.L and Addon.L.CURRENCY_CONFIG_CURRENCY_FMT) or "Currency %d"
+    return fmt:format(id)
+end
+
+function Addon:RefreshCurrencyConfigPopup(statusText)
+    local p = _currencyConfigPopup
+    if not p then return end
+
+    local L = self.L or {}
+    local cfg = self:GetTrackedCurrencyConfig()
+    local limit = self:GetTrackedCurrencyLimit()
+
+    if p._titleFS then
+        p._titleFS:SetText(L.CURRENCY_CONFIG_TITLE or "Configure Currencies")
+    end
+    if p._helpFS then
+        p._helpFS:SetText(L.CURRENCY_CONFIG_HELP or "Add by currency ID, toggle rows on or off, then reorder them.")
+    end
+    if p._countFS then
+        local countFmt = L.CURRENCY_CONFIG_COUNT_FMT or "%d/%d configured"
+        p._countFS:SetText(countFmt:format(#cfg, limit))
+    end
+    if p._addLabelFS then
+        p._addLabelFS:SetText(L.CURRENCY_CONFIG_ADD_LABEL or "Currency ID")
+    end
+    if p._addBtn then
+        p._addBtn:SetText(L.CURRENCY_CONFIG_ADD_BUTTON or "Add")
+    end
+    if p._statusFS then
+        p._statusFS:SetText(statusText or "")
+    end
+
+    p._rowFrames = p._rowFrames or {}
+    for i = 1, #p._rowFrames do
+        p._rowFrames[i]:Hide()
+    end
+
+    local rowAnchor = p._rowsAnchor or p
+    local rowH = 26
+    local btnW = 24
+    local removeW = 62
+    local buttonGap = 4
+    local rightInset = 12
+    local textRightPad = (btnW * 2) + removeW + (buttonGap * 2) + 12
+    local themeText = self.THEME and self.THEME.text or { r = 1, g = 1, b = 1, a = 1 }
+
+    for i = 1, #cfg do
+        local row = p._rowFrames[i]
+        if not row then
+            row = CreateFrame("Frame", nil, p)
+            row:SetHeight(rowH)
+
+            local idx = i
+            row._cb = Addon.Controls.NewCheckBox(row, function(v)
+                local nextCfg = Addon:GetTrackedCurrencyConfig()
+                if nextCfg[idx] then
+                    nextCfg[idx].enabled = v and true or false
+                    Addon:SetTrackedCurrencyConfig(nextCfg)
+                end
+            end, 14)
+            row._cb:SetPoint("LEFT", row, "LEFT", 0, 0)
+            if row._cb._label then
+                row._cb._label:SetPoint("RIGHT", row, "RIGHT", -textRightPad, 0)
+            end
+            if row._cb._hit then
+                row._cb._hit:SetPoint("TOPLEFT", row, "TOPLEFT", 0, 0)
+                row._cb._hit:SetPoint("BOTTOMRIGHT", row, "RIGHT", -textRightPad, 0)
+            end
+
+            row._upBtn = Addon.Controls.NewActionButton(row, btnW, 18)
+            row._upBtn:SetPoint("RIGHT", row, "RIGHT", -(btnW + removeW + (buttonGap * 2)), 0)
+            row._upBtn:SetText("^")
+            row._upBtn:SetScript("OnClick", function()
+                local nextCfg = Addon:GetTrackedCurrencyConfig()
+                if idx > 1 and nextCfg[idx] and nextCfg[idx - 1] then
+                    nextCfg[idx], nextCfg[idx - 1] = nextCfg[idx - 1], nextCfg[idx]
+                    Addon:SetTrackedCurrencyConfig(nextCfg)
+                end
+            end)
+
+            row._downBtn = Addon.Controls.NewActionButton(row, btnW, 18)
+            row._downBtn:SetPoint("RIGHT", row, "RIGHT", -(removeW + buttonGap), 0)
+            row._downBtn:SetText("v")
+            row._downBtn:SetScript("OnClick", function()
+                local nextCfg = Addon:GetTrackedCurrencyConfig()
+                if nextCfg[idx] and nextCfg[idx + 1] then
+                    nextCfg[idx], nextCfg[idx + 1] = nextCfg[idx + 1], nextCfg[idx]
+                    Addon:SetTrackedCurrencyConfig(nextCfg)
+                end
+            end)
+
+            row._removeBtn = Addon.Controls.NewActionButton(row, removeW, 18)
+            row._removeBtn:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+            row._removeBtn:SetText(L.CURRENCY_CONFIG_REMOVE_BUTTON or "Remove")
+            row._removeBtn:SetScript("OnClick", function()
+                local nextCfg = Addon:GetTrackedCurrencyConfig()
+                table.remove(nextCfg, idx)
+                Addon:SetTrackedCurrencyConfig(nextCfg)
+            end)
+
+            p._rowFrames[i] = row
+        end
+
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", rowAnchor, "TOPLEFT", 0, -((i - 1) * rowH))
+        row:SetPoint("TOPRIGHT", rowAnchor, "TOPRIGHT", 0, -((i - 1) * rowH))
+        row:Show()
+
+        local entry = cfg[i]
+        row._cb:SetChecked(entry.enabled ~= false)
+        row._cb:SetPoint("LEFT", row, "LEFT", 0, 0)
+        if row._cb._label then
+            row._cb._label:ClearAllPoints()
+            row._cb._label:SetPoint("LEFT", row._cb._box, "RIGHT", 6, 0)
+            row._cb._label:SetPoint("RIGHT", row, "RIGHT", -textRightPad, 0)
+            row._cb._label:SetText(GetConfiguredCurrencyLabel(entry.id))
+            if entry.enabled == false then
+                row._cb._label:SetTextColor(themeText.r, themeText.g, themeText.b, 0.55)
+            else
+                row._cb._label:SetTextColor(themeText.r, themeText.g, themeText.b, themeText.a or 1)
+            end
+        end
+        if row._cb._hit then
+            row._cb._hit:ClearAllPoints()
+            row._cb._hit:SetPoint("TOPLEFT", row, "TOPLEFT", 0, 0)
+            row._cb._hit:SetPoint("BOTTOMRIGHT", row, "RIGHT", -textRightPad, 0)
+        end
+        row._upBtn:SetShown(i > 1)
+        row._downBtn:SetShown(i < #cfg)
+        row._removeBtn:SetText(L.CURRENCY_CONFIG_REMOVE_BUTTON or "Remove")
+    end
+
+    local totalH = 170 + (#cfg * rowH)
+    p:SetHeight(max(230, totalH))
+end
+
+function Addon:ToggleCurrencyConfigPopup(anchor)
+    local p = _currencyConfigPopup
+    local L = self.L or {}
+    if p and p.IsShown and p:IsShown() then
+        p:Hide()
+        return
+    end
+
+    if not p then
+        p = Addon.Controls.NewPopupPanel("DIALOG", 0.12)
+        p:SetSize(430, 260)
+        p:SetMovable(true)
+        p:SetClampedToScreen(true)
+        p._closeOnOutsideClick = false
+
+        local dragBar = CreateFrame("Frame", nil, p)
+        dragBar:SetPoint("TOPLEFT", p, "TOPLEFT", 8, -8)
+        dragBar:SetPoint("TOPRIGHT", p, "TOPRIGHT", -8, -8)
+        dragBar:SetHeight(24)
+        dragBar:EnableMouse(true)
+        dragBar:RegisterForDrag("LeftButton")
+        dragBar:SetScript("OnDragStart", function()
+            p:StartMoving()
+        end)
+        dragBar:SetScript("OnDragStop", function()
+            p:StopMovingOrSizing()
+        end)
+        p._dragBar = dragBar
+
+        local titleFS = p:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+        titleFS:SetPoint("TOPLEFT", dragBar, "TOPLEFT", 4, 0)
+        titleFS:SetPoint("RIGHT", dragBar, "RIGHT", -120, 0)
+        titleFS:SetJustifyH("LEFT")
+        p._titleFS = titleFS
+
+        local countFS = p:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        countFS:SetPoint("RIGHT", dragBar, "RIGHT", -4, 0)
+        countFS:SetPoint("LEFT", titleFS, "RIGHT", 8, 0)
+        countFS:SetJustifyH("RIGHT")
+        p._countFS = countFS
+
+        local closeBtn = Addon.Controls.NewCloseButton(p, function() p:Hide() end)
+        closeBtn:SetPoint("TOPRIGHT", p, "TOPRIGHT", -4, -4)
+        p._closeBtn = closeBtn
+
+        local helpFS = p:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        helpFS:SetPoint("TOPLEFT", dragBar, "BOTTOMLEFT", 4, -8)
+        helpFS:SetPoint("TOPRIGHT", p, "TOPRIGHT", -12, -6)
+        helpFS:SetJustifyH("LEFT")
+        helpFS:SetTextColor(0.75, 0.75, 0.75, 1)
+        if helpFS.SetWordWrap then helpFS:SetWordWrap(true) end
+        p._helpFS = helpFS
+
+        local addLabelFS = p:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        addLabelFS:SetPoint("TOPLEFT", helpFS, "BOTTOMLEFT", 0, -10)
+        addLabelFS:SetJustifyH("LEFT")
+        p._addLabelFS = addLabelFS
+
+        local addBox = CreateFrame("EditBox", nil, p, "InputBoxTemplate")
+        addBox:SetAutoFocus(false)
+        addBox:SetSize(120, 20)
+        addBox:SetPoint("TOPLEFT", addLabelFS, "BOTTOMLEFT", 0, -6)
+        addBox:SetScript("OnEscapePressed", function(self_) self_:ClearFocus() end)
+        p._addBox = addBox
+
+        local addBtn = Addon.Controls.NewActionButton(p, 64, 20)
+        addBtn:SetPoint("LEFT", addBox, "RIGHT", 6, 0)
+        p._addBtn = addBtn
+
+        local statusFS = p:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        statusFS:SetPoint("TOPLEFT", addBox, "BOTTOMLEFT", 0, -8)
+        statusFS:SetPoint("TOPRIGHT", p, "TOPRIGHT", -12, -8)
+        statusFS:SetJustifyH("LEFT")
+        statusFS:SetTextColor(1.0, 0.82, 0.0, 1)
+        if statusFS.SetWordWrap then statusFS:SetWordWrap(true) end
+        p._statusFS = statusFS
+
+        local rowsAnchor = CreateFrame("Frame", nil, p)
+        rowsAnchor:SetPoint("TOPLEFT", statusFS, "BOTTOMLEFT", 0, -12)
+        rowsAnchor:SetPoint("TOPRIGHT", p, "TOPRIGHT", -12, 0)
+        rowsAnchor:SetHeight(1)
+        p._rowsAnchor = rowsAnchor
+
+        local function SubmitAdd()
+            local raw = p._addBox and p._addBox:GetText() or ""
+            local id = tonumber(raw)
+            if not (id and id > 0) then
+                Addon:RefreshCurrencyConfigPopup(L.CURRENCY_CONFIG_INVALID_ID or "Enter a valid currency ID.")
+                return
+            end
+            local cfg = Addon:GetTrackedCurrencyConfig()
+            for i = 1, #cfg do
+                if tonumber(cfg[i].id) == id then
+                    Addon:RefreshCurrencyConfigPopup(L.CURRENCY_CONFIG_DUPLICATE or "That currency is already configured.")
+                    return
+                end
+            end
+            if #cfg >= Addon:GetTrackedCurrencyLimit() then
+                local fmt = L.CURRENCY_CONFIG_LIMIT_FMT or "You can only configure %d currencies."
+                Addon:RefreshCurrencyConfigPopup(fmt:format(Addon:GetTrackedCurrencyLimit()))
+                return
+            end
+            cfg[#cfg + 1] = { id = id, enabled = true }
+            if p._addBox then p._addBox:SetText("") end
+            Addon:SetTrackedCurrencyConfig(cfg)
+        end
+
+        addBtn:SetScript("OnClick", SubmitAdd)
+        addBox:SetScript("OnEnterPressed", function()
+            SubmitAdd()
+        end)
+
+        _currencyConfigPopup = p
+    end
+
+    self:RefreshCurrencyConfigPopup()
+
+    if not p._shownOnce then
+        p:ClearAllPoints()
+        p:SetPoint("CENTER", UIParent, "CENTER")
+        p._shownOnce = true
+    end
+    p:Show()
+end
+
 --  Panel creation 
 function Addon:CreateTrackingPanel(parentFrame)
     if self._trackingFrame then return end
@@ -279,7 +549,11 @@ function Addon:CreateTrackingPanel(parentFrame)
     trackingFrame:SetPoint("BOTTOMLEFT",  parentFrame, "BOTTOMLEFT",  UI.sectionInsetX,  trackingBottomY)
     trackingFrame:SetPoint("BOTTOMRIGHT", parentFrame, "BOTTOMRIGHT", -UI.sectionInsetX, trackingBottomY)
     trackingFrame:SetHeight(UI.trackH)
-    self:RegisterWindowSurface(trackingFrame, { opacityMode = "ui", borderStyle = "panel" })
+    self:RegisterWindowSurface(trackingFrame, {
+        opacityMode = "ui",
+        borderStyle = "panel",
+        surfaceTopA = 0,
+    })
 
     local title = trackingFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", trackingFrame, "TOPLEFT", 10, -8)
@@ -342,31 +616,15 @@ function Addon:CreateTrackingPanel(parentFrame)
         function()
             Addon:ToggleGreatVault()
         end)
-    trackingFrame._lariasLeftTitleBtn:HookScript("OnClick", function(self_, button)
-        if button ~= "RightButton" then return end
-        Addon:ShowContextMenu(self_, {
-            { text = L.CONTEXT_DISABLE_GREAT_VAULT or "Disable Great Vault Section", onClick = function()
-                local db = Addon:EnsurePrefs()
-                db.showGreatVault = false
-                if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
-                if Addon.SyncGearPopup then Addon:SyncGearPopup() end
-            end },
-        })
-    end)
 
+    local currencyTip = L.TOOLTIP_OPEN_CURRENCIES or "Click to open the Currency panel"
+    local configureTip = L.TOOLTIP_CONFIGURE_CURRENCIES or "Right-click to configure tracked currencies"
     trackingFrame._lariasRightTitleBtn = MakeTitleButton(rightCol,
-        L.TOOLTIP_OPEN_CURRENCIES or "Click to open the Currency panel",
+        currencyTip .. "\n" .. configureTip,
         function() ToggleCharacter("TokenFrame") end)
     trackingFrame._lariasRightTitleBtn:HookScript("OnClick", function(self_, button)
         if button ~= "RightButton" then return end
-        Addon:ShowContextMenu(self_, {
-            { text = L.CONTEXT_DISABLE_CURRENCY or "Disable Currency Section", onClick = function()
-                local db = Addon:EnsurePrefs()
-                db.showCurrency = false
-                if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
-                if Addon.SyncGearPopup then Addon:SyncGearPopup() end
-            end },
-        })
+        Addon:ToggleCurrencyConfigPopup(self_)
     end)
 
     local rightTitle = trackingFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
@@ -483,11 +741,16 @@ function Addon:CreateTrackingPanel(parentFrame)
             targetH = TrackingUI.left._lastGvH
             if not (targetH and targetH > 0) then return end
         end
-        -- Keep the Great Vault grid at its own designed width.  The Currency
-        -- column can change the tracking panel's available width, but that
-        -- should never resize GV cells.
-        local cellW = GV_CELL_W
+        -- When Great Vault is the only visible column, let the grid stretch to
+        -- fill the available width; otherwise preserve the designed 3-cell size.
+        local leftW = (leftCol and leftCol.GetWidth and tonumber(leftCol:GetWidth())) or 0
+        local availGridW = max(0, floor(leftW - GV_GRID_X))
         local gridW = GV_GRID_W
+        if not (Addon._trackingFrame and Addon._trackingFrame._lariasShowBoth) and availGridW > GV_GRID_W then
+            gridW = availGridW
+        end
+        local cellW = max(1, floor(gridW / 3))
+        gridW = cellW * 3
 
         -- Count visible (non-hidden) blocks so row heights fill available space.
         local nVisible = 0
@@ -612,16 +875,9 @@ function Addon:CreateTrackingPanel(parentFrame)
         icon:SetScript("OnLeave", function() GameTooltip:Hide() end)
         icon:SetScript("OnMouseDown", function(self, button)
             if button ~= "RightButton" then return end
-            local id = self._lariasIconCurrencyID
             local qk = self._lariasIconQuestKey
             local itemID = self._lariasIconItemID
-            if id then
-                Addon:ShowContextMenu(self, {
-                    { text = (L.CONTEXT_HIDE_THIS_CURRENCY_FMT or "Hide %s"):format(GetCurrencyName(id) or tostring(id)), onClick = function()
-                        Addon:SetCurrencyHidden(id, true)
-                    end },
-                })
-            elseif itemID then
+            if itemID then
                 Addon:ShowContextMenu(self, {
                     { text = (L.CONTEXT_HIDE_THIS_ITEM_FMT or "Hide %s"):format(GetItemName(itemID) or tostring(itemID)), onClick = function()
                         Addon:SetItemHidden(itemID, true)
@@ -653,16 +909,9 @@ function Addon:CreateTrackingPanel(parentFrame)
         valueHit:SetScript("OnLeave", AU.HideTooltip)
         valueHit:SetScript("OnMouseDown", function(_, button)
             if button ~= "RightButton" then return end
-            local id  = row._lariasRightClickCurrencyID
             local qk  = row._lariasRightClickQuestKey
             local itemID = row._lariasRightClickItemID
-            if id then
-                Addon:ShowContextMenu(row, {
-                    { text = (L.CONTEXT_HIDE_THIS_CURRENCY_FMT or "Hide %s"):format(GetCurrencyName(id) or tostring(id)), onClick = function()
-                        Addon:SetCurrencyHidden(id, true)
-                    end },
-                })
-            elseif itemID then
+            if itemID then
                 Addon:ShowContextMenu(row, {
                     { text = (L.CONTEXT_HIDE_THIS_ITEM_FMT or "Hide %s"):format(GetItemName(itemID) or tostring(itemID)), onClick = function()
                         Addon:SetItemHidden(itemID, true)
@@ -694,16 +943,9 @@ function Addon:CreateTrackingPanel(parentFrame)
         end)
         row:SetScript("OnMouseDown", function(self, button)
             if button ~= "RightButton" then return end
-            local id = self._lariasRightClickCurrencyID
             local qk = self._lariasRightClickQuestKey
             local itemID = self._lariasRightClickItemID
-            if id then
-                Addon:ShowContextMenu(self, {
-                    { text = (L.CONTEXT_HIDE_THIS_CURRENCY_FMT or "Hide %s"):format(GetCurrencyName(id) or tostring(id)), onClick = function()
-                        Addon:SetCurrencyHidden(id, true)
-                    end },
-                })
-            elseif itemID then
+            if itemID then
                 Addon:ShowContextMenu(self, {
                     { text = (L.CONTEXT_HIDE_THIS_ITEM_FMT or "Hide %s"):format(GetItemName(itemID) or tostring(itemID)), onClick = function()
                         Addon:SetItemHidden(itemID, true)
@@ -871,37 +1113,42 @@ local function RenderSnapshotIntoPanel(snap)
 
     if snap.rightRows then
         local idx = 1
+        local ST = Addon.SNAP_TYPES or {}
+        local tracking = Addon.TRACKING
 
-        -- Separate crest rows from the rest so we can re-order by current config.
-        local storedCrestQty = {}
-        local nonCrestRows   = {}
+        local byKey = {}
+        local nonCurrencyRows = {}
+        local function MakeCurrencyKey(rowType, id)
+            return tostring(rowType or "") .. ":" .. tostring(tonumber(id) or 0)
+        end
+
         for _, row in ipairs(snap.rightRows) do
-            if row.type == "crest" and row.id then
-                storedCrestQty[row.id] = tonumber(row.qty) or 0
+            if (row.type == ST.CREST or row.type == ST.CATALYST
+                    or row.type == ST.SPARKS or row.type == ST.COFFERKEYS
+                    or row.type == ST.MISC) and row.id then
+                byKey[MakeCurrencyKey(row.type, row.id)] = row
             else
-                nonCrestRows[#nonCrestRows + 1] = row
+                nonCurrencyRows[#nonCurrencyRows + 1] = row
             end
         end
 
-        -- Render crests in current config order (with 0 for missing IDs).
-        local tracking = Addon.TRACKING
-        if tracking and Addon.GetGVData then
-            local ids, crestCount = Addon:GetCrestIDsAndCount()
-            for i = 1, crestCount do
-                local id = ids[i]
-                if id and not Addon:IsCurrencyHidden(id) then
-                    local qty = storedCrestQty[id] or 0
-                    local lbl, val = Addon:RenderCurrencySnapshotRow({ type = "crest", id = id, qty = qty })
-                    if IsNonEmptyText(lbl) or IsNonEmptyText(val) then
-                        SetRightRowPair(idx, lbl, val, Addon:GetCurrencyIcon(id), id)
-                        idx = idx + 1
-                    end
+        for _, entry in ipairs(Addon:GetTrackedCurrencyEntries(false)) do
+            local id = tonumber(entry.id)
+            if id and id > 0 then
+                local row = byKey[MakeCurrencyKey(entry.type, id)]
+                if not row then
+                    row = { type = entry.type, id = id, qty = 0, cap = 0, held = 0 }
+                end
+                local lbl, val = Addon:RenderCurrencySnapshotRow(row)
+                if IsNonEmptyText(lbl) or IsNonEmptyText(val) then
+                    SetRightRowPair(idx, lbl, val, Addon:GetCurrencyIcon(id), id)
+                    idx = idx + 1
                 end
             end
         end
 
         -- Remaining rows (catalyst, sparks, misc currencies, quests).
-        for _, row in ipairs(nonCrestRows) do
+        for _, row in ipairs(nonCurrencyRows) do
             local lbl, val
             if row.type then
                 lbl, val = Addon:RenderCurrencySnapshotRow(row)
@@ -912,7 +1159,7 @@ local function RenderSnapshotIntoPanel(snap)
             local currencyID = nil
             local itemID = nil
             local questKey = nil
-            if row.type == "sparks" or row.type == "misc" then
+            if row.type == "sparks" or row.type == "cofferkeys" or row.type == "misc" then
                 currencyID = row.id
                 iconID = Addon:GetCurrencyIcon(currencyID)
             elseif row.type == "catalyst" then
@@ -930,8 +1177,7 @@ local function RenderSnapshotIntoPanel(snap)
                 local _, _, _, _, _, _, _, _, _, itemTexture = GetItemInfo(itemID)
                 iconID = itemTexture
             end
-            if (not currencyID or not Addon:IsCurrencyHidden(currencyID))
-                    and (not questKey or not Addon:IsQuestHidden(questKey))
+            if (not questKey or not Addon:IsQuestHidden(questKey))
                     and (not itemID or not Addon:IsItemHidden(itemID))
                     and (IsNonEmptyText(lbl) or IsNonEmptyText(val)) then
                 SetRightRowPair(idx, lbl, val, iconID, currencyID, nil, nil, itemID, questKey)

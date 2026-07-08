@@ -39,12 +39,19 @@ function C.NewPopupPanel(strata, fadeTime)
     catcher:EnableMouse(true)
     catcher:Hide()
     catcher:SetScript("OnMouseDown", function()
+        if p._closeOnOutsideClick == false then return end
         p:Hide()
     end)
 
+    p._outsideClickCatcher = catcher
+    p._closeOnOutsideClick = true
     p:SetScript("OnHide", function() catcher:Hide() end)
     p:SetScript("OnShow", function()
-        catcher:Show()
+        if p._closeOnOutsideClick == false then
+            catcher:Hide()
+        else
+            catcher:Show()
+        end
         if UIFrameFadeIn then UIFrameFadeIn(p, ft, 0, 1)
         else p:SetAlpha(1) end
     end)

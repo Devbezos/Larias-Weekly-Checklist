@@ -144,7 +144,7 @@ function C.NewCloseButton(parent, onClick)
 
     -- Fixed colors: intentionally NOT driven by theme so the × never changes
     -- when the user adjusts the header color.
-    local CLOSE_R, CLOSE_G, CLOSE_B = 0.23, 0.96, 0.55
+    local CLOSE_R, CLOSE_G, CLOSE_B = 1.00, 0.82, 0.00
 
     local norm = btn:CreateFontString(nil, "OVERLAY")
     norm:SetFont("Fonts\\FRIZQT__.TTF", 16, "OUTLINE")

@@ -197,6 +197,7 @@ end
 -- Installs behaviour hooks on Addon so LayoutHeaderButtons_ can call them without
 -- keeping direct upvalue references to the closures below.
 function Addon:InitCharPickerUI(frame, styleFunc)
+    local L = Addon.L or {}
     local CPICK_PAD   = 6
     local CPICK_ROW_H = 20
 

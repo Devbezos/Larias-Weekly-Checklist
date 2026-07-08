@@ -82,17 +82,6 @@ Addon.OptionsPane.DISPLAY_ROWS = {
         end,
     },
     {
-        field    = "cbHideChangeWeek",
-        labelKey = "OPTIONS_HIDE_CHANGE_WEEK_BTN",  default = "Hide Week Selector",
-        tipKey   = "OPTIONS_TOOLTIP_HIDE_CHANGE_WEEK_BTN",
-        getVal   = function(d) return d.showChangeWeekBtn == false end,
-        onChange = function(v)
-            Addon:EnsurePrefs().showChangeWeekBtn = not v
-            _applyAll()
-            if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
-        end,
-    },
-    {
         field    = "cbHideIlvlRef",
         labelKey = "OPTIONS_HIDE_ILVL_REF_BTN",     default = "Hide Ilvl Reference",
         tipKey   = "OPTIONS_TOOLTIP_HIDE_ILVL_REF_BTN",
@@ -120,17 +109,6 @@ Addon.OptionsPane.DISPLAY_ROWS = {
         end,
     },
     {
-        field    = "cbHideCharPicker",
-        labelKey = "OPTIONS_HIDE_CHAR_PICKER",      default = "Hide Profile Button",
-        tipKey   = nil,
-        getVal   = function(d) return d.showCharPickerBtn == false end,
-        onChange = function(v)
-            Addon:EnsurePrefs().showCharPickerBtn = not v
-            _applyAll()
-            if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
-        end,
-    },
-    {
         field    = "cbHideAltSummary",
         labelKey = "OPTIONS_HIDE_ALT_SUMMARY",      default = "Hide Alt Summary Button",
         tipKey   = nil,
@@ -138,6 +116,7 @@ Addon.OptionsPane.DISPLAY_ROWS = {
         onChange = function(v)
             Addon:EnsurePrefs().showAltSummaryBtn = not v
             _applyAll()
+            if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
             if Addon.CharPicker and Addon.CharPicker.Populate then Addon.CharPicker.Populate() end
         end,
     },
@@ -192,7 +171,7 @@ Addon.OptionsPane.WARNING_ROWS = {
 }
 
 -- ── BuildDisplay(parent, opts) ────────────────────────────────────────────────
--- Creates: Reset button, divider, 9 checkboxes (5 left / 4 right), and an
+-- Creates: Reset button, divider, display checkboxes, and an
 -- optional Restore Hidden Rows button.  Returns a refs table with .sync().
 -- opts: { pad, btnH, tileH, width, restoreClickFn }
 function Addon.OptionsPane.BuildDisplay(parent, opts)
@@ -288,11 +267,10 @@ function Addon.OptionsPane.BuildDisplay(parent, opts)
         end
         -- Restore Hidden button: visible only when hidden rows exist.
         if refs.restoreHiddenBtn then
-            local nCur   = Addon.GetHiddenCurrencyList and #Addon:GetHiddenCurrencyList() or 0
             local nGV    = Addon.GetHiddenGVBlockList  and #Addon:GetHiddenGVBlockList()  or 0
             local nQuest = Addon.GetHiddenQuestList    and #Addon:GetHiddenQuestList()    or 0
             local nItem  = Addon.GetHiddenItemList     and #Addon:GetHiddenItemList()     or 0
-            local n      = nCur + nGV + nQuest + nItem
+            local n      = nGV + nQuest + nItem
             refs.restoreHiddenBtn:SetShown(n > 0)
             if n > 0 then
                 local L = Addon.L or {}

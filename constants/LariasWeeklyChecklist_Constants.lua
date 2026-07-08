@@ -49,6 +49,8 @@ local tracking = { -- https://www.wowhead.com/currencies/season-1
     sparkItemID                  = 232875, -- wowhead.com/item=232875    Spark of Radiance (reagent)
     sparkQuestID                 = 95245,  -- wowhead.com/quest=95245    Midnight: World Tour
     catalystCurrencyID           = 3378,   -- wowhead.com/currency=3378  Dawnlight Manaflux
+    cofferKeysCurrencyID         = 3310,   -- wowhead.com/currency=3310  Coffer Key Shards
+    cofferKeysDisplayCurrencyID  = 3028,   -- wowhead.com/currency=3028  Restored Coffer Key
     miscCurrencyIDs = {
         3418,  -- wowhead.com/currency=3418  Resonance Crystals
     },
