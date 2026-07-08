@@ -93,7 +93,7 @@ def strip_version_line(text: str) -> str:
 def build_enus_data_header(sheet_version: str = "") -> list[str]:
     lines = [
         "--[[",
-        "English (enUS) checklist data for Larias's Weekly Checklist",
+        "English (enUS) checklist data for Larias' Weekly Checklist",
         "",
         "NOTE: This is the canonical enUS dataset; other locales must keep IDs identical",
         "so completion tracking stays consistent across locales.",
@@ -134,9 +134,6 @@ def main(csv_in: str, lua_out: str) -> None:
     existing_text = None
     out_path = Path(lua_out)
     nl = "\n"
-
-    if out_path.parent and not out_path.parent.exists():
-        out_path.parent.mkdir(parents=True, exist_ok=True)
 
     if out_path.exists():
         existing_text = out_path.read_text(encoding="utf-8")

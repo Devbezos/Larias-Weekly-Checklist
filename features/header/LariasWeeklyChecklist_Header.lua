@@ -32,6 +32,27 @@ local function SetPickerButtonTextColor(btn, color)
     end
 end
 
+local function RefreshPickerButtonVisual(btn)
+    if not btn then return end
+    local vs = Addon.VISUAL_STYLE or {}
+    local hcol = Addon.THEME and Addon.THEME.header or { r = 1, g = 0.82, b = 0 }
+    local tcol = Addon.THEME and Addon.THEME.text or { r = 1, g = 1, b = 1 }
+    local alpha = btn._selected and (vs.sectionAccentA or 0.32)
+               or btn._hovered and (vs.sectionBandA or 0.12)
+               or 0
+
+    if btn._hoverBg then
+        btn._hoverBg:SetColorTexture(hcol.r, hcol.g, hcol.b, alpha)
+        if alpha > 0 then btn._hoverBg:Show() else btn._hoverBg:Hide() end
+    end
+
+    if btn._selected or btn._hovered then
+        SetPickerButtonTextColor(btn, hcol)
+    else
+        SetPickerButtonTextColor(btn, tcol)
+    end
+end
+
 -- ── Addon:CreateHeader ────────────────────────────────────────────────────────
 -- Creates all header chrome (close/gear/change-week/ilvl-ref/char-picker),
 -- defines the week-picker popup, and wires LayoutHeaderButtons_.
@@ -49,7 +70,10 @@ function Addon:CreateHeader(frame)
     frame._lariasCloseBtn = closeBtn
 
     -- ── Gear / settings button ────────────────────────────────────────────────
-    local gearBtn = C.NewIconButton(frame, "Interface\\Buttons\\UI-OptionsButton", nil, L.TAB_OPTIONS or "Options")
+    local gearBtn = C.NewIconButton(frame, "Interface\\Buttons\\UI-OptionsButton", nil, L.TAB_OPTIONS or "Options", {
+        useHeaderColorAtRest = true,
+        restAlpha = 1,
+    })
     gearBtn:SetPoint("RIGHT", closeBtn, "LEFT", -2, 0)
     gearBtn:SetScript("OnClick", function()
         if Addon.ToggleGearPopup then Addon:ToggleGearPopup(gearBtn, true) end
@@ -88,7 +112,21 @@ function Addon:CreateHeader(frame)
         if ilvlRefBtn then return ilvlRefBtn end
         local btn = Addon.Controls.NewActionButton(frame, 140, 22)
         btn:SetText(L.ILVLREF_BUTTON or "View Item Levels")
-        btn:SetScript("OnClick", function() Addon:ToggleIlvlRefWindow() end)
+        btn:RegisterForClicks("AnyUp")
+        btn:SetScript("OnClick", function(self_, button)
+            if button == "RightButton" then
+                Addon:ShowContextMenu(self_, {
+                    { text = L.CONTEXT_DISABLE_ITEM_LEVEL_POPUP or "Disable Item Level Popup", onClick = function()
+                        local db = Addon:EnsurePrefs()
+                        db.showIlvlRefBtn = false
+                        if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
+                        if Addon.SyncGearPopup       then Addon:SyncGearPopup()       end
+                    end },
+                })
+                return
+            end
+            Addon:ToggleIlvlRefWindow()
+        end)
         ilvlRefBtn              = btn
         frame._lariasIlvlRefBtn = btn
         return btn
@@ -139,8 +177,11 @@ function Addon:CreateHeader(frame)
             if btn.SetTextInsets then btn:SetTextInsets(10, 10, 0, 0) end
             local tr = Addon.Controls.GetButtonFontString(btn)
             if tr then
-                if tr.SetJustifyH then tr:SetJustifyH("LEFT") end
-                if tr.SetJustifyV then tr:SetJustifyV("MIDDLE") end
+                    -- Use the same font size/weight as section headers and center
+                    -- the text so the picker rows visually match the headers.
+                    if tr.SetJustifyH then tr:SetJustifyH("CENTER") end
+                    if tr.SetJustifyV then tr:SetJustifyV("MIDDLE") end
+                    if tr.SetFontObject then tr:SetFontObject("GameFontNormalLarge") end
             end
         end
         if picker.GetFrameLevel and btn.SetFrameLevel then
@@ -149,9 +190,25 @@ function Addon:CreateHeader(frame)
         if btn.Enable      then btn:Enable() end
         if btn.EnableMouse then btn:EnableMouse(true) end
         btn:Show()
-        SetPickerButtonTextColor(btn, Addon.THEME.text)
-        btn:SetScript("OnEnter", function() SetPickerButtonTextColor(btn, Addon.THEME.header) end)
-        btn:SetScript("OnLeave", function() SetPickerButtonTextColor(btn, Addon.THEME.text) end)
+        -- Create a hover background to match section header banding.
+        if not btn._hoverBg then
+            local bg = btn:CreateTexture(nil, "BACKGROUND")
+            bg:SetPoint("TOPLEFT", btn, "TOPLEFT", 0, 0)
+            bg:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", 0, 0)
+            bg:Hide()
+            btn._hoverBg = bg
+        end
+        btn._hovered = false
+        btn._selected = false
+        btn:SetScript("OnEnter", function()
+            btn._hovered = true
+            RefreshPickerButtonVisual(btn)
+        end)
+        btn:SetScript("OnLeave", function()
+            btn._hovered = false
+            RefreshPickerButtonVisual(btn)
+        end)
+        RefreshPickerButtonVisual(btn)
         return btn
     end
 
@@ -219,15 +276,26 @@ function Addon:CreateHeader(frame)
                 if type(section) == "table" then
                     local id        = section.id
                     local isCurrent = (tostring(id or "") == currentId)
-                    local label = ExtractMonthRangeLabel(section.title or id or "")
+                    -- Make picker labels match the header text shown above each week.
+                    local rawTitle = section.title or id or ""
+                    local display = tostring(rawTitle)
+                    -- Strip leading "... - " prefix (same as SetHeaderText)
+                    display = display:match("^.-%s%-%s(.+)$") or display
+                    -- Prepend DONE prefix when section is complete
+                    if Addon._IsSectionCompleteById and Addon._IsSectionCompleteById(id) then
+                        display = (L.DONE_PREFIX or "") .. display
+                    end
+                    local label = display
                     if label == "" then label = tostring(id or i) end
-                    if isCurrent then label = "> " .. label end
 
                     local btn = AcquirePickerButton(picker)
                     btn:ClearAllPoints()
-                    btn:SetPoint("TOPLEFT", picker, "TOPLEFT", PICKER_PAD, posY)
+                    btn:SetPoint("TOPLEFT",  picker, "TOPLEFT",  PICKER_PAD, posY)
+                    btn:SetPoint("TOPRIGHT", picker, "TOPRIGHT", -PICKER_PAD, posY)
                     btn:SetHeight(PICKER_ROW_HEIGHT)
                     btn:SetText(label)
+                    btn._selected = isCurrent
+                    RefreshPickerButtonVisual(btn)
                     btn:SetEnabled(true)
                     local capturedId    = id
                     local capturedTitle = section.title or label
@@ -270,33 +338,39 @@ function Addon:CreateHeader(frame)
                 end
                 local newW = math.max(160, math.min(520, math.ceil(bestW + PICKER_PAD * 4 + 24)))
                 picker:SetWidth(newW)
-                for _, b in ipairs(picker._buttons) do
-                    if b.SetWidth then b:SetWidth(newW - PICKER_PAD * 2) end
-                end
             end)
-        end
-
-        for _, b in ipairs(picker._buttons) do
-            if b.SetWidth then b:SetWidth(PICKER_ROW_WIDTH) end
         end
     end
 
     Addon._PopulateHeaderPicker = PopulateHeaderPicker
+    Addon._EnsureHeaderPicker    = EnsureHeaderPicker
 
     -- ── LayoutHeaderButtons_ ─────────────────────────────────────────────────
     local function LayoutHeaderButtons_()
         if Addon._inLayoutHeaderButtons then return end
         Addon._inLayoutHeaderButtons = true
         local dbLocal = Addon:EnsurePrefs()
-        local showCW  = dbLocal.showChangeWeekBtn ~= false
+        local db0     = Addon:EnsureDB()
+        local showCW  = false  -- Change Week button removed
         local showIR  = dbLocal.showIlvlRefBtn    ~= false
+        local allComplete = true
+
+        do
+            local order = Addon._order or {}
+            for i = 1, #order do
+                if Addon._IsSectionCompleteById and
+                   not Addon._IsSectionCompleteById(order[i], db0) then
+                    allComplete = false
+                    break
+                end
+            end
+        end
 
         -- changeWeekBtn: top-left of the frame.
         if showCW then
             local btn = EnsureChangeWeekBtn_()
             local cwWeekLabel
             do
-                local db0 = Addon:EnsureDB()
                 local storedStart = tostring(db0.startAtSectionId or "")
                 local currentId
                 if storedStart ~= "" then
@@ -312,7 +386,6 @@ function Addon:CreateHeader(frame)
                 end
                 if not currentId then
                     local order = Addon._order or {}
-                    local allComplete = true
                     for i = 1, #order do
                         if Addon._IsSectionCompleteById and
                            not Addon._IsSectionCompleteById(order[i], db0) then
@@ -341,11 +414,22 @@ function Addon:CreateHeader(frame)
             btn._lariasSelectedLabel = cwWeekLabel
             btn:SetText(cwWeekLabel)
             local cwTip = L.CHANGE_WEEK_BUTTON or "Change Week"
-            btn:SetScript("OnEnter", function(self_) Addon.AddonUtils.SetTooltip(self_, cwTip, "ANCHOR_BOTTOMLEFT") end)
+            btn:SetScript("OnEnter", function(self_) Addon.AddonUtils.SetTooltip(self_, cwTip .. "\n" .. (L.TOOLTIP_RIGHT_CLICK_DISABLE or "Right-click to disable"), "ANCHOR_BOTTOMLEFT") end)
             btn:SetScript("OnLeave", Addon.AddonUtils.HideTooltip)
-            btn:SetScript("OnClick", function()
+            btn:RegisterForClicks("AnyUp")
+            btn:SetScript("OnClick", function(self_, button)
+                if button == "RightButton" then
+                    Addon:ShowContextMenu(self_, {
+                        { text = L.CONTEXT_DISABLE_WEEK_SELECTOR or "Disable Week Selector", onClick = function()
+                            local db = Addon:EnsurePrefs()
+                            db.showChangeWeekBtn = false
+                            if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
+                            if Addon.SyncGearPopup       then Addon:SyncGearPopup()       end
+                        end },
+                    })
+                    return
+                end
                 local p = EnsureHeaderPicker()
-                if p and p._lariasClosedAt and (GetTime() - p._lariasClosedAt) < 0.20 then p._lariasClosedAt = nil; return end
                 if p and p.IsShown and p:IsShown() then
                     p:Hide()
                     return
@@ -360,11 +444,53 @@ function Addon:CreateHeader(frame)
                 end
             end)
             btn:ClearAllPoints()
-            local cwInsetX = (Addon.UI.padOuterX or 14) + (Addon.UI.sectionInsetX or 14)
-            btn:SetPoint("TOPLEFT", frame, "TOPLEFT", cwInsetX, -(Addon.UI.padOuterTop or 10) - 2)
+            local cwPadX = Addon.UI.padOuterX or 14
+            btn:SetPoint("TOPLEFT", frame, "TOPLEFT", cwPadX, -(Addon.UI.padOuterTop or 10) - 2)
             btn:Show()
         elseif changeWeekBtn then
             changeWeekBtn:Hide()
+        end
+
+        -- charPickerBtn: top-left of the frame (where Change Week was).
+        -- Defined by InitCharPickerUI in LariasWeeklyChecklist_CharPicker.lua.
+        local showCP = (dbLocal.showAltSummaryBtn ~= false) and not allComplete
+        local cp = Addon.CharPicker
+        if cp and cp.EnsureBtn then
+            local cpBtn = cp.EnsureBtn()
+            cpBtn:ClearAllPoints()
+            local cwPadX = Addon.UI.padOuterX or 14
+            cpBtn:SetPoint("TOPLEFT", frame, "TOPLEFT", cwPadX, -(Addon.UI.padOuterTop or 10) - 2)
+            if showCP then
+                cpBtn:RegisterForClicks("AnyUp")
+                cpBtn:SetText(L.ALT_SUMMARY_TITLE or "Alt Summary")
+                local cpText = Addon.Controls.GetButtonFontString and Addon.Controls.GetButtonFontString(cpBtn)
+                if cpText then
+                    Addon.Controls.ApplyThemeTextColor(cpText)
+                end
+                cpBtn:SetScript("OnEnter", function(self_)
+                    Addon.AddonUtils.SetTooltip(self_, L.CHAR_PICKER_ALT_SUMMARY_TOOLTIP or "Opens an account-wide summary for all tracked characters.", "ANCHOR_BOTTOMLEFT")
+                end)
+                cpBtn:SetScript("OnLeave", Addon.AddonUtils.HideTooltip)
+                cpBtn:SetScript("OnClick", function(self_, button)
+                    if button == "RightButton" then
+                        Addon:ShowContextMenu(self_, {
+                            { text = L.OPTIONS_HIDE_ALT_SUMMARY or "Hide Alt Summary Button", onClick = function()
+                                local db = Addon:EnsurePrefs()
+                                db.showAltSummaryBtn = false
+                                if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
+                                if Addon.SyncGearPopup       then Addon:SyncGearPopup()       end
+                            end },
+                        })
+                        return
+                    end
+                    if cp.Close then cp.Close() end
+                    if Addon.ToggleAltsSummary then Addon:ToggleAltsSummary(cpBtn) end
+                end)
+                cpBtn:Show()
+            else
+                if cp.Close then cp.Close() end
+                cpBtn:Hide()
+            end
         end
 
         -- ilvlRefBtn: left of gearBtn.
@@ -383,7 +509,7 @@ function Addon:CreateHeader(frame)
 
         -- Enforce minimum frame width based on visible button footprint.
         local _insetX = (Addon.UI.padOuterX or 14) + (Addon.UI.sectionInsetX or 14)
-        local _leftW  = _insetX + (showCW and (108 + 6) or 0)
+        local _leftW  = (Addon.UI.padOuterX or 14) + ((showCW or showCP) and (108 + 6) or 0)
         local _rightW = (Addon.UI.closeInset or 4) + 32 + 2 + 20
         if showIR then _rightW = _rightW + 4 + 140 end
         local _minW   = _leftW + 20 + _rightW
@@ -410,6 +536,25 @@ function Addon:CreateHeader(frame)
         local btn = changeWeekBtn
         if not (btn and btn.IsShown and btn:IsShown()) then return end
 
+        local function ApplyLabel(sectionId, fallbackLabel)
+            if sectionId ~= nil then
+                sectionId = tostring(sectionId)
+            end
+            if fallbackLabel == nil and sectionId ~= nil then
+                fallbackLabel = sectionId
+            end
+
+            local section   = sectionId and Addon._sectionsById and Addon._sectionsById[sectionId]
+            local extracted = ExtractMonthRangeLabel((section and section.title) or "")
+            local label     = (extracted ~= "") and extracted or (fallbackLabel or L.CHANGE_WEEK_BUTTON or "Change Week")
+            if btn._lariasVisibleWeekId == sectionId and btn._lariasVisibleWeekLabel == label then
+                return
+            end
+            btn._lariasVisibleWeekId    = sectionId
+            btn._lariasVisibleWeekLabel = label
+            btn:SetText(label)
+        end
+
         local sf       = Addon._scrollFrame
         local sections = Addon._activeSections or {}
 
@@ -426,10 +571,7 @@ function Addon:CreateHeader(frame)
                     end
                 end
                 if lastId then
-                    local section   = Addon._sectionsById and Addon._sectionsById[tostring(lastId)]
-                    local extracted = ExtractMonthRangeLabel((section and section.title) or tostring(lastId))
-                    local label     = (extracted ~= "") and extracted or (L.CHANGE_WEEK_BUTTON or "Change Week")
-                    btn:SetText(label)
+                    ApplyLabel(lastId)
                     return
                 end
             end
@@ -459,15 +601,14 @@ function Addon:CreateHeader(frame)
                 end
             end
             if bestId then
-                local section   = Addon._sectionsById and Addon._sectionsById[tostring(bestId)]
-                local extracted = ExtractMonthRangeLabel((section and section.title) or tostring(bestId))
-                local label     = (extracted ~= "") and extracted or (L.CHANGE_WEEK_BUTTON or "Change Week")
-                btn:SetText(label)
+                ApplyLabel(bestId)
                 return
             end
         end
 
-        if btn._lariasSelectedLabel then btn:SetText(btn._lariasSelectedLabel) end
+        if btn._lariasSelectedLabel then
+            ApplyLabel(nil, btn._lariasSelectedLabel)
+        end
     end
 
     -- ── CalcChangeWeekBtnWidth_ ───────────────────────────────────────────────
@@ -476,6 +617,12 @@ function Addon:CreateHeader(frame)
         if not (btn and frame) then return end
         local order = Addon._order or {}
         if #order == 0 then return end
+        local localeCode = (Addon.GetEffectiveLocaleCode and Addon:GetEffectiveLocaleCode()) or "enUS"
+        local widthSig = tostring(Addon._dataSig or "") .. "|" .. tostring(localeCode)
+        if btn._lariasWidthSig == widthSig and btn._lariasMeasuredWidth then
+            btn:SetWidth(btn._lariasMeasuredWidth)
+            return
+        end
 
         if not btn._lariasMeasureFS then
             local scratch = frame:CreateFontString(nil, "ARTWORK")
@@ -511,6 +658,8 @@ function Addon:CreateHeader(frame)
             end
             maxW = math.max(maxW, math.ceil(w) + PAD)
         end
+        btn._lariasWidthSig = widthSig
+        btn._lariasMeasuredWidth = maxW
         btn:SetWidth(maxW)
     end
 

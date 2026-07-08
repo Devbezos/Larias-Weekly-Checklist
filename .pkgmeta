@@ -40,7 +40,14 @@ externals:
     url: https://repos.wowace.com/wow/libwindow-1-1/trunk
 
 ignore:
+  - .gitattributes
   - .github
+  - .gitignore
+  - .venv
+  - __pycache__
+  - "*.pyc"
+  - LLM.md
+  - README.md
   - scripts
   - data
   - SETUP.md

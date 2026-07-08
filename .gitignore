@@ -1,5 +1,13 @@
-﻿scripts/deploy_to_wow.ps1
+scripts/deploy_to_wow.ps1
+scripts/__pycache__/
+__pycache__/
+*.pyc
+.venv/
 
 # Libraries are fetched by the packager via .pkgmeta externals.
 # Keep them on disk for local dev but do not commit them.
 lib/
+.gitattributes
+data/spreadsheet.csv
+LLM.md
+codex.md
