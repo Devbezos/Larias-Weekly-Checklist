@@ -2,14 +2,17 @@
 -- Must be loaded before any feature module that references Addon.AddonUtils.
 --
 -- Exposes Addon.AddonUtils:
---   COLORS              → palette table { red, yellow, green, white, dim }
---   ColorWrap(hex, txt) → "|c<hex><txt>|r"
---   Wipe(t)             → empties table t in-place (nil-safe)
---   IsNonEmptyText(txt) → true if string contains visible characters after stripping colour codes
---   FormatXY(cur, cap)  → "cur/cap" or "cur" when cap ≤ 0
---   ColorForXY(cur, cap)→ COLORS.red / yellow / green based on progress
+--   COLORS              - palette table { red, yellow, green, white, dim, gold }
+--   ColorWrap(hex, txt) - wraps text in a WoW color escape.
+--   Wipe(t)             - empties table t in-place (nil-safe).
+--   IsNonEmptyText(txt) - true when string contains visible characters.
+--   FormatXY(cur, cap)  - formats progress as "cur/cap" or "cur".
+--   ColorForXY(cur, cap)- returns red/yellow/green based on progress.
+--   GetCurrencyName(id) - safe currency name lookup.
+--   GetCurrencyIcon(id) - safe currency icon lookup.
+--   GetItemName(id)     - safe item name lookup.
 --
--- Also exposes Addon.RIGHT_LINE_COUNT (right-panel row cap used by Overlay + Currency).
+-- Also exposes Addon.RIGHT_LINE_COUNT (initial right-panel row count used by Overlay).
 
 local addonName = ...
 local Addon = _G[addonName]
@@ -18,17 +21,18 @@ if not Addon then return end
 local AddonUtils = {}
 Addon.AddonUtils = AddonUtils
 
--- ── Color palette ──────────────────────────────────────────────────────────────
+-- Shared WoW color-escape palette used by tracking rows and tooltips.
 AddonUtils.COLORS = {
     red    = "ffff4040",
     yellow = "ffffd34d",
     green  = "ff40ff40",
     white  = "ffffffff",
     dim    = "ff808080",
+    gold   = "ffcc9a28",  -- warm WoW gold for currency labels
 }
 local COLORS = AddonUtils.COLORS
 
--- ── Helpers ────────────────────────────────────────────────────────────────────
+-- Wraps text in a precomputed WoW ARGB color code (for example "ffff4040").
 function AddonUtils.ColorWrap(hex, txt)
     return "|c" .. hex .. tostring(txt or "") .. "|r"
 end
@@ -46,16 +50,40 @@ function AddonUtils.IsNonEmptyText(text)
 end
 
 function AddonUtils.FormatXY(cur, cap)
-    cur = tonumber(cur) or 0; cap = tonumber(cap) or 0
+    cur = tonumber(cur) or 0
+    cap = tonumber(cap) or 0
     if cap > 0 then return ("%d/%d"):format(cur, cap) end
     return tostring(cur)
 end
 
 function AddonUtils.ColorForXY(cur, cap)
-    cur = tonumber(cur) or 0; cap = tonumber(cap) or 0
+    cur = tonumber(cur) or 0
+    cap = tonumber(cap) or 0
     if cur <= 0 then return COLORS.red end
     if cap > 0 and cur >= cap then return COLORS.green end
     return COLORS.yellow
+end
+
+function AddonUtils.GetCurrencyInfo(id)
+    id = tonumber(id)
+    if not (id and id > 0) then return nil end
+    return C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo and C_CurrencyInfo.GetCurrencyInfo(id)
+end
+
+function AddonUtils.GetCurrencyName(id)
+    local info = AddonUtils.GetCurrencyInfo(id)
+    return info and info.name
+end
+
+function AddonUtils.GetCurrencyIcon(id)
+    local info = AddonUtils.GetCurrencyInfo(id)
+    return info and info.iconFileID
+end
+
+function AddonUtils.GetItemName(id)
+    id = tonumber(id)
+    if not (id and id > 0) then return nil end
+    return GetItemInfo and GetItemInfo(id) or nil
 end
 
 function AddonUtils.SetTooltip(frame, text, anchor)
@@ -91,6 +119,5 @@ function AddonUtils.SetTooltipLines(frame, lines, anchor)
     GameTooltip:Show()
 end
 
--- ── Shared layout constants ────────────────────────────────────────────────────
--- Maximum rows in the right column; owned here so Overlay and Currency stay in sync.
+-- Initial rows in the right column; Overlay grows beyond this when more rows exist.
 Addon.RIGHT_LINE_COUNT = 10

@@ -1,5 +1,5 @@
 --[[
-English (enUS) checklist data for Larias's Weekly Checklist
+English (enUS) checklist data for Larias' Weekly Checklist
 
 NOTE: This is the canonical enUS dataset; other locales must keep IDs identical
 so completion tracking stays consistent across locales.

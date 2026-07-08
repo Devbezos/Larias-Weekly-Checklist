@@ -9,15 +9,15 @@ if not Addon then return end
 --       Apply the addon's dark-backdrop action-button style to any Button.
 --
 --   Addon.Controls.NewCloseButton(parent [, onClick])
---       Branded 20×20 ✕ button: dark backdrop, gold glyph, red hover/push,
+--       Branded 20×20 ✕ button: dark backdrop, accent glyph, red hover/push,
 --       "Close" tooltip. onClick defaults to parent:Hide().
 --
 --   Addon.Controls.NewIconButton(parent, texturePath [, onClick [, tooltip]])
---       Branded 20×20 icon button (any texture), dark backdrop, gold hover.
+--       Branded 20×20 icon button (any texture), dark backdrop, accent hover.
 --
 --   Addon.Controls.NewExpandButton(parent [, onToggle [, initialExpanded
 --                                  [, expandTip [, shrinkTip]]]])
---       Branded 20×20 toggle button: dark backdrop, gold ▼/▲ glyph, white hover.
+--       Branded 20×20 toggle button: dark backdrop, muted ▼/▲ glyph, white hover.
 
 Addon.Controls = Addon.Controls or {}
 local C = Addon.Controls
@@ -29,11 +29,16 @@ function C.StyleButton(btn)
     if not btn then return end
 
     local T = Addon.THEME  -- single reference; all uses below share this upvalue
+    local V = Addon.VISUAL_STYLE or {}
 
     Addon:ApplyTheme(btn)
     -- Buttons use a slightly lower bg alpha than panels.
     if btn.SetBackdropColor and T then
-        btn:SetBackdropColor(T.bg.r, T.bg.g, T.bg.b, math.max(0, (tonumber(T.bg.a) or 1) - 0.28))
+        btn:SetBackdropColor(T.bg.r, T.bg.g, T.bg.b, 0)
+    end
+    if btn.SetBackdropBorderColor and T then
+        local bd = T.border or { r = 0.3, g = 0.3, b = 0.3, a = 1 }
+        btn:SetBackdropBorderColor(bd.r, bd.g, bd.b, V.buttonBorderA or bd.a or 1)
     end
 
     local function ClearTex(t)
@@ -53,6 +58,31 @@ function C.StyleButton(btn)
 
     if btn.SetTextInsets then btn:SetTextInsets(12, 12, 4, 4) end
 
+    if btn.CreateTexture and T then
+        if not btn._lariasButtonFill then
+            local fill = btn:CreateTexture(nil, "BACKGROUND")
+            fill:SetPoint("TOPLEFT", btn, "TOPLEFT", 1, -1)
+            fill:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -1, 1)
+            btn._lariasButtonFill = fill
+        end
+        btn._lariasButtonFill:SetColorTexture(
+            math.min(1, T.bg.r + 0.035),
+            math.min(1, T.bg.g + 0.035),
+            math.min(1, T.bg.b + 0.035),
+            V.buttonBgA or 0.34
+        )
+
+        if not btn._lariasButtonAccent then
+            local accent = btn:CreateTexture(nil, "ARTWORK")
+            accent:SetPoint("TOPLEFT", btn, "TOPLEFT", 2, -1)
+            accent:SetPoint("TOPRIGHT", btn, "TOPRIGHT", -2, -1)
+            accent:SetHeight(1)
+            btn._lariasButtonAccent = accent
+        end
+        local hdr = T.header or T.text or { r = 1, g = 1, b = 1 }
+        btn._lariasButtonAccent:SetColorTexture(hdr.r, hdr.g, hdr.b, 0.20)
+    end
+
     local tr = btn.Text or (btn.GetFontString and btn:GetFontString())
     if tr then
         if tr.SetJustifyV then tr:SetJustifyV("MIDDLE") end
@@ -66,15 +96,17 @@ function C.StyleButton(btn)
         end
     end
 
-    if btn.CreateTexture and not btn._lariasCustomHighlight then
-        local hl = btn:CreateTexture(nil, "HIGHLIGHT")
-        hl:SetAllPoints(btn)
-        if T then
-            hl:SetColorTexture(T.text.r, T.text.g, T.text.b, 0.06)
-        else
-            hl:SetColorTexture(1, 1, 1, 0.06)
+    if btn.CreateTexture then
+        if not btn._lariasCustomHighlight then
+            local hl = btn:CreateTexture(nil, "HIGHLIGHT")
+            hl:SetAllPoints(btn)
+            btn._lariasCustomHighlight = hl
         end
-        btn._lariasCustomHighlight = hl
+        if T and T.header then
+            btn._lariasCustomHighlight:SetColorTexture(T.header.r, T.header.g, T.header.b, V.buttonHighlightA or 0.08)
+        else
+            btn._lariasCustomHighlight:SetColorTexture(1, 1, 1, V.buttonHighlightA or 0.06)
+        end
     end
 
     btn._lariasTabStyled = true
@@ -93,15 +125,16 @@ local function ApplyFixedBackdrop(btn)
             tile = false, edgeSize = 1,
             insets = { left = 3, right = 3, top = 3, bottom = 3 },
         })
-        btn:SetBackdropColor(0.08, 0.08, 0.08, 0.85)
+        local vs = Addon.VISUAL_STYLE or {}
+        btn:SetBackdropColor(0.025, 0.040, 0.045, vs.iconButtonBgA or 0.58)
         local bd = Addon.THEME and Addon.THEME.border or { r=0.3, g=0.3, b=0.3, a=0.8 }
-        btn:SetBackdropBorderColor(bd.r, bd.g, bd.b, bd.a)
+        btn:SetBackdropBorderColor(bd.r, bd.g, bd.b, vs.buttonBorderA or bd.a)
     end
 end
 
 -- ── Close button ──────────────────────────────────────────────────────────────
 -- Creates and returns a branded 20×20 close button as a child of `parent`.
--- Design: fixed dark backdrop, gold "✕" glyph at rest, white glyph + red bg
+-- Design: fixed dark backdrop, accent "✕" glyph at rest, white glyph + red bg
 -- tint on hover, deeper red on push, "Close" tooltip.
 -- onClick defaults to hiding parent.  Caller is responsible for positioning.
 function C.NewCloseButton(parent, onClick)
@@ -151,17 +184,18 @@ end
 
 -- ── Generic icon button ───────────────────────────────────────────────────────
 -- Creates a 20×20 branded icon button with any texture (2 px inset so the dark
--- backdrop border shows around it). Fixed dim-white at rest, fixed gold on hover.
+-- backdrop border shows around it). Fixed dim-white at rest, fixed accent on hover.
 -- onClick defaults to a no-op.
-function C.NewIconButton(parent, texturePath, onClick, tooltip)
+function C.NewIconButton(parent, texturePath, onClick, tooltip, opts)
     local btn = CreateFrame("Button", nil, parent)
     btn:SetSize(20, 20)
     ApplyFixedBackdrop(btn)
+    opts = opts or {}
 
     -- Fixed colors — intentionally NOT driven by theme so the icon never
     -- changes color when the user adjusts text/header theme colors.
     local REST_R, REST_G, REST_B, REST_A = 0.75, 0.75, 0.75, 0.65  -- dim white
-    local HOV_R,  HOV_G,  HOV_B         = 1.00, 0.82, 0.00         -- gold
+    local HOV_R,  HOV_G,  HOV_B         = 0.23, 0.96, 0.55         -- addon accent
 
     local PAD = 2
     -- Keep norm as a plain BORDER texture (not registered via SetNormalTexture).
@@ -171,23 +205,60 @@ function C.NewIconButton(parent, texturePath, onClick, tooltip)
     norm:SetTexture(texturePath)
     norm:SetPoint("TOPLEFT",     btn, "TOPLEFT",      PAD, -PAD)
     norm:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -PAD,  PAD)
-    norm:SetVertexColor(REST_R, REST_G, REST_B, REST_A)
 
     -- Pushed overlay shown during click; lives above the norm texture.
     local pushed = btn:CreateTexture(nil, "OVERLAY")
     pushed:SetTexture(texturePath)
     pushed:SetPoint("TOPLEFT",     btn, "TOPLEFT",      PAD, -PAD)
     pushed:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -PAD,  PAD)
-    pushed:SetVertexColor(HOV_R * 0.45, HOV_G * 0.45, HOV_B * 0.45, 1)
     pushed:Hide()
+
+    local function GetRestColor()
+        if opts.useHeaderColorAtRest and Addon.THEME and Addon.THEME.header then
+            local h = Addon.THEME.header
+            return h.r, h.g, h.b, opts.restAlpha or 1
+        end
+        return REST_R, REST_G, REST_B, REST_A
+    end
+
+    local function GetHoverColor()
+        if opts.useHeaderColorAtRest and Addon.THEME and Addon.THEME.header then
+            local h = Addon.THEME.header
+            return h.r, h.g, h.b
+        end
+        return HOV_R, HOV_G, HOV_B
+    end
+
+    local function ApplyRestColor()
+        local r, g, b, a = GetRestColor()
+        norm:SetVertexColor(r, g, b, a)
+    end
+
+    local function ApplyPressedColor()
+        local r, g, b = GetHoverColor()
+        pushed:SetVertexColor(r * 0.45, g * 0.45, b * 0.45, 1)
+        norm:SetVertexColor(r * 0.45, g * 0.45, b * 0.45, 1)
+    end
+
+    local function ApplyHoverColor()
+        local r, g, b = GetHoverColor()
+        norm:SetVertexColor(r, g, b, 1)
+    end
+
+    btn._lariasRefreshIconTint = function()
+        ApplyRestColor()
+        local r, g, b = GetHoverColor()
+        pushed:SetVertexColor(r * 0.45, g * 0.45, b * 0.45, 1)
+    end
+    btn:_lariasRefreshIconTint()
 
     local hl = btn:CreateTexture(nil, "HIGHLIGHT")
     hl:SetAllPoints(btn)
-    hl:SetColorTexture(1, 1, 1, 0.10)
+    hl:SetColorTexture(1, 1, 1, (Addon.VISUAL_STYLE and Addon.VISUAL_STYLE.buttonHighlightA) or 0.10)
     btn:SetHighlightTexture(hl)
 
     btn:SetScript("OnEnter", function(self_)
-        norm:SetVertexColor(HOV_R, HOV_G, HOV_B, 1)
+        ApplyHoverColor()
         if tooltip then
             GameTooltip:SetOwner(self_, "ANCHOR_BOTTOMLEFT")
             GameTooltip:SetText(tooltip, 1, 1, 1, 1, true)
@@ -195,18 +266,18 @@ function C.NewIconButton(parent, texturePath, onClick, tooltip)
         end
     end)
     btn:SetScript("OnLeave", function()
-        norm:SetVertexColor(REST_R, REST_G, REST_B, REST_A)
+        ApplyRestColor()
         pushed:Hide()
         GameTooltip:Hide()
     end)
     btn:SetScript("OnMouseDown", function()
         pushed:Show()
-        norm:SetVertexColor(HOV_R * 0.45, HOV_G * 0.45, HOV_B * 0.45, 1)
+        ApplyPressedColor()
     end)
     btn:SetScript("OnMouseUp", function()
         pushed:Hide()
         -- Mouse is still on the button after a click; restore hover color.
-        norm:SetVertexColor(HOV_R, HOV_G, HOV_B, 1)
+        ApplyHoverColor()
     end)
 
     btn:SetScript("OnClick", onClick or function() end)
@@ -214,7 +285,7 @@ function C.NewIconButton(parent, texturePath, onClick, tooltip)
 end
 
 -- ── Expand / shrink button ────────────────────────────────────────────────────
--- Branded 20×20 toggle button: dark backdrop, gold ▼/▲ glyph, white on hover.
+-- Branded 20×20 toggle button: dark backdrop, muted ▼/▲ glyph, white on hover.
 --
 -- initialExpanded=true  → shows ▼ ("content visible; click to shrink")
 -- initialExpanded=false → shows ▲ ("content hidden; click to expand")
@@ -247,7 +318,7 @@ function C.NewExpandButton(parent, onToggle, initialExpanded, expandTip, shrinkT
 
     local hlTex = btn:CreateTexture(nil, "HIGHLIGHT")
     hlTex:SetAllPoints(btn)
-    hlTex:SetColorTexture(1, 1, 1, 0.10)
+    hlTex:SetColorTexture(1, 1, 1, (Addon.VISUAL_STYLE and Addon.VISUAL_STYLE.buttonHighlightA) or 0.10)
     btn:SetHighlightTexture(hlTex)
 
     local pushedTex = btn:CreateTexture(nil, "OVERLAY")
@@ -315,7 +386,7 @@ function C.NewSwatch(parent, size)
     local border = btn:CreateTexture(nil, "ARTWORK", nil, 0)
     border:SetPoint("TOPLEFT",     btn, "TOPLEFT",     -1,  1)
     border:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT",  1, -1)
-    border:SetColorTexture(0.55, 0.55, 0.55, 1)
+    border:SetColorTexture(0.55, 0.55, 0.55, 0.72)
     local fill = btn:CreateTexture(nil, "ARTWORK", nil, 1)
     fill:SetAllPoints(btn)
     fill:SetColorTexture(1, 1, 1, 1)

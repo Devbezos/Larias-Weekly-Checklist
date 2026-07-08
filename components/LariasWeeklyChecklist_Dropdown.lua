@@ -23,11 +23,7 @@ function C.NewPopupPanel(strata, fadeTime)
     local st = strata   or "HIGH"
     local ft = fadeTime or 0.15
     local p = Addon:NewThemedFrame(nil, UIParent)
-    if p.SetBackdropColor then
-        local pct   = (Addon.db and Addon.db.global and tonumber(Addon.db.global.uiOpacityPct)) or 65
-        local alpha = math.max(0, math.min(1.0, pct / 100))
-        p:SetBackdropColor(Addon.THEME.bg.r, Addon.THEME.bg.g, Addon.THEME.bg.b, alpha)
-    end
+    Addon:RegisterWindowSurface(p, { opacityMode = "ui", borderStyle = "popup" })
     p:SetFrameStrata(st)
     p:SetClampedToScreen(true)
     p:SetSize(200, 40)
@@ -41,22 +37,21 @@ function C.NewPopupPanel(strata, fadeTime)
     catcher:SetFrameStrata(st)
     catcher:SetFrameLevel((p.GetFrameLevel and p:GetFrameLevel() or 200) - 1)
     catcher:EnableMouse(true)
-    -- Note: SetPropagateMouseClicks is protected and cannot be called by addons.
-    -- The _lariasClosedAt timestamp handles the toggle-button re-click case instead.
     catcher:Hide()
     catcher:SetScript("OnMouseDown", function()
-        -- Record the time the panel was closed via the outside-click catcher so
-        -- that the propagated click arriving at the toggle button does not
-        -- immediately reopen it.  A 200 ms window covers the full mouse-down →
-        -- mouse-up (OnClick) duration of a normal human click, while a stale
-        -- timestamp (>200 ms old) never silently blocks a later toggle click.
-        p._lariasClosedAt = GetTime()
+        if p._closeOnOutsideClick == false then return end
         p:Hide()
     end)
 
+    p._outsideClickCatcher = catcher
+    p._closeOnOutsideClick = true
     p:SetScript("OnHide", function() catcher:Hide() end)
     p:SetScript("OnShow", function()
-        catcher:Show()
+        if p._closeOnOutsideClick == false then
+            catcher:Hide()
+        else
+            catcher:Show()
+        end
         if UIFrameFadeIn then UIFrameFadeIn(p, ft, 0, 1)
         else p:SetAlpha(1) end
     end)
@@ -122,7 +117,8 @@ function C.NewDivider(parent, y, leftPad, rightPad, anchorSide)
     div:SetHeight(1)
     if Addon.THEME then
         local bdr = Addon.THEME.border
-        div:SetColorTexture(bdr.r, bdr.g, bdr.b, 0.5)
+        local vs = Addon.VISUAL_STYLE or {}
+        div:SetColorTexture(bdr.r, bdr.g, bdr.b, vs.dividerA or 0.5)
     end
     if y then
         div:SetPoint(side .. "LEFT",  parent, side .. "LEFT",  lp,  y)

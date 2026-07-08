@@ -3,151 +3,24 @@
 local addonName = ...
 local Addon = _G[addonName]
 if not Addon then return end
+local L = Addon.L or {}
 
-local function SetCheckText(checkButton, text)
-    if not checkButton then return end
-    local lbl = checkButton._label
-    if lbl then
-        lbl:SetText(text or "")
-        local txt = Addon.THEME and Addon.THEME.text
-        if lbl.SetTextColor and txt then
-            lbl:SetTextColor(txt.r, txt.g, txt.b, txt.a or 1)
-        end
-    end
-end
-
-local OpenPopupColorPicker = Addon.Controls.OpenColorPicker
-
--- Native language names for the locale toggle button shown to non-English clients.
-local LOCALE_NATIVE_NAMES = {
-    deDE = "Deutsch",
-    esES = "Español",
-    esMX = "Español",
-    frFR = "Français",
-    itIT = "Italiano",
-    koKR = "한국어",
-    ptBR = "Português",
-    ruRU = "Русский",
-    trTR = "Türkçe",
-}
-
--- (GetSupportLinks and MakePopupSwatch removed; use Addon:GetSupportLinks() and Addon.Controls.NewSwatch)
-
--- Shared color definitions (owned by the main file; GearPopup is a consumer).
-local GEAR_COLOR_DEFS = Addon.THEME_COLOR_DEFS
+-- (SetCheckText, OpenPopupColorPicker, LOCALE_NATIVE_NAMES moved / removed;
+--  pane builders in LariasWeeklyChecklist_Options.lua handle all of this now.)
 
 function Addon:SyncGearPopup()
     local p = self._gearPopup
     if not p then return end
-    local db = self:EnsurePrefs()
-    local L  = self.L or {}
-    local function Sync(cb, checked, label)
-        if cb then
-            cb:SetChecked(checked)
-            SetCheckText(cb, label)
-        end
-    end
-    Sync(p._cbHideCompletedTasks, db.hideCompletedTasks and true or false,
-         L.OPTIONS_HIDE_COMPLETED_TASKS or "Hide Completed Tasks")
-    Sync(p._cbHideCompleted,    db.hideCompletedSections and true or false,
-         L.HIDE_FINISHED_WEEKS or "Hide Finished Weeks")
-    -- Dim the "Hide Finished Weeks" row when "Hide Completed Tasks" is active.
-    do
-        local dim = db.hideCompletedTasks and true or false
-        Addon.Controls.SetCheckEnabled(p._cbHideCompleted, not dim)
-    end
-    Sync(p._cbHideGreatVault,   not db.showGreatVault,
-         L.OPTIONS_HIDE_GREAT_VAULT  or "Hide Great Vault")
-    Sync(p._cbHideCurrency,     not db.showCurrency,
-         L.OPTIONS_HIDE_CURRENCY     or "Hide Currency")
-    Sync(p._cbHideChangeWeek,   db.showChangeWeekBtn == false,
-         L.OPTIONS_HIDE_CHANGE_WEEK_BTN or "Hide Week Selector")
-    Sync(p._cbHideIlvlRef,      db.showIlvlRefBtn == false,
-         L.OPTIONS_HIDE_ILVL_REF_BTN or "Hide Item Level Popup")
-    Sync(p._cbHideUpdateNotice, db.hideUpdateNotice and true or false,
-         L.OPTIONS_HIDE_UPDATE_NOTICE or "Hide Update Warnings")
-    local _minimap = Addon.db and Addon.db.global and Addon.db.global.minimap
-    Sync(p._cbHideMinimapBtn, _minimap and _minimap.hide and true or false,
-         L.OPTIONS_HIDE_MINIMAP_BTN or "Hide Minimap Button")
-    Sync(p._cbDisableUpgradeWarn, db.upgradeWarnDisabled and true or false,
-         L.OPTIONS_DISABLE_UPGRADE_WARN or "Hide Upgrade Warnings")
-    Sync(p._cbDisableCraftWarn, db.craftWarnDisabled and true or false,
-         L.OPTIONS_DISABLE_CRAFT_WARN or "Hide Crafting Warnings")
-    -- bonus roll warning option temporarily hidden
-    -- Sync(p._cbDisableBonusRollWarn, db.bonusRollWarnDisabled and true or false,
-    --      L.OPTIONS_DISABLE_BONUS_ROLL_WARN or "Hide Bonus Roll Warnings")
-
-    -- Refresh color swatch labels in case locale changed since popup was built.
-    if p._gearColorLabels then
-        for si, sd in ipairs(GEAR_COLOR_DEFS) do
-            local lbl = p._gearColorLabels[si]
-            if lbl then lbl:SetText(L[sd.labelKey] or sd.label) end
-        end
-    end
-
-    -- Reset button label.
-    if p._gearResetBtn then
-        p._gearResetBtn:SetText(L.RESET_BUTTON or "Reset List")
-    end
-
-    -- Language toggle: show only for non-English WoW clients.
-    -- Button says "English" when they're in their native language, or their
-    -- native language name when they've previously switched to English.
-    local _wowLocale     = (GetLocale and GetLocale()) or "enUS"
-    local _effLocale     = (self.GetEffectiveLocaleCode and self:GetEffectiveLocaleCode()) or "enUS"
-    local showLangToggle = _wowLocale ~= "enUS"
-    if p._gearLangBtn and p._gearLangDiv then
-        p._gearLangBtn:SetShown(showLangToggle)
-        p._gearLangDiv:SetShown(showLangToggle)
-        if showLangToggle then
-            if _effLocale ~= "enUS" then
-                p._gearLangBtn:SetText("English")
-            else
-                p._gearLangBtn:SetText(LOCALE_NATIVE_NAMES[_wowLocale] or _wowLocale)
-            end
-            if Addon._styleActionButton then Addon._styleActionButton(p._gearLangBtn) end
-        end
-    end
-
-    -- Recalculate popup height based on visible content.
-    do
-        -- Layout is 2-column (6 left + 5 right); height uses 6 rows (the taller column).
-        local PAD     = 10
-        local TILE_H  = 34
-        local cbsY    = 47  -- PAD(10) + reset(22) + 6 + div(1) + 8
-        -- VER_PAD covers slider section + color section + support links + credit/ver + lang btn (30 if visible).
-        local VER_PAD = showLangToggle and 202 or 172
-        local totalH  = cbsY + 5 * TILE_H + PAD + VER_PAD
-        p:SetHeight(totalH)
-    end
-
-    -- Re-apply custom styling after all SetText / SetEnabled calls above, which
-    -- can trigger UIPanelButtonTemplate's OnDisable/OnEnable handlers and restore
-    -- Blizzard's default grey text and art regions.
-    if Addon._styleActionButton then
-        if p._gearResetBtn then Addon._styleActionButton(p._gearResetBtn) end
-    end
-
-    -- Sync slider thumbs to current saved values.
-    if p._scaleSync then p._scaleSync() end
-    if p._opacSync  then p._opacSync()  end
-
-    -- Sync the compact color swatch colors to current saved values.
-    if p._gearColorSwatches then
-        for i, def in ipairs(GEAR_COLOR_DEFS) do
-            local sw = p._gearColorSwatches[i]
-            if sw then sw:SetColor(def:get()) end
-        end
-    end
+    -- Delegate all pane-level syncing to the shared builder sync closures.
+    if p._displaySync    then p._displaySync()    end
+    if p._warningsSync   then p._warningsSync()   end
+    if p._appearanceSync then p._appearanceSync() end
+    -- Re-apply tab colours (active tab gets header colour, others are dimmed).
+    if p._ShowTab then p._ShowTab(p._activeTab or 1) end
 end
 
 function Addon:ToggleGearPopup(anchor, growRight)
     local p = self._gearPopup
-    -- Guard: the outside-click catcher records GetTime() when it closes the panel;
-    -- if that propagated click reaches the gear button within 50 ms we treat it as
-    -- "the same event" and suppress the reopen.  A timestamp is used so a stale
-    -- flag from a click-elsewhere never permanently blocks a later toggle.
-    if p and p._lariasClosedAt and (GetTime() - p._lariasClosedAt) < 0.20 then p._lariasClosedAt = nil; return end
     if p and p.IsShown and p:IsShown() then
         p:Hide()
         return
@@ -156,317 +29,155 @@ function Addon:ToggleGearPopup(anchor, growRight)
     -- Create lazily.
     if not p then
         p = Addon.Controls.NewPopupPanel("DIALOG", 0.12)
-        if p.SetBackdropBorderColor then p:SetBackdropBorderColor(Addon.THEME.border.r, Addon.THEME.border.g, Addon.THEME.border.b, 1) end
-        p:SetSize(340, 10)   -- height set after rows are placed
+        Addon:ApplyPopupBorder(p)
 
-        -- Layout constants.
-        local PAD    = 10
+        -- ── Layout constants ─────────────────────────────────────────────────
+        local POPUP_W     = 340
+        local POPUP_H     = 330
+        local PAD         = 10
+        local BTN_H       = 22
+        local TILE_H      = 28    -- checkbox tile height (box + padding)
+        local TAB_BTN_H   = 22
+        local TAB_GAP     = 6     -- gap between tab-button row and pane content
+        local PANE_TOP    = PAD + TAB_BTN_H + TAB_GAP   -- 38 px from popup top
+        local BOTTOM_H    = 80    -- px reserved at bottom for support links + credit
+        local NUM_TABS    = 3
+        local TAB_GAP_BTN = 4     -- gap between adjacent tab buttons
+        local TAB_W       = math.floor((POPUP_W - 2 * PAD - (NUM_TABS - 1) * TAB_GAP_BTN) / NUM_TABS)
 
-        -- ── Reset List button (top of popup) ───────────────────────────────
-        local rstStartY = PAD          -- px from popup top
-        local resetBtn = Addon.Controls.NewActionButton(p, nil, 22)
-        resetBtn:SetPoint("TOPLEFT",  p, "TOPLEFT",  PAD,  -rstStartY)
-        resetBtn:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PAD, -rstStartY)
-        resetBtn:SetScript("OnClick", function() Addon:PerformFullReset() end)
-        p._gearResetBtn = resetBtn
+        p:SetSize(POPUP_W, POPUP_H)
 
-        -- ── Divider after Reset ────────────────────────────────────────────
-        local div1StartY = rstStartY + 22 + 6
-        Addon.Controls.NewDivider(p, -div1StartY, PAD, PAD)
-
-        -- ── 11 Checkboxes ─────────────────────────────────────────────────
-        local checks = {
-            { key = "_cbHideCompletedTasks",   tooltipKey = "OPTIONS_TOOLTIP_HIDE_COMPLETED_TASKS" },
-            { key = "_cbHideCompleted",         tooltipKey = "OPTIONS_TOOLTIP_HIDE_FINISHED_WEEKS"  },
-            { key = "_cbHideGreatVault",        tooltipKey = "OPTIONS_TOOLTIP_HIDE_GREAT_VAULT"     },
-            { key = "_cbHideCurrency",          tooltipKey = "OPTIONS_TOOLTIP_HIDE_CURRENCY"        },
-            { key = "_cbHideChangeWeek",        tooltipKey = "OPTIONS_TOOLTIP_HIDE_CHANGE_WEEK_BTN" },
-            { key = "_cbHideIlvlRef",           tooltipKey = "OPTIONS_TOOLTIP_HIDE_ILVL_REF_BTN"    },
-            { key = "_cbHideUpdateNotice",      tooltipKey = "OPTIONS_TOOLTIP_HIDE_UPDATE_NOTICE"   },
-            { key = "_cbHideMinimapBtn",        tooltipKey = "OPTIONS_TOOLTIP_HIDE_MINIMAP_BTN"     },
-            { key = "_cbDisableUpgradeWarn",    tooltipKey = "OPTIONS_TOOLTIP_DISABLE_UPGRADE_WARN"   },
-            { key = "_cbDisableCraftWarn",       tooltipKey = "OPTIONS_TOOLTIP_DISABLE_CRAFT_WARN"     },
+        -- ── Tab buttons ──────────────────────────────────────────────────────
+        local TAB_LABELS = {
+            L.SETTINGS_TAB_DISPLAY or "Display",
+            L.SETTINGS_TAB_WARNINGS or "Warnings",
+            L.SETTINGS_TAB_APPEARANCE or "Appearance",
         }
-        local callbacks = {
-            _cbHideCompletedTasks = function(checked)
-                local db = Addon:EnsurePrefs()
-                db.hideCompletedTasks = checked
-                -- "Hide Completed Tasks" implies "Hide Finished Weeks" — force it on
-                -- so completed sections are also hidden and the week label stays correct.
-                if checked then db.hideCompletedSections = true end
-                if Addon.SyncGearPopup then Addon:SyncGearPopup() end
-                if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
-                if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
-            end,
-            _cbHideCompleted  = function(checked)
-                local db = Addon:EnsurePrefs()
-                db.hideCompletedSections = checked
-                if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
-                if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
-            end,
-            _cbHideGreatVault = function(checked)
-                local db = Addon:EnsurePrefs()
-                db.showGreatVault = not checked
-                if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
-            end,
-            _cbHideCurrency   = function(checked)
-                local db = Addon:EnsurePrefs()
-                db.showCurrency = not checked
-                if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
-            end,
-            _cbHideChangeWeek = function(checked)
-                local db = Addon:EnsurePrefs()
-                db.showChangeWeekBtn = not checked
-                if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
-            end,
-            _cbHideIlvlRef    = function(checked)
-                local db = Addon:EnsurePrefs()
-                db.showIlvlRefBtn = not checked
-                if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
-            end,
-            _cbHideUpdateNotice = function(checked)
-                local db = Addon:EnsurePrefs()
-                db.hideUpdateNotice = checked
-                if not checked then
-                    -- Re-query peers so the banner can repopulate if version data was cleared.
-                    if Addon.RequestVersions then Addon:RequestVersions(false) end
-                end
-                if Addon.UpdateStatusBanner then Addon:UpdateStatusBanner() end
-            end,
-            _cbDisableUpgradeWarn = function(checked)
-                local db = Addon:EnsurePrefs()
-                db.upgradeWarnDisabled = checked or nil
-                if Addon.CheckUpgradeWarning then Addon:CheckUpgradeWarning() end
-            end,
-            _cbDisableCraftWarn = function(checked)
-                local db = Addon:EnsurePrefs()
-                db.craftWarnDisabled = checked or nil
-                if Addon.CheckCraftingWarning then Addon:CheckCraftingWarning() end
-            end,
-            -- bonus roll warning callback temporarily hidden
-            _cbHideMinimapBtn = function(checked)
-                local gdb = Addon.db and Addon.db.global
-                if gdb then
-                    gdb.minimap = gdb.minimap or {}
-                    gdb.minimap.hide = checked or nil
-                end
-                local ok, icon = pcall(function() return LibStub("LibDBIcon-1.0") end)
-                if ok and icon then
-                    if checked then
-                        icon:Hide(addonName)
-                    else
-                        icon:Show(addonName)
-                    end
-                end
-            end,
-        }
+        p._tabs  = {}
+        p._panes = {}
 
-        local TILE_H     = 34    -- total tile height (box + padding)
-        local cbsY       = div1StartY + 1 + 8   -- checkboxes section top (px from popup top)
-        local COL_W      = math.floor((p:GetWidth() - 2 * PAD) / 2)  -- half inner width
-
-        for i, info in ipairs(checks) do
-            local col      = (i <= 5) and 0 or 1              -- 0 = left, 1 = right
-            local ri       = (i <= 5) and (i - 1) or (i - 6) -- row within column
-            local colX     = PAD + col * COL_W
-            local tileTopY = -(cbsY + ri * TILE_H)
-
-            local _key = info.key
-            local cb = Addon.Controls.NewCheckBox(p, function(newState)
-                callbacks[_key](newState)
-                if Addon.SyncGearPopup then Addon:SyncGearPopup() end
+        for i = 1, NUM_TABS do
+            local tx = PAD + (i - 1) * (TAB_W + TAB_GAP_BTN)
+            local tb = Addon.Controls.NewActionButton(p, TAB_W, TAB_BTN_H)
+            tb:SetPoint("TOPLEFT", p, "TOPLEFT", tx, -PAD)
+            tb:SetText(TAB_LABELS[i])
+            local _i = i
+            tb:SetScript("OnClick", function()
+                if p._ShowTab then p._ShowTab(_i) end
             end)
-            cb:SetPoint("TOPLEFT", p, "TOPLEFT", colX, tileTopY)
-            cb:SetHeight(TILE_H)
-            cb._label:SetPoint("RIGHT", p, "TOPLEFT", colX + COL_W - 4, 0)
-            p[info.key] = cb
+            -- Active indicator: thin gold bar at the bottom of the active tab button.
+            local bar = tb:CreateTexture(nil, "OVERLAY")
+            bar:SetColorTexture(Addon.THEME.header.r, Addon.THEME.header.g, Addon.THEME.header.b, 1)
+            bar:SetPoint("BOTTOMLEFT",  tb, "BOTTOMLEFT",  2, 1)
+            bar:SetPoint("BOTTOMRIGHT", tb, "BOTTOMRIGHT", -2, 1)
+            bar:SetHeight(2)
+            bar:Hide()
+            tb._activeBar = bar
+            p._tabs[i] = tb
+        end
 
-            local _tooltipKey = info.tooltipKey
-            if _tooltipKey then
-                cb:SetScript("OnEnter", function(self_)
-                    local tip = Addon.L and Addon.L[_tooltipKey]
-                    if tip then Addon.AddonUtils.SetTooltip(self_, tip) end
-                end)
-                cb:SetScript("OnLeave", Addon.AddonUtils.HideTooltip)
+        -- ── Pane frames (one per tab, fills between tab row and bottom section) ──
+        for i = 1, NUM_TABS do
+            local pane = CreateFrame("Frame", nil, p)
+            pane:SetPoint("TOPLEFT",     p, "TOPLEFT",     0, -PANE_TOP)
+            pane:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", 0,  BOTTOM_H)
+            pane:Hide()
+            p._panes[i] = pane
+        end
+        local pane1, pane2, pane3 = p._panes[1], p._panes[2], p._panes[3]
+
+        -- ── ShowTab helper ───────────────────────────────────────────────────
+        local function ShowTab(tabIdx)
+            p._activeTab = tabIdx
+            local hdr = Addon.THEME.header
+            for i = 1, NUM_TABS do
+                local tb = p._tabs[i]
+                local pn = p._panes[i]
+                local tr = Addon.Controls.GetButtonFontString(tb)
+                if i == tabIdx then
+                    if tr then tr:SetTextColor(hdr.r, hdr.g, hdr.b, 1) end
+                    if tb._activeBar then tb._activeBar:Show() end
+                    if pn then pn:Show() end
+                else
+                    if tr then tr:SetTextColor(0.5, 0.5, 0.5, 1) end
+                    if tb._activeBar then tb._activeBar:Hide() end
+                    if pn then pn:Hide() end
+                end
             end
-
-            local hit = cb._hit
-            hit:SetPoint("TOPLEFT",  p, "TOPLEFT", colX,          tileTopY)
-            hit:SetPoint("TOPRIGHT", p, "TOPLEFT", colX + COL_W,  tileTopY)
-            hit:SetHeight(TILE_H)
         end
+        p._ShowTab = ShowTab
 
-        -- ── Version + credit ───────────────────────────────────────────────
-        local _getMeta = C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata
-        local _ver     = (_getMeta and _getMeta(addonName, "Version")) or ""
-        local _locReg  = _G["LARIASWEEKLYCHECKLIST_LOCALE_REGISTRY"]
-        local _dataVer = (_locReg and type(_locReg.sheet_version) == "string" and _locReg.sheet_version) or ""
-
-        -- ── Compact color swatches – beside sliders (right column) ──────────
-        -- colorSectionDiv divides the slider+color zone from the credit block.
-        local COLOR_DIV_Y = 72   -- divider bottom (px from popup BOTTOMLEFT); accounts for the support link section below
-        local colorSectionDiv = Addon.Controls.NewDivider(p, COLOR_DIV_Y, PAD, PAD, "BOTTOM")
-
-        -- ── Scale & Opacity (left) + Colors (right) in one row ─────────────
-        local SROW_H_P   = (Addon.UI.sliderLabelH or 14) + 2 + math.max(16, Addon.UI.sliderH or 20)
-        local OPAC_BOT   = COLOR_DIV_Y + 8
-        local SCALE_BOT  = OPAC_BOT + SROW_H_P + 8
-        local SDIV_BOT   = SCALE_BOT + SROW_H_P + 8
-
-        -- Divider above the combined zone.
-        local sliderSectionDiv = Addon.Controls.NewDivider(p, SDIV_BOT, PAD, PAD, "BOTTOM")
-
-        local SLIDER_W    = 190                  -- left column: slider width
-        local COLOR_COL_X = PAD + SLIDER_W + 10  -- right column: x from popup left
-
-        -- Opacity slider (left column).
-        local opacPaneP = CreateFrame("Frame", nil, p)
-        opacPaneP:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", PAD, OPAC_BOT)
-        opacPaneP:SetSize(SLIDER_W, SROW_H_P)
-        opacPaneP:EnableMouse(true)
-        p._opacSync = Addon:CreateSliderWidget(opacPaneP, {
-            minV       = 10, maxV = 100, stepV = 5,
-            getVal     = function()
-                local gdb = Addon.db and Addon.db.global
-                return (gdb and tonumber(gdb.uiOpacityPct)) or 65
-            end,
-            applyFn    = function(pct)
-                local gdb = Addon.db and Addon.db.global
-                if gdb then gdb.uiOpacityPct = pct end
-                if Addon.ApplyOpacity then Addon:ApplyOpacity() end
-            end,
-            minLabel   = (Addon.L or {}).UI_OPACITY_MIN_LABEL or "10%",
-            maxLabel   = (Addon.L or {}).UI_OPACITY_MAX_LABEL or "100%",
-            fmtFn      = function(v) return math.floor(v + 0.5) .. "%" end,
-            titleLabel = (Addon.L or {}).UI_OPACITY_LABEL     or "Opacity",
-            liveApply  = true,
-        })
-
-        local scalePaneP = CreateFrame("Frame", nil, p)
-        scalePaneP:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", PAD, SCALE_BOT)
-        scalePaneP:SetSize(SLIDER_W, SROW_H_P)
-        scalePaneP:EnableMouse(true)
-        p._scaleSync = Addon:CreateSliderWidget(scalePaneP, {
-            minV       = 50, maxV = 150, stepV = 1,
-            getVal     = function()
-                local gdb = Addon.db and Addon.db.global
-                return (gdb and tonumber(gdb.uiScalePct)) or 100
-            end,
-            applyFn    = function(pct)
-                local gdb = Addon.db and Addon.db.global
-                if gdb then gdb.uiScalePct = pct end
-                if Addon.ApplyUIScale then Addon:ApplyUIScale() end
-            end,
-            minLabel   = (Addon.L or {}).UI_SCALE_MIN_LABEL or "50%",
-            maxLabel   = (Addon.L or {}).UI_SCALE_MAX_LABEL or "150%",
-            fmtFn      = function(v) return math.floor(v + 0.5) .. "%" end,
-            titleLabel = (Addon.L or {}).UI_SCALE_LABEL     or "Scale",
-        })
-
-        -- ── Right column: 3 compact [swatch] Label rows ──────────────────────
-        -- Pin each swatch to its matching slider rather than centering as a stack:
-        --   si=1 Background → vertically centered on the Scale slider
-        --   si=2 Text       → centered in the gap between the two sliders
-        --   si=3 Header     → vertically centered on the Opacity slider
-        local SW_H = 16
-        local half = math.floor(SW_H / 2)
-        local swatchBotYs = {
-            SCALE_BOT + math.floor(SROW_H_P / 2) - half,          -- Background ↔ Scale
-            OPAC_BOT  + SROW_H_P + 4             - half,          -- Text ↔ gap
-            OPAC_BOT  + math.floor(SROW_H_P / 2) - half,          -- Header ↔ Opacity
-        }
-
-        p._gearColorSwatches = {}
-        p._gearColorLabels   = {}
-        for si, sd in ipairs(GEAR_COLOR_DEFS) do
-            local rowBotY = swatchBotYs[si] or swatchBotYs[#swatchBotYs]
-            local _L = Addon.L or {}
-
-            local sw = Addon.Controls.NewSwatch(p, 16)
-            sw:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", COLOR_COL_X, rowBotY)
-            sw:SetColor(sd:get())
-            sw:SetScript("OnClick", function()
-                local cr, cg, cb = sd:get()
-                OpenPopupColorPicker(cr, cg, cb,
-                    function(nr, ng, nb) sd:save(nr, ng, nb); sw:SetColor(nr, ng, nb) end,
-                    function(pr, pg, pb) sd:save(pr, pg, pb); sw:SetColor(pr, pg, pb) end
-                )
-            end)
-            p._gearColorSwatches[si] = sw
-
-            local lbl = p:CreateFontString(nil, "OVERLAY")
-            lbl:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
-            lbl:SetText(_L[sd.labelKey] or sd.label)
-            lbl:SetTextColor(0.70, 0.70, 0.70, 1)
-            lbl:SetPoint("LEFT", sw, "RIGHT", 4, 0)
-            p._gearColorLabels[si] = lbl
-        end
-
-        local creditLabel = p:CreateFontString(nil, "OVERLAY")
-        creditLabel:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
-        creditLabel:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", 8, 5)
-        creditLabel:SetJustifyH("LEFT")
-        creditLabel:SetText("Built by Dev  \226\128\162  Approved by Larias")
-        creditLabel:SetTextColor(0.45, 0.45, 0.45, 0.6)
-
-        local verLabel = p:CreateFontString(nil, "OVERLAY")
-        verLabel:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
-        verLabel:SetPoint("BOTTOMLEFT", creditLabel, "TOPLEFT", 0, 2)
-        verLabel:SetJustifyH("LEFT")
+        -- ── Pane 1: Display ──────────────────────────────────────────────────
         do
-            local parts = {}
-            if _ver     ~= "" then parts[#parts + 1] = "v" .. _ver          end
-            if _dataVer ~= "" then parts[#parts + 1] = "Spreadsheet v" .. _dataVer end
-            verLabel:SetText(table.concat(parts, "  \226\128\162  "))
-        end
-        verLabel:SetTextColor(0.45, 0.45, 0.45, 0.6)
-
-        -- ── Support links (Guide Doc / Checklist / Discord) ─────────────────────
-        -- Divider above the buttons.
-        local suppDiv = Addon.Controls.NewDivider(p, 76, PAD, PAD, "BOTTOM")
-
-        -- Divide available width (minus two side-pads and two 4 px inter-button gaps) equally among 3 buttons.
-        local SUPP_BTN_W = math.floor((p:GetWidth() - 2 * PAD - 8) / 3)
-        for si, sl in ipairs(Addon:GetSupportLinks()) do
-            local _url = sl.url
-            local sx   = PAD + (si - 1) * (SUPP_BTN_W + 4)
-            local sbtn = Addon.Controls.NewActionButton(p, SUPP_BTN_W, 22)
-            sbtn:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", sx, 48)
-            sbtn:SetText(sl.label)
-            sbtn:SetScript("OnClick", function() Addon.OpenSupportLink(_url) end)
+            local opts = { pad = PAD, btnH = BTN_H, tileH = TILE_H, width = POPUP_W,
+                           restoreClickFn = function() Addon:ToggleRestoreHiddenCurrencies(p) end }
+            local dr = Addon.OptionsPane.BuildDisplay(pane1, opts)
+            p._displaySync = dr.sync
         end
 
-        -- ── Language toggle button (non-English clients only) ────────────────────
-        -- Sits above the slider section divider when visible.
-        --   SDIV_BOT≈168  ->  lang btn bottom=173, lang divider bottom=199
-        --   VER_PAD grows from 172 to 202 when this button is visible.
-        local langDivider = Addon.Controls.NewDivider(p, 199, PAD, PAD, "BOTTOM")
-        langDivider:Hide()
-        p._gearLangDiv = langDivider
+        -- ── Pane 2: Warnings ─────────────────────────────────────────────────
+        do
+            local opts = { pad = PAD, tileH = TILE_H, width = POPUP_W }
+            local wr = Addon.OptionsPane.BuildWarnings(pane2, opts)
+            p._warningsSync = wr.sync
+        end
 
-        local langBtn = Addon.Controls.NewActionButton(p, nil, 22)
-        langBtn:SetPoint("BOTTOMLEFT",  p, "BOTTOMLEFT",  PAD,  173)
-        langBtn:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -PAD, 173)
-        langBtn:Hide()
-        langBtn:SetScript("OnClick", function()
-            if not Addon.SetLocaleOverride then return end
-            local eff = (Addon.GetEffectiveLocaleCode and Addon:GetEffectiveLocaleCode()) or "enUS"
-            if eff ~= "enUS" then
-                Addon:SetLocaleOverride("enUS")
-            else
-                Addon:SetLocaleOverride("auto")
+        -- ── Pane 3: Appearance ────────────────────────────────────────────────
+        do
+            local opts = { pad = PAD, btnH = BTN_H, width = POPUP_W, showLangBtn = true }
+            local ar = Addon.OptionsPane.BuildAppearance(pane3, opts)
+            p._appearanceSync = ar.sync
+        end
+
+        -- ── Bottom section (always visible): divider, support links, credit ──
+        do
+            local _getMeta = C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata
+            local _ver     = (_getMeta and _getMeta(addonName, "Version")) or ""
+            local _locReg  = _G["LARIASWEEKLYCHECKLIST_LOCALE_REGISTRY"]
+            local _dataVer = (_locReg and type(_locReg.sheet_version) == "string" and _locReg.sheet_version) or ""
+            local _deployTs = (type(Addon.DEV_DEPLOY_TIMESTAMP) == "string" and Addon.DEV_DEPLOY_TIMESTAMP) or ""
+
+            local creditLabel = p:CreateFontString(nil, "OVERLAY")
+            creditLabel:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
+            creditLabel:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", 8, 5)
+            creditLabel:SetJustifyH("LEFT")
+            creditLabel:SetText(L.CREDIT_BUILT_BY or "Built by Dev  \226\128\162  Approved by Larias")
+            creditLabel:SetTextColor(0.45, 0.45, 0.45, 0.6)
+
+            local verLabel = p:CreateFontString(nil, "OVERLAY")
+            verLabel:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
+            verLabel:SetPoint("BOTTOMLEFT", creditLabel, "TOPLEFT", 0, 2)
+            verLabel:SetJustifyH("LEFT")
+            do
+                local parts = {}
+                if _ver     ~= "" then parts[#parts + 1] = (L.VERSION_LABEL_FMT or "v%s"):format(_ver) end
+                if _dataVer ~= "" then parts[#parts + 1] = (L.SPREADSHEET_VERSION_LABEL_FMT or "Spreadsheet v%s"):format(_dataVer) end
+                if _deployTs ~= "" then parts[#parts + 1] = (L.DEV_DEPLOY_TIMESTAMP_LABEL_FMT or "Deployed %s"):format(_deployTs) end
+                verLabel:SetText(table.concat(parts, "  \226\128\162  "))
             end
-            if Addon.SyncGearPopup then Addon:SyncGearPopup() end
-            if Addon.RequestRefresh then Addon:RequestRefresh() else Addon:Refresh() end
-        end)
-        p._gearLangBtn = langBtn
+            verLabel:SetTextColor(0.45, 0.45, 0.45, 0.6)
+
+            -- Divider above support buttons.
+            Addon.Controls.NewDivider(p, 76, PAD, PAD, "BOTTOM")
+
+            -- Three support link buttons.
+            local SUPP_BTN_W = math.floor((POPUP_W - 2 * PAD - 8) / 3)
+            for si, sl in ipairs(Addon:GetSupportLinks()) do
+                local _url = sl.url
+                local sx   = PAD + (si - 1) * (SUPP_BTN_W + 4)
+                local sbtn = Addon.Controls.NewActionButton(p, SUPP_BTN_W, 22)
+                sbtn:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", sx, 48)
+                sbtn:SetText(sl.label)
+                sbtn:SetScript("OnClick", function() Addon.OpenSupportLink(_url) end)
+            end
+        end
 
         self._gearPopup = p
-        -- Apply saved opacity to the new popup (it was created with alpha=1.0).
+        -- Apply saved opacity to the new popup (created with alpha=1.0).
         if self.ApplyOpacity then self:ApplyOpacity() end
     end
 
-    -- Sync current values and labels (includes hidden chars trigger label).
+    -- Sync current values and labels (also calls ShowTab(1) to set initial state).
     self:SyncGearPopup()
 
     -- Position below the anchor or center if no anchor.
@@ -483,4 +194,124 @@ function Addon:ToggleGearPopup(anchor, growRight)
         p:SetPoint("CENTER", UIParent, "CENTER")
     end
     p:Show()
+end
+
+--- Opens (or rebuilds) the restore-hidden-currencies panel anchored to `anchor`.
+--- If `anchor` is nil, keeps the panel's current position.
+function Addon:OpenRestoreHiddenCurrencies(anchor)
+    -- Build a unified list: hidden currencies, items, vault blocks, and quests.
+    local combined = {}
+    for _, e in ipairs(self.GetHiddenItemList and self:GetHiddenItemList() or {}) do
+        local _id = e.id
+        combined[#combined + 1] = {
+            name      = e.name .. " |cff808080" .. (L.RESTORE_HIDDEN_ITEM_SUFFIX or "(Item)") .. "|r",
+            onRestore = function() Addon:SetItemHidden(_id, false) end,
+        }
+    end
+    for _, e in ipairs(self:GetHiddenGVBlockList()) do
+        local _idx = e.idx
+        combined[#combined + 1] = {
+            name      = e.name .. " |cff808080" .. (L.RESTORE_HIDDEN_VAULT_SUFFIX or "(Vault)") .. "|r",
+            onRestore = function() Addon:SetGVBlockHidden(_idx, false) end,
+        }
+    end
+    for _, e in ipairs(self:GetHiddenQuestList()) do
+        local _qk = e.key
+        combined[#combined + 1] = {
+            name      = e.name .. " |cff808080" .. (L.RESTORE_HIDDEN_QUEST_SUFFIX or "(Quest)") .. "|r",
+            onRestore = function() Addon:SetQuestHidden(_qk, false) end,
+        }
+    end
+    if #combined == 0 then
+        if self._restoreHiddenFrame then self._restoreHiddenFrame:Hide() end
+        return
+    end
+
+    local f = self._restoreHiddenFrame
+    local ROW_H, PAD, BTN_W = 22, 8, 70
+
+    if not f then
+        f = CreateFrame("Frame", "LariasRestoreHiddenFrame", UIParent, "BackdropTemplate")
+        f:SetFrameStrata("DIALOG")
+        f:SetClampedToScreen(true)
+        -- Close button
+        local xClose = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+        xClose:SetSize(18, 18)
+        xClose:SetPoint("TOPRIGHT", f, "TOPRIGHT", 2, 2)
+        xClose:SetScript("OnClick", function() f:Hide() end)
+        f._rowFrames = {}
+        self._restoreHiddenFrame = f
+        -- Register with UISpecialFrames so ESC closes this window.
+        tinsert(UISpecialFrames, "LariasRestoreHiddenFrame")
+    end
+
+    -- Apply theme backdrop.
+    self:ApplyOpaquePopupTheme(f)
+
+    -- Title
+    if not f._titleFS then
+        f._titleFS = f:CreateFontString(nil, "OVERLAY")
+        f._titleFS:SetFont("Fonts\\FRIZQT__.TTF", 12, "")
+        f._titleFS:SetPoint("TOPLEFT",  f, "TOPLEFT",  PAD, -PAD)
+        f._titleFS:SetPoint("TOPRIGHT", f, "TOPRIGHT", -20, -PAD)
+        f._titleFS:SetHeight(16)
+        f._titleFS:SetJustifyH("LEFT")
+    end
+    local hdr = self.THEME and self.THEME.header
+    if hdr then f._titleFS:SetTextColor(hdr.r, hdr.g, hdr.b, 1) end
+    f._titleFS:SetText(L.RESTORE_HIDDEN_TITLE or "Restore Hidden Currencies")
+
+    -- Hide old row frames and rebuild.
+    for _, rf in ipairs(f._rowFrames) do rf:Hide() end
+    f._rowFrames = {}
+
+    local th = self.THEME and self.THEME.text
+    for ri, entry in ipairs(combined) do
+        local rowY = -(PAD + 16 + 4 + (ri - 1) * ROW_H)
+        local rf   = CreateFrame("Frame", nil, f)
+        rf:SetPoint("TOPLEFT",  f, "TOPLEFT",  PAD, rowY)
+        rf:SetPoint("TOPRIGHT", f, "TOPRIGHT", -PAD, rowY)
+        rf:SetHeight(ROW_H)
+
+        local nameFS = rf:CreateFontString(nil, "OVERLAY")
+        nameFS:SetFont("Fonts\\FRIZQT__.TTF", 11, "")
+        nameFS:SetPoint("LEFT",  rf, "LEFT",  0, 0)
+        nameFS:SetPoint("RIGHT", rf, "RIGHT", -(BTN_W + 4), 0)
+        nameFS:SetJustifyH("LEFT")
+        nameFS:SetJustifyV("MIDDLE")
+        nameFS:SetText(entry.name)
+        if th then nameFS:SetTextColor(th.r, th.g, th.b, 0.9) end
+
+        local btn = Addon.Controls.NewActionButton(rf, nil, 18)
+        btn:SetWidth(BTN_W)
+        btn:SetPoint("RIGHT", rf, "RIGHT", 0, 0)
+        btn:SetText(L.RESTORE_HIDDEN_BTN or "Restore")
+        btn:SetScript("OnClick", function()
+            entry.onRestore()
+        end)
+        if Addon._styleActionButton then Addon._styleActionButton(btn) end
+
+        f._rowFrames[ri] = rf
+    end
+
+    local totalH = PAD + 16 + 4 + #combined * ROW_H + PAD
+    f:SetSize(240, totalH)
+
+    if anchor then
+        f:ClearAllPoints()
+        f:SetPoint("TOPLEFT", anchor, "TOPRIGHT", 4, 0)
+    elseif not (f.GetNumPoints and f:GetNumPoints() > 0) then
+        f:SetPoint("CENTER")
+    end
+    f:Show()
+end
+
+--- Toggles the restore-hidden-currencies panel.
+function Addon:ToggleRestoreHiddenCurrencies(anchor)
+    local f = self._restoreHiddenFrame
+    if f and f.IsShown and f:IsShown() then
+        f:Hide()
+    else
+        self:OpenRestoreHiddenCurrencies(anchor)
+    end
 end

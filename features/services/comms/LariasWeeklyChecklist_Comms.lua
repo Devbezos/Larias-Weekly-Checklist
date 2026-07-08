@@ -1,8 +1,8 @@
 -- Addon communications + update notice logic.
 --
 -- Message format:
--- - Structured tables serialized via AceSerializer and prefixed with "S:".
--- - t = message type ("Q" query, "V" version)
+-- - "Q" query
+-- - "V\taddonVersion\tsheetVersion" version reply
 --
 -- Performance:
 -- - Broadcast/query/reply are throttled (timers) to avoid chat spam.
@@ -15,12 +15,18 @@ Addon.COMM_PREFIX = Addon.COMM_PREFIX or "LWMC"
 local BROADCAST_THROTTLE_SECONDS = 30
 local REPLY_THROTTLE_SECONDS = 5
 
-local AceSerializer = LibStub and LibStub("AceSerializer-3.0", true)
-local COMM_SERIAL_PREFIX = "S:"
-
 local broadcastTimerActive = false
 local replyTimerActive = false
 local queryTimerActive = false
+local commFrame
+
+local function RunLater(delay, callback)
+    if C_Timer and C_Timer.After then
+        C_Timer.After(delay, callback)
+    else
+        callback()
+    end
+end
 
 -- Trim helper for metadata/version parsing.
 local function Trim(s)
@@ -90,28 +96,22 @@ local function CompareVersions(versionA, versionB)
 end
 
 local function SerializeCommMessage(tbl)
-    -- Serialize a structured payload and prepend a small discriminator.
-    -- Returns nil if serialization fails (or AceSerializer missing).
-    if not (AceSerializer and AceSerializer.Serialize) then return nil end
     if type(tbl) ~= "table" then return nil end
-
-    local ok, serialized = pcall(AceSerializer.Serialize, AceSerializer, tbl)
-    if not ok or type(serialized) ~= "string" or serialized == "" then
-        return nil
+    if tbl.t == "Q" then
+        return "Q"
+    elseif tbl.t == "V" then
+        return table.concat({ "V", tostring(tbl.v or ""), tostring(tbl.sv or "") }, "\t")
     end
-    return COMM_SERIAL_PREFIX .. serialized
+    return nil
 end
 
 local function DeserializeCommMessage(message)
-    -- Parse a structured payload produced by SerializeCommMessage.
     if type(message) ~= "string" then return nil end
+    if message == "Q" then return { t = "Q" } end
 
-    if message:sub(1, #COMM_SERIAL_PREFIX) == COMM_SERIAL_PREFIX and AceSerializer and AceSerializer.Deserialize then
-        local payload = message:sub(#COMM_SERIAL_PREFIX + 1)
-        local ok, success, decoded = pcall(AceSerializer.Deserialize, AceSerializer, payload)
-        if ok and success and type(decoded) == "table" then
-            return decoded
-        end
+    local msgType, version, sheetVersion = strsplit("\t", message)
+    if msgType == "V" then
+        return { t = "V", v = version or "", sv = sheetVersion or "" }
     end
     return nil
 end
@@ -119,8 +119,10 @@ end
 local function SafeSendCommMessage(msg, channel)
     -- Guarded send: comms should never hard-error.
     if not channel or channel == "" then return end
-    if Addon and Addon.SendCommMessage then
-        pcall(Addon.SendCommMessage, Addon, Addon.COMM_PREFIX, msg, channel)
+    if C_ChatInfo and C_ChatInfo.SendAddonMessage then
+        pcall(C_ChatInfo.SendAddonMessage, Addon.COMM_PREFIX, msg, channel)
+    elseif SendAddonMessage then
+        pcall(SendAddonMessage, Addon.COMM_PREFIX, msg, channel)
     end
 end
 
@@ -210,7 +212,7 @@ function Addon:BroadcastVersion(force)
 
     if not force then
         broadcastTimerActive = true
-        self:ScheduleTimer(function() broadcastTimerActive = false end, BROADCAST_THROTTLE_SECONDS)
+        RunLater(BROADCAST_THROTTLE_SECONDS, function() broadcastTimerActive = false end)
     end
 end
 
@@ -235,13 +237,13 @@ function Addon:RequestVersions(force)
 
     if not force then
         queryTimerActive = true
-        self:ScheduleTimer(function() queryTimerActive = false end, BROADCAST_THROTTLE_SECONDS)
+        RunLater(BROADCAST_THROTTLE_SECONDS, function() queryTimerActive = false end)
     end
 end
 
 function Addon:OnAddonMessage(prefix, message, sender)
-    -- AceComm entry point (also used by OnCommReceived).
-    -- We ignore non-structured messages to avoid legacy/backcompat complexity.
+    -- Native addon-message entry point.
+    -- We ignore unknown messages to avoid legacy/backcompat complexity.
     if prefix ~= self.COMM_PREFIX then return end
     if type(message) ~= "string" then return end
 
@@ -257,12 +259,12 @@ function Addon:OnAddonMessage(prefix, message, sender)
         end
 
         replyTimerActive = true
-        self:ScheduleTimer(function() replyTimerActive = false end, REPLY_THROTTLE_SECONDS)
+        RunLater(REPLY_THROTTLE_SECONDS, function() replyTimerActive = false end)
 
         local delay = (math.random() * 2.0)
-        self:ScheduleTimer(function()
+        RunLater(delay, function()
             self:BroadcastVersion(true)
-        end, delay)
+        end)
         return
     end
 
@@ -321,7 +323,7 @@ function Addon:OnAddonMessage(prefix, message, sender)
 end
 
 function Addon:OnCommReceived(prefix, messageText, _, sender)
-    -- AceComm callback signature includes an unused distribution parameter.
+    -- Backward-compatible wrapper for callers that still use the old shape.
     self:OnAddonMessage(prefix, messageText, sender)
 end
 
@@ -343,16 +345,18 @@ function Addon:CommsOnEnable()
         end
     end
 
-    -- Embed AceComm-3.0 now if it is available.  We defer this from NewAddon
-    -- so a missing or overridden library does not crash the main chunk and
-    -- break slash commands for everyone.
-    local aceComm = LibStub and LibStub("AceComm-3.0", true)
-    if aceComm and not self.RegisterComm then
-        aceComm:Embed(self)
+    if C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix then
+        pcall(C_ChatInfo.RegisterAddonMessagePrefix, self.COMM_PREFIX)
+    elseif RegisterAddonMessagePrefix then
+        pcall(RegisterAddonMessagePrefix, self.COMM_PREFIX)
     end
 
-    if self.RegisterComm then
-        self:RegisterComm(self.COMM_PREFIX)
+    if not commFrame then
+        commFrame = CreateFrame("Frame")
+        commFrame:RegisterEvent("CHAT_MSG_ADDON")
+        commFrame:SetScript("OnEvent", function(_, _, prefix, message, _, sender)
+            Addon:OnAddonMessage(prefix, message, sender)
+        end)
     end
 
     self:BroadcastVersion(true)

@@ -13,7 +13,46 @@ if not Addon then return end
 
 local LOCALE_REGISTRY_KEY = Addon.LOCALE_REGISTRY_KEY
 
--- ── Addon:GetListData ─────────────────────────────────────────────────────────
+local TRACKED_ALT_LOOT_SECTION_ID = "larias_tracked_alt_loot"
+
+local function BuildTrackedAltLootSection(self)
+    if type(self.GetTrackedLootCharKeys) ~= "function" then return nil end
+
+    local L = self.L or {}
+    local trackedKeys = self:GetTrackedLootCharKeys()
+    if #trackedKeys == 0 then return nil end
+
+    local gdb = self.db and self.db.global
+    local items = {}
+
+    for _, profileKey in ipairs(trackedKeys) do
+        local cdb = gdb and gdb.chars and gdb.chars[profileKey]
+        local charName = (profileKey:match("^(.-)%s*%-") or profileKey):gsub("^%s+", ""):gsub("%s+$", "")
+        if charName == "" then charName = profileKey end
+        local ilvl = tonumber(cdb and cdb.ilvl) or 0
+
+        local text
+        if ilvl > 0 then
+            text = (L.TRACKED_ALT_LOOT_ITEM_ILVL_FMT or "Max loot on %s (ilvl %d)"):format(charName, math.floor(ilvl))
+        else
+            text = (L.TRACKED_ALT_LOOT_ITEM_FMT or "Max loot on %s"):format(charName)
+        end
+
+        items[#items + 1] = {
+            id = profileKey,
+            text = text,
+        }
+    end
+
+    if #items == 0 then return nil end
+
+    return {
+        id = TRACKED_ALT_LOOT_SECTION_ID,
+        title = L.TRACKED_ALT_LOOT_SECTION_TITLE or "Tracked Alt Loot",
+        items = items,
+    }
+end
+
 -- Return the checklist dataset for the current effective locale.
 -- Cached by locale code because the dataset is static per session.
 function Addon:GetListData()
@@ -24,27 +63,53 @@ function Addon:GetListData()
     local localeCode = self:GetEffectiveLocaleCode()
 
     if self._cachedListLocaleCode == localeCode and type(self._cachedListData) == "table" then
-        return self._cachedListData
+        local trackedSection = BuildTrackedAltLootSection(self)
+        if not trackedSection then
+            return self._cachedListData
+        end
+        local merged = {}
+        for i, section in ipairs(self._cachedListData) do
+            merged[i] = section
+        end
+        merged[#merged + 1] = trackedSection
+        return merged
     end
 
     local data = dataByLocale[localeCode]
     if type(data) == "table" then
         self._cachedListLocaleCode = localeCode
         self._cachedListData = data
-        return data
+        local trackedSection = BuildTrackedAltLootSection(self)
+        if not trackedSection then
+            return data
+        end
+        local merged = {}
+        for i, section in ipairs(data) do
+            merged[i] = section
+        end
+        merged[#merged + 1] = trackedSection
+        return merged
     end
 
     data = dataByLocale.enUS
     if type(data) == "table" then
         self._cachedListLocaleCode = "enUS"
         self._cachedListData = data
-        return data
+        local trackedSection = BuildTrackedAltLootSection(self)
+        if not trackedSection then
+            return data
+        end
+        local merged = {}
+        for i, section in ipairs(data) do
+            merged[i] = section
+        end
+        merged[#merged + 1] = trackedSection
+        return merged
     end
 
     return {}
 end
 
--- ── Addon:PruneObsoleteSavedState ─────────────────────────────────────────────
 -- Walks the saved checked/collapsed tables and removes any keys that no longer
 -- correspond to a section or item in the current dataset. Runs once per session.
 function Addon:PruneObsoleteSavedState()
@@ -88,14 +153,14 @@ function Addon:PruneObsoleteSavedState()
     -- via sheet_to_lua) don't break already-completed weeks.
     --
     -- Two signals are combined to handle the three common update patterns:
-    --   (a) items renamed  → old IDs pruned, new IDs added; checkedCount stays
+    --   (a) items renamed: old IDs pruned, new IDs added. checkedCount stays
     --       the same but matchCount drops.  checkedCount >= currentCount catches
     --       this when item counts don't change net, and the 90% threshold below
     --       helps when a couple of new items were also added.
-    --   (b) items removed  → currentCount shrinks; checkedCount >= currentCount
+    --   (b) items removed: currentCount shrinks, so checkedCount >= currentCount
     --       still holds.
     --   (c) items added to an already-complete section (e.g. items moved in
-    --       from a deleted section) → checkedCount < currentCount but the ratio
+    --       from a deleted section): checkedCount < currentCount but the ratio
     --       is still high; the 90% threshold catches this.
     local currentSheetVer = (function()
         local r = Addon.GetLocaleRegistry and Addon.GetLocaleRegistry()
@@ -126,7 +191,7 @@ function Addon:PruneObsoleteSavedState()
                     -- Nothing was ever checked in this section; skip.
                 else
                     -- Threshold: 90% of current items must be covered by old
-                    -- checked entries.  math.max(1,…) avoids a zero floor for
+                    -- checked entries.  math.max(1, ...) avoids a zero floor for
                     -- single-item sections.  This is intentionally slightly
                     -- lenient so that a section completed at the previous
                     -- version survives even if 1-2 new items were added to it.
@@ -168,7 +233,4 @@ function Addon:PruneObsoleteSavedState()
         end
     end
 
-    if (removedChecked > 0 or removedCollapsed > 0) and self.Debugf then
-        self:Debugf("sv_prune", "Pruned SV: checked=%d collapsed=%d", removedChecked, removedCollapsed)
-    end
 end

@@ -1,4 +1,4 @@
-﻿-- IlvlRef module: standalone popup window with Midnight Season 1 item-level reference tables.
+-- IlvlRef module: standalone popup window with Midnight Season 1 item-level reference tables.
 -- Opened/closed via the "Item Levels" button in the main frame.
 
 local addonName = ...
@@ -40,9 +40,10 @@ end
 -- Draw a 1 px horizontal rule and return the new posY.
 local function HRule(parent, posY)
     local tex = parent:CreateTexture(nil, "ARTWORK")
+    local vs = Addon.VISUAL_STYLE or {}
     tex:SetColorTexture(
         Addon.THEME.border.r, Addon.THEME.border.g,
-        Addon.THEME.border.b, Addon.THEME.border.a * 0.6)
+        Addon.THEME.border.b, vs.strongDividerA or (Addon.THEME.border.a * 0.6))
     tex:SetHeight(1)
     tex:SetPoint("TOPLEFT",  parent, "TOPLEFT",  0,  posY)
     tex:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0,  posY)
@@ -118,8 +119,8 @@ end
 -- cols = { {x, w, t, [align]} }  (x/w are cell boundaries; t = header text)
 -- rows = { {cell1, cell2, ...}, ... }
 -- Returns new posY.
-local GBOR = 0.55  -- outer border / header divider opacity multiplier
-local GLIN = 0.18  -- inner row / column line opacity multiplier
+local GBOR = (Addon.VISUAL_STYLE and Addon.VISUAL_STYLE.trackingBorderA) or 0.55
+local GLIN = (Addon.VISUAL_STYLE and Addon.VISUAL_STYLE.trackingInnerA) or 0.18
 local function GridTable(parent, posY, cols, rows)
         local borderColor = Addon.THEME.border
         local dimColor    = Addon.THEME.textDim
@@ -178,24 +179,25 @@ local function BuildIlvlRefWindow()
     -- ilvl at rank r = ilvlBase + RANK_OFFSETS[r]
     -- Starting points and rank offsets are defined in LariasWeeklyChecklist_Constants.lua
     -- and loaded into Addon.TRACKING. The literals below are fallbacks only.
-    local tracking = Addon.TRACKING or {}
-    local rawBases   = tracking.ilvlBases       or { 220, 233, 246, 259, 272 }
-    local RANK_OFFSETS = tracking.ilvlRankOffsets or { 0, 4, 7, 10, 13, 17 }
+    local tracking     = Addon.TRACKING or {}
+    local ilvlBase      = tracking.ilvlBase      or 220
+    local ilvlTrackStep = tracking.ilvlTrackStep or 13
+    local RANK_OFFSETS  = tracking.ilvlRankOffsets or { 0, 4, 7, 10, 13, 17 }
 
     local TIERS = {
-        { id="ADV",   color=ADV,   ilvlBase=rawBases[1] or 220,
+        { id="ADV",   color=ADV,   ilvlBase=ilvlBase + ilvlTrackStep * 0,
           crest      = Locale.ILVLREF_CREST_ADV,
           crestShort = Locale.ILVLREF_CREST_ADV },
-        { id="VET",   color=VET,   ilvlBase=rawBases[2] or 233,
+        { id="VET",   color=VET,   ilvlBase=ilvlBase + ilvlTrackStep * 1,
           crest      = Locale.ILVLREF_CREST_VET,
           crestShort = Locale.ILVLREF_CREST_VET },
-        { id="CHAMP", color=CHAMP, ilvlBase=rawBases[3] or 246,
+        { id="CHAMP", color=CHAMP, ilvlBase=ilvlBase + ilvlTrackStep * 2,
           crest      = Locale.ILVLREF_CREST_CHAMP,
           crestShort = Locale.ILVLREF_CREST_CHAMP },
-        { id="HERO",  color=HERO,  ilvlBase=rawBases[4] or 259,
+        { id="HERO",  color=HERO,  ilvlBase=ilvlBase + ilvlTrackStep * 3,
           crest      = Locale.ILVLREF_CREST_HERO,
           crestShort = Locale.ILVLREF_CREST_HERO },
-        { id="MYTH",  color=MYTH,  ilvlBase=rawBases[5] or 272,
+        { id="MYTH",  color=MYTH,  ilvlBase=ilvlBase + ilvlTrackStep * 4,
           crest      = Locale.ILVLREF_CREST_MYTH,
           crestShort = Locale.ILVLREF_CREST_MYTH },
     }
@@ -371,8 +373,7 @@ local function BuildIlvlRefWindow()
     win:Hide()
 
     -- Override bg to fully opaque (NewThemedFrame sets theme defaults; bg.a is 0.65).
-    local bg = Addon.THEME.bg
-    win:SetBackdropColor(bg.r, bg.g, bg.b, 1.0)
+    Addon:ApplyOpaquePopupTheme(win)
 
     -- Title (centered, leaves room for close button on the right)
     local titleFS = win:CreateFontString(nil, "ARTWORK", "GameFontNormal")

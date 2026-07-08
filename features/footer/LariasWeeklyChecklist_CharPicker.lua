@@ -7,14 +7,73 @@ if not Addon then return end
 -- Returns a sorted list of all characters that have ever logged in with the addon.
 -- Primary source: AceDB's sv.profileKeys (populated on every login automatically).
 -- Secondary: global.chars keys (in case a char only has the new-format data).
+local function CountKeys(t)
+    if type(t) ~= "table" then return 0 end
+    local n = 0
+    for _ in pairs(t) do
+        n = n + 1
+    end
+    return n
+end
+
+local function IsCharacterProfileKey(charKey)
+    if type(charKey) ~= "string" then return false end
+    local name, realm = charKey:match("^%s*(.-)%s%-%s(.-)%s*$")
+    return name ~= nil and realm ~= nil and name ~= "" and realm ~= ""
+end
+
+local function PruneInvalidCharacterKeys(self)
+    local db = self.db
+    if not db then return end
+
+    local currentKey = self.GetCurrentProfileKey and self:GetCurrentProfileKey() or nil
+    local removedAny = false
+
+    local function PruneMap(map)
+        if type(map) ~= "table" then return end
+        for charKey in pairs(map) do
+            if charKey ~= currentKey and not IsCharacterProfileKey(charKey) then
+                map[charKey] = nil
+                removedAny = true
+            end
+        end
+    end
+
+    local gdb = db.global
+    PruneMap(gdb and gdb.charClasses)
+    PruneMap(gdb and gdb.charLevels)
+    PruneMap(gdb and gdb.hiddenChars)
+    PruneMap(gdb and gdb.trackedLootChars)
+
+    if removedAny then
+        self._charProfileKeysCache = nil
+    end
+end
+
 function Addon:GetCharProfileKeys()
+    PruneInvalidCharacterKeys(self)
+
+    local sv = self.db and self.db.sv
+    local profileKeys = sv and sv.profileKeys
+    local chars = self.db and self.db.global and self.db.global.chars
+    local profileKeyCount = CountKeys(profileKeys)
+    local charCount = CountKeys(chars)
+
+    local cache = self._charProfileKeysCache
+    if cache
+       and cache.profileKeysRef == profileKeys
+       and cache.charsRef == chars
+       and cache.profileKeyCount == profileKeyCount
+       and cache.charCount == charCount then
+        return cache.keys
+    end
+
     local seen = {}
     local keys = {}
 
-    local sv = self.db and self.db.sv
-    if sv and sv.profileKeys then
-        for charKey in pairs(sv.profileKeys) do
-            if not seen[charKey] then
+    if profileKeys then
+        for charKey in pairs(profileKeys) do
+            if IsCharacterProfileKey(charKey) and not seen[charKey] then
                 seen[charKey] = true
                 tinsert(keys, charKey)
             end
@@ -22,10 +81,9 @@ function Addon:GetCharProfileKeys()
     end
 
     -- Also include any chars that exist in global.chars but not in sv.profileKeys.
-    local chars = self.db and self.db.global and self.db.global.chars
     if chars then
         for charKey in pairs(chars) do
-            if not seen[charKey] then
+            if IsCharacterProfileKey(charKey) and not seen[charKey] then
                 seen[charKey] = true
                 tinsert(keys, charKey)
             end
@@ -33,13 +91,71 @@ function Addon:GetCharProfileKeys()
     end
 
     table.sort(keys)
+    self._charProfileKeysCache = {
+        profileKeysRef = profileKeys,
+        charsRef = chars,
+        profileKeyCount = profileKeyCount,
+        charCount = charCount,
+        keys = keys,
+    }
     return keys
+end
+
+local function GetMaxCharacterLevel()
+    if type(GetMaxPlayerLevel) == "function" then
+        local lvl = tonumber(GetMaxPlayerLevel())
+        if lvl and lvl > 0 then return lvl end
+    end
+    if type(GetMaxLevelForLatestExpansion) == "function" then
+        local lvl = tonumber(GetMaxLevelForLatestExpansion())
+        if lvl and lvl > 0 then return lvl end
+    end
+    local lvl = tonumber(MAX_PLAYER_LEVEL)
+    if lvl and lvl > 0 then return lvl end
+    return nil
+end
+
+local function IsOwnProfileKey(profileKey, ownKey)
+    if not (profileKey and ownKey) then return false end
+    return profileKey == ownKey or profileKey:lower() == ownKey:lower()
+end
+
+function Addon:IsMaxLevelChar(profileKey)
+    if not profileKey then return false end
+    local gdb = self.db and self.db.global
+    local lvl = gdb and gdb.charLevels and tonumber(gdb.charLevels[profileKey])
+    local maxLevel = GetMaxCharacterLevel()
+    if not (lvl and maxLevel) then return false end
+    return lvl >= maxLevel
+end
+
+local function SnapshotHasUsableData(snap)
+    if type(snap) ~= "table" then return false end
+    if snap.leftLines ~= nil then return true end
+    if type(snap.rightRows) ~= "table" then return false end
+    for _, row in ipairs(snap.rightRows) do
+        if row.qty and row.qty > 0 then return true end
+    end
+    return false
+end
+
+local function IsPickableChar(self, profileKey, ownKey, gdb)
+    if IsOwnProfileKey(profileKey, ownKey) then return false end
+    if gdb and gdb.hiddenChars and gdb.hiddenChars[profileKey] then return false end
+    if not self:IsMaxLevelChar(profileKey) then return false end
+    return true
 end
 
 -- Switches the viewed character.  profileKey=nil means own character.
 -- Character data lives in db.global.chars[key] so no profile switching is
 -- needed \u2014 just update _viewingChar and refresh the UI.
 function Addon:SetViewingChar(profileKey)
+    -- Clear any shared popup blockers before rebuilding the view.
+    if self.HideSummaryOverlays then
+        self:HideSummaryOverlays()
+    elseif self.HideContextMenu then
+        self:HideContextMenu()
+    end
     local ownKey = self:GetCurrentProfileKey()
     if profileKey == nil or profileKey == ownKey then
         self._viewingChar = nil
@@ -67,22 +183,10 @@ function Addon:HasPickableChars()
     local ownKey = self:GetCurrentProfileKey()
     local gdb    = self.db and self.db.global
     for _, charKey in ipairs(self:GetCharProfileKeys()) do
-        local isOwn    = (charKey == ownKey) or (charKey:lower() == ownKey:lower())
-        local isHidden = gdb and gdb.hiddenChars and gdb.hiddenChars[charKey]
-        if not isOwn and not isHidden then
+        if IsPickableChar(self, charKey, ownKey, gdb) then
             local classToken = gdb and gdb.charClasses and gdb.charClasses[charKey]
             local snap = gdb and gdb.chars and gdb.chars[charKey] and gdb.chars[charKey].trackingSnapshot
-            local usable = snap and (
-                snap.leftLines ~= nil or
-                (function()
-                    if type(snap.rightRows) ~= "table" then return false end
-                    for _, row in ipairs(snap.rightRows) do
-                        if row.qty and row.qty > 0 then return true end
-                    end
-                    return false
-                end)()
-            )
-            if classToken and usable then return true end
+            if classToken and SnapshotHasUsableData(snap) then return true end
         end
     end
     return false
@@ -93,6 +197,7 @@ end
 -- Installs behaviour hooks on Addon so LayoutHeaderButtons_ can call them without
 -- keeping direct upvalue references to the closures below.
 function Addon:InitCharPickerUI(frame, styleFunc)
+    local L = Addon.L or {}
     local CPICK_PAD   = 6
     local CPICK_ROW_H = 20
 
@@ -107,11 +212,20 @@ function Addon:InitCharPickerUI(frame, styleFunc)
         if styleFunc then styleFunc(btn) end
         charPickerBtn              = btn
         frame._lariasCharPickerBtn = btn
+        -- Ensure text is left-aligned so the arrow glyph stays within the
+        -- button bounds and doesn't visually overlap the centered section title.
+        local tr = Addon.Controls.GetButtonFontString(btn)
+        if tr and tr.ClearAllPoints and tr.SetPoint then
+            tr:ClearAllPoints()
+            tr:SetPoint("LEFT",  btn, "LEFT",  6, 0)
+            tr:SetPoint("RIGHT", btn, "RIGHT", -4, 0)
+            if tr.SetJustifyH then tr:SetJustifyH("LEFT") end
+        end
         btn:SetScript("OnEnter", function(self_)
             local L = Addon.L or {}
             GameTooltip:SetOwner(self_, "ANCHOR_BOTTOMLEFT")
             GameTooltip:SetText(L.CHAR_PICKER_BUTTON or "Swap Profile", 1, 1, 1)
-            GameTooltip:AddLine(L.CHAR_PICKER_TOOLTIP_REMOVE or "To remove a character, use the Options menu.", 1, 1, 1, true)
+            GameTooltip:AddLine(L.CHAR_PICKER_BUTTON_TOOLTIP or "Click to switch to another character view.", 0.7, 0.7, 0.7, true)
             GameTooltip:Show()
         end)
         btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -122,14 +236,36 @@ function Addon:InitCharPickerUI(frame, styleFunc)
         local btn = charPickerBtn
         if not btn then return end
         local L   = Addon.L or {}
-        local lbl = L.CHAR_PICKER_BUTTON or "Swap Profile"
         local panelOpen = charPickerPanel and charPickerPanel.IsShown and charPickerPanel:IsShown()
         local arrowTex  = panelOpen
             and "|TInterface\\Buttons\\UI-ScrollBar-ScrollUpButton-Up:10:10|t"
             or  "|TInterface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up:10:10|t"
-        btn:SetText(lbl .. " " .. arrowTex)
         local tr = Addon.Controls.GetButtonFontString(btn)
-        Addon.Controls.ApplyThemeTextColor(tr)
+        if Addon._viewingChar then
+            -- Show the viewed character's name (class-colored) instead of "Swap Profile".
+            local charName = (Addon._viewingChar:match("^(.-)%s*%-") or Addon._viewingChar)
+                              :gsub("^%s+",""):gsub("%s+$","")
+            if charName == "" then charName = Addon._viewingChar end
+            btn:SetText(charName .. " " .. arrowTex)
+            local gdb = Addon.db and Addon.db.global
+            local cls  = gdb and gdb.charClasses and gdb.charClasses[Addon._viewingChar]
+            local cc   = cls and RAID_CLASS_COLORS and RAID_CLASS_COLORS[cls]
+            if cc and tr and tr.SetTextColor then
+                tr:SetTextColor(cc.r, cc.g, cc.b, 1)
+            else
+                Addon.Controls.ApplyThemeTextColor(tr)
+            end
+        else
+            local myName = (UnitName and UnitName("player")) or (L.CHAR_PICKER_BUTTON or "Swap Profile")
+            btn:SetText(myName .. " " .. arrowTex)
+            local _, myClassToken = UnitClass and UnitClass("player")
+            local myCC = myClassToken and RAID_CLASS_COLORS and RAID_CLASS_COLORS[myClassToken]
+            if myCC and tr and tr.SetTextColor then
+                tr:SetTextColor(myCC.r, myCC.g, myCC.b, 1)
+            else
+                Addon.Controls.ApplyThemeTextColor(tr)
+            end
+        end
     end
 
     -- ── Panel ─────────────────────────────────────────────────────────────────
@@ -203,18 +339,61 @@ function Addon:InitCharPickerUI(frame, styleFunc)
     local function hasUsableData(charKey)
         local gdb = Addon.db and Addon.db.global
         local cdb = gdb and gdb.chars and gdb.chars[charKey]
-        if not cdb then return false end
-        local snap = cdb.trackingSnapshot
-        if not snap then return false end
-        -- Weekly-task tracking lines present → definitely has data.
-        if snap.leftLines ~= nil then return true end
-        -- Currency rows present, but only count if at least one is non-zero.
-        if type(snap.rightRows) == "table" then
-            for _, row in ipairs(snap.rightRows) do
-                if row.qty and row.qty > 0 then return true end
-            end
+        return cdb and SnapshotHasUsableData(cdb.trackingSnapshot) or false
+    end
+
+    -- ── Right-click context menu (hide / show a character) ────────────────────
+    local rcMenu       -- lazy popup panel
+    local function ShowRightClickMenu(srcBtn, profileKey)
+        local gdb = Addon.db and Addon.db.global
+        if not gdb then return end
+
+        if not rcMenu then
+            rcMenu = Addon.Controls.NewPopupPanel("DIALOG", 0.10)
+            rcMenu:SetSize(160, 32)
         end
-        return false
+
+        local charName = (profileKey:match("^(.-)%s*%-") or profileKey):gsub("^%s+",""):gsub("%s+$","")
+        local isHidden = (gdb.hiddenChars and gdb.hiddenChars[profileKey]) and true or false
+
+        if not rcMenu._rcActionBtn then
+            local ab = Addon.Controls.NewActionButton(rcMenu, 148, 20)
+            Addon:ApplyTheme(ab)
+            ab:ClearAllPoints()
+            ab:SetPoint("TOPLEFT",  rcMenu, "TOPLEFT",  6, -6)
+            ab:SetPoint("TOPRIGHT", rcMenu, "TOPRIGHT", -6, -6)
+            rcMenu._rcActionBtn = ab
+        end
+        local ab = rcMenu._rcActionBtn
+        ab:SetText(isHidden
+            and ((L.CHAR_PICKER_SHOW_FMT or "Show %s"):format(charName))
+            or ((L.CHAR_PICKER_HIDE_FMT or "Hide %s"):format(charName)))
+        local tr = Addon.Controls.GetButtonFontString(ab)
+        if tr then
+            if isHidden then tr:SetTextColor(0.5, 1, 0.5, 1)
+            else             tr:SetTextColor(1, 0.5, 0.5, 1) end
+        end
+        ab:Show()
+        ab:SetScript("OnClick", function()
+            rcMenu:Hide()
+            gdb.hiddenChars = gdb.hiddenChars or {}
+            if isHidden then
+                gdb.hiddenChars[profileKey] = nil
+            else
+                gdb.hiddenChars[profileKey] = true
+                -- If viewing the now-hidden char, reset to own character.
+                if Addon._viewingChar == profileKey then
+                    Addon:SetViewingChar(nil)
+                end
+            end
+            if Addon.CharPicker and Addon.CharPicker.Populate then Addon.CharPicker.Populate() end
+            if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
+            if Addon.RefreshAltsSummary  then Addon:RefreshAltsSummary()  end
+        end)
+
+        rcMenu:ClearAllPoints()
+        rcMenu:SetPoint("TOPLEFT", srcBtn, "BOTTOMLEFT", 0, -4)
+        rcMenu:Show()
     end
 
     local function Populate()
@@ -228,23 +407,28 @@ function Addon:InitCharPickerUI(frame, styleFunc)
 
         -- When viewing another character, show a "back to me" entry first.
         if Addon._viewingChar then
-            local myName = (UnitName and UnitName("player")) or "My character"
+            local myName = (UnitName and UnitName("player")) or (L.CHAR_PICKER_MY_CHARACTER or "My character")
             local btn = AcquireBtn(p)
             btn:ClearAllPoints()
             btn:SetPoint("TOPLEFT",  p, "TOPLEFT",  0, posY)
             btn:SetPoint("TOPRIGHT", p, "TOPRIGHT", 0, posY)
             btn:SetHeight(CPICK_ROW_H)
-            btn:SetText("<< " .. myName)  -- back to own char
+            btn:SetText((L.CHAR_PICKER_BACK_FMT or "<< %s"):format(myName))  -- back to own char
             local tr = Addon.Controls.GetButtonFontString(btn)
             local th = Addon.THEME.text
             if tr then tr:SetTextColor(th.r, th.g, th.b, 0.7) end
             btn:SetScript("OnEnter", function(self_)
                 local fs = Addon.Controls.GetButtonFontString(self_)
                 if fs then fs:SetTextColor(1, 1, 0, 1) end
+                GameTooltip:SetOwner(self_, "ANCHOR_RIGHT")
+                GameTooltip:SetText(L.CHAR_PICKER_MY_CHARACTER or "My character", 1, 1, 1)
+                GameTooltip:AddLine(L.CHAR_PICKER_BACK_TOOLTIP or "Returns to your current character's checklist.", 0.7, 0.7, 0.7, true)
+                GameTooltip:Show()
             end)
             btn:SetScript("OnLeave", function(self_)
                 local fs = Addon.Controls.GetButtonFontString(self_)
                 if fs then fs:SetTextColor(th.r, th.g, th.b, 0.7) end
+                GameTooltip:Hide()
             end)
             btn:SetScript("OnClick", function()
                 p:Hide()
@@ -255,15 +439,8 @@ function Addon:InitCharPickerUI(frame, styleFunc)
         end
 
         for _, profileKey in ipairs(allKeys) do
-            -- Skip own character.
-            local isOwn     = (profileKey == ownKey)
-            -- Also compare case-insensitively for safety (realm capitalisation).
-            if not isOwn then
-                isOwn = (profileKey:lower() == ownKey:lower())
-            end
             local isViewing = (profileKey == Addon._viewingChar)
-            local isHidden  = (gdb and gdb.hiddenChars and gdb.hiddenChars[profileKey]) and true or false
-            if not isOwn and not isHidden then
+            if IsPickableChar(Addon, profileKey, ownKey, gdb) then
                 local classToken = classFor(profileKey)
                 -- Skip chars with no class entry or no saved snapshot data.
                 if classToken and hasUsableData(profileKey) then
@@ -281,6 +458,49 @@ function Addon:InitCharPickerUI(frame, styleFunc)
                 btn:SetPoint("TOPRIGHT", p, "TOPRIGHT", 0, posY)
                 btn:SetHeight(CPICK_ROW_H)
 
+                -- Helper: build and show a tooltip for a character button.
+                local function ShowCharTooltip(self_, pk, isCurrentlyViewing)
+                    local gdb2  = Addon.db and Addon.db.global
+                    local cdb   = gdb2 and gdb2.chars and gdb2.chars[pk]
+                    local cls   = gdb2 and gdb2.charClasses and gdb2.charClasses[pk]
+                    local lvl   = gdb2 and gdb2.charLevels  and gdb2.charLevels[pk]
+                    local ilvl  = cdb and tonumber(cdb.ilvl) or 0
+                    local realm = pk:match("%s*%-%s*(.+)$") or ""
+                    local cname = (pk:match("^(.-)%s*%-") or pk):gsub("^%s+",""):gsub("%s+$","")
+                    if cname == "" then cname = pk end
+                    GameTooltip:SetOwner(self_, "ANCHOR_RIGHT")
+                    -- Name line in class color.
+                    local tr2, tg2, tb2 = 1, 1, 1
+                    local cc2 = cls and RAID_CLASS_COLORS and RAID_CLASS_COLORS[cls]
+                    if cc2 then tr2, tg2, tb2 = cc2.r, cc2.g, cc2.b end
+                    GameTooltip:SetText(cname, tr2, tg2, tb2)
+                    if realm ~= "" then
+                        GameTooltip:AddLine(realm, 0.7, 0.7, 0.7)
+                    end
+                    if cls then
+                        local clsName = (LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[cls])
+                                     or (LOCALIZED_CLASS_NAMES_FEMALE and LOCALIZED_CLASS_NAMES_FEMALE[cls])
+                                     or (cls:sub(1,1) .. cls:sub(2):lower())
+                        if lvl and lvl > 0 then
+                            local lvlFmt = L.CHAR_PICKER_LEVEL_CLASS_FMT or "%s %d %s"
+                            local lvlLabel = _G.LEVEL or "Level"
+                            GameTooltip:AddLine(lvlFmt:format(lvlLabel, lvl, clsName), 0.85, 0.85, 0.85)
+                        else
+                            GameTooltip:AddLine(clsName, 0.85, 0.85, 0.85)
+                        end
+                    end
+                    if ilvl > 0 then
+                        local ilvlFmt = L.CHAR_PICKER_ITEM_LEVEL_FMT or "Item Level %d"
+                        GameTooltip:AddLine(ilvlFmt:format(math.floor(ilvl)), 0.90, 0.82, 0.55)
+                    end
+                    if isCurrentlyViewing then
+                        GameTooltip:AddLine(L.CHAR_PICKER_CURRENTLY_VIEWING or "Currently viewing", 0.3, 1, 0.3)
+                    else
+                        GameTooltip:AddLine(L.CHAR_PICKER_TOOLTIP_ACTIONS or "Click to view  |  Right-click to hide", 0.5, 0.5, 0.5)
+                    end
+                    GameTooltip:Show()
+                end
+
                 if isViewing then
                     -- Currently viewed: show ✔ prefix, disable clicking; no X.
                     btn:SetText(CHECK .. " " .. charName)
@@ -288,8 +508,9 @@ function Addon:InitCharPickerUI(frame, styleFunc)
                     local tr = Addon.Controls.GetButtonFontString(btn)
                     if tr then tr:SetTextColor(0, 1, 0, 0.9) end
                     btn:SetScript("OnClick", nil)
-                    btn:SetScript("OnEnter", nil)
-                    btn:SetScript("OnLeave", nil)
+                    local _pk2 = profileKey
+                    btn:SetScript("OnEnter", function(self_) ShowCharTooltip(self_, _pk2, true) end)
+                    btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
                 else
                     btn:SetText(charName)
                     btn:SetEnabled(true)
@@ -297,15 +518,23 @@ function Addon:InitCharPickerUI(frame, styleFunc)
                     if tr then tr:SetTextColor(r, g, b, 1) end
 
                     local _r, _g, _b, _pk = r, g, b, profileKey
+                    btn:SetScript("OnMouseDown", function(self_, button)
+                        if button == "RightButton" then
+                            ShowRightClickMenu(self_, _pk)
+                        end
+                    end)
                     btn:SetScript("OnEnter", function(self_)
                         local fs = Addon.Controls.GetButtonFontString(self_)
                         if fs then fs:SetTextColor(1, 1, 0, 1) end
+                        ShowCharTooltip(self_, _pk, false)
                     end)
                     btn:SetScript("OnLeave", function(self_)
                         local fs = Addon.Controls.GetButtonFontString(self_)
                         if fs then fs:SetTextColor(_r, _g, _b, 1) end
+                        GameTooltip:Hide()
                     end)
-                    btn:SetScript("OnClick", function()
+                    btn:SetScript("OnClick", function(self_, button)
+                        if button == "RightButton" then return end
                         p:Hide()
                         Addon:SetViewingChar(_pk)
                     end)
@@ -316,11 +545,40 @@ function Addon:InitCharPickerUI(frame, styleFunc)
             end
         end
 
-        -- No entries built → nothing to show; close and bail out.
-        if #p._buttons == 0 then
-            p:Hide()
-            return
-        end
+        -- "≡ Alt Summary" button — shown at the bottom unless the user disabled it.
+        local _showAltSum = Addon:EnsurePrefs().showAltSummaryBtn ~= false
+        if _showAltSum then
+            local smBtn = AcquireBtn(p)
+            smBtn:ClearAllPoints()
+            smBtn:SetPoint("TOPLEFT",  p, "TOPLEFT",  0, posY)
+            smBtn:SetPoint("TOPRIGHT", p, "TOPRIGHT", 0, posY)
+            smBtn:SetHeight(CPICK_ROW_H)
+            smBtn:SetText(L.ALT_SUMMARY_TITLE or "Alt Summary")
+            smBtn:SetEnabled(true)
+            local tr = Addon.Controls.GetButtonFontString(smBtn)
+            if tr then tr:SetTextColor(0.70, 0.70, 1, 1) end
+            smBtn:SetScript("OnEnter", function(self_)
+                local fs = Addon.Controls.GetButtonFontString(self_)
+                if fs then fs:SetTextColor(1, 1, 0.6, 1) end
+                GameTooltip:SetOwner(self_, "ANCHOR_RIGHT")
+                GameTooltip:SetText(L.ALT_SUMMARY_TITLE or "Alt Summary", 1, 1, 1)
+                GameTooltip:AddLine(L.CHAR_PICKER_ALT_SUMMARY_TOOLTIP or "Opens an account-wide summary for all tracked characters.", 0.7, 0.7, 0.7, true)
+                GameTooltip:Show()
+            end)
+            smBtn:SetScript("OnLeave", function(self_)
+                local fs = Addon.Controls.GetButtonFontString(self_)
+                if fs then fs:SetTextColor(0.70, 0.70, 1, 1) end
+                GameTooltip:Hide()
+            end)
+            smBtn:SetScript("OnClick", function()
+                p:Hide()
+                if Addon.ToggleAltsSummary then
+                    Addon:ToggleAltsSummary(charPickerBtn)
+                end
+            end)
+            tinsert(p._buttons, smBtn)
+            posY = posY - CPICK_ROW_H
+        end  -- _showAltSum guard
 
         p:SetHeight(math.max(40, -posY + CPICK_PAD))
 
@@ -349,7 +607,6 @@ function Addon:InitCharPickerUI(frame, styleFunc)
     -- ── OnClick for the header button ─────────────────────────────────────────
     local function OnPickerBtnClick()
         local p = EnsurePanel()
-        if p and p._lariasClosedAt and (GetTime() - p._lariasClosedAt) < 0.20 then p._lariasClosedAt = nil; return end
         if p and p.IsShown and p:IsShown() then
             p:Hide()
             return
@@ -365,16 +622,27 @@ function Addon:InitCharPickerUI(frame, styleFunc)
         end
     end
 
-    -- ── Store hooks on Addon so LayoutHeaderButtons_ can call them ────────────
-    Addon._cpEnsureBtn     = EnsureBtn
-    Addon._cpUpdateLabel   = UpdateLabel
-    Addon._cpPopulate      = Populate
-    Addon._cpOnClick       = OnPickerBtnClick
-    Addon._cpClose         = function()
+    -- ── Expose CharPicker API on Addon.CharPicker namespace ───────────────────
+    -- Centralising these under a single table avoids polluting Addon with
+    -- many underscored "private" keys and makes ownership clear at a glance.
+    Addon.CharPicker = Addon.CharPicker or {}
+    Addon.CharPicker.EnsureBtn   = EnsureBtn
+    Addon.CharPicker.UpdateLabel = UpdateLabel
+    Addon.CharPicker.Populate    = Populate
+    Addon.CharPicker.OnClick     = OnPickerBtnClick
+    Addon.CharPicker.Close       = function()
         if charPickerPanel and charPickerPanel.IsShown and charPickerPanel:IsShown() then
             charPickerPanel:Hide()
         end
+        if rcMenu and rcMenu.IsShown and rcMenu:IsShown() then
+            rcMenu:Hide()
+        end
     end
-    -- Also expose UpdateLabel under the old name used by SetViewingChar above.
+    -- Compatibility aliases (referenced by older call sites before namespace was introduced).
+    Addon._cpEnsureBtn           = Addon.CharPicker.EnsureBtn
+    Addon._cpUpdateLabel         = Addon.CharPicker.UpdateLabel
+    Addon._cpPopulate            = Addon.CharPicker.Populate
+    Addon._cpOnClick             = Addon.CharPicker.OnClick
+    Addon._cpClose               = Addon.CharPicker.Close
     Addon.UpdateCharPickerBtnLabel = UpdateLabel
 end
