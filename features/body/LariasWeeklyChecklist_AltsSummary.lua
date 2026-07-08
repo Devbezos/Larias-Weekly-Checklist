@@ -620,7 +620,7 @@ local function EnsurePanel()
     completionFS:SetJustifyV("TOP")
     completionFS:SetPoint("TOPLEFT", f, "TOPLEFT", PAD, -(TITLE_H + 8))
     completionFS:SetPoint("TOPRIGHT", f, "TOPRIGHT", -PAD - 28, -(TITLE_H + 8))
-    completionFS:SetText("Larias Checklist Complete. Displaying Alt Summary.")
+    completionFS:SetText(L.ALT_SUMMARY_COMPLETION_REDIRECT or "")
     completionFS:Hide()
     f._altsCompletionNoticeFS = completionFS
 
@@ -1773,7 +1773,7 @@ PopulateSummary = function(panel)
     if panel._altsCompletionNoticeFS then
         panel._altsCompletionNoticeFS:SetShown(showCompletionNotice)
         if showCompletionNotice then
-            panel._altsCompletionNoticeFS:SetText("Larias Checklist Complete. Displaying Alt Summary.")
+            panel._altsCompletionNoticeFS:SetText(L.ALT_SUMMARY_COMPLETION_REDIRECT or "")
             panel._altsCompletionNoticeFS:SetTextColor(header.r, header.g, header.b, 0.92)
         end
     end
@@ -2277,7 +2277,7 @@ PopulateSummary = function(panel)
                 if row.action then
                     GameTooltip:SetText(L.TOOLTIP_CLICK_TO_OPEN or "Click to open", 1, 1, 1)
                     if row.action == "currency" then
-                        GameTooltip:AddLine(L.CONTEXT_OPEN_CURRENCY_CONFIG or "Right-click to configure tracked currencies", 0.5, 0.5, 0.5)
+                        GameTooltip:AddLine(L.CONTEXT_OPEN_CURRENCY_CONFIG or "", 0.5, 0.5, 0.5)
                     end
                     GameTooltip:AddLine(L.ALT_SUMMARY_ALT_LEFT_CLICK_REORDER or "Alt+drag to reorder", 0.5, 0.5, 0.5)
                 else

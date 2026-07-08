@@ -350,7 +350,8 @@ function Addon:RegisterSettingsPanel()
     if not ok then
         -- Print the error so it surfaces in the WoW chat frame for diagnosis.
         -- (panelFrame is left nil so we skip registration gracefully.)
-        print("|cffff4444Laria's Checklist|r Settings panel error: " .. tostring(result))
+        local fmt = (L and L.SETTINGS_PANEL_ERROR_FMT) or "|cffff4444%s|r Settings panel error: %s"
+        print(fmt:format((L and L.DISPLAY_NAME) or "Larias' Weekly Checklist", tostring(result)))
         return
     end
     local frame = result

@@ -91,6 +91,7 @@ local STRINGS = {
 	TOOLTIP_OPEN_GREAT_VAULT  = "Click to open the Great Vault",
 	TOOLTIP_OPEN_CURRENCIES   = "Click to open the Currency panel",
 	TOOLTIP_CONFIGURE_CURRENCIES = "Right-click to configure tracked currencies",
+	CONTEXT_OPEN_CURRENCY_CONFIG = "Right-click to configure tracked currencies",
 
 	-- Tracking panel
 	TRACKING_GREAT_VAULT_TITLE = "Great Vault",
@@ -140,6 +141,7 @@ local STRINGS = {
 	TRACKING_AVAILABLE_AFTER_TRADEUP_FMT = "Available after trade-up: %d",
 	TRACKING_HELD_FMT = "Held: %d",
 	TRACKING_UPGRADE_SIGIL = "Upgrade Sigil",
+	TRACKING_COFFER_KEYS_LABEL = "Coffer Keys",
 	TRACKING_SPARKS_FMT = "Sparks: %d",
 	TRACKING_SPARKS_XY_FMT = "Sparks: %d / %d",
 	TRACKING_QUEST_DONE_SUFFIX = "(quest done)",
@@ -282,9 +284,11 @@ local STRINGS = {
 	ALT_SUMMARY_SECTION_CRESTS = "Crests",
 	ALT_SUMMARY_SECTION_UPGRADE_COST = "Upgrade Cost",
 	ALT_SUMMARY_SECTION_CURRENCIES = "Currencies",
+	ALT_SUMMARY_SECTION_QUESTS = "Quests",
 	ALT_SUMMARY_MISC_CURRENCY_FMT = "Currency %d",
 	ALT_SUMMARY_SHOW_HIDDEN = "Show hidden",
 	ALT_SUMMARY_SHOW_HIDDEN_TOOLTIP = "Includes characters you have hidden from the default view.",
+	ALT_SUMMARY_COMPLETION_REDIRECT = "Larias Checklist Complete. Displaying Alt Summary.",
 	ALT_SUMMARY_NO_CHARACTERS = "No characters found",
 	ALT_SUMMARY_LOADING = "Loading...",
 	ALT_SUMMARY_EMPTY = "Empty",
@@ -355,6 +359,7 @@ local STRINGS = {
 	CURRENCY_CONFIG_ENABLE_LIMIT = "Can only track up to 12 currencies.",
 	CURRENCY_CONFIG_SHOW_HIDDEN = "Show hidden",
 	CURRENCY_CONFIG_SHOW_HIDDEN_TOOLTIP = "Shows disabled and hidden currencies so you can restore them here.",
+	CURRENCY_CONFIG_SHOW_HIDDEN_TOOLTIP_RESTORE = "Shows currencies you previously hid so you can restore them here.",
 	CURRENCY_CONFIG_TOOLTIP_TOGGLE = "Left-click toggles this currency on or off.",
 	CURRENCY_CONFIG_TOOLTIP_REORDER = "Alt+drag reorders this currency.",
 	CURRENCY_CONFIG_TOOLTIP_HIDE = "Right-click hides this currency.",
@@ -371,6 +376,7 @@ local STRINGS = {
 	CREDIT_BUILT_BY = "Built by Dev  \226\128\162  Approved by Larias",
 	VERSION_LABEL_FMT = "v%s",
 	SPREADSHEET_VERSION_LABEL_FMT = "Spreadsheet v%s",
+	SETTINGS_PANEL_ERROR_FMT = "|cffff4444%s|r Settings panel error: %s",
 }
 
 for key, value in pairs(STRINGS) do
