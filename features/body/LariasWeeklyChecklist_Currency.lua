@@ -543,22 +543,66 @@ local function GetTrackedCurrencyType(tracking, currencyID)
     return SNAP_TYPES.MISC
 end
 
+
+local _trackedEntryBuf = {}
+local _trackedEntryPool = {}
+
+local function AcquireSnapshotRow(rows, index)
+    local row = rows[index]
+    if not row then
+        row = {}
+        rows[index] = row
+    else
+        Wipe(row)
+    end
+    return row
+end
+
 function Addon:GetTrackedCurrencyEntries(includeDisabled)
     local cfg = self.GetTrackedCurrencyConfig and self:GetTrackedCurrencyConfig() or {}
     local tracking = self.TRACKING or {}
-    local out = {}
+    local out = _trackedEntryBuf
+    local n = 0
     for i = 1, #cfg do
         local entry = cfg[i]
         local id = tonumber(entry and entry.id)
-        if id and id > 0 and (includeDisabled or entry.enabled ~= false) then
+        local itemID = tonumber(entry and entry.itemID)
+        if itemID and itemID > 0 then
+            local enabled = includeDisabled or not (Addon.IsItemHidden and Addon:IsItemHidden(itemID))
+            if enabled then
+                n = n + 1
+                local row = _trackedEntryPool[n]
+                if not row then
+                    row = {}
+                    _trackedEntryPool[n] = row
+                end
+                row.id = nil
+                row.itemID = itemID
+                row.enabled = not (Addon.IsItemHidden and Addon:IsItemHidden(itemID))
+                row.type = (itemID == WEAP_UPG_COMBINED_ID) and SNAP_TYPES.WEAPUPG or nil
+                row.kind = entry.kind or "item"
+                row.crestIdx = nil
+                out[n] = row
+            end
+        elseif id and id > 0 and (includeDisabled or entry.enabled ~= false) then
             local rowType, crestIdx = GetTrackedCurrencyType(tracking, id)
-            out[#out + 1] = {
-                id = id,
-                enabled = entry.enabled ~= false,
-                type = rowType,
-                crestIdx = crestIdx,
-            }
+            n = n + 1
+            local row = _trackedEntryPool[n]
+            if not row then
+                row = {}
+                _trackedEntryPool[n] = row
+            end
+            row.id = id
+            row.itemID = nil
+            row.enabled = entry.enabled ~= false
+            row.type = rowType
+            row.kind = nil
+            row.crestIdx = crestIdx
+            out[n] = row
         end
+    end
+    for i = n + 1, #out do
+        out[i] = nil
     end
     return out
 end
@@ -782,6 +826,7 @@ end
 -- stored gear snapshot.  Returns nil when no snapshot data is available yet.
 -- Only slots with a real item link are counted.  Limited crafted items store
 -- trueMaxRank below maxRank; skip them because they cannot upgrade to track max.
+local _crestsNeededByTier = {}
 local function ComputeCrestsNeededByTier(tracking)
     local db     = Addon.db and Addon.db.global
     local ownKey = Addon.GetCurrentProfileKey and Addon:GetCurrentProfileKey()
@@ -789,13 +834,72 @@ local function ComputeCrestsNeededByTier(tracking)
                    and db.chars[ownKey].trackingSnapshot
     if type(Addon:GetUpgradeGearSlots(snap)) ~= "table" then return nil end
 
-    local needed = {}
+    Wipe(_crestsNeededByTier)
+    local needed = _crestsNeededByTier
     local _, crestCount = GetCrestIDsAndCount(tracking or {})
     for tierIdx = 1, crestCount do
         needed[tierIdx] = Addon:CalcTierUpgradeCost(snap, tierIdx)
     end
 
     return needed
+end
+
+local _crestConvertTooltipTexts = {}
+local _crestAmountTooltipTexts = {}
+local _crestConvertTooltipPool = {}
+local _crestAmountTooltipPool = {}
+local _catalystTooltipPool = {}
+local _miscTooltipPool = {}
+
+local function ClearTooltipRefs(refs, count)
+    for i = 1, max(#refs, count or 0) do
+        refs[i] = nil
+    end
+    return refs
+end
+
+local function BeginTooltipTable(pool, key)
+    local t = pool[key]
+    if not t then
+        t = {}
+        pool[key] = t
+    end
+    local oldCount = t._count or #t
+    for i = 1, oldCount do
+        local line = t[i]
+        if line then
+            line.text = nil
+            line.r = nil
+            line.g = nil
+            line.b = nil
+            line.a = nil
+        end
+    end
+    t._count = 0
+    return t
+end
+
+local function AddTooltipLine(t, text, r, g, b, a)
+    local n = (t._count or 0) + 1
+    local line = t[n]
+    if not line then
+        line = {}
+        t[n] = line
+    end
+    line.text = text
+    line.r = r
+    line.g = g
+    line.b = b
+    line.a = a
+    t._count = n
+end
+
+local function FinishTooltipTable(t)
+    local count = t._count or 0
+    for i = count + 1, #t do
+        t[i] = nil
+    end
+    return t
 end
 
 local function GetCrestLines()
@@ -810,8 +914,8 @@ local function GetCrestLines()
     local highestTradeTarget, gained = ComputeCrestTradeup(cache, crestCount, batchLower, batchHigher)
     local crestLabels = BuildCrestLabels(ids, crestCount)
     local crestsNeededByTier = ComputeCrestsNeededByTier(tracking)
-    local convertTooltipTexts = {}
-    local amountTooltipTexts  = {}
+    local convertTooltipTexts = ClearTooltipRefs(_crestConvertTooltipTexts, crestCount)
+    local amountTooltipTexts  = ClearTooltipRefs(_crestAmountTooltipTexts, crestCount)
     for i = 1, crestCount do
         local id = ids[i]
         if id then
@@ -829,19 +933,19 @@ local function GetCrestLines()
                     color = (held > 0) and COLORS.green or COLORS.dim
                 end
                 local tipBonus = math.max(0, held - earned)
-                local tipTbl   = {}
+                local tipTbl   = BeginTooltipTable(_crestAmountTooltipPool, i)
                 if wkMax > 0 then
                     local earnable = math.max(0, wkMax - earned)
-                    tipTbl[#tipTbl + 1] = { text = (L.TRACKING_EARNED_FMT or "Earned: %d/%d"):format(earned, wkMax) }
-                    tipTbl[#tipTbl + 1] = { text = (L.TRACKING_HELD_FMT or "Held: %d"):format(held), r = 0.75, g = 0.75, b = 0.75 }
+                    AddTooltipLine(tipTbl, (L.TRACKING_EARNED_FMT or "Earned: %d/%d"):format(earned, wkMax))
+                    AddTooltipLine(tipTbl, (L.TRACKING_HELD_FMT or "Held: %d"):format(held), 0.75, 0.75, 0.75)
                     if earnable > 0 then
-                        tipTbl[#tipTbl + 1] = { text = (L.TRACKING_STILL_EARNABLE_FMT or "Still earnable: %d"):format(earnable), r = 1.0, g = 0.82, b = 0.0 }
+                        AddTooltipLine(tipTbl, (L.TRACKING_STILL_EARNABLE_FMT or "Still earnable: %d"):format(earnable), 1.0, 0.82, 0.0)
                     else
-                        tipTbl[#tipTbl + 1] = { text = (L.TRACKING_WEEKLY_CAP_REACHED or "Weekly cap reached"), r = 0.3, g = 1.0, b = 0.3 }
+                        AddTooltipLine(tipTbl, L.TRACKING_WEEKLY_CAP_REACHED or "Weekly cap reached", 0.3, 1.0, 0.3)
                     end
                 end
                 if tipBonus > 0 then
-                    tipTbl[#tipTbl + 1] = { text = (L.TRACKING_BONUS_TRADEUP_FMT or "Bonus (trade-up): +%d"):format(tipBonus), r = 0.6, g = 0.8, b = 1.0 }
+                    AddTooltipLine(tipTbl, (L.TRACKING_BONUS_TRADEUP_FMT or "Bonus (trade-up): +%d"):format(tipBonus), 0.6, 0.8, 1.0)
                 end
                 -- Gear upgrade cost for this crest tier (from snapshot).
                 -- Reduce the shortfall by this tier's own available trade-up only;
@@ -849,22 +953,22 @@ local function GetCrestLines()
                 local needed = crestsNeededByTier and crestsNeededByTier[i]
                 if needed ~= nil then
                     if needed == 0 then
-                        tipTbl[#tipTbl + 1] = { text = L.TRACKING_GEAR_UPGRADE_ALL_MAXED or "Gear upgrade: all slots maxed", r = 0.3, g = 1.0, b = 0.3 }
+                        AddTooltipLine(tipTbl, L.TRACKING_GEAR_UPGRADE_ALL_MAXED or "Gear upgrade: all slots maxed", 0.3, 1.0, 0.3)
                     else
                         local available = held + (tonumber(gained[i]) or 0)
                         local deficit = math.max(0, needed - available)
                         if deficit == 0 then
-                            tipTbl[#tipTbl + 1] = { text = (L.TRACKING_GEAR_UPGRADE_HAVE_ENOUGH_FMT or "Gear upgrade: need %d  (have enough)"):format(needed), r = 0.3, g = 1.0, b = 0.3 }
+                            AddTooltipLine(tipTbl, (L.TRACKING_GEAR_UPGRADE_HAVE_ENOUGH_FMT or "Gear upgrade: need %d  (have enough)"):format(needed), 0.3, 1.0, 0.3)
                         else
-                            tipTbl[#tipTbl + 1] = { text = (L.TRACKING_GEAR_UPGRADE_SHORT_FMT or "Gear upgrade: need %d  (%d short)"):format(needed, deficit), r = 1.0, g = 0.5, b = 0.3 }
+                            AddTooltipLine(tipTbl, (L.TRACKING_GEAR_UPGRADE_SHORT_FMT or "Gear upgrade: need %d  (%d short)"):format(needed, deficit), 1.0, 0.5, 0.3)
                         end
                         if available ~= held then
-                            tipTbl[#tipTbl + 1] = { text = (L.TRACKING_AVAILABLE_AFTER_TRADEUP_FMT or "Available after trade-up: %d"):format(available), r = 0.6, g = 0.8, b = 1.0 }
+                            AddTooltipLine(tipTbl, (L.TRACKING_AVAILABLE_AFTER_TRADEUP_FMT or "Available after trade-up: %d"):format(available), 0.6, 0.8, 1.0)
                         end
                     end
                 end
-                if #tipTbl == 0 then tipTbl[#tipTbl + 1] = { text = (L.TRACKING_HELD_FMT or "Held: %d"):format(held) } end
-                amountTooltipTexts[i] = tipTbl
+                if (tipTbl._count or 0) == 0 then AddTooltipLine(tipTbl, (L.TRACKING_HELD_FMT or "Held: %d"):format(held)) end
+                amountTooltipTexts[i] = FinishTooltipTable(tipTbl)
                 local tradeUp = ""
                 if highestTradeTarget and i == highestTradeTarget then
                     local n = tonumber(gained[i]) or 0
@@ -873,18 +977,18 @@ local function GetCrestLines()
                         local thisEarned = cache.earned[i]    or 0
                         local thisWkMax  = cache.weeklyMax[i] or 0
                         local cappedN    = (thisWkMax > 0) and math.min(n, math.max(0, thisWkMax - thisEarned)) or n
-                        local tipTbl     = {}
+                        local tipTbl     = BeginTooltipTable(_crestConvertTooltipPool, i)
                         if cappedN ~= n then
-                            tipTbl[#tipTbl + 1] = { text = (L.TRACKING_TRADEUP_CURRENTLY_EARNABLE_FMT or "Currently earnable: %d"):format(cappedN) }
-                            tipTbl[#tipTbl + 1] = { text = (L.TRACKING_TRADEUP_UNCAPPED_FMT           or "Uncapped: %d"):format(n) }
+                            AddTooltipLine(tipTbl, (L.TRACKING_TRADEUP_CURRENTLY_EARNABLE_FMT or "Currently earnable: %d"):format(cappedN))
+                            AddTooltipLine(tipTbl, (L.TRACKING_TRADEUP_UNCAPPED_FMT           or "Uncapped: %d"):format(n))
                         else
-                            tipTbl[#tipTbl + 1] = { text = (L.TRACKING_TRADEUP_EARNABLE_FMT           or "Earnable: %d"):format(n) }
+                            AddTooltipLine(tipTbl, (L.TRACKING_TRADEUP_EARNABLE_FMT           or "Earnable: %d"):format(n))
                         end
                         local convertTip = L.TRACKING_CONVERT_TOOLTIP or ""
                         if convertTip ~= "" then
-                            tipTbl[#tipTbl + 1] = { text = convertTip, r = 0.7, g = 0.7, b = 0.7 }
+                            AddTooltipLine(tipTbl, convertTip, 0.7, 0.7, 0.7)
                         end
-                        convertTooltipTexts[i] = tipTbl
+                        convertTooltipTexts[i] = FinishTooltipTable(tipTbl)
                     end
                 end
                 local lbl = ColorWrap(GetCurrencyQualityColor(id), tostring(name)) .. tradeUp
@@ -940,13 +1044,14 @@ local function GetCatalystParts()
     end
     local catTip
     if cap and cap > 0 then
-        catTip = {}
-        catTip[#catTip + 1] = { text = (L.TRACKING_CHARGES_XY_FMT or "Charges: %d/%d"):format(cur, cap) }
+        catTip = BeginTooltipTable(_catalystTooltipPool, id or "catalyst")
+        AddTooltipLine(catTip, (L.TRACKING_CHARGES_XY_FMT or "Charges: %d/%d"):format(cur, cap))
         if cur < cap then
-            catTip[#catTip + 1] = { text = (L.TRACKING_STILL_EARNABLE_FMT or "Still earnable: %d"):format(cap - cur), r = 1.0, g = 0.82, b = 0.0 }
+            AddTooltipLine(catTip, (L.TRACKING_STILL_EARNABLE_FMT or "Still earnable: %d"):format(cap - cur), 1.0, 0.82, 0.0)
         else
-            catTip[#catTip + 1] = { text = (L.TRACKING_WEEKLY_CAP_REACHED or "Weekly cap reached"), r = 0.3, g = 1.0, b = 0.3 }
+            AddTooltipLine(catTip, L.TRACKING_WEEKLY_CAP_REACHED or "Weekly cap reached", 0.3, 1.0, 0.3)
         end
+        catTip = FinishTooltipTable(catTip)
     end
     local catValColor = (cap and cap > 0 and cur >= cap) and COLORS.green
                      or (cur > 0)                         and COLORS.yellow
@@ -974,14 +1079,15 @@ local function GetGenericCurrencyParts(id)
     local miscTip
     if cap > 0 then
         local earnable = math.max(0, cap - earned)
-        miscTip = {}
-        miscTip[#miscTip + 1] = { text = (L.TRACKING_EARNED_FMT or "Earned: %d/%d"):format(earned, cap) }
-        miscTip[#miscTip + 1] = { text = (L.TRACKING_HELD_FMT or "Held: %d"):format(held), r = 0.75, g = 0.75, b = 0.75 }
+        miscTip = BeginTooltipTable(_miscTooltipPool, id)
+        AddTooltipLine(miscTip, (L.TRACKING_EARNED_FMT or "Earned: %d/%d"):format(earned, cap))
+        AddTooltipLine(miscTip, (L.TRACKING_HELD_FMT or "Held: %d"):format(held), 0.75, 0.75, 0.75)
         if earnable > 0 then
-            miscTip[#miscTip + 1] = { text = (L.TRACKING_STILL_EARNABLE_FMT or "Still earnable: %d"):format(earnable), r = 1.0, g = 0.82, b = 0.0 }
+            AddTooltipLine(miscTip, (L.TRACKING_STILL_EARNABLE_FMT or "Still earnable: %d"):format(earnable), 1.0, 0.82, 0.0)
         else
-            miscTip[#miscTip + 1] = { text = (L.TRACKING_WEEKLY_CAP_REACHED or "Weekly cap reached"), r = 0.3, g = 1.0, b = 0.3 }
+            AddTooltipLine(miscTip, L.TRACKING_WEEKLY_CAP_REACHED or "Weekly cap reached", 0.3, 1.0, 0.3)
         end
+        miscTip = FinishTooltipTable(miscTip)
     end
     return lbl, val, miscTip
 end
@@ -992,7 +1098,6 @@ end
 -- every tracking update (which fires on bag updates, currency changes, etc.).
 local _panelRowBuf  = {}  -- result array, returned and reused each call
 local _panelRowPool = {}  -- pool of row sub-tables, one slot per max possible row
-
 local function FillRow(n, lbl, val, iconID, currencyID, tooltipText, amountTooltipText, itemID, questKey)
     if not _panelRowPool[n] then _panelRowPool[n] = {} end
     local r             = _panelRowPool[n]
@@ -1005,6 +1110,20 @@ local function FillRow(n, lbl, val, iconID, currencyID, tooltipText, amountToolt
     r.itemID            = itemID or nil
     r.questKey          = questKey or nil
     _panelRowBuf[n] = r
+end
+
+function Addon:ReleaseCurrencyRuntimeCaches()
+    Wipe(_crestsNeededByTier)
+    Wipe(_crestConvertTooltipTexts)
+    Wipe(_crestAmountTooltipTexts)
+    Wipe(_crestConvertTooltipPool)
+    Wipe(_crestAmountTooltipPool)
+    Wipe(_catalystTooltipPool)
+    Wipe(_miscTooltipPool)
+    Wipe(_panelRowBuf)
+    Wipe(_panelRowPool)
+    Wipe(_trackedEntryBuf)
+    Wipe(_trackedEntryPool)
 end
 
 --- Returns an ordered list of currency rows ready to display in the right column.
@@ -1048,6 +1167,31 @@ function Addon:GetCurrencyPanelRows()
                 n = n + 1
                 FillRow(n, kLbl, kVal, GetCurrencyIconID(id), id, nil, kTip)
             end
+        elseif entry.type == SNAP_TYPES.WEAPUPG then
+            local shardHeld    = (GetItemCount and GetItemCount(WEAP_UPG_SHARD_ID))    or 0
+            local combinedHeld = (GetItemCount and GetItemCount(WEAP_UPG_COMBINED_ID)) or 0
+            local needCount    = GetWeaponUpgradeNeedCount()
+            local total        = combinedHeld + shardHeld / WEAP_UPG_SHARDS_PER
+            local iName, _, iQuality, _, _, _, _, _, _, iTex = GetItemInfo and GetItemInfo(WEAP_UPG_COMBINED_ID) or nil
+            if not iTex and C_Item and C_Item.GetItemIconByID then
+                iTex = C_Item.GetItemIconByID(WEAP_UPG_COMBINED_ID)
+            end
+            local lbl
+            if iName then
+                local qhex = GetQualityHex(GetItemDisplayQuality(WEAP_UPG_COMBINED_ID) or iQuality, COLORS.white)
+                lbl = ColorWrap(qhex, iName)
+            else
+                lbl = ColorWrap(COLORS.gold, L.TRACKING_UPGRADE_SIGIL or "Upgrade Sigil")
+            end
+            local val
+            if needCount > 0 then
+                local valStr = FormatSigilAmount(total) .. "/" .. needCount
+                val = ColorWrap(ColorForXY(total, needCount), valStr)
+            else
+                val = ColorWrap(COLORS.green, FormatSigilAmount(total))
+            end
+            n = n + 1
+            FillRow(n, lbl, val, iTex, nil, nil, nil, WEAP_UPG_COMBINED_ID)
         else
             local lbl, val, tip = GetGenericCurrencyParts(id)
             if IsNonEmptyText(lbl) or IsNonEmptyText(val) then
@@ -1108,39 +1252,6 @@ function Addon:GetCurrencyPanelRows()
         end
     end
 
-    -- Weapon/trinket upgrade items: one row showing combined-equivalent with 1 decimal
-    -- e.g. 7 shards + 1 combined = 2.4 combined equivalent
-    if n < RIGHT_LINE_COUNT then
-        if Addon:IsItemHidden(WEAP_UPG_COMBINED_ID) then
-            for i = n + 1, #_panelRowBuf do _panelRowBuf[i] = nil end
-            return _panelRowBuf
-        end
-        local shardHeld    = (GetItemCount and GetItemCount(WEAP_UPG_SHARD_ID))    or 0
-        local combinedHeld = (GetItemCount and GetItemCount(WEAP_UPG_COMBINED_ID)) or 0
-        local needCount    = GetWeaponUpgradeNeedCount()
-        local total        = combinedHeld + shardHeld / WEAP_UPG_SHARDS_PER
-        local iName, _, iQuality, _, _, _, _, _, _, iTex = GetItemInfo and GetItemInfo(WEAP_UPG_COMBINED_ID) or nil
-        if not iTex and C_Item and C_Item.GetItemIconByID then
-            iTex = C_Item.GetItemIconByID(WEAP_UPG_COMBINED_ID)
-        end
-        local lbl
-        if iName then
-            local qhex = GetQualityHex(GetItemDisplayQuality(WEAP_UPG_COMBINED_ID) or iQuality, COLORS.white)
-            lbl = ColorWrap(qhex, iName)
-        else
-            lbl = ColorWrap(COLORS.gold, L.TRACKING_UPGRADE_SIGIL or "Upgrade Sigil")
-        end
-        local val
-        if needCount > 0 then
-            local valStr = FormatSigilAmount(total) .. "/" .. needCount
-            val = ColorWrap(ColorForXY(total, needCount), valStr)
-        else
-            val = ColorWrap(COLORS.green, FormatSigilAmount(total))
-        end
-        n = n + 1
-        FillRow(n, lbl, val, iTex, nil, nil, nil, WEAP_UPG_COMBINED_ID)
-    end
-
     -- Trim stale entries from a previous call that had more rows.
     for i = n + 1, #_panelRowBuf do _panelRowBuf[i] = nil end
 
@@ -1150,7 +1261,9 @@ end
 --- Populates snap.rightRows with structured (type-tagged) snapshot data.
 --- Called from Overlay's BuildTrackingSnapshot API.
 function Addon:FillCurrencySnapshot(snap)
-    if snap.rightRows then Wipe(snap.rightRows) else snap.rightRows = {} end
+    if type(snap.rightRows) ~= "table" then snap.rightRows = {} end
+    local rows = snap.rightRows
+    local rowCount = 0
     local tracking = self.TRACKING
     local crestCache, crestTradeups
     if tracking then
@@ -1185,33 +1298,41 @@ function Addon:FillCurrencySnapshot(snap)
 
     for _, entry in ipairs(self:GetTrackedCurrencyEntries(true)) do
         local id = tonumber(entry.id)
-        if id and id > 0 then
+        if entry.type == SNAP_TYPES.WEAPUPG then
+            rowCount = rowCount + 1
+            local row = AcquireSnapshotRow(rows, rowCount)
+            row.type        = SNAP_TYPES.WEAPUPG
+            row.shardQty    = (GetItemCount and GetItemCount(WEAP_UPG_SHARD_ID))    or 0
+            row.combinedQty = (GetItemCount and GetItemCount(WEAP_UPG_COMBINED_ID)) or 0
+            row.need        = GetWeaponUpgradeNeedCount(snap)
+        elseif id and id > 0 then
             if entry.type == SNAP_TYPES.CREST and crestCache and entry.crestIdx then
                 local i = entry.crestIdx
                 local tradeup = crestTradeups and crestTradeups[i]
-                snap.rightRows[#snap.rightRows + 1] = {
-                    type = SNAP_TYPES.CREST, id = id,
-                    qty = crestCache.cur[i] or 0,
-                    earned = crestCache.earned[i] or 0,
-                    cap = crestCache.cap[i] or 0,
-                    tradeup = (tradeup and tradeup > 0) and tradeup or nil,
-                }
+                rowCount = rowCount + 1
+                local row = AcquireSnapshotRow(rows, rowCount)
+                row.type = SNAP_TYPES.CREST
+                row.id = id
+                row.qty = crestCache.cur[i] or 0
+                row.earned = crestCache.earned[i] or 0
+                row.cap = crestCache.cap[i] or 0
+                row.tradeup = (tradeup and tradeup > 0) and tradeup or nil
             elseif entry.type == SNAP_TYPES.CATALYST then
-                snap.rightRows[#snap.rightRows + 1] = {
-                    type = SNAP_TYPES.CATALYST,
-                    id = id,
-                    qty = catQty or 0,
-                    cap = catCap or 0,
-                }
+                rowCount = rowCount + 1
+                local row = AcquireSnapshotRow(rows, rowCount)
+                row.type = SNAP_TYPES.CATALYST
+                row.id = id
+                row.qty = catQty or 0
+                row.cap = catCap or 0
             elseif entry.type == SNAP_TYPES.SPARKS then
-                snap.rightRows[#snap.rightRows + 1] = {
-                    type = SNAP_TYPES.SPARKS,
-                    id = id,
-                    qty = tonumber(sQty) or 0,
-                    held = tonumber(sHeld) or 0,
-                    cap = tonumber(sCap) or 0,
-                    questDone = sparkQDone,
-                }
+                rowCount = rowCount + 1
+                local row = AcquireSnapshotRow(rows, rowCount)
+                row.type = SNAP_TYPES.SPARKS
+                row.id = id
+                row.qty = tonumber(sQty) or 0
+                row.held = tonumber(sHeld) or 0
+                row.cap = tonumber(sCap) or 0
+                row.questDone = sparkQDone
             elseif entry.type == SNAP_TYPES.COFFERKEYS then
                 local shardsID = tracking and tonumber(tracking.cofferKeysCurrencyID)
                 local getCurrency = C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo
@@ -1219,44 +1340,53 @@ function Addon:FillCurrencySnapshot(snap)
                 local earnedShards = (shardInfo and tonumber(shardInfo.quantityEarnedThisWeek)) or 0
                 local weeklyCapShards = (shardInfo and tonumber(shardInfo.maxWeeklyQuantity)) or 0
                 local displayInfo = getCurrency and getCurrency(id) or nil
-                snap.rightRows[#snap.rightRows + 1] = {
-                    type = SNAP_TYPES.COFFERKEYS,
-                    id = id,
-                    qty = floor(earnedShards / 100),
-                    cap = floor(weeklyCapShards / 100),
-                    held = (displayInfo and tonumber(displayInfo.quantity)) or 0,
-                }
+                rowCount = rowCount + 1
+                local row = AcquireSnapshotRow(rows, rowCount)
+                row.type = SNAP_TYPES.COFFERKEYS
+                row.id = id
+                row.qty = floor(earnedShards / 100)
+                row.cap = floor(weeklyCapShards / 100)
+                row.held = (displayInfo and tonumber(displayInfo.quantity)) or 0
             else
                 local qty, cap = FormatCurrencyProgressParts(id)
                 local info = C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo and C_CurrencyInfo.GetCurrencyInfo(id)
-                snap.rightRows[#snap.rightRows + 1] = {
-                    type = SNAP_TYPES.MISC, id = id,
-                    qty = tonumber(qty) or 0,
-                    held = (info and tonumber(info.quantity)) or 0,
-                    cap = tonumber(cap) or 0,
-                }
+                rowCount = rowCount + 1
+                local row = AcquireSnapshotRow(rows, rowCount)
+                row.type = SNAP_TYPES.MISC
+                row.id = id
+                row.qty = tonumber(qty) or 0
+                row.held = (info and tonumber(info.quantity)) or 0
+                row.cap = tonumber(cap) or 0
             end
         end
     end
     local bDone = GetQuestDoneRaw("delversBounty")
     if bDone ~= nil then
-        snap.rightRows[#snap.rightRows + 1] = { type = SNAP_TYPES.QUEST, key = "delversBounty", done = bDone }
+        rowCount = rowCount + 1
+        local row = AcquireSnapshotRow(rows, rowCount)
+        row.type = SNAP_TYPES.QUEST
+        row.key = "delversBounty"
+        row.done = bDone
     end
     local sDone = GetQuestDoneRaw("nullaeusSpoils")
     if sDone ~= nil then
-        snap.rightRows[#snap.rightRows + 1] = { type = SNAP_TYPES.QUEST, key = "nullaeusSpoils", done = sDone }
+        rowCount = rowCount + 1
+        local row = AcquireSnapshotRow(rows, rowCount)
+        row.type = SNAP_TYPES.QUEST
+        row.key = "nullaeusSpoils"
+        row.done = sDone
     end
     local pDone = GetQuestDoneRaw("weeklyPrey")
     if pDone ~= nil then
-        snap.rightRows[#snap.rightRows + 1] = { type = SNAP_TYPES.QUEST, key = "weeklyPrey", done = pDone }
+        rowCount = rowCount + 1
+        local row = AcquireSnapshotRow(rows, rowCount)
+        row.type = SNAP_TYPES.QUEST
+        row.key = "weeklyPrey"
+        row.done = pDone
     end
-    -- Weapon/trinket upgrade items: store raw counts + need; display as decimal combined-equivalent
-    snap.rightRows[#snap.rightRows + 1] = {
-        type        = SNAP_TYPES.WEAPUPG,
-        shardQty    = (GetItemCount and GetItemCount(WEAP_UPG_SHARD_ID))    or 0,
-        combinedQty = (GetItemCount and GetItemCount(WEAP_UPG_COMBINED_ID)) or 0,
-        need        = GetWeaponUpgradeNeedCount(snap),
-    }
+    for i = rowCount + 1, #rows do
+        rows[i] = nil
+    end
 end
 
 --- Converts a single typed snapshot row into a (label, value) display string pair.

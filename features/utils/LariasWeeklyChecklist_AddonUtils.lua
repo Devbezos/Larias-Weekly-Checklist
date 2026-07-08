@@ -11,6 +11,9 @@
 --   GetCurrencyName(id) - safe currency name lookup.
 --   GetCurrencyIcon(id) - safe currency icon lookup.
 --   GetItemName(id)     - safe item name lookup.
+--   MoveArrayEntry(t, fromIdx, toIdx) - reorders one entry within an array table.
+--   GetFrameCursorOffset(frame, axis) - cursor offset relative to frame left/top.
+--   CreateDragReorderController(frame, opts) - generic 1D drag/reorder state machine.
 --
 -- Also exposes Addon.RIGHT_LINE_COUNT (initial right-panel row count used by Overlay).
 
@@ -20,6 +23,7 @@ if not Addon then return end
 
 local AddonUtils = {}
 Addon.AddonUtils = AddonUtils
+local abs, max, min = math.abs, math.max, math.min
 
 -- Shared WoW color-escape palette used by tracking rows and tooltips.
 AddonUtils.COLORS = {
@@ -117,6 +121,126 @@ function AddonUtils.SetTooltipLines(frame, lines, anchor)
         end
     end
     GameTooltip:Show()
+end
+
+function AddonUtils.MoveArrayEntry(items, fromIdx, toIdx)
+    if type(items) ~= "table" then return items end
+    local count = #items
+    if count <= 0 then return items end
+
+    fromIdx = max(1, min(count, tonumber(fromIdx) or 1))
+    local moved = table.remove(items, fromIdx)
+    if moved == nil then return items end
+
+    local insertMax = #items + 1
+    toIdx = max(1, min(insertMax, tonumber(toIdx) or fromIdx))
+    table.insert(items, toIdx, moved)
+    return items
+end
+
+function AddonUtils.GetFrameCursorOffset(frame, axis)
+    if not (frame and GetCursorPosition and frame.GetEffectiveScale) then return nil end
+    local scale = frame:GetEffectiveScale()
+    if not scale or scale == 0 then scale = 1 end
+
+    if axis == "y" then
+        local cursorY = select(2, GetCursorPosition())
+        local top = frame:GetTop()
+        if not (cursorY and top) then return nil end
+        return top - (cursorY / scale)
+    end
+
+    local cursorX = select(1, GetCursorPosition())
+    local left = frame:GetLeft()
+    if not (cursorX and left) then return nil end
+    return (cursorX / scale) - left
+end
+
+function AddonUtils.CreateDragReorderController(frame, opts)
+    opts = opts or {}
+    local controller = { frame = frame, opts = opts, state = nil }
+
+    function controller:GetState()
+        return self.state
+    end
+
+    function controller:Clear()
+        local state = self.state
+        if state and opts.restoreDragVisual then
+            opts.restoreDragVisual(state, self.frame)
+        end
+        self.state = nil
+        if opts.hideIndicator then
+            opts.hideIndicator(self.frame)
+        end
+    end
+
+    function controller:Begin(state)
+        if type(state) ~= "table" then return false end
+        local cursorValue = opts.getCursorValue and opts.getCursorValue(self.frame)
+        if cursorValue == nil then return false end
+        self:Clear()
+        state.active = false
+        state.startCursor = cursorValue
+        state.targetIdx = state.targetIdx or state.sourceIdx
+        self.state = state
+        return true
+    end
+
+    function controller:Finish()
+        local state = self.state
+        if not state then return nil, false end
+
+        local targetIdx = state.targetIdx or state.sourceIdx
+        local shouldCommit = state.active and targetIdx and targetIdx ~= state.sourceIdx and opts.onCommit
+        if shouldCommit then
+            local commitState = state
+            self:Clear()
+            opts.onCommit(self.frame, commitState, targetIdx)
+            return commitState, true
+        end
+
+        self:Clear()
+        return state, false
+    end
+
+    function controller:Update()
+        local state = self.state
+        if not state then return end
+
+        local leftDown = opts.isDragButtonDown and opts.isDragButtonDown()
+        if leftDown == nil then
+            leftDown = IsMouseButtonDown and IsMouseButtonDown("LeftButton")
+        end
+        if not leftDown then
+            self:Finish()
+            return
+        end
+
+        local cursorValue = opts.getCursorValue and opts.getCursorValue(self.frame)
+        if cursorValue == nil then return end
+
+        if not state.active then
+            if abs(cursorValue - (state.startCursor or cursorValue)) < (tonumber(opts.threshold) or 0) then
+                return
+            end
+            state.active = true
+            if opts.onActivate then
+                opts.onActivate(self.frame, state)
+            end
+            if opts.applyDragVisual then
+                opts.applyDragVisual(state, self.frame)
+            end
+        end
+
+        state.targetIdx = (opts.getDropIndex and opts.getDropIndex(cursorValue, state, self.frame))
+            or state.sourceIdx
+        if opts.showIndicator then
+            opts.showIndicator(state.targetIdx, state, self.frame)
+        end
+    end
+
+    return controller
 end
 
 -- Initial rows in the right column; Overlay grows beyond this when more rows exist.

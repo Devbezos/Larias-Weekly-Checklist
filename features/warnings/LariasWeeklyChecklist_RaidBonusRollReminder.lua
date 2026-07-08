@@ -13,6 +13,7 @@ local reminderState = {
     lastProgressKey = nil,
 }
 local autoHideToken = 0
+local scratchSnapshot
 
 local function HideReminder()
     autoHideToken = autoHideToken + 1
@@ -80,14 +81,10 @@ local function GetBonusRollProgress()
 end
 
 local function GetCurrentSnapshot()
-    if not (Addon.EnsureDB and Addon.SaveTrackingSnapshot) then return nil end
-
-    local viewedCharacter = Addon._viewingChar
-    Addon._viewingChar = nil
-    local db = Addon:EnsureDB()
-    Addon._viewingChar = viewedCharacter
-
-    return Addon:SaveTrackingSnapshot(db)
+    if not Addon.BuildTrackingSnapshot then return nil end
+    scratchSnapshot = scratchSnapshot or {}
+    Addon:BuildTrackingSnapshot(scratchSnapshot)
+    return scratchSnapshot
 end
 
 local function HasWatermarkedUpgradeNeed()

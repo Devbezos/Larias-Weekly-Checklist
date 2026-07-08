@@ -18,6 +18,15 @@ local function IsShown(frame)
     return frame and frame.IsShown and frame:IsShown()
 end
 
+local function OnTrackingEvent(_, eventName, unit)
+    if eventName == "UNIT_INVENTORY_CHANGED" and unit ~= "player" then return end
+    if IsShown(trackingUIParent) and IsShown(Addon._trackingFrame) then
+        Addon:RequestTrackingUpdate()
+    else
+        Addon:RequestBackgroundSnapshotUpdate()
+    end
+end
+
 function Addon:HasTrackingSnapshot()
     if not (self.db and self.db.global) then return false end
     local ownKey = self:GetCurrentProfileKey()
@@ -54,18 +63,16 @@ function Addon:ConfigureTrackingEvents(parentFrame, showGreatVault, showCurrency
         SafeRegisterEvent(trackingEventFrame, "ITEM_INTERACTION_ITEM_SELECTION_UPDATED")
     end
 
-    trackingEventFrame:SetScript("OnEvent", function(_, eventName, unit)
-        if eventName == "UNIT_INVENTORY_CHANGED" and unit ~= "player" then return end
-        if IsShown(trackingUIParent) and IsShown(Addon._trackingFrame) then
-            Addon:RequestTrackingUpdate()
-        else
-            Addon:RequestBackgroundSnapshotUpdate()
-        end
-    end)
+    trackingEventFrame:SetScript("OnEvent", OnTrackingEvent)
 end
 
 function Addon:SuspendTrackingUI()
     trackingUIParent = nil
+    backgroundTrackingEnabled = false
+    if trackingEventFrame then
+        trackingEventFrame:UnregisterAllEvents()
+        trackingEventFrame:SetScript("OnEvent", nil)
+    end
 end
 
 local function ScheduleOnce(updateKey, callback)
@@ -90,23 +97,20 @@ local function ScheduleOnce(updateKey, callback)
 end
 
 function Addon:RequestBackgroundSnapshotUpdate()
+    if not backgroundTrackingEnabled then return end
     ScheduleOnce("background", function(addon)
         addon:UpdateSnapshotBackground()
     end)
 end
 
 function Addon:StartBackgroundTracking()
-    self:ConfigureTrackingEvents(nil, true, true)
-    self:RequestBackgroundSnapshotUpdate()
-
-    -- Login APIs settle asynchronously; these passes replace incomplete early
-    -- captures without requiring the checklist window to be opened.
-    if C_Timer and C_Timer.After then
-        for _, delay in ipairs({ 2, 5 }) do
-            C_Timer.After(delay, function()
-                Addon:RequestBackgroundSnapshotUpdate()
-            end)
-        end
+    -- Keep closed-window background usage as low as possible.
+    -- Live tracking events are enabled only while the main checklist UI is open;
+    -- callers that need a snapshot while closed should request one on demand.
+    backgroundTrackingEnabled = false
+    if trackingEventFrame then
+        trackingEventFrame:UnregisterAllEvents()
+        trackingEventFrame:SetScript("OnEvent", nil)
     end
 end
 
@@ -135,6 +139,7 @@ end
 
 function Addon:RequestTrackingUpdate()
     ScheduleOnce("panel", function(addon)
+        if not (IsShown(trackingUIParent) and IsShown(addon._trackingFrame)) then return end
         if addon.UpdateTracking then addon:UpdateTracking() end
     end)
 end

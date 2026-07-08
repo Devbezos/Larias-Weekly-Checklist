@@ -9,6 +9,9 @@ local AU = Addon.AddonUtils
 local GetCurrencyIcon = AU.GetCurrencyIcon
 local GetCurrencyName = AU.GetCurrencyName
 local GetItemName = AU.GetItemName
+local MoveArrayEntry = AU.MoveArrayEntry
+local GetFrameCursorOffset = AU.GetFrameCursorOffset
+local CreateDragReorderController = AU.CreateDragReorderController
 
 -- ── Layout constants ──────────────────────────────────────────────────────────
 local PAD        = 8
@@ -573,6 +576,9 @@ local function EnsurePanel()
     -- ESC via UISpecialFrames, or any other dismiss path).
     f:SetScript("OnHide", function()
         HideSummaryOverlays()
+        if f._dragReorderController then
+            f._dragReorderController:Clear()
+        end
     end)
 
     -- Pool tables for reuse.
@@ -595,8 +601,8 @@ local function EnsurePanel()
     f._dragInsertTex = dragInsert
 
     f:SetScript("OnUpdate", function(self_)
-        if self_._dragUpdate then
-            self_._dragUpdate(self_)
+        if self_._dragReorderController then
+            self_._dragReorderController:Update()
         end
     end)
 
@@ -672,26 +678,7 @@ local function BuildCharOrderKeys(chars)
 end
 
 local function MoveOrderKey(orderKeys, fromIdx, toIdx)
-    local count = #orderKeys
-    if count == 0 then return orderKeys end
-    fromIdx = math.max(1, math.min(count, tonumber(fromIdx) or 1))
-    toIdx   = math.max(1, math.min(count, tonumber(toIdx)   or fromIdx))
-    if fromIdx == toIdx then return orderKeys end
-
-    local moved = orderKeys[fromIdx]
-    table.remove(orderKeys, fromIdx)
-    table.insert(orderKeys, toIdx, moved)
-    return orderKeys
-end
-
-local function GetPanelCursorX(panel)
-    if not (panel and GetCursorPosition and panel.GetEffectiveScale) then return nil end
-    local cursorX = select(1, GetCursorPosition())
-    local left = panel:GetLeft()
-    if not (cursorX and left) then return nil end
-    local scale = panel:GetEffectiveScale()
-    if not scale or scale == 0 then scale = 1 end
-    return (cursorX / scale) - left
+    return MoveArrayEntry(orderKeys, fromIdx, toIdx)
 end
 
 local function HasHiddenSummaryChars(gdb, ownKey, allKeys, maxLvl)
@@ -1639,15 +1626,6 @@ PopulateSummary = function(panel)
         panel._dragInsertTex:Show()
     end
 
-    local function ClearDragState()
-        local state = panel._dragState
-        if state then
-            RestoreDraggedColumnVisual(state)
-        end
-        panel._dragState = nil
-        HideDragIndicator()
-    end
-
     -- Use the same theme colors as the main frame.  ApplyOpacity below supplies
     -- the saved background alpha so the Alt Summary matches the main window.
     do
@@ -1678,43 +1656,39 @@ PopulateSummary = function(panel)
     local TOTAL_W     = PAD + COL_LABEL + numChars * colW + RIGHT_PAD
 
     panel:SetSize(math.max(260, TOTAL_W), math.max(120, TOTAL_H))
-    panel._dragUpdate = function(self_)
-        local state = self_._dragState
-        if not state then return end
-
-        local leftDown = IsMouseButtonDown and IsMouseButtonDown("LeftButton")
-        if not leftDown then
-            local targetIdx = state.targetIdx or state.sourceIdx
-            if state.active and targetIdx and targetIdx ~= state.sourceIdx then
-                local orderKeys = BuildCharOrderKeys(chars)
-                MoveOrderKey(orderKeys, state.sourceIdx, targetIdx)
-                ClearDragState()
-                if Addon.SetAltSummaryCharOrder then
-                    Addon:SetAltSummaryCharOrder(orderKeys)
-                end
-                return
-            end
-            ClearDragState()
-            return
-        end
-
-        local cursorX = GetPanelCursorX(self_)
-        if not cursorX then return end
-
-        if not state.active then
-            if math.abs(cursorX - state.startX) < DRAG_THRESHOLD then
-                return
-            end
-            state.active = true
+    panel._dragReorderController = CreateDragReorderController(panel, {
+        threshold = DRAG_THRESHOLD,
+        getCursorValue = function(self_)
+            return GetFrameCursorOffset(self_, "x")
+        end,
+        hideIndicator = function()
+            HideDragIndicator()
+        end,
+        restoreDragVisual = function(state)
+            RestoreDraggedColumnVisual(state)
+        end,
+        onActivate = function()
             if panel._hoverRowTex then panel._hoverRowTex:Hide() end
             if panel._hoverColTex then panel._hoverColTex:Hide() end
             OnCellLeave()
+        end,
+        applyDragVisual = function(state)
             ApplyDraggedColumnVisual(state)
-        end
-
-        state.targetIdx = GetDropIndex(cursorX) or state.sourceIdx
-        ShowDragIndicator(state.targetIdx)
-    end
+        end,
+        getDropIndex = function(cursorX)
+            return GetDropIndex(cursorX)
+        end,
+        showIndicator = function(targetIdx)
+            ShowDragIndicator(targetIdx)
+        end,
+        onCommit = function(_, state, targetIdx)
+            local orderKeys = BuildCharOrderKeys(chars)
+            MoveOrderKey(orderKeys, state.sourceIdx, targetIdx)
+            if Addon.SetAltSummaryCharOrder then
+                Addon:SetAltSummaryCharOrder(orderKeys)
+            end
+        end,
+    })
 
     -- Hide all pooled widgets from previous call.
     for _, t in ipairs(panel._divTexPool)  do t:Hide() end
@@ -2140,28 +2114,24 @@ PopulateSummary = function(panel)
             col.hdrHit:SetScript("OnMouseDown", function(s_, button)
                 if button ~= "LeftButton" then return end
                 if not (IsAltKeyDown and IsAltKeyDown()) then return end
-                ClearDragState()
-                local startX = GetPanelCursorX(panel)
-                if not startX then return end
-                panel._dragState = {
-                    active = false,
-                    startX = startX,
+                if not panel._dragReorderController then return end
+                panel._dragReorderController:Begin({
                     sourceIdx = ci,
                     targetIdx = ci,
                     charKey = _ck,
                     char = char,
                     col = col,
-                }
+                })
             end)
             col.hdrHit:SetScript("OnMouseUp", function(s_, button)
                 if button == "LeftButton" then
-                    local state = panel._dragState
+                    local state = panel._dragReorderController and panel._dragReorderController:GetState()
                     local shouldOpenGear = not state
                     if state and state.charKey == _ck and not state.active then
                         shouldOpenGear = true
                     end
-                    if state then
-                        ClearDragState()
+                    if state and panel._dragReorderController then
+                        panel._dragReorderController:Finish()
                     end
                     if shouldOpenGear then
                         if _gearPopupFrame and _gearPopupFrame:IsShown()
@@ -2308,6 +2278,19 @@ end
 function Addon:CloseAltsSummary()
     if altSummaryFrame then altSummaryFrame:Hide() end
     if _gearPopupFrame then _gearPopupFrame:Hide() end
+end
+
+function Addon:ReleaseAltsSummaryRuntimeCaches()
+    _cachedRows = nil
+    _layout = nil
+    _rowsDirty = true
+    _panelDirty = true
+    if altSummaryFrame and not (altSummaryFrame.IsShown and altSummaryFrame:IsShown()) then
+        if altSummaryFrame._dragReorderController then
+            altSummaryFrame._dragReorderController:Clear()
+        end
+        HideSummaryOverlays()
+    end
 end
 
 function Addon:ToggleAltsSummary(anchorFrame)
