@@ -548,7 +548,7 @@ function Addon:GetTrackedCurrencyEnabledCount(entries)
 
     local count = 0
     for i = 1, #cfg do
-        if cfg[i] and cfg[i].enabled ~= false and not tonumber(cfg[i].itemID) then
+        if cfg[i] and cfg[i].enabled ~= false then
             count = count + 1
         end
     end

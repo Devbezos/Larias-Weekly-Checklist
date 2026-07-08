@@ -414,8 +414,7 @@ local function BuildCurrencyConfigDisplayEntries(showHidden)
         if entryKey and not seen[entryKey] then
             seen[entryKey] = true
             local isItem = itemID and true or false
-            local isHidden = isItem and (Addon.IsItemHidden and Addon:IsItemHidden(itemID) or false)
-                or entry.enabled == false
+            local isHidden = isItem and (Addon.IsItemHidden and Addon:IsItemHidden(itemID) or false) or false
             if isHidden then
                 hiddenCount = hiddenCount + 1
             end
@@ -423,7 +422,7 @@ local function BuildCurrencyConfigDisplayEntries(showHidden)
                 entries[#entries + 1] = {
                     id = id,
                     itemID = itemID,
-                    enabled = not isHidden,
+                    enabled = entry.enabled ~= false,
                     hidden = isHidden,
                     source = entry.source or "custom",
                     kind = entry.kind,
@@ -530,8 +529,10 @@ local function CurrencyConfigShowRowTooltip(popup, row, owner)
     if current.kind == "item" then
         if current.hidden then
             GameTooltip:AddLine(L.CURRENCY_CONFIG_TOOLTIP_RESTORE or "Left-click restores this currency.", 1, 1, 1, true)
+            GameTooltip:AddLine(L.CURRENCY_CONFIG_TOOLTIP_RESTORE_FRONT or "Alt+left-click restores it and moves it to the front.", 0.75, 0.75, 0.75, true)
         else
             GameTooltip:AddLine(L.CURRENCY_CONFIG_TOOLTIP_TOGGLE or "Left-click toggles this currency on or off.", 1, 1, 1, true)
+            GameTooltip:AddLine(L.CURRENCY_CONFIG_TOOLTIP_REORDER or "Alt+left-click moves this currency to the front.", 0.75, 0.75, 0.75, true)
             GameTooltip:AddLine(L.CURRENCY_CONFIG_TOOLTIP_HIDE or "Right-click hides this currency.", 0.75, 0.75, 0.75, true)
         end
         GameTooltip:Show()
@@ -546,7 +547,7 @@ local function CurrencyConfigShowRowTooltip(popup, row, owner)
         GameTooltip:AddLine(L.CURRENCY_CONFIG_TOOLTIP_REORDER or "Alt+left-click moves this currency to the front.", 0.75, 0.75, 0.75, true)
         GameTooltip:AddLine(L.CURRENCY_CONFIG_TOOLTIP_HIDE or "Right-click hides this currency.", 0.75, 0.75, 0.75, true)
     end
-    if current.source == "custom" then
+    if tostring(current.source or ""):find("^custom") then
         GameTooltip:AddLine(L.CURRENCY_CONFIG_TOOLTIP_DELETE or "Click the X to permanently delete this custom currency.", 0.75, 0.75, 0.75, true)
     end
     GameTooltip:Show()
@@ -554,30 +555,37 @@ end
 
 local function CurrencyConfigTryEnableEntry(popup, entry)
     if not entry then return false end
-    if entry.kind == "item" then
-        Addon:SetItemHidden(entry.itemID, false)
-        return true
-    end
-
     local currentCfg = Addon:GetTrackedCurrencyConfig()
     local entryID = tonumber(entry.id)
+    local entryKey = GetPopupEntryKey(entry)
     local limit = popup and popup._trackedCurrencyLimit or Addon:GetTrackedCurrencyLimit()
-    if not entryID then return false end
-
-    local currentIdx = FindTrackedCurrencyConfigIndex(currentCfg, entryID)
     local currentEnabledCount = Addon.GetTrackedCurrencyEnabledCount and Addon:GetTrackedCurrencyEnabledCount(currentCfg) or 0
+    local currentIdx = entryKey and FindTrackedCurrencyConfigIndexByKey(currentCfg, entryKey) or nil
     local alreadyEnabled = currentIdx and currentCfg[currentIdx] and currentCfg[currentIdx].enabled ~= false
     if not alreadyEnabled and currentEnabledCount >= limit then
         Addon:RefreshCurrencyConfigPopup((Addon.L or {}).CURRENCY_CONFIG_ENABLE_LIMIT or "Can only track up to 12 currencies.")
         return false
     end
-    if currentIdx then
+    if currentIdx and currentCfg[currentIdx] then
         currentCfg[currentIdx].enabled = true
-    else
+    elseif entry.kind == "item" and tonumber(entry.itemID) then
+        currentCfg[#currentCfg + 1] = {
+            itemID = tonumber(entry.itemID),
+            enabled = true,
+            source = entry.source or "builtin-item",
+            kind = entry.kind or "item",
+        }
+    elseif entryID then
         currentCfg[#currentCfg + 1] = { id = entryID, enabled = true, source = entry.source or "custom" }
+    else
+        return false
     end
     if entry.hidden then
-        Addon:SetCurrencyHidden(entryID, false)
+        if entry.kind == "item" then
+            Addon:SetItemHidden(entry.itemID, false)
+        elseif entryID then
+            Addon:SetCurrencyHidden(entryID, false)
+        end
     end
     Addon:SetTrackedCurrencyConfig(currentCfg)
     return true
@@ -597,6 +605,12 @@ local function CurrencyConfigHandleRowMouse(popup, row, button)
     if button == "RightButton" then
         if entry.hidden then return true end
         if entry.kind == "item" then
+            local nextCfg = Addon:GetTrackedCurrencyConfig()
+            local currentIdx = FindTrackedCurrencyConfigIndexByKey(nextCfg, GetPopupEntryKey(entry))
+            if currentIdx and nextCfg[currentIdx] then
+                nextCfg[currentIdx].enabled = false
+                Addon:SetTrackedCurrencyConfig(nextCfg)
+            end
             Addon:SetItemHidden(entry.itemID, true)
             return true
         end
@@ -727,14 +741,18 @@ function Addon:RefreshCurrencyConfigPopup(statusText)
             row._cb = Addon.Controls.NewCheckBox(row, nil, 14)
             row._deleteBtn = Addon.Controls.NewCloseButton(row, function()
                 local entry = row._entryData
-                if not (entry and entry.source == "custom") then return end
+                if not (entry and tostring(entry.source or ""):find("^custom")) then return end
                 local nextCfg = Addon:GetTrackedCurrencyConfig()
-                local currentIdx = FindTrackedCurrencyConfigIndex(nextCfg, entry.id)
+                local currentIdx = FindTrackedCurrencyConfigIndexByKey(nextCfg, GetPopupEntryKey(entry))
                 if currentIdx and nextCfg[currentIdx] then
                     table.remove(nextCfg, currentIdx)
                     Addon:SetTrackedCurrencyConfig(nextCfg)
                 end
-                Addon:SetCurrencyHidden(entry.id, false)
+                if entry.itemID then
+                    Addon:SetItemHidden(entry.itemID, false)
+                elseif entry.id then
+                    Addon:SetCurrencyHidden(entry.id, false)
+                end
             end)
             row._deleteBtn:SetSize(16, 16)
             row._deleteBtn:SetPoint("RIGHT", row, "RIGHT", 0, 0)
@@ -781,8 +799,21 @@ function Addon:RefreshCurrencyConfigPopup(statusText)
                 end
                 if entry.kind == "item" then
                     local newVal = not self_:GetChecked()
+                    local nextCfg = Addon:GetTrackedCurrencyConfig()
+                    local currentIdx = FindTrackedCurrencyConfigIndexByKey(nextCfg, GetPopupEntryKey(entry))
+                    if newVal
+                            and Addon.GetTrackedCurrencyEnabledCount
+                            and (not (currentIdx and nextCfg[currentIdx] and nextCfg[currentIdx].enabled ~= false))
+                            and Addon:GetTrackedCurrencyEnabledCount(nextCfg) >= (p._trackedCurrencyLimit or limit) then
+                        self_:SetChecked(false)
+                        Addon:RefreshCurrencyConfigPopup(L.CURRENCY_CONFIG_ENABLE_LIMIT or "Can only track up to 12 currencies.")
+                        return
+                    end
                     self_:SetChecked(newVal)
-                    Addon:SetItemHidden(entry.itemID, not newVal)
+                    if currentIdx and nextCfg[currentIdx] then
+                        nextCfg[currentIdx].enabled = newVal and true or false
+                        Addon:SetTrackedCurrencyConfig(nextCfg)
+                    end
                     return
                 end
                 self_:SetChecked(not self_:GetChecked())
@@ -836,8 +867,20 @@ function Addon:RefreshCurrencyConfigPopup(statusText)
                     end
                     local newVal = not row._cb:GetChecked()
                     if entry.kind == "item" then
+                        local nextCfg = Addon:GetTrackedCurrencyConfig()
+                        local currentIdx = FindTrackedCurrencyConfigIndexByKey(nextCfg, GetPopupEntryKey(entry))
+                        if newVal
+                                and Addon.GetTrackedCurrencyEnabledCount
+                                and (not (currentIdx and nextCfg[currentIdx] and nextCfg[currentIdx].enabled ~= false))
+                                and Addon:GetTrackedCurrencyEnabledCount(nextCfg) >= (p._trackedCurrencyLimit or limit) then
+                            Addon:RefreshCurrencyConfigPopup(L.CURRENCY_CONFIG_ENABLE_LIMIT or "Can only track up to 12 currencies.")
+                            return
+                        end
                         row._cb:SetChecked(newVal)
-                        Addon:SetItemHidden(entry.itemID, not newVal)
+                        if currentIdx and nextCfg[currentIdx] then
+                            nextCfg[currentIdx].enabled = newVal and true or false
+                            Addon:SetTrackedCurrencyConfig(nextCfg)
+                        end
                         return
                     end
                     local nextCfg = Addon:GetTrackedCurrencyConfig()
@@ -893,7 +936,7 @@ function Addon:RefreshCurrencyConfigPopup(statusText)
         row._displayIndex = i
         row._cb:SetChecked(entry.enabled ~= false)
         row._cb:SetPoint("LEFT", row, "LEFT", 0, 0)
-        local labelRightPad = (entry.source == "custom") and 28 or textRightPad
+        local labelRightPad = (tostring(entry.source or ""):find("^custom")) and 28 or textRightPad
         if row._cb._label then
             row._cb._label:ClearAllPoints()
             row._cb._label:SetPoint("LEFT", row._cb._box, "RIGHT", 6, 0)
@@ -913,7 +956,7 @@ function Addon:RefreshCurrencyConfigPopup(statusText)
             row._cb._hit:SetPoint("BOTTOMRIGHT", row, "RIGHT", -labelRightPad, 0)
         end
         if row._deleteBtn then
-            if entry.source == "custom" then
+            if tostring(entry.source or ""):find("^custom") then
                 row._deleteBtn:Show()
             else
                 row._deleteBtn:Hide()

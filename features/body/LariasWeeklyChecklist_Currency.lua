@@ -568,8 +568,8 @@ function Addon:GetTrackedCurrencyEntries(includeDisabled)
         local id = tonumber(entry and entry.id)
         local itemID = tonumber(entry and entry.itemID)
         if itemID and itemID > 0 then
-            local enabled = includeDisabled or not (Addon.IsItemHidden and Addon:IsItemHidden(itemID))
-            if enabled then
+            local isHidden = Addon.IsItemHidden and Addon:IsItemHidden(itemID)
+            if not isHidden and (includeDisabled or entry.enabled ~= false) then
                 n = n + 1
                 local row = _trackedEntryPool[n]
                 if not row then
@@ -578,7 +578,7 @@ function Addon:GetTrackedCurrencyEntries(includeDisabled)
                 end
                 row.id = nil
                 row.itemID = itemID
-                row.enabled = not (Addon.IsItemHidden and Addon:IsItemHidden(itemID))
+                row.enabled = entry.enabled ~= false
                 row.type = (itemID == WEAP_UPG_COMBINED_ID) and SNAP_TYPES.WEAPUPG or nil
                 row.kind = entry.kind or "item"
                 row.crestIdx = nil
