@@ -1771,11 +1771,11 @@ local function EnsureCompletionPanel()
     if not (frame and scrollChild) then return nil end
 
     local panel = CreateFrame("Frame", nil, scrollChild)
-    panel:SetHeight(96)
+    panel:SetHeight(72)
     panel:Hide()
 
     local content = CreateFrame("Frame", nil, panel)
-    content:SetSize(220, 60)
+    content:SetSize(220, 28)
     content:SetPoint("CENTER", panel, "CENTER", 0, 0)
     panel._contentFrame = content
 
@@ -1783,31 +1783,6 @@ local function EnsureCompletionPanel()
     title:SetPoint("TOP", content, "TOP", 0, 0)
     title:SetText(L.COMPLETION_JOB_DONE or "Job's done.")
     panel._titleFS = title
-
-    local btn = Addon.Controls and Addon.Controls.NewActionButton
-        and Addon.Controls.NewActionButton(panel, 160, 24)
-        or CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
-    btn:SetSize(160, 24)
-    btn:SetText(L.COMPLETION_OPEN_ALT_SUMMARY or L.ALT_SUMMARY_TITLE or "Open Alt Summary")
-    btn:SetPoint("TOP", title, "BOTTOM", 0, -14)
-    btn:SetScript("OnClick", function()
-        if Addon.ToggleAltsSummary then
-            Addon:ToggleAltsSummary(frame)
-        end
-    end)
-    btn:SetScript("OnEnter", function(self_)
-        if Addon.AddonUtils and Addon.AddonUtils.SetTooltip then
-            Addon.AddonUtils.SetTooltip(self_, L.TOOLTIP_CLICK_TO_OPEN or "Click to open")
-        end
-    end)
-    btn:SetScript("OnLeave", function()
-        if Addon.AddonUtils and Addon.AddonUtils.HideTooltip then
-            Addon.AddonUtils.HideTooltip()
-        elseif GameTooltip then
-            GameTooltip:Hide()
-        end
-    end)
-    panel._altSummaryBtn = btn
 
     frame._lariasCompletionPanel = panel
     return panel
@@ -1828,17 +1803,10 @@ local function ShowCompletionPanel(show)
         panel._titleFS:SetText(L.COMPLETION_JOB_DONE or "Job's done.")
         panel._titleFS:SetTextColor(header.r, header.g, header.b, header.a or 1)
     end
-    if panel._altSummaryBtn then
-        panel._altSummaryBtn:SetText(L.COMPLETION_OPEN_ALT_SUMMARY or L.ALT_SUMMARY_TITLE or "Open Alt Summary")
-        if Addon.Controls and Addon.Controls.StyleButton then
-            Addon.Controls.StyleButton(panel._altSummaryBtn)
-        end
-    end
-
     local paddingX = Addon.UI.padOuterX or Addon.UI.sectionInsetX
     local sectionW = math.max(1, (scrollFrame and scrollFrame:GetWidth() or Addon.UI.frameW) - 2 * paddingX)
     local scrollH = (scrollFrame and scrollFrame.GetHeight and tonumber(scrollFrame:GetHeight())) or 0
-    local panelH = max(96, scrollH - (Addon.UI.sectionTopPad or 0) * 2)
+    local panelH = max(72, scrollH - (Addon.UI.sectionTopPad or 0) * 2)
     panel:ClearAllPoints()
     panel:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", paddingX, -Addon.UI.sectionTopPad)
     panel:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", -paddingX, -Addon.UI.sectionTopPad)
@@ -1854,8 +1822,7 @@ end
 
 function Addon:UpdateCompletionEasterEgg(db)
     -- When the list is fully complete (no visible sections remain after
-    -- hide-completed collapses them), show a compact completion message with
-    -- a button that opens the normal Alt Summary popup.
+    -- hide-completed collapses them), show a compact completion message.
     if not (frame and scrollFrame) then return end
 
     db = db or self:EnsureDB()
@@ -1922,8 +1889,10 @@ local function CalcDataSig(data)
     -- NOTE: This assumes list data doesn't mutate in-place without clearing __lariasSig.
     local cached = rawget(data, "__lariasSig")
     if type(cached) == "number" then
-        return cached
-    end
+    return cached
+end
+
+local RebuildDataIndex
 
     -- Memory-friendly signature: numeric hash, no big temp tables / concatenated strings.
     -- (Collision risk is extremely low for our static dataset; acceptable for change detection.)
@@ -2159,6 +2128,28 @@ local function ToggleHeaderPickerFromAnchor(anchor)
     end
 end
 
+function Addon:ShouldRedirectToAltsSummary(db)
+    db = db or self:EnsureDB()
+    if not self._order or #self._order == 0 then
+        local data = self.GetListData and self:GetListData()
+        if data and #data > 0 then
+            local sig = CalcDataSig(data)
+            RebuildDataIndex(data, sig)
+        end
+    end
+    return self:IsListComplete(db) == true
+end
+
+function Addon:OpenCompletionRedirectSummary()
+    self._pendingCompletionRedirect = nil
+    if frame and frame.IsShown and frame:IsShown() then
+        frame:Hide()
+    end
+    if self.OpenAltsSummary then
+        self:OpenAltsSummary(nil, { completionRedirect = true })
+    end
+end
+
 local function OnSectionExpandButtonClick(self_)
     local sectionFrame = self_ and self_._sectionFrame
     if not sectionFrame then return end
@@ -2384,7 +2375,7 @@ end
 -- Rebuilds _sectionsById, _order, and _dataSig when the dataset signature
 -- changes. Releases all active section frames so SyncSectionPool starts clean.
 -- Returns true if the data changed (callers use this to decide checkbox resync).
-local function RebuildDataIndex(data, sig)
+RebuildDataIndex = function(data, sig)
     local changed = (Addon._dataSig ~= sig)
                  or (not Addon._sectionsById)
                  or (not next(Addon._sectionsById))
@@ -2611,6 +2602,13 @@ function Addon:Refresh()
         self:UpdateTracking()
     end
 
+    local pendingCompletionRedirect = self._pendingCompletionRedirect
+    self._pendingCompletionRedirect = nil
+    if pendingCompletionRedirect and self.ShouldRedirectToAltsSummary and self:ShouldRedirectToAltsSummary() then
+        self:OpenCompletionRedirectSummary()
+        return
+    end
+
     -- Sync the change-week button label to whatever section is at the top of
     -- the viewport after the list has been (re)built and laid out.
     if self._refreshChangeWeekLabel and C_Timer and C_Timer.After then
@@ -2808,6 +2806,21 @@ function Addon:Toggle()
     if frame:IsShown() then
         frame:Hide()
     else
+        local redirectToAltsSummary = self.ShouldRedirectToAltsSummary and self:ShouldRedirectToAltsSummary()
+        local asf = self._altsSummaryFrame
+        if redirectToAltsSummary then
+            if asf and asf.IsShown and asf:IsShown() then
+                asf:Hide()
+                return
+            end
+            self:BroadcastVersion(false)
+            self:RequestVersions(false)
+            if self.OpenAltsSummary then
+                self:OpenAltsSummary(nil, { completionRedirect = true })
+            end
+            return
+        end
+        self._pendingCompletionRedirect = true
         self:BroadcastVersion(false)
         self:RequestVersions(false)
         if self.SelectMainTab then

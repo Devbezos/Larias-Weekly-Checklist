@@ -528,10 +528,8 @@ local function CurrencyConfigShowRowTooltip(popup, row, owner)
     GameTooltip:SetText(GetConfiguredPopupEntryLabel(current), 1, 0.82, 0)
     if current.kind == "item" then
         if current.hidden then
-            GameTooltip:AddLine(L.CURRENCY_CONFIG_TOOLTIP_RESTORE or "Left-click restores this currency.", 1, 1, 1, true)
             GameTooltip:AddLine(L.CURRENCY_CONFIG_TOOLTIP_RESTORE_FRONT or "Alt+left-click restores it and moves it to the front.", 0.75, 0.75, 0.75, true)
         else
-            GameTooltip:AddLine(L.CURRENCY_CONFIG_TOOLTIP_TOGGLE or "Left-click toggles this currency on or off.", 1, 1, 1, true)
             GameTooltip:AddLine(L.CURRENCY_CONFIG_TOOLTIP_REORDER or "Alt+left-click moves this currency to the front.", 0.75, 0.75, 0.75, true)
             GameTooltip:AddLine(L.CURRENCY_CONFIG_TOOLTIP_HIDE or "Right-click hides this currency.", 0.75, 0.75, 0.75, true)
         end
@@ -540,10 +538,8 @@ local function CurrencyConfigShowRowTooltip(popup, row, owner)
     end
 
     if current.hidden then
-        GameTooltip:AddLine(L.CURRENCY_CONFIG_TOOLTIP_RESTORE or "Left-click restores this currency.", 1, 1, 1, true)
         GameTooltip:AddLine(L.CURRENCY_CONFIG_TOOLTIP_RESTORE_FRONT or "Alt+left-click restores it and moves it to the front.", 0.75, 0.75, 0.75, true)
     else
-        GameTooltip:AddLine(L.CURRENCY_CONFIG_TOOLTIP_TOGGLE or "Left-click toggles this currency on or off.", 1, 1, 1, true)
         GameTooltip:AddLine(L.CURRENCY_CONFIG_TOOLTIP_REORDER or "Alt+left-click moves this currency to the front.", 0.75, 0.75, 0.75, true)
         GameTooltip:AddLine(L.CURRENCY_CONFIG_TOOLTIP_HIDE or "Right-click hides this currency.", 0.75, 0.75, 0.75, true)
     end
@@ -965,23 +961,20 @@ function Addon:RefreshCurrencyConfigPopup(statusText)
     end
 
     if p._addLabelFS and p._addBox and p._addBtn then
+        local footerPad = 10
         p._addLabelFS:ClearAllPoints()
-        if #displayEntries > 0 and p._rowFrames[#displayEntries] and p._rowFrames[#displayEntries]:IsShown() then
-            p._addLabelFS:SetPoint("TOPLEFT", p._rowFrames[#displayEntries], "BOTTOMLEFT", 0, -8)
-        else
-            p._addLabelFS:SetPoint("TOPLEFT", p._rowsAnchor, "TOPLEFT", 0, -2)
-        end
+        p._addLabelFS:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", 12, footerPad + 26)
 
         p._addBox:ClearAllPoints()
-        p._addBox:SetPoint("TOPLEFT", p._addLabelFS, "BOTTOMLEFT", 0, -6)
+        p._addBox:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", 12, footerPad)
 
         p._addBtn:ClearAllPoints()
         p._addBtn:SetPoint("LEFT", p._addBox, "RIGHT", 6, 0)
 
         if p._statusFS then
             p._statusFS:ClearAllPoints()
-            p._statusFS:SetPoint("TOPLEFT", p._addBox, "BOTTOMLEFT", 0, -6)
-            p._statusFS:SetPoint("TOPRIGHT", p, "TOPRIGHT", -12, -8)
+            p._statusFS:SetPoint("BOTTOMLEFT", p._addLabelFS, "TOPLEFT", 0, 6)
+            p._statusFS:SetPoint("RIGHT", p, "RIGHT", -12, 0)
         end
     end
 
@@ -1012,7 +1005,7 @@ function Addon:RefreshCurrencyConfigPopup(statusText)
     p:SetWidth(desiredW)
 
     local rowsTopOffset = hiddenCount > 0 and 42 or 30
-    local totalH = rowsTopOffset + (#displayEntries * rowH) + 84
+    local totalH = rowsTopOffset + (#displayEntries * rowH) + 108
     p:SetHeight(max(CURRENCY_CONFIG_MIN_HEIGHT, totalH))
 end
 
@@ -1032,6 +1025,13 @@ function Addon:ToggleCurrencyConfigPopup(anchor)
         p:SetSize(320, CURRENCY_CONFIG_MIN_HEIGHT)
         p:SetMovable(true)
         p:SetClampedToScreen(true)
+        p:RegisterForDrag("LeftButton")
+        p:SetScript("OnDragStart", function(self_)
+            self_:StartMoving()
+        end)
+        p:SetScript("OnDragStop", function(self_)
+            self_:StopMovingOrSizing()
+        end)
         p._closeOnOutsideClick = false
         p._rowHeight = 26
 

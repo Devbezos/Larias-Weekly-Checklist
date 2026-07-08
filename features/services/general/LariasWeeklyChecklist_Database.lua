@@ -115,6 +115,8 @@ function Addon:SetupAddonDB()
             hiddenChars   = {},  -- [profileKey] = true
             trackedLootChars = {}, -- [profileKey] = true
             altSummaryCharOrder = {}, -- ordered profileKeys for manual Alt Summary priority
+            altSummarySectionOrder = {}, -- ordered section keys for Alt Summary categories
+            altSummaryRowOrder = {}, -- [sectionKey] = ordered row keys for Alt Summary rows
             -- Account-wide display preferences.
             hideCompletedSections = true,
             showGreatVault        = true,
@@ -362,6 +364,10 @@ local function RestoreMissingBuiltInTrackedCurrencies(self, entries)
 end
 
 local function RefreshAfterAltSummaryOrderChange(self)
+    if self.MarkAltsSummaryDirty then
+        self:MarkAltsSummaryDirty(true)
+        return
+    end
     if self.RefreshAltsSummary then
         self:RefreshAltsSummary()
     elseif self.RequestRefresh then
@@ -650,6 +656,109 @@ function Addon:SetAltSummaryCharOrder(orderKeys)
     end
 
     gdb.altSummaryCharOrder = nextOrder
+    RefreshAfterAltSummaryOrderChange(self)
+end
+
+function Addon:GetAltSummarySectionOrder()
+    local gdb = self.db and self.db.global
+    local order = gdb and gdb.altSummarySectionOrder
+    if type(order) ~= "table" then return {} end
+
+    local seen = {}
+    local result = {}
+    for i = 1, #order do
+        local key = order[i]
+        if type(key) == "string" and key ~= "" and not seen[key] then
+            seen[key] = true
+            result[#result + 1] = key
+        end
+    end
+    return result
+end
+
+function Addon:SetAltSummarySectionOrder(orderKeys)
+    if type(orderKeys) ~= "table" then return end
+    local gdb = self.db and self.db.global
+    if not gdb then return end
+
+    local seen = {}
+    local nextOrder = {}
+
+    for i = 1, #orderKeys do
+        local key = orderKeys[i]
+        if type(key) == "string" and key ~= "" and not seen[key] then
+            seen[key] = true
+            nextOrder[#nextOrder + 1] = key
+        end
+    end
+
+    local existing = gdb.altSummarySectionOrder
+    if type(existing) == "table" then
+        for i = 1, #existing do
+            local key = existing[i]
+            if type(key) == "string" and key ~= "" and not seen[key] then
+                seen[key] = true
+                nextOrder[#nextOrder + 1] = key
+            end
+        end
+    end
+
+    gdb.altSummarySectionOrder = nextOrder
+    RefreshAfterAltSummaryOrderChange(self)
+end
+
+function Addon:GetAltSummaryRowOrder(sectionKey)
+    sectionKey = tostring(sectionKey or "")
+    if sectionKey == "" then return {} end
+
+    local gdb = self.db and self.db.global
+    local orderMap = gdb and gdb.altSummaryRowOrder
+    local order = type(orderMap) == "table" and orderMap[sectionKey] or nil
+    if type(order) ~= "table" then return {} end
+
+    local seen = {}
+    local result = {}
+    for i = 1, #order do
+        local key = order[i]
+        if type(key) == "string" and key ~= "" and not seen[key] then
+            seen[key] = true
+            result[#result + 1] = key
+        end
+    end
+    return result
+end
+
+function Addon:SetAltSummaryRowOrder(sectionKey, orderKeys)
+    sectionKey = tostring(sectionKey or "")
+    if sectionKey == "" or type(orderKeys) ~= "table" then return end
+
+    local gdb = self.db and self.db.global
+    if not gdb then return end
+    gdb.altSummaryRowOrder = gdb.altSummaryRowOrder or {}
+
+    local seen = {}
+    local nextOrder = {}
+
+    for i = 1, #orderKeys do
+        local key = orderKeys[i]
+        if type(key) == "string" and key ~= "" and not seen[key] then
+            seen[key] = true
+            nextOrder[#nextOrder + 1] = key
+        end
+    end
+
+    local existing = gdb.altSummaryRowOrder[sectionKey]
+    if type(existing) == "table" then
+        for i = 1, #existing do
+            local key = existing[i]
+            if type(key) == "string" and key ~= "" and not seen[key] then
+                seen[key] = true
+                nextOrder[#nextOrder + 1] = key
+            end
+        end
+    end
+
+    gdb.altSummaryRowOrder[sectionKey] = nextOrder
     RefreshAfterAltSummaryOrderChange(self)
 end
 
