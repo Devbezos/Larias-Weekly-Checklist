@@ -235,10 +235,8 @@ function Addon:OpenRestoreHiddenCurrencies(anchor)
         f:SetFrameStrata("DIALOG")
         f:SetClampedToScreen(true)
         -- Close button
-        local xClose = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-        xClose:SetSize(18, 18)
-        xClose:SetPoint("TOPRIGHT", f, "TOPRIGHT", 2, 2)
-        xClose:SetScript("OnClick", function() f:Hide() end)
+        local xClose = Addon.Controls.NewCloseButton(f, function() f:Hide() end)
+        xClose:SetPoint("TOPRIGHT", f, "TOPRIGHT", -2, -2)
         f._rowFrames = {}
         self._restoreHiddenFrame = f
         -- Register with UISpecialFrames so ESC closes this window.

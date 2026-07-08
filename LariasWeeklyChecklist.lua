@@ -568,8 +568,6 @@ function Addon:OnEnable()
         self:PruneObsoleteSavedState()
     end
 
-    if self.StartBackgroundTracking then self:StartBackgroundTracking() end
-
     -- Record this character's class and level immediately on login so they
     -- appear in AltsSummary even if the main window is never opened.
     -- (Previously this only happened inside the CreateFrame callback.)
@@ -780,21 +778,25 @@ function Addon:OpenOptions()
 end
 
 -- Forces the main list panel to re-render; kept for call-site compatibility.
-function Addon:SelectMainTab()
+function Addon:SelectMainTab(_, skipRefresh)
     self:CreateFrame()
     if not frame then return end
     if scrollFrame and scrollFrame.SetShown then
         scrollFrame:SetShown(true)
     end
-    if self.ApplyTrackingPanelOptions then
-        self:ApplyTrackingPanelOptions()
-    elseif self.UpdateTracking then
-        self:UpdateTracking()
+    if IsFrameShown(frame) then
+        if self.ApplyTrackingPanelOptions then
+            self:ApplyTrackingPanelOptions()
+        elseif self.UpdateTracking then
+            self:UpdateTracking()
+        end
     end
-    if self.RequestRefresh then
-        self:RequestRefresh()
-    elseif self.Refresh then
-        self:Refresh()
+    if not skipRefresh then
+        if self.RequestRefresh then
+            self:RequestRefresh()
+        elseif self.Refresh then
+            self:Refresh()
+        end
     end
 end
 
@@ -1576,6 +1578,7 @@ local function ReleaseSectionFrame(sectionFrame)
     sectionFrame:ClearAllPoints()
     sectionFrame._sectionId = nil
     sectionFrame._index = nil
+    if sectionFrame._title then sectionFrame._title:SetText("") end
 
     if sectionFrame._checkboxes then
         for i = #sectionFrame._checkboxes, 1, -1 do
@@ -1586,18 +1589,38 @@ local function ReleaseSectionFrame(sectionFrame)
             checkbox._itemId = nil
             checkbox._dbKey = nil
             checkbox:SetScript("OnClick", nil)
+            if checkbox.text then checkbox.text:SetText("") end
+            if checkbox._label then checkbox._label:SetText("") end
             tinsert(Addon._checkboxPool, checkbox)
             sectionFrame._checkboxes[i] = nil
         end
     end
 
+    sectionFrame._header._sectionFrame = nil
     sectionFrame._header:SetScript("OnClick", nil)
     sectionFrame._header:SetScript("OnEnter", nil)
     sectionFrame._header:SetScript("OnLeave", nil)
+    if sectionFrame._titleHover then
+        sectionFrame._titleHover:EnableMouse(false)
+        sectionFrame._titleHover:SetScript("OnEnter", nil)
+        sectionFrame._titleHover:SetScript("OnLeave", nil)
+    end
     if sectionFrame._expandBtn then
         sectionFrame._expandBtn:SetScript("OnClick", nil)
+        sectionFrame._expandBtn:SetScript("OnEnter", nil)
+        sectionFrame._expandBtn:SetScript("OnLeave", nil)
+        sectionFrame._expandBtn._sectionFrame = nil
+        sectionFrame._expandBtn._opensWeekPicker = nil
     end
     tinsert(Addon._sectionPool, sectionFrame)
+end
+
+local function ReleaseActiveListFrames()
+    for i = #Addon._activeSections, 1, -1 do
+        ReleaseSectionFrame(Addon._activeSections[i])
+        Addon._activeSections[i] = nil
+    end
+    Wipe(Addon._sectionsIndexById)
 end
 
 local function AcquireCheckbox(parentSectionFrame)
@@ -1748,11 +1771,11 @@ local function EnsureCompletionPanel()
     if not (frame and scrollChild) then return nil end
 
     local panel = CreateFrame("Frame", nil, scrollChild)
-    panel:SetHeight(96)
+    panel:SetHeight(72)
     panel:Hide()
 
     local content = CreateFrame("Frame", nil, panel)
-    content:SetSize(220, 60)
+    content:SetSize(220, 28)
     content:SetPoint("CENTER", panel, "CENTER", 0, 0)
     panel._contentFrame = content
 
@@ -1760,31 +1783,6 @@ local function EnsureCompletionPanel()
     title:SetPoint("TOP", content, "TOP", 0, 0)
     title:SetText(L.COMPLETION_JOB_DONE or "Job's done.")
     panel._titleFS = title
-
-    local btn = Addon.Controls and Addon.Controls.NewActionButton
-        and Addon.Controls.NewActionButton(panel, 160, 24)
-        or CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
-    btn:SetSize(160, 24)
-    btn:SetText(L.COMPLETION_OPEN_ALT_SUMMARY or L.ALT_SUMMARY_TITLE or "Open Alt Summary")
-    btn:SetPoint("TOP", title, "BOTTOM", 0, -14)
-    btn:SetScript("OnClick", function()
-        if Addon.ToggleAltsSummary then
-            Addon:ToggleAltsSummary(frame)
-        end
-    end)
-    btn:SetScript("OnEnter", function(self_)
-        if Addon.AddonUtils and Addon.AddonUtils.SetTooltip then
-            Addon.AddonUtils.SetTooltip(self_, L.TOOLTIP_CLICK_TO_OPEN or "Click to open")
-        end
-    end)
-    btn:SetScript("OnLeave", function()
-        if Addon.AddonUtils and Addon.AddonUtils.HideTooltip then
-            Addon.AddonUtils.HideTooltip()
-        elseif GameTooltip then
-            GameTooltip:Hide()
-        end
-    end)
-    panel._altSummaryBtn = btn
 
     frame._lariasCompletionPanel = panel
     return panel
@@ -1805,17 +1803,10 @@ local function ShowCompletionPanel(show)
         panel._titleFS:SetText(L.COMPLETION_JOB_DONE or "Job's done.")
         panel._titleFS:SetTextColor(header.r, header.g, header.b, header.a or 1)
     end
-    if panel._altSummaryBtn then
-        panel._altSummaryBtn:SetText(L.COMPLETION_OPEN_ALT_SUMMARY or L.ALT_SUMMARY_TITLE or "Open Alt Summary")
-        if Addon.Controls and Addon.Controls.StyleButton then
-            Addon.Controls.StyleButton(panel._altSummaryBtn)
-        end
-    end
-
     local paddingX = Addon.UI.padOuterX or Addon.UI.sectionInsetX
     local sectionW = math.max(1, (scrollFrame and scrollFrame:GetWidth() or Addon.UI.frameW) - 2 * paddingX)
     local scrollH = (scrollFrame and scrollFrame.GetHeight and tonumber(scrollFrame:GetHeight())) or 0
-    local panelH = max(96, scrollH - (Addon.UI.sectionTopPad or 0) * 2)
+    local panelH = max(72, scrollH - (Addon.UI.sectionTopPad or 0) * 2)
     panel:ClearAllPoints()
     panel:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", paddingX, -Addon.UI.sectionTopPad)
     panel:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", -paddingX, -Addon.UI.sectionTopPad)
@@ -1831,8 +1822,7 @@ end
 
 function Addon:UpdateCompletionEasterEgg(db)
     -- When the list is fully complete (no visible sections remain after
-    -- hide-completed collapses them), show a compact completion message with
-    -- a button that opens the normal Alt Summary popup.
+    -- hide-completed collapses them), show a compact completion message.
     if not (frame and scrollFrame) then return end
 
     db = db or self:EnsureDB()
@@ -1899,8 +1889,10 @@ local function CalcDataSig(data)
     -- NOTE: This assumes list data doesn't mutate in-place without clearing __lariasSig.
     local cached = rawget(data, "__lariasSig")
     if type(cached) == "number" then
-        return cached
-    end
+    return cached
+end
+
+local RebuildDataIndex
 
     -- Memory-friendly signature: numeric hash, no big temp tables / concatenated strings.
     -- (Collision risk is extremely low for our static dataset; acceptable for change detection.)
@@ -2118,6 +2110,90 @@ local function OnHeaderClick(header)
     LayoutFrom(sectionFrame._index or 1)
 end
 
+local function ToggleHeaderPickerFromAnchor(anchor)
+    local p = (Addon._EnsureHeaderPicker and Addon._EnsureHeaderPicker())
+           or (frame and frame._lariasHeaderPicker)
+    if not (p and anchor) then return end
+    if p.IsShown and p:IsShown() then
+        p:Hide()
+        return
+    end
+    p:ClearAllPoints()
+    p:SetPoint("TOPRIGHT", anchor, "BOTTOMRIGHT", 0, -4)
+    p:Show()
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, Addon._PopulateHeaderPicker)
+    elseif Addon._PopulateHeaderPicker then
+        Addon._PopulateHeaderPicker()
+    end
+end
+
+function Addon:ShouldRedirectToAltsSummary(db)
+    db = db or self:EnsureDB()
+    if not self._order or #self._order == 0 then
+        local data = self.GetListData and self:GetListData()
+        if data and #data > 0 then
+            local sig = CalcDataSig(data)
+            RebuildDataIndex(data, sig)
+        end
+    end
+    return self:IsListComplete(db) == true
+end
+
+function Addon:OpenCompletionRedirectSummary()
+    self._pendingCompletionRedirect = nil
+    if frame and frame.IsShown and frame:IsShown() then
+        frame:Hide()
+    end
+    if self.OpenAltsSummary then
+        self:OpenAltsSummary(nil, { completionRedirect = true })
+    end
+end
+
+local function OnSectionExpandButtonClick(self_)
+    local sectionFrame = self_ and self_._sectionFrame
+    if not sectionFrame then return end
+
+    if self_._opensWeekPicker then
+        ToggleHeaderPickerFromAnchor(self_)
+        return
+    end
+
+    local sectionId = sectionFrame._sectionId
+    if not sectionId then return end
+    local coll = not IsSectionCollapsed(sectionId)
+    SetSectionCollapsed(sectionId, coll)
+    if not coll then
+        Addon._userExpandedCompleted[sectionId] = true
+    else
+        Addon._userExpandedCompleted[sectionId] = nil
+    end
+    if UpdateSectionVisuals then
+        UpdateSectionVisuals(sectionFrame, sectionId)
+    end
+    LayoutFrom(sectionFrame._index or 1)
+end
+
+local function OnPickerSectionHeaderClick(self_)
+    local sectionFrame = self_ and self_._sectionFrame
+    if not sectionFrame then return end
+    ToggleHeaderPickerFromAnchor(sectionFrame._expandBtn or sectionFrame._header)
+end
+
+local function OnSectionExpandButtonEnter(self_)
+    GameTooltip:SetOwner(self_, "ANCHOR_BOTTOMLEFT")
+    GameTooltip:SetText(L.CHANGE_WEEK_BUTTON or "Change Week", 1, 1, 1, 1, true)
+    GameTooltip:Show()
+end
+
+local function OnSectionExpandButtonLeave()
+    GameTooltip:Hide()
+end
+
+local function OnPickerSectionTitleHoverEnter(self_)
+    Addon.AddonUtils.SetTooltip(self_, L.PICKER_HEADER_TOOLTIP or "Click to change week", "ANCHOR_BOTTOMLEFT")
+end
+
 local function SyncCheckboxesForSection(sectionFrame, sectionId, db)
     -- Ensure the section frame has exactly one checkbox per item.
     -- This is only called when data changes or when new frames are created.
@@ -2299,14 +2375,14 @@ end
 -- Rebuilds _sectionsById, _order, and _dataSig when the dataset signature
 -- changes. Releases all active section frames so SyncSectionPool starts clean.
 -- Returns true if the data changed (callers use this to decide checkbox resync).
-local function RebuildDataIndex(data, sig)
+RebuildDataIndex = function(data, sig)
     local changed = (Addon._dataSig ~= sig)
                  or (not Addon._sectionsById)
                  or (not next(Addon._sectionsById))
     if not changed then return false end
 
-    Addon._sectionsById = {}
-    Addon._order        = {}
+    Wipe(Addon._sectionsById)
+    Wipe(Addon._order)
     for i = 1, #data do
         local section = data[i]
         Addon._sectionsById[section.id] = section
@@ -2368,22 +2444,11 @@ local function ApplySectionVisuals(want, haveBefore, dataChanged, database, chil
         end
         if sectionFrame._expandBtn then
             sectionFrame._expandBtn:SetFrameLevel(SECTION_FRAME_LEVEL + 2)
-            -- Wire OnClick here (not at creation) because sectionId is now known.
-            local capturedFrame   = sectionFrame
-            local capturedSection = Addon._order[i]
-            sectionFrame._expandBtn:SetScript("OnClick", function(self_)
-                local coll = not IsSectionCollapsed(capturedSection)
-                SetSectionCollapsed(capturedSection, coll)
-                if not coll then
-                    Addon._userExpandedCompleted[capturedSection] = true
-                else
-                    Addon._userExpandedCompleted[capturedSection] = nil
-                end
-                if UpdateSectionVisuals then
-                    UpdateSectionVisuals(capturedFrame, capturedSection)
-                end
-                LayoutFrom(capturedFrame._index or 1)
-            end)
+            sectionFrame._expandBtn._sectionFrame = sectionFrame
+            sectionFrame._expandBtn._opensWeekPicker = nil
+            sectionFrame._expandBtn:SetScript("OnClick", OnSectionExpandButtonClick)
+            sectionFrame._expandBtn:SetScript("OnEnter", nil)
+            sectionFrame._expandBtn:SetScript("OnLeave", nil)
         end
         sectionFrame._sectionId             = sectionId
         sectionFrame._index                 = i
@@ -2402,27 +2467,10 @@ local function ApplySectionVisuals(want, haveBefore, dataChanged, database, chil
         if isCurrentSec then
             -- Current/topmost week: clicking the section title opens the week picker.
             -- Expand/collapse still works via the expand button on the right.
-            local _capturedSF = sectionFrame
-            sectionFrame._header:SetScript("OnClick", function()
-                local p = (Addon._EnsureHeaderPicker and Addon._EnsureHeaderPicker())
-                       or (frame and frame._lariasHeaderPicker)
-                if not p then return end
-                if p.IsShown and p:IsShown() then p:Hide(); return end
-                p:ClearAllPoints()
-                local anchor = _capturedSF._expandBtn or _capturedSF._header
-                p:SetPoint("TOPRIGHT", anchor, "BOTTOMRIGHT", 0, -4)
-                p:Show()
-                if C_Timer and C_Timer.After then
-                    C_Timer.After(0, Addon._PopulateHeaderPicker)
-                elseif Addon._PopulateHeaderPicker then
-                    Addon._PopulateHeaderPicker()
-                end
-            end)
+            sectionFrame._header:SetScript("OnClick", OnPickerSectionHeaderClick)
             if sectionFrame._titleHover then
                 sectionFrame._titleHover:EnableMouse(true)
-                sectionFrame._titleHover:SetScript("OnEnter", function(self_)
-                    Addon.AddonUtils.SetTooltip(self_, L.PICKER_HEADER_TOOLTIP or "Click to change week", "ANCHOR_BOTTOMLEFT")
-                end)
+                sectionFrame._titleHover:SetScript("OnEnter", OnPickerSectionTitleHoverEnter)
                 sectionFrame._titleHover:SetScript("OnLeave", Addon.AddonUtils.HideTooltip)
             end
             -- Replace the right-side expand button behaviour with a week-picker
@@ -2430,26 +2478,10 @@ local function ApplySectionVisuals(want, haveBefore, dataChanged, database, chil
             -- with the picker (up when open, down when closed).
             if sectionFrame._expandBtn then
                 local btn = sectionFrame._expandBtn
-                btn:SetScript("OnClick", function()
-                    local p = (Addon._EnsureHeaderPicker and Addon._EnsureHeaderPicker())
-                           or (frame and frame._lariasHeaderPicker)
-                    if not p then return end
-                    if p.IsShown and p:IsShown() then p:Hide(); return end
-                    p:ClearAllPoints()
-                    p:SetPoint("TOPRIGHT", btn, "BOTTOMRIGHT", 0, -4)
-                    p:Show()
-                    if C_Timer and C_Timer.After then
-                        C_Timer.After(0, Addon._PopulateHeaderPicker)
-                    elseif Addon._PopulateHeaderPicker then
-                        Addon._PopulateHeaderPicker()
-                    end
-                end)
-                btn:SetScript("OnEnter", function(self_)
-                    GameTooltip:SetOwner(self_, "ANCHOR_BOTTOMLEFT")
-                    GameTooltip:SetText(L.CHANGE_WEEK_BUTTON or "Change Week", 1, 1, 1, 1, true)
-                    GameTooltip:Show()
-                end)
-                btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+                btn._opensWeekPicker = true
+                btn:SetScript("OnClick", OnSectionExpandButtonClick)
+                btn:SetScript("OnEnter", OnSectionExpandButtonEnter)
+                btn:SetScript("OnLeave", OnSectionExpandButtonLeave)
 
                 -- Sync glyph to picker visibility. NewExpandButton shows the
                 -- down glyph when its `_expanded` is true, but the picker code
@@ -2570,6 +2602,13 @@ function Addon:Refresh()
         self:UpdateTracking()
     end
 
+    local pendingCompletionRedirect = self._pendingCompletionRedirect
+    self._pendingCompletionRedirect = nil
+    if pendingCompletionRedirect and self.ShouldRedirectToAltsSummary and self:ShouldRedirectToAltsSummary() then
+        self:OpenCompletionRedirectSummary()
+        return
+    end
+
     -- Sync the change-week button label to whatever section is at the top of
     -- the viewport after the list has been (re)built and laid out.
     if self._refreshChangeWeekLabel and C_Timer and C_Timer.After then
@@ -2609,6 +2648,26 @@ local function RecordCharacterMetadata(self)
         for k in pairs(classes) do
             if not tostring(k):find(" %- ") then classes[k] = nil end
         end
+    end
+end
+
+local closedGarbageCollectQueued = false
+local function RunClosedGarbageCollect()
+    closedGarbageCollectQueued = false
+    if IsFrameShown(frame) then return end
+    if collectgarbage then
+        collectgarbage("collect")
+    end
+end
+
+local function CollectClosedGarbageSoon()
+    if closedGarbageCollectQueued then return end
+    closedGarbageCollectQueued = true
+
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0.25, RunClosedGarbageCollect)
+    else
+        RunClosedGarbageCollect()
     end
 end
 
@@ -2655,7 +2714,23 @@ function Addon:CreateFrame()
         if Addon._restoreHiddenFrame and Addon._restoreHiddenFrame.IsShown and Addon._restoreHiddenFrame:IsShown() then
             Addon._restoreHiddenFrame:Hide()
         end
+        if Addon._currencyConfigPopup and Addon._currencyConfigPopup.IsShown and Addon._currencyConfigPopup:IsShown() then
+            Addon._currencyConfigPopup:Hide()
+        end
+        if Addon.SuspendTrackingUI then
+            Addon:SuspendTrackingUI()
+        end
         if Addon.CharPicker and Addon.CharPicker.Close then Addon.CharPicker.Close() end
+        ReleaseActiveListFrames()
+        if Addon.ReleaseTrackingPanelRuntimeCaches then
+            Addon:ReleaseTrackingPanelRuntimeCaches()
+        elseif Addon.ReleaseCurrencyRuntimeCaches then
+            Addon:ReleaseCurrencyRuntimeCaches()
+        end
+        if Addon.ReleaseAltsSummaryRuntimeCaches then
+            Addon:ReleaseAltsSummaryRuntimeCaches()
+        end
+        CollectClosedGarbageSoon()
     end)
     -- Record this character's class, level, and ilvl on first open.
     RecordCharacterMetadata(self)
@@ -2731,17 +2806,32 @@ function Addon:Toggle()
     if frame:IsShown() then
         frame:Hide()
     else
+        local redirectToAltsSummary = self.ShouldRedirectToAltsSummary and self:ShouldRedirectToAltsSummary()
+        local asf = self._altsSummaryFrame
+        if redirectToAltsSummary then
+            if asf and asf.IsShown and asf:IsShown() then
+                asf:Hide()
+                return
+            end
+            self:BroadcastVersion(false)
+            self:RequestVersions(false)
+            if self.OpenAltsSummary then
+                self:OpenAltsSummary(nil, { completionRedirect = true })
+            end
+            return
+        end
+        self._pendingCompletionRedirect = true
         self:BroadcastVersion(false)
         self:RequestVersions(false)
         if self.SelectMainTab then
-            self:SelectMainTab(1)
+            self:SelectMainTab(1, true)
         end
+        frame:Show()
         if self.RequestRefresh then
             self:RequestRefresh()
         else
             self:Refresh()
         end
-        frame:Show()
     end
 end
 

@@ -9,6 +9,9 @@ local AU = Addon.AddonUtils
 local GetCurrencyIcon = AU.GetCurrencyIcon
 local GetCurrencyName = AU.GetCurrencyName
 local GetItemName = AU.GetItemName
+local MoveArrayEntry = AU.MoveArrayEntry
+local GetFrameCursorOffset = AU.GetFrameCursorOffset
+local CreateDragReorderController = AU.CreateDragReorderController
 
 -- ── Layout constants ──────────────────────────────────────────────────────────
 local PAD        = 8
@@ -444,6 +447,80 @@ local function ShowItemHideMenu(anchor, itemID)
     })
 end
 
+local function ShowSummaryRowContextMenu(anchor, row)
+    if not row then return end
+    if row.itemID then
+        ShowItemHideMenu(anchor, row.itemID)
+    elseif row.questKey then
+        Addon:ShowContextMenu(anchor, {
+            { text = L.CONTEXT_HIDE_THIS_ROW or "Hide this row", onClick = function()
+                Addon:SetQuestHidden(row.questKey, true)
+            end },
+        })
+    end
+end
+
+local function BuildSectionOrderMap(orderKeys)
+    local map = {}
+    for i = 1, #(orderKeys or {}) do
+        local key = orderKeys[i]
+        if type(key) == "string" and key ~= "" and map[key] == nil then
+            map[key] = i
+        end
+    end
+    return map
+end
+
+local function BuildAltSummaryRowKey(row)
+    if type(row) ~= "table" then return nil end
+    if type(row.rowKey) == "string" and row.rowKey ~= "" then
+        return row.rowKey
+    end
+    if row.currencyID then
+        return "currency:" .. tostring(tonumber(row.currencyID) or 0)
+    end
+    if row.questKey then
+        return "quest:" .. tostring(row.questKey)
+    end
+    if row.itemID then
+        return "item:" .. tostring(tonumber(row.itemID) or 0)
+    end
+    if row.type == "upgcost" then
+        return "upgcost:" .. tostring(tonumber(row.tierIdx) or 0)
+    end
+    if row.type == "gv" then
+        return "gv:" .. tostring(tonumber(row.gvBlock) or 0)
+    end
+    if row.type == "keystone" then
+        return "keystone"
+    end
+    return tostring(row.type or "row") .. ":" .. tostring(row.label or "")
+end
+
+local function BuildVisibleRowOrderKeys(rows)
+    local orderKeys = {}
+    for i = 1, #(rows or {}) do
+        local row = rows[i]
+        local rowKey = row and BuildAltSummaryRowKey(row)
+        if rowKey then
+            orderKeys[#orderKeys + 1] = rowKey
+        end
+    end
+    return orderKeys
+end
+
+local function BuildVisibleSectionOrderKeys(sections)
+    local orderKeys = {}
+    for i = 1, #(sections or {}) do
+        local section = sections[i]
+        local key = section and section.key
+        if type(key) == "string" and key ~= "" then
+            orderKeys[#orderKeys + 1] = key
+        end
+    end
+    return orderKeys
+end
+
 local function RefreshAfterCharVisibilityChange(panel)
     if Addon.CharPicker and Addon.CharPicker.Populate then Addon.CharPicker.Populate() end
     if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
@@ -528,8 +605,7 @@ local function EnsurePanel()
     -- Title strip.
     local titleBgTex = f:CreateTexture(nil, "BACKGROUND")
     titleBgTex:SetColorTexture(th.header.r, th.header.g, th.header.b, STYLE.sectionBandA * GetPanelChromeAlpha())
-    titleBgTex:SetPoint("TOPLEFT",  f, "TOPLEFT",  1, -1)
-    titleBgTex:SetPoint("TOPRIGHT", f, "TOPRIGHT", -1, -1)
+    titleBgTex:SetPoint("TOPLEFT",  f, "TOPLEFT", PAD - 6, -1)
     titleBgTex:SetHeight(TITLE_H + 2)
     f._altsTitleBgTex = titleBgTex
 
@@ -538,6 +614,15 @@ local function EnsurePanel()
     titleFS:SetTextColor(th.header.r, th.header.g, th.header.b, 1)
     titleFS:SetPoint("TOPLEFT", f, "TOPLEFT", PAD, -7)
     f._altsTitleFS = titleFS
+
+    local completionFS = MakeFS(f, 11, "")
+    completionFS:SetJustifyH("CENTER")
+    completionFS:SetJustifyV("TOP")
+    completionFS:SetPoint("TOPLEFT", f, "TOPLEFT", PAD, -(TITLE_H + 8))
+    completionFS:SetPoint("TOPRIGHT", f, "TOPRIGHT", -PAD - 28, -(TITLE_H + 8))
+    completionFS:SetText("Larias Checklist Complete. Displaying Alt Summary.")
+    completionFS:Hide()
+    f._altsCompletionNoticeFS = completionFS
 
     local closeBtn = Addon.Controls.NewCloseButton(f, function()
         if _gearPopupFrame then _gearPopupFrame:Hide() end
@@ -573,6 +658,12 @@ local function EnsurePanel()
     -- ESC via UISpecialFrames, or any other dismiss path).
     f:SetScript("OnHide", function()
         HideSummaryOverlays()
+        if f._dragReorderController then
+            f._dragReorderController:Clear()
+        end
+        if f._rowDragReorderController then
+            f._rowDragReorderController:Clear()
+        end
     end)
 
     -- Pool tables for reuse.
@@ -594,9 +685,16 @@ local function EnsurePanel()
     dragInsert:Hide()
     f._dragInsertTex = dragInsert
 
+    local rowDragInsert = f:CreateTexture(nil, "OVERLAY")
+    rowDragInsert:Hide()
+    f._rowDragInsertTex = rowDragInsert
+
     f:SetScript("OnUpdate", function(self_)
-        if self_._dragUpdate then
-            self_._dragUpdate(self_)
+        if self_._dragReorderController then
+            self_._dragReorderController:Update()
+        end
+        if self_._rowDragReorderController then
+            self_._rowDragReorderController:Update()
         end
     end)
 
@@ -672,26 +770,7 @@ local function BuildCharOrderKeys(chars)
 end
 
 local function MoveOrderKey(orderKeys, fromIdx, toIdx)
-    local count = #orderKeys
-    if count == 0 then return orderKeys end
-    fromIdx = math.max(1, math.min(count, tonumber(fromIdx) or 1))
-    toIdx   = math.max(1, math.min(count, tonumber(toIdx)   or fromIdx))
-    if fromIdx == toIdx then return orderKeys end
-
-    local moved = orderKeys[fromIdx]
-    table.remove(orderKeys, fromIdx)
-    table.insert(orderKeys, toIdx, moved)
-    return orderKeys
-end
-
-local function GetPanelCursorX(panel)
-    if not (panel and GetCursorPosition and panel.GetEffectiveScale) then return nil end
-    local cursorX = select(1, GetCursorPosition())
-    local left = panel:GetLeft()
-    if not (cursorX and left) then return nil end
-    local scale = panel:GetEffectiveScale()
-    if not scale or scale == 0 then scale = 1 end
-    return (cursorX / scale) - left
+    return MoveArrayEntry(orderKeys, fromIdx, toIdx)
 end
 
 local function HasHiddenSummaryChars(gdb, ownKey, allKeys, maxLvl)
@@ -770,14 +849,50 @@ end
 
 local function BuildRowDefs(tracking, LAYOUT, chars)
     local snapTypes = GetSnapTypes()
-    local rows = {}
-    local function addSec(lbl, action)  rows[#rows + 1] = { type = "sechdr", label = lbl, action = action } end
-    local function addRow(t, lbl, extra)
-        local r = { type = t, label = lbl }
-        if extra then for k, v in pairs(extra) do r[k] = v end end
-        rows[#rows + 1] = r
+    local sections = {}
+    local sectionByKey = {}
+    local currentSection = nil
+
+    local function ensureSection(key, label, action)
+        key = tostring(key or "")
+        if key == "" then return nil end
+        local section = sectionByKey[key]
+        if section then
+            if label then section.label = label end
+            if action ~= nil then section.action = action end
+            return section
+        end
+        section = {
+            key = key,
+            label = label,
+            action = action,
+            rows = {},
+            _addedAt = #sections + 1,
+        }
+        sections[#sections + 1] = section
+        sectionByKey[key] = section
+        return section
     end
-    -- Returns display name and tier RGB for crest tier i.
+
+    local function addSec(key, label, action)
+        currentSection = ensureSection(key, label, action)
+        return currentSection
+    end
+
+    local function addRow(t, lbl, extra)
+        if not currentSection then return nil end
+        local r = { type = t, label = lbl, sectionKey = currentSection.key }
+        if extra then
+            for k, v in pairs(extra) do
+                r[k] = v
+            end
+        end
+        r.rowKey = BuildAltSummaryRowKey(r)
+        r._addedAt = #currentSection.rows + 1
+        currentSection.rows[#currentSection.rows + 1] = r
+        return r
+    end
+
     local function CrestTierInfo(i)
         local name = (Addon.IlvlUtils and Addon.IlvlUtils.GetCrestTrackName(i))
                      or CREST_ABBREV[i] or ("Tier " .. i)
@@ -786,7 +901,7 @@ local function BuildRowDefs(tracking, LAYOUT, chars)
         return name, cr, cg, cb
     end
 
-    addSec(L.ALT_SUMMARY_SECTION_CURRENCIES or "Currencies", "currency")
+    addSec("currencies", L.ALT_SUMMARY_SECTION_CURRENCIES or "Currencies", "currency")
     if Addon.GetTrackedCurrencyEntries then
         for _, entry in ipairs(Addon:GetTrackedCurrencyEntries(false)) do
             local currencyID = tonumber(entry.id)
@@ -838,42 +953,60 @@ local function BuildRowDefs(tracking, LAYOUT, chars)
         end
     end
 
-    -- Quest rows (conditional on questID > 0).
-    local questIDs     = (tracking and tracking.questIDs)     or {}
+    local questIDs = (tracking and tracking.questIDs) or {}
     local questItemIDs = (tracking and tracking.questItemIDs) or {}
-    local L            = Addon.L or {}
+    local questsSection
+    local function ensureQuestSection()
+        if not questsSection then
+            questsSection = addSec("quests", L.ALT_SUMMARY_SECTION_QUESTS or "Quests", nil)
+        else
+            currentSection = questsSection
+        end
+    end
     local function addQuestRow(key, labelKey, fallback)
         if (tonumber(questIDs[key]) or 0) <= 0 then return end
         if Addon:IsQuestHidden(key) then return end
         local iID = tonumber(questItemIDs[key]) or 0
         if iID > 0 and Addon:IsItemHidden(iID) then return end
+        ensureQuestSection()
         local icon
         local qr, qg, qb
         if iID > 0 then
             _, icon, qr, qg, qb = GetCachedItemRowMeta(iID)
         end
-        addRow("quest", L[labelKey] or fallback, { questKey = key, itemID = iID > 0 and iID or nil, iconID = icon, cr = qr, cg = qg, cb = qb })
+        addRow("quest", L[labelKey] or fallback, {
+            questKey = key,
+            itemID = iID > 0 and iID or nil,
+            iconID = icon,
+            cr = qr,
+            cg = qg,
+            cb = qb,
+        })
     end
     addQuestRow("nullaeusSpoils", "TRACKING_QUEST_NULLAEUS_SPOILS", "Spoils of Nullaeus")
-    addQuestRow("weeklyPrey",     "TRACKING_QUEST_WEEKLY_PREY",     "Weekly Prey")
+    addQuestRow("weeklyPrey", "TRACKING_QUEST_WEEKLY_PREY", "Weekly Prey")
 
-    -- Build upgrade-cost rows only for tiers at least one visible character needs.
     do
         local addedUpgradeRows = false
         for i = 1, NUM_CRESTS do
             if AnyVisibleCharNeedsUpgradeCost(chars, i) then
                 if not addedUpgradeRows then
-                    addSec(L.ALT_SUMMARY_SECTION_UPGRADE_COST or "Upgrade Cost", nil)
+                    addSec("upgradecost", L.ALT_SUMMARY_SECTION_UPGRADE_COST or "Upgrade Cost", nil)
                     addedUpgradeRows = true
                 end
                 local name, cr, cg, cb = CrestTierInfo(i)
-                rows[#rows + 1] = { type = "upgcost", label = name, tierIdx = i, cr = cr, cg = cg, cb = cb }
+                addRow("upgcost", name, {
+                    tierIdx = i,
+                    cr = cr,
+                    cg = cg,
+                    cb = cb,
+                })
             end
         end
 
         if not Addon:IsItemHidden(268552) then
             if not addedUpgradeRows then
-                addSec(L.ALT_SUMMARY_SECTION_UPGRADE_COST or "Upgrade Cost", nil)
+                addSec("upgradecost", L.ALT_SUMMARY_SECTION_UPGRADE_COST or "Upgrade Cost", nil)
                 addedUpgradeRows = true
             end
             local combinedName, combinedTex, wr, wg, wb = GetCachedItemRowMeta(268552)
@@ -885,7 +1018,7 @@ local function BuildRowDefs(tracking, LAYOUT, chars)
         end
     end
 
-    addSec(L.TRACKING_GREAT_VAULT_TITLE or "Great Vault", "greatvault")
+    addSec("greatvault", L.TRACKING_GREAT_VAULT_TITLE or "Great Vault", "greatvault")
     addRow("keystone", L.ALT_SUMMARY_KEYSTONE or "Keystone", {})
     for gi = 1, 3 do
         if not Addon:IsGVBlockHidden(gi) then
@@ -893,7 +1026,53 @@ local function BuildRowDefs(tracking, LAYOUT, chars)
         end
     end
 
-    return rows
+    local sectionOrderMap = BuildSectionOrderMap(Addon.GetAltSummarySectionOrder and Addon:GetAltSummarySectionOrder() or {})
+    table.sort(sections, function(a, b)
+        local ai = sectionOrderMap[a.key]
+        local bi = sectionOrderMap[b.key]
+        if ai and bi then return ai < bi end
+        if ai then return true end
+        if bi then return false end
+        return (a._addedAt or 0) < (b._addedAt or 0)
+    end)
+
+    local rows = {}
+    local orderedSections = {}
+    for si = 1, #sections do
+        local section = sections[si]
+        if section and section.rows and #section.rows > 0 then
+            local rowOrderMap = BuildSectionOrderMap(Addon.GetAltSummaryRowOrder and Addon:GetAltSummaryRowOrder(section.key) or {})
+            table.sort(section.rows, function(a, b)
+                local ai = rowOrderMap[a.rowKey]
+                local bi = rowOrderMap[b.rowKey]
+                if ai and bi then return ai < bi end
+                if ai then return true end
+                if bi then return false end
+                return (a._addedAt or 0) < (b._addedAt or 0)
+            end)
+
+            orderedSections[#orderedSections + 1] = section
+            rows[#rows + 1] = {
+                type = "sechdr",
+                label = section.label,
+                action = section.action,
+                sectionKey = section.key,
+                rowKey = "section:" .. section.key,
+                section = section,
+            }
+            for ri = 1, #section.rows do
+                local row = section.rows[ri]
+                row.section = section
+                row.sectionKey = section.key
+                rows[#rows + 1] = row
+            end
+        end
+    end
+
+    return {
+        rows = rows,
+        sections = orderedSections,
+    }
 end
 
 -- ── Snap data factory ────────────────────────────────────────────────────
@@ -1573,7 +1752,10 @@ PopulateSummary = function(panel)
         _cachedRows = BuildRowDefs(tracking, LAYOUT, chars)
         _rowsDirty  = false
     end
-    local rows = _cachedRows
+    local rowBundle = _cachedRows or {}
+    local rows = rowBundle.rows or {}
+    local sections = rowBundle.sections or {}
+    panel._rowSections = sections
 
     -- ── Sizing ────────────────────────────────────────────────────────────────
     local totalContentH = 0
@@ -1584,9 +1766,17 @@ PopulateSummary = function(panel)
     local isInline = panel._inline
     local colW = COL_W
     local CONTENT_TOP, COL_HDR_TOP, ROWS_TOP, FOOTER_TOP, TOTAL_H
+    local showCompletionNotice = (not isInline) and panel._completionRedirect == true
     if panel._altsTitleBgTex then panel._altsTitleBgTex:SetShown(not isInline) end
     if panel._altsTitleFS    then panel._altsTitleFS:SetShown(not isInline)    end
     if panel._altsCloseBtn   then panel._altsCloseBtn:SetShown(not isInline)   end
+    if panel._altsCompletionNoticeFS then
+        panel._altsCompletionNoticeFS:SetShown(showCompletionNotice)
+        if showCompletionNotice then
+            panel._altsCompletionNoticeFS:SetText("Larias Checklist Complete. Displaying Alt Summary.")
+            panel._altsCompletionNoticeFS:SetTextColor(header.r, header.g, header.b, 0.92)
+        end
+    end
 
     local function HideDragIndicator()
         if panel._dragInsertTex then
@@ -1639,13 +1829,68 @@ PopulateSummary = function(panel)
         panel._dragInsertTex:Show()
     end
 
-    local function ClearDragState()
-        local state = panel._dragState
-        if state then
-            RestoreDraggedColumnVisual(state)
+    local function HideRowDragIndicator()
+        if panel._rowDragInsertTex then
+            panel._rowDragInsertTex:Hide()
         end
-        panel._dragState = nil
-        HideDragIndicator()
+    end
+
+    local function RestoreDraggedRowVisual(state)
+        local widget = state and state.widget
+        if not widget then return end
+        widget:SetAlpha(1)
+        if state.labelFS then
+            state.labelFS:SetAlpha(1)
+        end
+    end
+
+    local function ApplyDraggedRowVisual(state)
+        local widget = state and state.widget
+        if not widget then return end
+        widget:SetAlpha(0.35)
+        if state.labelFS then
+            state.labelFS:SetAlpha(0.35)
+        end
+    end
+
+    local function GetRowDropIndex(cursorPanelY, state)
+        local entries = state and state.entries
+        if not entries or #entries == 0 then return nil end
+        local cursorY = tonumber(cursorPanelY) or 0
+        for idx = 1, #entries do
+            local entry = entries[idx]
+            local topOffset = tonumber(entry and entry._dragTopOffset) or 0
+            local height = tonumber(entry and entry._dragHeight) or ROW_H
+            local midpoint = topOffset + (height * 0.5)
+            if cursorY <= midpoint then
+                return idx
+            end
+        end
+        return #entries + 1
+    end
+
+    local function ShowRowDragIndicator(targetIdx, state)
+        if not (panel._rowDragInsertTex and state and state.entries) then return end
+        local entries = state.entries
+        local count = #entries
+        if count <= 0 then return end
+        targetIdx = math.max(1, math.min(count + 1, tonumber(targetIdx) or 1))
+
+        local lineOffset
+        if targetIdx <= count then
+            lineOffset = tonumber(entries[targetIdx] and entries[targetIdx]._dragTopOffset) or 0
+        else
+            local lastEntry = entries[count]
+            lineOffset = (tonumber(lastEntry and lastEntry._dragTopOffset) or 0)
+                + (tonumber(lastEntry and lastEntry._dragHeight) or ROW_H)
+        end
+
+        panel._rowDragInsertTex:SetColorTexture(header.r, header.g, header.b, 0.9)
+        panel._rowDragInsertTex:ClearAllPoints()
+        panel._rowDragInsertTex:SetPoint("TOPLEFT", panel, "TOPLEFT", 1, -lineOffset)
+        panel._rowDragInsertTex:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -1, -lineOffset)
+        panel._rowDragInsertTex:SetHeight(2)
+        panel._rowDragInsertTex:Show()
     end
 
     -- Use the same theme colors as the main frame.  ApplyOpacity below supplies
@@ -1663,13 +1908,18 @@ PopulateSummary = function(panel)
             local h = Addon.THEME.header
             if panel._altsTitleBgTex then
                 panel._altsTitleBgTex:SetColorTexture(h.r, h.g, h.b, STYLE.sectionBandA * GetPanelChromeAlpha())
+                panel._altsTitleBgTex:ClearAllPoints()
+                panel._altsTitleBgTex:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD - 6, -1)
+                panel._altsTitleBgTex:SetWidth(math.max(32, (panel._altsTitleFS and panel._altsTitleFS:GetStringWidth() or 0) + 14))
+                panel._altsTitleBgTex:SetHeight(TITLE_H + 2)
             end
             if panel._altsTitleFS    then panel._altsTitleFS:SetTextColor(h.r, h.g, h.b, 1)          end
         end
     end
     if Addon.ApplyOpacity then Addon:ApplyOpacity() end
 
-    CONTENT_TOP = isInline and -PAD or -(TITLE_H + 4)
+    local completionNoticeOffset = showCompletionNotice and 18 or 0
+    CONTENT_TOP = isInline and -PAD or -(TITLE_H + 4 + completionNoticeOffset)
     local chromeA = GetPanelChromeAlpha()
     COL_HDR_TOP = CONTENT_TOP
     ROWS_TOP    = COL_HDR_TOP - COL_HDR_H - 2
@@ -1678,43 +1928,83 @@ PopulateSummary = function(panel)
     local TOTAL_W     = PAD + COL_LABEL + numChars * colW + RIGHT_PAD
 
     panel:SetSize(math.max(260, TOTAL_W), math.max(120, TOTAL_H))
-    panel._dragUpdate = function(self_)
-        local state = self_._dragState
-        if not state then return end
-
-        local leftDown = IsMouseButtonDown and IsMouseButtonDown("LeftButton")
-        if not leftDown then
-            local targetIdx = state.targetIdx or state.sourceIdx
-            if state.active and targetIdx and targetIdx ~= state.sourceIdx then
-                local orderKeys = BuildCharOrderKeys(chars)
-                MoveOrderKey(orderKeys, state.sourceIdx, targetIdx)
-                ClearDragState()
-                if Addon.SetAltSummaryCharOrder then
-                    Addon:SetAltSummaryCharOrder(orderKeys)
-                end
-                return
-            end
-            ClearDragState()
-            return
-        end
-
-        local cursorX = GetPanelCursorX(self_)
-        if not cursorX then return end
-
-        if not state.active then
-            if math.abs(cursorX - state.startX) < DRAG_THRESHOLD then
-                return
-            end
-            state.active = true
+    panel._dragReorderController = CreateDragReorderController(panel, {
+        threshold = DRAG_THRESHOLD,
+        getCursorValue = function(self_)
+            return GetFrameCursorOffset(self_, "x")
+        end,
+        hideIndicator = function()
+            HideDragIndicator()
+        end,
+        restoreDragVisual = function(state)
+            RestoreDraggedColumnVisual(state)
+        end,
+        onActivate = function()
             if panel._hoverRowTex then panel._hoverRowTex:Hide() end
             if panel._hoverColTex then panel._hoverColTex:Hide() end
             OnCellLeave()
+        end,
+        applyDragVisual = function(state)
             ApplyDraggedColumnVisual(state)
-        end
-
-        state.targetIdx = GetDropIndex(cursorX) or state.sourceIdx
-        ShowDragIndicator(state.targetIdx)
-    end
+        end,
+        getDropIndex = function(cursorX)
+            return GetDropIndex(cursorX)
+        end,
+        showIndicator = function(targetIdx)
+            ShowDragIndicator(targetIdx)
+        end,
+        onCommit = function(_, state, targetIdx)
+            local orderKeys = BuildCharOrderKeys(chars)
+            MoveOrderKey(orderKeys, state.sourceIdx, targetIdx)
+            if Addon.SetAltSummaryCharOrder then
+                Addon:SetAltSummaryCharOrder(orderKeys)
+            end
+        end,
+    })
+    panel._rowDragReorderController = CreateDragReorderController(panel, {
+        threshold = DRAG_THRESHOLD,
+        getCursorValue = function(self_)
+            return GetFrameCursorOffset(self_, "y")
+        end,
+        hideIndicator = function()
+            HideRowDragIndicator()
+        end,
+        restoreDragVisual = function(state)
+            RestoreDraggedRowVisual(state)
+        end,
+        onActivate = function()
+            if panel._hoverRowTex then panel._hoverRowTex:Hide() end
+            if panel._hoverColTex then panel._hoverColTex:Hide() end
+            OnCellLeave()
+        end,
+        applyDragVisual = function(state)
+            ApplyDraggedRowVisual(state)
+        end,
+        getDropIndex = function(cursorY, state)
+            return GetRowDropIndex(cursorY, state)
+        end,
+        showIndicator = function(targetIdx, state)
+            ShowRowDragIndicator(targetIdx, state)
+        end,
+        onCommit = function(_, state, targetIdx)
+            if not state then return end
+            if state.dragKind == "section" then
+                local orderKeys = BuildVisibleSectionOrderKeys(panel._rowSections)
+                MoveOrderKey(orderKeys, state.sourceIdx, targetIdx)
+                if Addon.SetAltSummarySectionOrder then
+                    Addon:SetAltSummarySectionOrder(orderKeys)
+                end
+                return
+            end
+            local sectionKey = state.sectionKey
+            if not sectionKey then return end
+            local orderKeys = BuildVisibleRowOrderKeys(state.entries)
+            MoveOrderKey(orderKeys, state.sourceIdx, targetIdx)
+            if Addon.SetAltSummaryRowOrder then
+                Addon:SetAltSummaryRowOrder(sectionKey, orderKeys)
+            end
+        end,
+    })
 
     -- Hide all pooled widgets from previous call.
     for _, t in ipairs(panel._divTexPool)  do t:Hide() end
@@ -1745,6 +2035,13 @@ PopulateSummary = function(panel)
         local t = panel._divTexPool[divCursor]
         t:ClearAllPoints()
         t:SetSize(0, 0)
+        if t.EnableMouse then t:EnableMouse(false) end
+        if t.SetScript then
+            t:SetScript("OnEnter", nil)
+            t:SetScript("OnLeave", nil)
+            t:SetScript("OnMouseDown", nil)
+            t:SetScript("OnMouseUp", nil)
+        end
         t:Show()
         return t
     end
@@ -1809,6 +2106,7 @@ PopulateSummary = function(panel)
         local h = panel._rowHitPool[hitCursor]
         h:ClearAllPoints()
         h:SetScript("OnEnter", nil)
+        h:SetScript("OnMouseDown", nil)
         h:SetScript("OnMouseUp", nil)
         h:SetScript("OnLeave", function()
             HideHover()
@@ -1897,11 +2195,24 @@ PopulateSummary = function(panel)
 
     -- Row labels (left column).
     local curRowY = ROWS_TOP
+    local sectionDragEntries = {}
+    local rowDragEntriesBySection = {}
     for ri, row in ipairs(rows) do
         local h = (row.type == "sechdr") and HDR_ROW_H or ROW_H
         local rowTop = curRowY
+        row._dragTopOffset = -rowTop
+        row._dragHeight = h
 
         if row.type == "sechdr" then
+            local sectionKey = row.sectionKey
+            local section = row.section
+            if section and section.rows then
+                row._dragHeight = h + (#section.rows * ROW_H)
+            end
+            sectionDragEntries[#sectionDragEntries + 1] = row
+            if section then
+                section._dragIndex = #sectionDragEntries
+            end
             local secBg = GetDiv()
             secBg:SetColorTexture(header.r, header.g, header.b, STYLE.sectionBandA * chromeA)
             secBg:SetPoint("TOPLEFT",  panel, "TOPLEFT",   1, curRowY)
@@ -1927,27 +2238,62 @@ PopulateSummary = function(panel)
             secFS:SetText(row.label)
             secFS:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD + 4, curRowY)
             secFS:SetSize(COL_LABEL - 4, h)
-            if row.action then
-                secBg:EnableMouse(true)
-                secBg:SetScript("OnMouseUp", function()
+            secBg:EnableMouse(true)
+            secBg:SetScript("OnMouseDown", function(_, button)
+                if button ~= "LeftButton" then return end
+                if not (IsAltKeyDown and IsAltKeyDown()) then return end
+                if not panel._rowDragReorderController then return end
+                panel._rowDragReorderController:Begin({
+                    dragKind = "section",
+                    sourceIdx = section and section._dragIndex or nil,
+                    targetIdx = section and section._dragIndex or nil,
+                    sectionKey = sectionKey,
+                    entries = sectionDragEntries,
+                    widget = secBg,
+                    labelFS = secFS,
+                })
+            end)
+            secBg:SetScript("OnMouseUp", function(s_, button)
+                if button == "LeftButton" then
+                    local state = panel._rowDragReorderController and panel._rowDragReorderController:GetState()
+                    if state and state.dragKind == "section" and state.sectionKey == sectionKey then
+                        panel._rowDragReorderController:Finish()
+                        return
+                    end
                     if row.action == "currency" then
                         ToggleCharacter("TokenFrame")
                     elseif row.action == "greatvault" then
                         Addon:ToggleGreatVault()
                     end
-                end)
-                secBg:SetScript("OnEnter", function(s_)
-                    ShowHover(rowTop, h - 1)
-                    GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
+                    return
+                end
+                if button == "RightButton" and row.action == "currency" and Addon.ToggleCurrencyConfigPopup then
+                    Addon:ToggleCurrencyConfigPopup(s_)
+                end
+            end)
+            secBg:SetScript("OnEnter", function(s_)
+                ShowHover(rowTop, h - 1)
+                GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
+                if row.action then
                     GameTooltip:SetText(L.TOOLTIP_CLICK_TO_OPEN or "Click to open", 1, 1, 1)
-                    GameTooltip:Show()
-                end)
-                secBg:SetScript("OnLeave", function()
-                    HideHover()
-                    GameTooltip:Hide()
-                end)
-            end
+                    if row.action == "currency" then
+                        GameTooltip:AddLine(L.CONTEXT_OPEN_CURRENCY_CONFIG or "Right-click to configure tracked currencies", 0.5, 0.5, 0.5)
+                    end
+                    GameTooltip:AddLine(L.ALT_SUMMARY_ALT_LEFT_CLICK_REORDER or "Alt+drag to reorder", 0.5, 0.5, 0.5)
+                else
+                    GameTooltip:SetText(L.ALT_SUMMARY_ALT_LEFT_CLICK_REORDER or "Alt+drag to reorder", 1, 1, 1)
+                end
+                GameTooltip:Show()
+            end)
+            secBg:SetScript("OnLeave", function()
+                HideHover()
+                GameTooltip:Hide()
+            end)
         else
+            local sectionKey = row.sectionKey
+            rowDragEntriesBySection[sectionKey] = rowDragEntriesBySection[sectionKey] or {}
+            rowDragEntriesBySection[sectionKey][#rowDragEntriesBySection[sectionKey] + 1] = row
+            row._sectionDragIndex = #rowDragEntriesBySection[sectionKey]
             local rowBg = GetDiv()
             if (ri % 2) == 0 then
                 rowBg:SetColorTexture(1, 1, 1, STYLE.rowLightA * chromeA)
@@ -1997,11 +2343,38 @@ PopulateSummary = function(panel)
 
             -- Transparent hit frame so hovering the label shows the currency tooltip.
             local cID = row.currencyID
+            local hit = GetHit()
+            hit:ClearAllPoints()
+            hit:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, curRowY)
+            hit:SetSize(COL_LABEL - PAD, h - 1)
+            hit:SetScript("OnMouseDown", function(_, button)
+                if button ~= "LeftButton" then return end
+                if not (IsAltKeyDown and IsAltKeyDown()) then return end
+                if not panel._rowDragReorderController then return end
+                panel._rowDragReorderController:Begin({
+                    dragKind = "row",
+                    sourceIdx = row._sectionDragIndex,
+                    targetIdx = row._sectionDragIndex,
+                    sectionKey = sectionKey,
+                    rowKey = row.rowKey,
+                    entries = rowDragEntriesBySection[sectionKey],
+                    widget = hit,
+                    labelFS = lblFS,
+                })
+            end)
+            hit:SetScript("OnMouseUp", function(s_, button)
+                if button == "LeftButton" then
+                    local state = panel._rowDragReorderController and panel._rowDragReorderController:GetState()
+                    if state and state.dragKind == "row" and state.rowKey == row.rowKey then
+                        panel._rowDragReorderController:Finish()
+                    end
+                    return
+                end
+                if button == "RightButton" then
+                    ShowSummaryRowContextMenu(s_, row)
+                end
+            end)
             if cID then
-                local hit = GetHit()
-                hit:ClearAllPoints()
-                hit:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, curRowY)
-                hit:SetSize(COL_LABEL - PAD, h - 1)
                 local _cid = tonumber(cID)
                 hit:SetScript("OnEnter", function(s_)
                     ShowHover(rowTop, h - 1)
@@ -2010,12 +2383,7 @@ PopulateSummary = function(panel)
                     GameTooltip:SetCurrencyByID(_cid)
                     GameTooltip:Show()
                 end)
-                hit:SetScript("OnMouseUp", nil)
             else
-                local hit = GetHit()
-                hit:ClearAllPoints()
-                hit:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, curRowY)
-                hit:SetSize(COL_LABEL - PAD, h - 1)
                 hit:SetScript("OnEnter", function()
                     ShowHover(rowTop, h - 1)
                 end)
@@ -2024,6 +2392,8 @@ PopulateSummary = function(panel)
 
         curRowY = curRowY - h
     end
+    panel._sectionDragEntries = sectionDragEntries
+    panel._rowDragEntriesBySection = rowDragEntriesBySection
 
     local chk = panel._summaryChk
     if chk then
@@ -2140,28 +2510,24 @@ PopulateSummary = function(panel)
             col.hdrHit:SetScript("OnMouseDown", function(s_, button)
                 if button ~= "LeftButton" then return end
                 if not (IsAltKeyDown and IsAltKeyDown()) then return end
-                ClearDragState()
-                local startX = GetPanelCursorX(panel)
-                if not startX then return end
-                panel._dragState = {
-                    active = false,
-                    startX = startX,
+                if not panel._dragReorderController then return end
+                panel._dragReorderController:Begin({
                     sourceIdx = ci,
                     targetIdx = ci,
                     charKey = _ck,
                     char = char,
                     col = col,
-                }
+                })
             end)
             col.hdrHit:SetScript("OnMouseUp", function(s_, button)
                 if button == "LeftButton" then
-                    local state = panel._dragState
+                    local state = panel._dragReorderController and panel._dragReorderController:GetState()
                     local shouldOpenGear = not state
                     if state and state.charKey == _ck and not state.active then
                         shouldOpenGear = true
                     end
-                    if state then
-                        ClearDragState()
+                    if state and panel._dragReorderController then
+                        panel._dragReorderController:Finish()
                     end
                     if shouldOpenGear then
                         if _gearPopupFrame and _gearPopupFrame:IsShown()
@@ -2241,22 +2607,13 @@ PopulateSummary = function(panel)
                     if existingOnEnter then existingOnEnter(s_) end
                 end)
 
+                local rowCurrencyID = row.currencyID
                 local hideItemID = row.itemID
                 local hideQuestKey = row.questKey
-                if hideItemID or hideQuestKey then
-                    local _itemID = hideItemID
-                    local _questKey = hideQuestKey
+                if rowCurrencyID or hideItemID or hideQuestKey then
                     cell:SetScript("OnMouseUp", function(s_, button)
                         if button ~= "RightButton" then return end
-                        if _itemID then
-                            ShowItemHideMenu(s_, _itemID)
-                        elseif _questKey then
-                            Addon:ShowContextMenu(s_, {
-                                { text = L.CONTEXT_HIDE_THIS_ROW or "Hide this row", onClick = function()
-                                    Addon:SetQuestHidden(_questKey, true)
-                                end },
-                            })
-                        end
+                        ShowSummaryRowContextMenu(s_, row)
                     end)
                 else
                     cell:SetScript("OnMouseUp", nil)
@@ -2281,8 +2638,9 @@ end
 
 -- ── Public API ────────────────────────────────────────────────────────────────
 
-function Addon:OpenAltsSummary(anchorFrame)
+function Addon:OpenAltsSummary(anchorFrame, opts)
     local f = EnsurePanel()
+    opts = opts or {}
     if (not self.HasTrackingSnapshot or not self:HasTrackingSnapshot()) and self.UpdateSnapshotBackground then
         self:UpdateSnapshotBackground()
     end
@@ -2299,15 +2657,30 @@ function Addon:OpenAltsSummary(anchorFrame)
         f:SetClampedToScreen(true)
     end
     f._inline  = false
-    if _panelDirty or _rowsDirty or not f._lariasAltSummaryPopulated then
-        PopulateSummary(f)
-    end
+    f._completionRedirect = opts.completionRedirect == true
+    PopulateSummary(f)
     f:Show()
 end
 
 function Addon:CloseAltsSummary()
     if altSummaryFrame then altSummaryFrame:Hide() end
     if _gearPopupFrame then _gearPopupFrame:Hide() end
+end
+
+function Addon:ReleaseAltsSummaryRuntimeCaches()
+    _cachedRows = nil
+    _layout = nil
+    _rowsDirty = true
+    _panelDirty = true
+    if altSummaryFrame and not (altSummaryFrame.IsShown and altSummaryFrame:IsShown()) then
+        if altSummaryFrame._dragReorderController then
+            altSummaryFrame._dragReorderController:Clear()
+        end
+        if altSummaryFrame._rowDragReorderController then
+            altSummaryFrame._rowDragReorderController:Clear()
+        end
+        HideSummaryOverlays()
+    end
 end
 
 function Addon:ToggleAltsSummary(anchorFrame)

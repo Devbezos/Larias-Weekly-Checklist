@@ -49,13 +49,27 @@ local function IsItemEmbellished(itemLink)
     return false
 end
 
-local function CopySlotData(slotData)
-    if type(slotData) ~= "table" then return nil end
-    local copy = {}
-    for k, v in pairs(slotData) do
-        copy[k] = v
+local function WipeArray(t)
+    if type(t) ~= "table" then return {} end
+    for i = #t, 1, -1 do
+        t[i] = nil
     end
-    return copy
+    return t
+end
+
+local _checkedTiers = {}
+
+local function CopyTableFields(dst, src)
+    if type(dst) ~= "table" then dst = {} end
+    for k in pairs(dst) do
+        dst[k] = nil
+    end
+    if type(src) == "table" then
+        for k, v in pairs(src) do
+            dst[k] = v
+        end
+    end
+    return dst
 end
 
 local function GetSlotWatermarkScore(slotData)
@@ -145,10 +159,13 @@ function Addon:BuildTrackingSnapshot(snap)
 
     -- Equipment slots: full item data for the gear popup and upgrade-cost rows.
     -- tier and rank are derived from the equipped item's ilvl using IlvlUtils.
-    local previousBestGearSlots = type(snap.bestGearSlots) == "table" and snap.bestGearSlots
-                               or type(snap.gearSlots) == "table" and snap.gearSlots
-                               or nil
-    snap.gearSlots = {}
+    local previousBestGearSlots = type(snap.bestGearSlots) == "table" and snap.bestGearSlots or nil
+    local previousGearSlots = type(snap.gearSlots) == "table" and snap.gearSlots or nil
+    if not previousBestGearSlots then
+        previousBestGearSlots = previousGearSlots
+    end
+    snap.gearSlots = snap.gearSlots or {}
+    local gearSlots = snap.gearSlots
     local snapSlotIDs = (Addon.TRACKING and Addon.TRACKING.gearSlotIDs)
                         or {1,2,3,5,6,7,8,9,10,11,12,13,14,15,16,17}
     local maxRankCount = Addon.TRACKING and Addon.TRACKING.ilvlRankOffsets
@@ -179,14 +196,32 @@ function Addon:BuildTrackingSnapshot(snap)
             end
         end
 
-        snap.gearSlots[sid] = {
-            link          = link,
-            ilvl          = ilvl,
-            rank          = rank,
-            maxRank       = maxRank,
-            tierIdx       = tierIdx,
-            isEmbellished = IsItemEmbellished(link) or nil,
-        }
+        local slotData = gearSlots[sid]
+        if not slotData then
+            slotData = {}
+            gearSlots[sid] = slotData
+        end
+        slotData.link = link
+        slotData.ilvl = ilvl
+        slotData.rank = rank
+        slotData.maxRank = maxRank
+        slotData.tierIdx = tierIdx
+        slotData.isEmbellished = IsItemEmbellished(link) or nil
+        slotData.trueMaxRank = nil
+        slotData.upgradeInfoUnavailable = nil
+        slotData.upgradeCostRemaining = nil
+    end
+    for sid in pairs(gearSlots) do
+        local keep = false
+        for _, wantedSid in ipairs(snapSlotIDs) do
+            if wantedSid == sid then
+                keep = true
+                break
+            end
+        end
+        if not keep then
+            gearSlots[sid] = nil
+        end
     end
 
     -- Weapon slot comparison: prefer 2H (slot 16 only) over dual-wield (slots 16+17)
@@ -194,14 +229,24 @@ function Addon:BuildTrackingSnapshot(snap)
     -- The link-gated fallback above already keeps slot 17 at ilvl=0 for 2H users;
     -- this block is a safety net in case any stray ilvl bled through.
     do
-        local ws16 = snap.gearSlots[16]
-        local ws17 = snap.gearSlots[17]
+        local ws16 = gearSlots[16]
+        local ws17 = gearSlots[17]
         if ws16 and ws17 then
             local ilvl16 = ws16.ilvl or 0
             local ilvl17 = ws17.ilvl or 0
             -- If 2H is highest (slot 17 has no real link but echoed an ilvl), clear it.
             if ilvl16 > 0 and ilvl16 >= ilvl17 and not ws17.link then
-                snap.gearSlots[17] = { link=nil, ilvl=0, rank=nil, maxRank=nil, tierIdx=nil }
+                local cleared = gearSlots[17] or {}
+                gearSlots[17] = cleared
+                cleared.link = nil
+                cleared.ilvl = 0
+                cleared.rank = nil
+                cleared.maxRank = nil
+                cleared.tierIdx = nil
+                cleared.isEmbellished = nil
+                cleared.trueMaxRank = nil
+                cleared.upgradeInfoUnavailable = nil
+                cleared.upgradeCostRemaining = nil
             end
         end
     end
@@ -210,15 +255,15 @@ function Addon:BuildTrackingSnapshot(snap)
     -- WoW only returns reliable upgrade details in some contexts, so missing or
     -- empty API data must not mark an item as capped.  When details are missing,
     -- Alt Summary falls back to rank math and default crest costs.
-    snap.upgradeCostPerStep = {}
+    snap.upgradeCostPerStep = WipeArray(snap.upgradeCostPerStep)
     snap.upgradeDetailsAvailable = false
     if API.ItemUpgrade and API.ItemUpgrade.SetItemUpgradeFromLocation
             and API.ItemUpgrade.GetItemUpgradeItemInfo and API.ItemLocation then
         local TRACKING = Addon.TRACKING
         local crestIDs = TRACKING and TRACKING.crestCurrencyIDs
-        local checkedTiers = {}
+        local checkedTiers = WipeArray(_checkedTiers)
         for _, sid in ipairs(snapSlotIDs) do
-            local gs = snap.gearSlots[sid]
+            local gs = gearSlots[sid]
             if gs and gs.link and gs.tierIdx and gs.rank and gs.maxRank then
                 local tierIdx = gs.tierIdx
                 local crestID = crestIDs and crestIDs[tierIdx]
@@ -255,8 +300,8 @@ function Addon:BuildTrackingSnapshot(snap)
                                 local newRank = Addon.IlvlUtils
                                     and Addon.IlvlUtils.GetRank(gs.ilvl, actualTierIdx)
                                 if newRank then
-                                    snap.gearSlots[sid].tierIdx = actualTierIdx
-                                    snap.gearSlots[sid].rank    = newRank
+                                    gearSlots[sid].tierIdx = actualTierIdx
+                                    gearSlots[sid].rank    = newRank
                                     gs.tierIdx = actualTierIdx
                                     gs.rank    = newRank
                                     tierIdx    = actualTierIdx
@@ -271,15 +316,15 @@ function Addon:BuildTrackingSnapshot(snap)
                         local nLevels     = #info.upgradeLevelInfos
                         local trueMaxRank = (nLevels > 0) and (gs.rank + nLevels) or nil
                         if trueMaxRank and trueMaxRank < gs.maxRank then
-                            snap.gearSlots[sid].trueMaxRank = trueMaxRank
+                            gearSlots[sid].trueMaxRank = trueMaxRank
                         end
                         -- Void-upgraded / otherwise capped items can share ilvls with the
                         -- first ranks of the next crest track. When WoW reports the item
                         -- is already at its upgrade cap, trust that over ilvl-derived
                         -- track math so the item does not appear crest-upgradeable.
                         if maxUpgrade > 0 and currentUpgrade > 0 and currentUpgrade >= maxUpgrade and nLevels == 0 then
-                            snap.gearSlots[sid].trueMaxRank = gs.rank
-                            snap.gearSlots[sid].upgradeCostRemaining = 0
+                            gearSlots[sid].trueMaxRank = gs.rank
+                            gearSlots[sid].upgradeCostRemaining = 0
                         end
 
                         if crestID and nLevels > 0 then
@@ -306,12 +351,12 @@ function Addon:BuildTrackingSnapshot(snap)
                             end
                         end
                         if sawRemainingCrestCost then
-                            snap.gearSlots[sid].upgradeCostRemaining = remainingCrestCost
+                            gearSlots[sid].upgradeCostRemaining = remainingCrestCost
                         end
 
                         -- Capture per-tier cost from the first upgradable slot found.
                         if crestID and not checkedTiers[tierIdx]
-                                and snap.gearSlots[sid].rank < snap.gearSlots[sid].maxRank then
+                                and gearSlots[sid].rank < gearSlots[sid].maxRank then
                             if levelInfo and levelInfo.currencyCostsToUpgrade then
                                 for _, ce in ipairs(levelInfo.currencyCostsToUpgrade) do
                                     if ce.currencyID == crestID then
@@ -325,28 +370,50 @@ function Addon:BuildTrackingSnapshot(snap)
                     else
                         -- No reliable item-upgrade details for this slot. Leave
                         -- trueMaxRank unset so display code uses the normal tier cap.
-                        snap.gearSlots[sid].upgradeInfoUnavailable = true
+                        gearSlots[sid].upgradeInfoUnavailable = true
                     end
                 end)
                 if not upgradeReadOK then
-                    snap.gearSlots[sid].upgradeInfoUnavailable = true
+                    gearSlots[sid].upgradeInfoUnavailable = true
                 end
             end
         end
         if API.ItemUpgrade.ClearItemUpgrade then API.ItemUpgrade.ClearItemUpgrade() end
     end
 
-    snap.bestGearSlots = {}
+    snap.bestGearSlots = snap.bestGearSlots or {}
+    local bestGearSlots = snap.bestGearSlots
     for _, sid in ipairs(snapSlotIDs) do
-        local currentSlot = snap.gearSlots[sid]
+        local currentSlot = gearSlots[sid]
         local previousSlot = previousBestGearSlots and previousBestGearSlots[sid]
-        if ShouldReplaceWatermarkSlot(currentSlot, previousSlot) then
-            snap.bestGearSlots[sid] = currentSlot
-        else
-            snap.bestGearSlots[sid] = CopySlotData(previousSlot) or CopySlotData(currentSlot)
+        local sourceSlot = ShouldReplaceWatermarkSlot(currentSlot, previousSlot) and currentSlot
+            or previousSlot or currentSlot
+        if sourceSlot ~= bestGearSlots[sid] then
+            bestGearSlots[sid] = CopyTableFields(bestGearSlots[sid], sourceSlot)
+        end
+    end
+    for sid in pairs(bestGearSlots) do
+        local keep = false
+        for _, wantedSid in ipairs(snapSlotIDs) do
+            if wantedSid == sid then
+                keep = true
+                break
+            end
+        end
+        if not keep then
+            bestGearSlots[sid] = nil
         end
     end
 
     -- Right-column rows can depend on the gear watermark, so save them last.
-    Addon:FillCurrencySnapshot(snap)
+    -- Be defensive here: snapshot capture can be requested during partial init,
+    -- and we never want a missing currency hook to break the whole addon.
+    if type(Addon.FillCurrencySnapshot) == "function" then
+        Addon:FillCurrencySnapshot(snap)
+    else
+        snap.rightRows = snap.rightRows or {}
+        for i = #snap.rightRows, 1, -1 do
+            snap.rightRows[i] = nil
+        end
+    end
 end

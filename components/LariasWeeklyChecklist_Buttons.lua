@@ -140,6 +140,16 @@ end
 function C.NewCloseButton(parent, onClick)
     local btn = CreateFrame("Button", nil, parent)
     btn:SetSize(20, 20)
+    if btn.SetHitRectInsets then
+        -- Make the button easier to click when it sits near drag bars or tight edges.
+        btn:SetHitRectInsets(-4, -4, -4, -4)
+    end
+    if parent and parent.GetFrameLevel and btn.SetFrameLevel then
+        btn:SetFrameLevel((tonumber(parent:GetFrameLevel()) or 0) + 10)
+    end
+    if btn.RegisterForClicks then
+        btn:RegisterForClicks("LeftButtonUp")
+    end
     ApplyFixedBackdrop(btn)
 
     -- Fixed colors: intentionally NOT driven by theme so the × never changes

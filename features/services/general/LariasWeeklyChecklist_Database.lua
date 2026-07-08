@@ -115,6 +115,8 @@ function Addon:SetupAddonDB()
             hiddenChars   = {},  -- [profileKey] = true
             trackedLootChars = {}, -- [profileKey] = true
             altSummaryCharOrder = {}, -- ordered profileKeys for manual Alt Summary priority
+            altSummarySectionOrder = {}, -- ordered section keys for Alt Summary categories
+            altSummaryRowOrder = {}, -- [sectionKey] = ordered row keys for Alt Summary rows
             -- Account-wide display preferences.
             hideCompletedSections = true,
             showGreatVault        = true,
@@ -164,15 +166,26 @@ local function RefreshAfterTrackedCurrencyConfigChange(self)
     if self.RefreshCurrencyConfigPopup then self:RefreshCurrencyConfigPopup() end
 end
 
-local function BuildDefaultTrackedCurrencyConfig(self)
+local BUILTIN_TRACKED_ITEM_ENTRIES = {
+    {
+        itemID = 268552,
+        enabled = true,
+        source = "builtin-item",
+        kind = "item",
+    },
+}
+
+local function GetBuiltInTrackedConfigEntries(self)
     local tracking = self and self.TRACKING or {}
     local out = {}
     local seen = {}
 
-    local function push(id)
+    local function pushCurrency(id)
         id = tonumber(id)
-        if not (id and id > 0) or seen[id] then return end
-        seen[id] = true
+        if not (id and id > 0) then return false end
+        local key = "currency:" .. id
+        if seen[key] then return false end
+        seen[key] = true
         out[#out + 1] = { id = id, enabled = true, source = "builtin" }
         if #out >= MAX_TRACKED_CURRENCIES then return true end
         return false
@@ -181,22 +194,43 @@ local function BuildDefaultTrackedCurrencyConfig(self)
     local crestIDs = tracking and tracking.crestCurrencyIDs
     if type(crestIDs) == "table" then
         for i = 1, #crestIDs do
-            if push(crestIDs[i]) then return out end
+            if pushCurrency(crestIDs[i]) then return out end
         end
     end
 
-    if push(tracking and tracking.catalystCurrencyID) then return out end
-    if push(tracking and tracking.sparkCurrencyID)    then return out end
-    if push(tracking and tracking.cofferKeysDisplayCurrencyID) then return out end
+    if pushCurrency(tracking and tracking.catalystCurrencyID) then return out end
+    if pushCurrency(tracking and tracking.sparkCurrencyID)    then return out end
+    if pushCurrency(tracking and tracking.cofferKeysDisplayCurrencyID) then return out end
 
     local miscIDs = tracking and tracking.miscCurrencyIDs
     if type(miscIDs) == "table" then
         for i = 1, #miscIDs do
-            if push(miscIDs[i]) then return out end
+            if pushCurrency(miscIDs[i]) then return out end
+        end
+    end
+
+    for i = 1, #BUILTIN_TRACKED_ITEM_ENTRIES do
+        local entry = BUILTIN_TRACKED_ITEM_ENTRIES[i]
+        local itemID = tonumber(entry and entry.itemID)
+        if itemID then
+            local key = "item:" .. itemID
+            if not seen[key] then
+                seen[key] = true
+                out[#out + 1] = {
+                    itemID = itemID,
+                    enabled = entry.enabled ~= false,
+                    source = entry.source or "builtin-item",
+                    kind = entry.kind or "item",
+                }
+            end
         end
     end
 
     return out
+end
+
+local function BuildDefaultTrackedCurrencyConfig(self)
+    return GetBuiltInTrackedConfigEntries(self)
 end
 
 local function IsBuiltInTrackedCurrencyID(self, currencyID)
@@ -225,6 +259,17 @@ local function IsBuiltInTrackedCurrencyID(self, currencyID)
     return false
 end
 
+local function IsBuiltInTrackedItemID(itemID)
+    itemID = tonumber(itemID)
+    if not itemID then return false end
+    for i = 1, #BUILTIN_TRACKED_ITEM_ENTRIES do
+        if tonumber(BUILTIN_TRACKED_ITEM_ENTRIES[i].itemID) == itemID then
+            return true
+        end
+    end
+    return false
+end
+
 function Addon:IsBuiltInTrackedCurrencyID(currencyID)
     return IsBuiltInTrackedCurrencyID(self, currencyID)
 end
@@ -236,22 +281,36 @@ local function NormalizeTrackedCurrencyConfig(self, entries, allowEmpty)
     if type(entries) == "table" then
         for i = 1, #entries do
             local entry = entries[i]
-            local id = type(entry) == "table"
-                and tonumber(entry.id or entry.currencyID)
-                or tonumber(entry)
-            if id and id > 0 and not seen[id] then
-                seen[id] = true
-                local source = "custom"
-                if type(entry) == "table" and entry.source == "custom" then
-                    source = "custom"
-                elseif IsBuiltInTrackedCurrencyID(self, id) then
-                    source = "builtin"
+            local id = type(entry) == "table" and tonumber(entry.id or entry.currencyID) or tonumber(entry)
+            local itemID = type(entry) == "table" and tonumber(entry.itemID) or nil
+
+            if itemID and itemID > 0 then
+                local key = "item:" .. itemID
+                if not seen[key] then
+                    seen[key] = true
+                    out[#out + 1] = {
+                        itemID = itemID,
+                        enabled = not (type(entry) == "table" and entry.enabled == false),
+                        source = (type(entry) == "table" and entry.source) or (IsBuiltInTrackedItemID(itemID) and "builtin-item") or "custom-item",
+                        kind = (type(entry) == "table" and entry.kind) or "item",
+                    }
                 end
-                out[#out + 1] = {
-                    id = id,
-                    enabled = not (type(entry) == "table" and entry.enabled == false),
-                    source = source,
-                }
+            elseif id and id > 0 then
+                local key = "currency:" .. id
+                if not seen[key] then
+                    seen[key] = true
+                    local source = "custom"
+                    if type(entry) == "table" and entry.source == "custom" then
+                        source = "custom"
+                    elseif IsBuiltInTrackedCurrencyID(self, id) then
+                        source = "builtin"
+                    end
+                    out[#out + 1] = {
+                        id = id,
+                        enabled = not (type(entry) == "table" and entry.enabled == false),
+                        source = source,
+                    }
+                end
             end
         end
     end
@@ -268,23 +327,36 @@ local function RestoreMissingBuiltInTrackedCurrencies(self, entries)
 
     local seen = {}
     for i = 1, #entries do
-        local id = tonumber(entries[i] and entries[i].id)
+        local entry = entries[i]
+        local id = tonumber(entry and entry.id)
+        local itemID = tonumber(entry and entry.itemID)
         if id and id > 0 then
-            seen[id] = true
+            seen["currency:" .. id] = true
+        elseif itemID and itemID > 0 then
+            seen["item:" .. itemID] = true
         end
     end
 
-    local builtIns = BuildDefaultTrackedCurrencyConfig(self)
+    local builtIns = GetBuiltInTrackedConfigEntries(self)
     for i = 1, #builtIns do
         local entry = builtIns[i]
         local id = tonumber(entry and entry.id)
-        if id and id > 0 and not seen[id] then
+        local itemID = tonumber(entry and entry.itemID)
+        if id and id > 0 and not seen["currency:" .. id] then
             entries[#entries + 1] = {
                 id = id,
                 enabled = false,
                 source = "builtin",
             }
-            seen[id] = true
+            seen["currency:" .. id] = true
+        elseif itemID and itemID > 0 and not seen["item:" .. itemID] then
+            entries[#entries + 1] = {
+                itemID = itemID,
+                enabled = false,
+                source = entry.source or "builtin-item",
+                kind = entry.kind or "item",
+            }
+            seen["item:" .. itemID] = true
         end
     end
 
@@ -292,6 +364,10 @@ local function RestoreMissingBuiltInTrackedCurrencies(self, entries)
 end
 
 local function RefreshAfterAltSummaryOrderChange(self)
+    if self.MarkAltsSummaryDirty then
+        self:MarkAltsSummaryDirty(true)
+        return
+    end
     if self.RefreshAltsSummary then
         self:RefreshAltsSummary()
     elseif self.RequestRefresh then
@@ -520,8 +596,10 @@ function Addon:GetTrackedCurrencyConfig()
         local entry = gdb.trackedCurrencyConfig[i]
         out[i] = {
             id = entry.id,
+            itemID = entry.itemID,
             enabled = entry.enabled ~= false,
             source = entry.source,
+            kind = entry.kind,
         }
     end
     return out
@@ -578,6 +656,109 @@ function Addon:SetAltSummaryCharOrder(orderKeys)
     end
 
     gdb.altSummaryCharOrder = nextOrder
+    RefreshAfterAltSummaryOrderChange(self)
+end
+
+function Addon:GetAltSummarySectionOrder()
+    local gdb = self.db and self.db.global
+    local order = gdb and gdb.altSummarySectionOrder
+    if type(order) ~= "table" then return {} end
+
+    local seen = {}
+    local result = {}
+    for i = 1, #order do
+        local key = order[i]
+        if type(key) == "string" and key ~= "" and not seen[key] then
+            seen[key] = true
+            result[#result + 1] = key
+        end
+    end
+    return result
+end
+
+function Addon:SetAltSummarySectionOrder(orderKeys)
+    if type(orderKeys) ~= "table" then return end
+    local gdb = self.db and self.db.global
+    if not gdb then return end
+
+    local seen = {}
+    local nextOrder = {}
+
+    for i = 1, #orderKeys do
+        local key = orderKeys[i]
+        if type(key) == "string" and key ~= "" and not seen[key] then
+            seen[key] = true
+            nextOrder[#nextOrder + 1] = key
+        end
+    end
+
+    local existing = gdb.altSummarySectionOrder
+    if type(existing) == "table" then
+        for i = 1, #existing do
+            local key = existing[i]
+            if type(key) == "string" and key ~= "" and not seen[key] then
+                seen[key] = true
+                nextOrder[#nextOrder + 1] = key
+            end
+        end
+    end
+
+    gdb.altSummarySectionOrder = nextOrder
+    RefreshAfterAltSummaryOrderChange(self)
+end
+
+function Addon:GetAltSummaryRowOrder(sectionKey)
+    sectionKey = tostring(sectionKey or "")
+    if sectionKey == "" then return {} end
+
+    local gdb = self.db and self.db.global
+    local orderMap = gdb and gdb.altSummaryRowOrder
+    local order = type(orderMap) == "table" and orderMap[sectionKey] or nil
+    if type(order) ~= "table" then return {} end
+
+    local seen = {}
+    local result = {}
+    for i = 1, #order do
+        local key = order[i]
+        if type(key) == "string" and key ~= "" and not seen[key] then
+            seen[key] = true
+            result[#result + 1] = key
+        end
+    end
+    return result
+end
+
+function Addon:SetAltSummaryRowOrder(sectionKey, orderKeys)
+    sectionKey = tostring(sectionKey or "")
+    if sectionKey == "" or type(orderKeys) ~= "table" then return end
+
+    local gdb = self.db and self.db.global
+    if not gdb then return end
+    gdb.altSummaryRowOrder = gdb.altSummaryRowOrder or {}
+
+    local seen = {}
+    local nextOrder = {}
+
+    for i = 1, #orderKeys do
+        local key = orderKeys[i]
+        if type(key) == "string" and key ~= "" and not seen[key] then
+            seen[key] = true
+            nextOrder[#nextOrder + 1] = key
+        end
+    end
+
+    local existing = gdb.altSummaryRowOrder[sectionKey]
+    if type(existing) == "table" then
+        for i = 1, #existing do
+            local key = existing[i]
+            if type(key) == "string" and key ~= "" and not seen[key] then
+                seen[key] = true
+                nextOrder[#nextOrder + 1] = key
+            end
+        end
+    end
+
+    gdb.altSummaryRowOrder[sectionKey] = nextOrder
     RefreshAfterAltSummaryOrderChange(self)
 end
 
