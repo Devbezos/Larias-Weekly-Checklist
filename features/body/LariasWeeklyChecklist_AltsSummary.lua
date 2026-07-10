@@ -2641,7 +2641,9 @@ end
 function Addon:OpenAltsSummary(anchorFrame, opts)
     local f = EnsurePanel()
     opts = opts or {}
-    if (not self.HasTrackingSnapshot or not self:HasTrackingSnapshot()) and self.UpdateSnapshotBackground then
+    -- Always refresh the logged-in character snapshot before opening so
+    -- currency/Great Vault rows do not show stale values from an older capture.
+    if self.UpdateSnapshotBackground then
         self:UpdateSnapshotBackground()
     end
     -- Sync scale and opacity to current settings (frame may have been created lazily).
@@ -2660,6 +2662,20 @@ function Addon:OpenAltsSummary(anchorFrame, opts)
     f._completionRedirect = opts.completionRedirect == true
     PopulateSummary(f)
     f:Show()
+
+    -- Some currency APIs can settle a tick later after purchases; apply one
+    -- follow-up refresh while the panel is still open to avoid stale counts.
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0.35, function()
+            if not (f and f.IsShown and f:IsShown()) then return end
+            if Addon.UpdateSnapshotBackground then
+                Addon:UpdateSnapshotBackground()
+            end
+            if Addon.RefreshAltsSummary then
+                Addon:RefreshAltsSummary()
+            end
+        end)
+    end
 end
 
 function Addon:CloseAltsSummary()

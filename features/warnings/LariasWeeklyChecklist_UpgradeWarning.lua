@@ -20,6 +20,28 @@ end
 
 local _warn  -- { holder, label, disableBtn }
 
+local function ApplyUpgradeWarningTheme()
+    if not _warn then return end
+    local txt = Addon.THEME and Addon.THEME.text
+    local bg = Addon.THEME and Addon.THEME.bg
+    local vs = Addon.VISUAL_STYLE or {}
+    if _warn.label and _warn.label.SetTextColor then
+        if txt then
+            _warn.label:SetTextColor(txt.r, txt.g, txt.b, txt.a or 1)
+        end
+        if _warn.label.SetShadowColor and bg then
+            _warn.label:SetShadowColor(bg.r, bg.g, bg.b, vs.textShadowA or bg.a or 1)
+        end
+    end
+    if _warn.disableBtn and Addon.Controls and Addon.Controls.StyleButton then
+        Addon.Controls.StyleButton(_warn.disableBtn)
+    end
+end
+
+function Addon:RefreshUpgradeWarningTheme()
+    ApplyUpgradeWarningTheme()
+end
+
 local CREST_LOCALE_KEYS = {
     "ILVLREF_CREST_ADV",
     "ILVLREF_CREST_VET",
@@ -103,10 +125,8 @@ local function SetupHooks()
         label:SetPoint("TOPRIGHT", holder, "TOPRIGHT", -PAD_W, -bodyTop)
         label:SetJustifyH("CENTER")
         label:SetSpacing(2)
-        label:SetTextColor(1.0, 0.9, 0.88)
         label:SetWordWrap(true)
         label:SetShadowOffset(1, -1)
-        label:SetShadowColor(0, 0, 0, 0.65)
 
         local disableBtn = Addon.Controls.NewActionButton(holder, 220, BTN_H)
         disableBtn:SetPoint("TOP", label, "BOTTOM", 0, -GAP)
@@ -123,6 +143,7 @@ local function SetupHooks()
         end)
 
         _warn = { holder = holder, label = label, disableBtn = disableBtn }
+        ApplyUpgradeWarningTheme()
 
         hooksecurefunc(ItemUpgradeFrame, "Show", function()
             C_Timer.After(0, function()
