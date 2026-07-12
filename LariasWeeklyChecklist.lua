@@ -1208,6 +1208,11 @@ function Addon:ApplyThemeColors()
         self:UpdateCharPickerBtnLabel()
     end
 
+    -- Refresh popup warning body/button colors that are created outside the
+    -- shared frame registries.
+    if self.RefreshUpgradeWarningTheme then self:RefreshUpgradeWarningTheme() end
+    if self.RefreshRaidBonusRollReminderTheme then self:RefreshRaidBonusRollReminderTheme() end
+
     -- Refresh gear popup checkbox labels immediately (works whether the popup is shown or not).
     if self.SyncGearPopup then self:SyncGearPopup() end
 

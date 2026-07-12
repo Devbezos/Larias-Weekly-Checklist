@@ -15,6 +15,32 @@ local reminderState = {
 local autoHideToken = 0
 local scratchSnapshot
 
+local function DisableReminderForever()
+    Addon:EnsurePrefs().raidBonusRollReminderDisabled = true
+end
+
+local function ApplyReminderTheme()
+    if not reminderFrame then return end
+    local txt = Addon.THEME and Addon.THEME.text
+    local bg = Addon.THEME and Addon.THEME.bg
+    local vs = Addon.VISUAL_STYLE or {}
+    if reminderFrame.label and reminderFrame.label.SetTextColor then
+        if txt then
+            reminderFrame.label:SetTextColor(txt.r, txt.g, txt.b, txt.a or 1)
+        end
+        if reminderFrame.label.SetShadowColor and bg then
+            reminderFrame.label:SetShadowColor(bg.r, bg.g, bg.b, vs.textShadowA or bg.a or 1)
+        end
+    end
+    if reminderFrame.disableBtn and Addon.Controls and Addon.Controls.StyleButton then
+        Addon.Controls.StyleButton(reminderFrame.disableBtn)
+    end
+end
+
+function Addon:RefreshRaidBonusRollReminderTheme()
+    ApplyReminderTheme()
+end
+
 local function HideReminder()
     autoHideToken = autoHideToken + 1
     if reminderFrame and reminderFrame.holder then
@@ -55,10 +81,10 @@ local function GetBonusRollProgress()
 
     local weeklyCap = tonumber(info.maxWeeklyQuantity) or 0
     local walletCap = tonumber(info.maxQuantity) or 0
+    -- Weekly-cap currencies must use weekly-earned counters (not wallet-held)
+    -- so spending purchased rolls never re-triggers the reminder as "unpurchased".
     local earned = tonumber(info.quantityEarnedThisWeek)
         or tonumber(info.weeklyQuantity)
-        or tonumber(info.totalEarned)
-        or 0
     local held = tonumber(info.quantity) or 0
 
     if weeklyCap <= 0 then
@@ -66,9 +92,17 @@ local function GetBonusRollProgress()
     end
     if weeklyCap <= 0 then return nil end
 
-    if earned <= 0 and held > 0 then
-        earned = held
+    -- If the API cannot report weekly-earned for this currency, suppress reminder
+    -- rather than showing a false positive for already purchased/spent rolls.
+    if earned == nil then
+        if held >= weeklyCap then
+            earned = weeklyCap
+        else
+            return nil
+        end
     end
+
+    earned = math.max(0, tonumber(earned) or 0)
 
     return {
         id = BONUS_ROLL_CURRENCY_ID,
@@ -126,46 +160,45 @@ local function EnsureReminderFrame()
     local PAD_W = 14
     local BTN_H = 24
     local PANEL_W = 300
-    local PANEL_H = 64
+    local PANEL_H = 108
 
     local holder = Addon:NewThemedFrame(nil, UIParent)
     holder:SetFrameStrata("DIALOG")
     holder:SetFrameLevel(210)
     holder:SetSize(PANEL_W, PANEL_H)
-    holder:SetPoint("CENTER", UIParent, "CENTER", 0, -100)
+    holder:SetPoint("TOP", UIParent, "TOP", 0, -220)
     holder:SetClampedToScreen(true)
     holder:EnableMouse(true)
-    local bodyTop = Addon:ApplyWarningPanelTheme(holder, {
-        title = L.RAID_BONUS_ROLL_REMINDER_TITLE or "Bonus Rolls",
-        pad = PAD_W,
-        bodyTop = 36,
-    })
+    Addon:ApplyOpaquePopupTheme(holder)
     holder:Hide()
 
-    local closeBtn = Addon.Controls.NewCloseButton(holder, HideReminder)
+    local closeBtn = Addon.Controls.NewCloseButton(holder, function()
+        DisableReminderForever()
+        HideReminder()
+        if Addon.RefreshSettingsCheckboxes then Addon:RefreshSettingsCheckboxes() end
+        if Addon.SyncGearPopup then Addon:SyncGearPopup() end
+    end)
     closeBtn:SetPoint("TOPRIGHT", holder, "TOPRIGHT", -2, -2)
 
     local label = holder:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    label:SetPoint("TOPLEFT", holder, "TOPLEFT", PAD_W, -bodyTop)
-    label:SetPoint("TOPRIGHT", holder, "TOPRIGHT", -PAD_W, -bodyTop)
+    label:SetPoint("TOPLEFT", holder, "TOPLEFT", PAD_W, -(PAD_W + 8))
+    label:SetPoint("TOPRIGHT", holder, "TOPRIGHT", -PAD_W, -(PAD_W + 8))
     label:SetJustifyH("LEFT")
     label:SetSpacing(1)
-    label:SetTextColor(1.0, 0.9, 0.88)
     label:SetWordWrap(true)
     label:SetShadowOffset(1, -1)
-    label:SetShadowColor(0, 0, 0, 0.65)
 
-    local disableBtn = Addon.Controls.NewActionButton(UIParent, 170, BTN_H)
+    local disableBtn = Addon.Controls.NewActionButton(holder, 170, BTN_H)
     disableBtn:SetFrameStrata("DIALOG")
     disableBtn:SetFrameLevel(209)
-    disableBtn:SetPoint("TOP", holder, "BOTTOM", 0, -8)
+    disableBtn:SetPoint("BOTTOM", holder, "BOTTOM", 0, PAD_W)
     disableBtn:SetText(L.RAID_BONUS_ROLL_REMINDER_DISABLE_BTN or "Hide Raid Reminder")
     disableBtn:SetScript("OnEnter", function(self)
         Addon.AddonUtils.SetTooltip(self, L.RAID_BONUS_ROLL_REMINDER_DISABLE_TOOLTIP or "Disable future raid-entry bonus-roll reminders.", "ANCHOR_BOTTOM")
     end)
     disableBtn:SetScript("OnLeave", Addon.AddonUtils.HideTooltip)
     disableBtn:SetScript("OnClick", function()
-        Addon:EnsurePrefs().raidBonusRollReminderDisabled = true
+        DisableReminderForever()
         HideReminder()
         if Addon.RefreshSettingsCheckboxes then Addon:RefreshSettingsCheckboxes() end
         if Addon.SyncGearPopup then Addon:SyncGearPopup() end
@@ -178,6 +211,7 @@ local function EnsureReminderFrame()
         closeBtn = closeBtn,
         disableBtn = disableBtn,
     }
+    ApplyReminderTheme()
     return reminderFrame
 end
 
@@ -190,20 +224,20 @@ function Addon:UpdateRaidBonusRollReminder()
 
     local instanceKey = GetCurrentReminderKey()
     if not instanceKey then
+        prefs.raidBonusRollReminderLastShownInstanceKey = nil
         reminderState.lastInstanceKey = nil
         reminderState.lastProgressKey = nil
         HideReminder()
         return
     end
 
-    local progress = GetBonusRollProgress()
-    if not progress or progress.remaining <= 0 then
-        reminderState.lastProgressKey = nil
-        HideReminder()
+    -- Persist this gate so /reload inside the same instance does not re-show.
+    if prefs.raidBonusRollReminderLastShownInstanceKey == instanceKey then
         return
     end
 
-    if not HasWatermarkedUpgradeNeed() then
+    local progress = GetBonusRollProgress()
+    if not progress or progress.remaining <= 0 then
         reminderState.lastProgressKey = nil
         HideReminder()
         return
@@ -216,6 +250,7 @@ function Addon:UpdateRaidBonusRollReminder()
 
     reminderState.lastInstanceKey = instanceKey
     reminderState.lastProgressKey = progressKey
+    prefs.raidBonusRollReminderLastShownInstanceKey = instanceKey
 
     local frame = EnsureReminderFrame()
     frame.label:SetText(L.RAID_BONUS_ROLL_REMINDER_MSG or "You have bonus rolls available for purchase.")

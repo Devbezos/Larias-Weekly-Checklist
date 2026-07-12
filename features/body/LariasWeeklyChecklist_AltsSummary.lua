@@ -620,7 +620,7 @@ local function EnsurePanel()
     completionFS:SetJustifyV("TOP")
     completionFS:SetPoint("TOPLEFT", f, "TOPLEFT", PAD, -(TITLE_H + 8))
     completionFS:SetPoint("TOPRIGHT", f, "TOPRIGHT", -PAD - 28, -(TITLE_H + 8))
-    completionFS:SetText("Larias Checklist Complete. Displaying Alt Summary.")
+    completionFS:SetText(L.ALT_SUMMARY_COMPLETION_REDIRECT or "")
     completionFS:Hide()
     f._altsCompletionNoticeFS = completionFS
 
@@ -1773,7 +1773,7 @@ PopulateSummary = function(panel)
     if panel._altsCompletionNoticeFS then
         panel._altsCompletionNoticeFS:SetShown(showCompletionNotice)
         if showCompletionNotice then
-            panel._altsCompletionNoticeFS:SetText("Larias Checklist Complete. Displaying Alt Summary.")
+            panel._altsCompletionNoticeFS:SetText(L.ALT_SUMMARY_COMPLETION_REDIRECT or "")
             panel._altsCompletionNoticeFS:SetTextColor(header.r, header.g, header.b, 0.92)
         end
     end
@@ -2277,7 +2277,7 @@ PopulateSummary = function(panel)
                 if row.action then
                     GameTooltip:SetText(L.TOOLTIP_CLICK_TO_OPEN or "Click to open", 1, 1, 1)
                     if row.action == "currency" then
-                        GameTooltip:AddLine(L.CONTEXT_OPEN_CURRENCY_CONFIG or "Right-click to configure tracked currencies", 0.5, 0.5, 0.5)
+                        GameTooltip:AddLine(L.CONTEXT_OPEN_CURRENCY_CONFIG or "", 0.5, 0.5, 0.5)
                     end
                     GameTooltip:AddLine(L.ALT_SUMMARY_ALT_LEFT_CLICK_REORDER or "Alt+drag to reorder", 0.5, 0.5, 0.5)
                 else
@@ -2641,7 +2641,9 @@ end
 function Addon:OpenAltsSummary(anchorFrame, opts)
     local f = EnsurePanel()
     opts = opts or {}
-    if (not self.HasTrackingSnapshot or not self:HasTrackingSnapshot()) and self.UpdateSnapshotBackground then
+    -- Always refresh the logged-in character snapshot before opening so
+    -- currency/Great Vault rows do not show stale values from an older capture.
+    if self.UpdateSnapshotBackground then
         self:UpdateSnapshotBackground()
     end
     -- Sync scale and opacity to current settings (frame may have been created lazily).
@@ -2660,6 +2662,20 @@ function Addon:OpenAltsSummary(anchorFrame, opts)
     f._completionRedirect = opts.completionRedirect == true
     PopulateSummary(f)
     f:Show()
+
+    -- Some currency APIs can settle a tick later after purchases; apply one
+    -- follow-up refresh while the panel is still open to avoid stale counts.
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0.35, function()
+            if not (f and f.IsShown and f:IsShown()) then return end
+            if Addon.UpdateSnapshotBackground then
+                Addon:UpdateSnapshotBackground()
+            end
+            if Addon.RefreshAltsSummary then
+                Addon:RefreshAltsSummary()
+            end
+        end)
+    end
 end
 
 function Addon:CloseAltsSummary()
