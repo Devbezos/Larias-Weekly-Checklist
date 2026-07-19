@@ -26,7 +26,11 @@ local COL_HDR_H  = 36          -- class bar + name + ilvl; date lives in the too
 
 local NUM_CRESTS = 5
 local CREST_ABBREV = { "Adv", "Vet", "Chp", "Hero", "Myth" }
-local GV_NAMES     = { "Raid", "M+ / Delve", "World" }
+local GV_NAMES     = {
+    L.TRACKING_GV_RAID or "Raid",
+    L.ALT_SUMMARY_GV_DUNGEONS or L.TRACKING_GV_DUNGEONS or "M+ / Delve",
+    L.TRACKING_GV_WORLD or "World",
+}
 local GV_THRESHOLDS = { {2,4,6}, {1,4,8}, {2,4,8} }
 
 -- Read from TRACKING so Overlay.lua (which captures the data) uses the same list.
@@ -964,9 +968,16 @@ local function BuildRowDefs(tracking, LAYOUT, chars)
         end
     end
     local function addQuestRow(key, labelKey, fallback)
-        if (tonumber(questIDs[key]) or 0) <= 0 then return end
+        local qid = tonumber(questIDs[key]) or 0
+        if qid <= 0 and key == "delveBoss" then
+            qid = tonumber(questIDs.nullaeusSpoils) or 0
+        end
+        if qid <= 0 then return end
         if Addon:IsQuestHidden(key) then return end
         local iID = tonumber(questItemIDs[key]) or 0
+        if iID <= 0 and key == "delveBoss" then
+            iID = tonumber(questItemIDs.nullaeusSpoils) or 0
+        end
         if iID > 0 and Addon:IsItemHidden(iID) then return end
         ensureQuestSection()
         local icon
@@ -983,7 +994,7 @@ local function BuildRowDefs(tracking, LAYOUT, chars)
             cb = qb,
         })
     end
-    addQuestRow("nullaeusSpoils", "TRACKING_QUEST_NULLAEUS_SPOILS", "Spoils of Nullaeus")
+    addQuestRow("delveBoss", "TRACKING_QUEST_DELVE_BOSS", "Delve Boss")
     addQuestRow("weeklyPrey", "TRACKING_QUEST_WEEKLY_PREY", "Weekly Prey")
 
     do
@@ -997,6 +1008,7 @@ local function BuildRowDefs(tracking, LAYOUT, chars)
                 local name, cr, cg, cb = CrestTierInfo(i)
                 addRow("upgcost", name, {
                     tierIdx = i,
+                    iconID = tracking and tracking.crestCurrencyIDs and GetCurrencyIcon(tracking.crestCurrencyIDs[i]),
                     cr = cr,
                     cg = cg,
                     cb = cb,

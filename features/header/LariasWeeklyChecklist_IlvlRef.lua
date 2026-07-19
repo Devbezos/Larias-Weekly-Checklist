@@ -24,6 +24,31 @@ local HERO  = Addon.IlvlUtils.GetEscapePrefix(4)  -- Hero        (orange)
 local MYTH  = Addon.IlvlUtils.GetEscapePrefix(5)  -- Myth/Gilded (gold)
 local COLOR_RESET = "|r"
 
+local function GetIlvlRefWindowTitle(locale)
+    locale = locale or {}
+    local baseTitle = locale.ILVLREF_WINDOW_TITLE or "Midnight Season 1 Item Level Reference"
+    local tracking = Addon.TRACKING or {}
+
+    local seasonName = tracking._activeSeasonName
+    local seasonNum = tonumber(tracking._activeSeasonNumber)
+    if (type(seasonName) ~= "string" or seasonName == "") and seasonNum then
+        local seasonFmt = locale.ILVLREF_SEASON_LABEL_FMT or "Season %d"
+        seasonName = seasonFmt:format(seasonNum)
+    end
+
+    if type(seasonName) == "string" and seasonName ~= "" then
+        local titleFmt = locale.ILVLREF_WINDOW_TITLE_FMT
+        if type(titleFmt) == "string" and titleFmt ~= "" then
+            return titleFmt:format(seasonName)
+        end
+        if not baseTitle:find(seasonName, 1, true) then
+            return baseTitle .. " (" .. seasonName .. ")"
+        end
+    end
+
+    return baseTitle
+end
+
 -- Create a FontString anchored at (x, posY) from parent's TOPLEFT.
 -- fontObj, r/g/b/a, w, align are optional.
 local function FS(parent, x, posY, text, fontObj, r, g, b, a, w, align)
@@ -183,31 +208,31 @@ local function BuildIlvlRefWindow()
     local ilvlBase      = tracking.ilvlBase      or 220
     local ilvlTrackStep = tracking.ilvlTrackStep or 13
     local RANK_OFFSETS  = tracking.ilvlRankOffsets or { 0, 4, 7, 10, 13, 17 }
+        local MYTH_EXTRA_ILVLS = (type(tracking.ilvlMythExtraLevels) == "table") and tracking.ilvlMythExtraLevels or {}
 
     local TIERS = {
         { id="ADV",   color=ADV,   ilvlBase=ilvlBase + ilvlTrackStep * 0,
+                    trackName  = (Addon.IlvlUtils and Addon.IlvlUtils.GetCrestTrackName and Addon.IlvlUtils.GetCrestTrackName(1)) or "Adventurer",
           crest      = Locale.ILVLREF_CREST_ADV,
           crestShort = Locale.ILVLREF_CREST_ADV },
         { id="VET",   color=VET,   ilvlBase=ilvlBase + ilvlTrackStep * 1,
+                    trackName  = (Addon.IlvlUtils and Addon.IlvlUtils.GetCrestTrackName and Addon.IlvlUtils.GetCrestTrackName(2)) or "Veteran",
           crest      = Locale.ILVLREF_CREST_VET,
           crestShort = Locale.ILVLREF_CREST_VET },
         { id="CHAMP", color=CHAMP, ilvlBase=ilvlBase + ilvlTrackStep * 2,
+                    trackName  = (Addon.IlvlUtils and Addon.IlvlUtils.GetCrestTrackName and Addon.IlvlUtils.GetCrestTrackName(3)) or "Champion",
           crest      = Locale.ILVLREF_CREST_CHAMP,
           crestShort = Locale.ILVLREF_CREST_CHAMP },
         { id="HERO",  color=HERO,  ilvlBase=ilvlBase + ilvlTrackStep * 3,
+                    trackName  = (Addon.IlvlUtils and Addon.IlvlUtils.GetCrestTrackName and Addon.IlvlUtils.GetCrestTrackName(4)) or "Hero",
           crest      = Locale.ILVLREF_CREST_HERO,
           crestShort = Locale.ILVLREF_CREST_HERO },
         { id="MYTH",  color=MYTH,  ilvlBase=ilvlBase + ilvlTrackStep * 4,
+                    trackName  = (Addon.IlvlUtils and Addon.IlvlUtils.GetCrestTrackName and Addon.IlvlUtils.GetCrestTrackName(5)) or "Myth",
           crest      = Locale.ILVLREF_CREST_MYTH,
           crestShort = Locale.ILVLREF_CREST_MYTH },
     }
 
-    -- GetIlvl(2, 3)  → integer ilvl  for tier index 2, rank 3  (ilvlBase + RANK_OFFSETS[rank])
-    -- IC(2, 3) → colored string ready for display
-    local function GetIlvl(tier, rank)
-        local tierData = TIERS[tier]
-        return tierData.ilvlBase + RANK_OFFSETS[rank]
-    end
     local function IC(tier, rank)
         local tierData = TIERS[tier]
         return tierData.color .. (tierData.ilvlBase + RANK_OFFSETS[rank]) .. COLOR_RESET
@@ -222,12 +247,10 @@ local function BuildIlvlRefWindow()
         local nameCell
         if isOverlap then
             local nextRank = rank - 4
-            local lKey     = "ILVLREF_TRACK_" .. tier.id .. rank .. "_" .. nextTier.id .. nextRank
-            local fb       = tier.crest .. " " .. rank .. " / " .. nextTier.crest .. " " .. nextRank
-            nameCell = DualTrack(Locale[lKey] or fb, tier.color, nextTier.color)
+            local fb = tier.trackName .. " " .. rank .. "/6" .. " / " .. nextTier.trackName .. " " .. nextRank .. "/6"
+            nameCell = DualTrack(fb, tier.color, nextTier.color)
         else
-            local lKey = "ILVLREF_TRACK_" .. tier.id .. rank
-            nameCell   = tier.color .. (Locale[lKey] or tier.crest .. " " .. rank) .. COLOR_RESET
+            nameCell = tier.color .. tier.trackName .. " " .. rank .. "/6" .. COLOR_RESET
         end
 
         local crestCell
@@ -241,13 +264,28 @@ local function BuildIlvlRefWindow()
         return { ilvlCell, nameCell, crestCell }
     end
 
-    local TRACKS = {}
+    local DEFAULT_TRACKS_TABLE = {
+        {
+            Locale.ILVLREF_COL_ILVL,
+            Locale.ILVLREF_COL_TRACK,
+            Locale.ILVLREF_COL_CREST_NEEDED,
+        },
+    }
     for ti, tier in ipairs(TIERS) do
         local nextTier  = TIERS[ti + 1]
         local startRank = (ti == 1) and 1 or 3
         for rank = startRank, 6 do
-            table.insert(TRACKS, makeTrackRow(tier, rank, nextTier))
+            table.insert(DEFAULT_TRACKS_TABLE, makeTrackRow(tier, rank, nextTier))
         end
+    end
+    for extraRank = 1, #MYTH_EXTRA_ILVLS do
+        local displayRank = 6 + extraRank
+        local ilvl = MYTH_EXTRA_ILVLS[extraRank]
+        table.insert(DEFAULT_TRACKS_TABLE, {
+            MYTH .. ilvl .. COLOR_RESET,
+            MYTH .. TIERS[5].trackName .. " " .. displayRank .. "/6" .. COLOR_RESET,
+            MYTH .. TIERS[5].crest .. COLOR_RESET,
+        })
     end
 
     -- Crafted item levels  (quality n = tier base + RANK_OFFSETS[n])
@@ -256,7 +294,15 @@ local function BuildIlvlRefWindow()
         local atlas = rawIcons[n] or ("Professions-Icon-Quality-Tier" .. n)
         return "|A:" .. atlas .. ":14:14|a"
     end
-    local CRAFTED = {
+    local DEFAULT_CRAFTED_TABLE = {
+        {
+            Locale.ILVLREF_COL_QUALITY,
+            ADV .. Locale.ILVLREF_CREST_ADV .. COLOR_RESET,
+            VET .. Locale.ILVLREF_CREST_VET .. COLOR_RESET,
+            CHAMP .. Locale.ILVLREF_CREST_CHAMP .. COLOR_RESET,
+            HERO .. Locale.ILVLREF_CREST_HERO .. COLOR_RESET,
+            MYTH .. Locale.ILVLREF_CREST_MYTH .. COLOR_RESET,
+        },
         { QIcon(1), IC(1,1), IC(2,1), IC(3,1), IC(4,1), IC(5,1) },
         { QIcon(2), IC(1,2), IC(2,2), IC(3,2), IC(4,2), IC(5,2) },
         { QIcon(3), IC(1,3), IC(2,3), IC(3,3), IC(4,3), IC(5,3) },
@@ -265,7 +311,12 @@ local function BuildIlvlRefWindow()
     }
 
     -- Dungeon item levels
-    local DUNGEONS = {
+    local DEFAULT_DUNGEONS_TABLE = {
+        {
+            Locale.ILVLREF_COL_SOURCE,
+            Locale.ILVLREF_COL_END_LOOT,
+            Locale.ILVLREF_COL_GREAT_VAULT,
+        },
         { Locale.ILVLREF_DUNGEON_HEROIC,     IC(1,4), IC(2,4)  },
         { Locale.ILVLREF_DUNGEON_MYTHIC,     IC(3,1), IC(3,4)  },
         { "M2",  IC(3,2), IC(4,1) },
@@ -282,7 +333,14 @@ local function BuildIlvlRefWindow()
     }
 
     -- Raid item levels  (each difficulty = one tier across boss columns 1–4)
-    local RAID = {
+    local DEFAULT_RAID_TABLE = {
+        {
+            Locale.ILVLREF_COL_DIFFICULTY,
+            Locale.ILVLREF_COL_BOSS1,
+            Locale.ILVLREF_COL_BOSS2,
+            Locale.ILVLREF_COL_BOSS3,
+            Locale.ILVLREF_COL_BOSS4,
+        },
         { Locale.ILVLREF_RAID_LFR,    IC(2,1), IC(2,2), IC(2,3), IC(2,4) },
         { Locale.ILVLREF_RAID_NORMAL,  IC(3,1), IC(3,2), IC(3,3), IC(3,4) },
         { Locale.ILVLREF_RAID_HEROIC,  IC(4,1), IC(4,2), IC(4,3), IC(4,4) },
@@ -291,7 +349,13 @@ local function BuildIlvlRefWindow()
 
     -- Bountiful Delve item levels
     local tFmt = Locale.ILVLREF_DELVE_TIER_FMT
-    local DELVES = {
+    local DEFAULT_DELVES_TABLE = {
+        {
+            Locale.ILVLREF_COL_TIER,
+            Locale.ILVLREF_COL_END_LOOT,
+            Locale.ILVLREF_COL_MAP_DROP,
+            Locale.ILVLREF_COL_GREAT_VAULT,
+        },
         { tFmt:format(1),  IC(1,1), "-",     IC(2,1) },
         { tFmt:format(2),  IC(1,2), "-",     IC(2,2) },
         { tFmt:format(3),  IC(1,3), "-",     IC(2,3) },
@@ -305,38 +369,215 @@ local function BuildIlvlRefWindow()
         { tFmt:format(11), IC(3,2), IC(4,1), IC(4,1) },
     }
 
+    local function ResolveLocaleToken(value)
+        if type(value) == "string" and Locale[value] then
+            return Locale[value]
+        end
+        return value
+    end
+
+    local function ResolveHeaderCell(value)
+        if type(value) == "string" then
+            local crestTier = value:match("^CREST_(%d)$")
+            if crestTier then
+                local tier = tonumber(crestTier)
+                local tierData = TIERS[tier]
+                if tierData then
+                    return tierData.color .. tierData.crest .. COLOR_RESET
+                end
+            end
+        end
+        return ResolveLocaleToken(value)
+    end
+
+    local function ColorizeIlvlNumber(ilvl)
+        if type(ilvl) ~= "number" then return ilvl end
+        local hex = (Addon.IlvlUtils and Addon.IlvlUtils.GetColorHex and Addon.IlvlUtils.GetColorHex(ilvl)) or "ffffffff"
+        return "|c" .. hex .. tostring(ilvl) .. COLOR_RESET
+    end
+
+    local function ResolvePairCell(cell)
+        if type(cell) == "number" then
+            return ColorizeIlvlNumber(cell)
+        end
+        if type(cell) == "table" and type(cell[1]) == "number" and type(cell[2]) == "number" then
+            return IC(cell[1], cell[2])
+        end
+        return ResolveLocaleToken(cell)
+    end
+
+    local function BuildTracksTableFromSpec(spec)
+        if type(spec) ~= "table" or #spec < 2 then return nil end
+
+        local out = {}
+        local header = spec[1]
+        if type(header) ~= "table" then return nil end
+        out[1] = {
+            ResolveHeaderCell(header[1]),
+            ResolveHeaderCell(header[2]),
+            ResolveHeaderCell(header[3]),
+        }
+
+        local function FindRankForIlvl(tierData, ilvl)
+            if not (tierData and type(ilvl) == "number") then return nil end
+            for r = 1, #RANK_OFFSETS do
+                if (tierData.ilvlBase + (RANK_OFFSETS[r] or 0)) == ilvl then
+                    return r
+                end
+            end
+            return nil
+        end
+
+        for i = 2, #spec do
+            local row = spec[i]
+            if type(row) == "table" then
+                local tierIndex = tonumber(row.tier or row[1])
+                local rank = tonumber(row.rank or row[2])
+                local explicitNextTierIndex = tonumber(row.nextTier or row[3]) or 0
+                local explicitNextRank = tonumber(row.nextRank)
+                local explicitIlvl = tonumber(row.ilvl or row[4])
+
+                local tier = tierIndex and TIERS[tierIndex]
+                if tier and rank then
+                    local ilvl = explicitIlvl or (tier.ilvlBase + (RANK_OFFSETS[rank] or 0))
+                    local inferredNextTierIndex = 0
+                    local inferredNextRank = nil
+                    local nextTierByOrder = TIERS[(tierIndex or 0) + 1]
+                    if nextTierByOrder then
+                        inferredNextRank = FindRankForIlvl(nextTierByOrder, ilvl)
+                        if inferredNextRank then
+                            inferredNextTierIndex = (tierIndex or 0) + 1
+                        end
+                    end
+
+                    local nextTierIndex = (explicitNextTierIndex > 0) and explicitNextTierIndex or inferredNextTierIndex
+                    local nextTier = (nextTierIndex > 0) and TIERS[nextTierIndex] or nil
+                    local nextRank = explicitNextRank or inferredNextRank
+                    if not (nextRank and nextRank > 0) and nextTier then
+                        nextRank = FindRankForIlvl(nextTier, ilvl) or (rank - 4)
+                    end
+
+                    local isOverlap = (nextTier ~= nil) and (nextRank ~= nil)
+
+                    local ilvlCell = (isOverlap and nextTier.color or tier.color) .. ilvl .. COLOR_RESET
+                    local nameCell
+                    if isOverlap then
+                        local fb = tier.trackName .. " " .. rank .. "/6" .. " / " .. nextTier.trackName .. " " .. nextRank .. "/6"
+                        nameCell = DualTrack(fb, tier.color, nextTier.color)
+                    else
+                        nameCell = tier.color .. tier.trackName .. " " .. rank .. "/6" .. COLOR_RESET
+                    end
+
+                    local crestCell
+                    if rank == 6 and nextTier then
+                        crestCell = tier.color .. tier.crestShort .. COLOR_RESET
+                            .. " - (|cFFFF2020" .. (Locale.ILVLREF_DO_NOT_USE_CRESTS_FMT or "DO NOT USE %s CRESTS"):format(nextTier.crest) .. "|r)"
+                    else
+                        crestCell = tier.color .. tier.crest .. COLOR_RESET
+                    end
+
+                    out[#out + 1] = { ilvlCell, nameCell, crestCell }
+                end
+            end
+        end
+
+        return (#out >= 2) and out or nil
+    end
+
+    local function BuildCraftedTableFromSpec(spec)
+        if type(spec) ~= "table" or #spec < 2 then return nil end
+        local out = {}
+        local header = spec[1]
+        if type(header) ~= "table" then return nil end
+        out[1] = {
+            ResolveHeaderCell(header[1]),
+            ResolveHeaderCell(header[2]),
+            ResolveHeaderCell(header[3]),
+            ResolveHeaderCell(header[4]),
+            ResolveHeaderCell(header[5]),
+            ResolveHeaderCell(header[6]),
+        }
+        for i = 2, #spec do
+            local row = spec[i]
+            if type(row) == "table" then
+                local quality = tonumber(row[1])
+                if quality then
+                    out[#out + 1] = {
+                        QIcon(quality),
+                        ResolvePairCell(row[2]),
+                        ResolvePairCell(row[3]),
+                        ResolvePairCell(row[4]),
+                        ResolvePairCell(row[5]),
+                        ResolvePairCell(row[6]),
+                    }
+                end
+            end
+        end
+        return (#out >= 2) and out or nil
+    end
+
+    local function BuildGenericTableFromSpec(spec, firstColFormatter)
+        if type(spec) ~= "table" or #spec < 2 then return nil end
+        local out = {}
+        local header = spec[1]
+        if type(header) ~= "table" then return nil end
+
+        local headerOut = {}
+        for i = 1, #header do
+            headerOut[i] = ResolveHeaderCell(header[i])
+        end
+        out[1] = headerOut
+
+        for i = 2, #spec do
+            local row = spec[i]
+            if type(row) == "table" then
+                local rowOut = {}
+                for ci = 1, #row do
+                    local cell = row[ci]
+                    if ci == 1 and firstColFormatter then
+                        rowOut[ci] = firstColFormatter(cell)
+                    else
+                        rowOut[ci] = ResolvePairCell(cell)
+                    end
+                end
+                out[#out + 1] = rowOut
+            end
+        end
+
+        return (#out >= 2) and out or nil
+    end
+
+    local seasonTables = type(tracking.ilvlRefTables) == "table" and tracking.ilvlRefTables or nil
+    local TRACKS_TABLE = (seasonTables and BuildTracksTableFromSpec(seasonTables.tracks)) or DEFAULT_TRACKS_TABLE
+    local CRAFTED_TABLE = (seasonTables and BuildCraftedTableFromSpec(seasonTables.crafted)) or DEFAULT_CRAFTED_TABLE
+    local DUNGEONS_TABLE = (seasonTables and BuildGenericTableFromSpec(seasonTables.dungeons)) or DEFAULT_DUNGEONS_TABLE
+    local RAID_TABLE = (seasonTables and BuildGenericTableFromSpec(seasonTables.raid)) or DEFAULT_RAID_TABLE
+    local DELVES_TABLE = (seasonTables and BuildGenericTableFromSpec(seasonTables.delves, function(cell)
+        if type(cell) == "number" then
+            return tFmt:format(cell)
+        end
+        return ResolveLocaleToken(cell)
+    end)) or DEFAULT_DELVES_TABLE
+
+    local function MatrixToColsRows(matrix)
+        local headers = matrix[1] or {}
+        local rows = {}
+        for i = 2, #matrix do
+            rows[#rows + 1] = matrix[i]
+        end
+        local cols = {}
+        for i, header in ipairs(headers) do
+            cols[i] = { t = header }
+        end
+        return AutoFitCols(cols, rows), rows
+    end
+
     -- Pre-fit column widths and compute dynamic window width ----------------
-    local trackCols = AutoFitCols({
-        { t = Locale.ILVLREF_COL_ILVL           },
-        { t = Locale.ILVLREF_COL_TRACK  },
-        { t = Locale.ILVLREF_COL_CREST_NEEDED          },
-    }, TRACKS)
-    local craftCols = AutoFitCols({
-        { t = Locale.ILVLREF_COL_QUALITY                          },
-        { t = ADV..Locale.ILVLREF_CREST_ADV..COLOR_RESET    },
-        { t = VET..Locale.ILVLREF_CREST_VET..COLOR_RESET    },
-        { t = CHAMP..Locale.ILVLREF_CREST_CHAMP..COLOR_RESET },
-        { t = HERO..Locale.ILVLREF_CREST_HERO..COLOR_RESET  },
-        { t = MYTH..Locale.ILVLREF_CREST_MYTH..COLOR_RESET  },
-    }, CRAFTED)
-    local dungCols = AutoFitCols({
-        { t = Locale.ILVLREF_COL_SOURCE      },
-        { t = Locale.ILVLREF_COL_END_LOOT    },
-        { t = Locale.ILVLREF_COL_GREAT_VAULT },
-    }, DUNGEONS)
-    local raidCols = AutoFitCols({
-        { t = Locale.ILVLREF_COL_DIFFICULTY },
-        { t = Locale.ILVLREF_COL_BOSS1      },
-        { t = Locale.ILVLREF_COL_BOSS2      },
-        { t = Locale.ILVLREF_COL_BOSS3      },
-        { t = Locale.ILVLREF_COL_BOSS4      },
-    }, RAID)
-    local delveCols = AutoFitCols({
-        { t = Locale.ILVLREF_COL_TIER        },
-        { t = Locale.ILVLREF_COL_END_LOOT    },
-        { t = Locale.ILVLREF_COL_MAP_DROP    },
-        { t = Locale.ILVLREF_COL_GREAT_VAULT },
-    }, DELVES)
+    local trackCols, trackRows = MatrixToColsRows(TRACKS_TABLE)
+    local craftCols, craftRows = MatrixToColsRows(CRAFTED_TABLE)
+    local dungCols, dungRows = MatrixToColsRows(DUNGEONS_TABLE)
+    local raidCols, raidRows = MatrixToColsRows(RAID_TABLE)
+    local delveCols, delveRows = MatrixToColsRows(DELVES_TABLE)
     local function tblW(cols) return cols[#cols].x + cols[#cols].w end
 
     local win = Addon:NewThemedFrame("LariasIlvlRefFrame", UIParent)
@@ -383,7 +624,7 @@ local function BuildIlvlRefWindow()
     titleFS:SetJustifyH("CENTER")
     local titleHeaderColor = Addon.THEME.header
     titleFS:SetTextColor(titleHeaderColor.r, titleHeaderColor.g, titleHeaderColor.b, titleHeaderColor.a)
-    titleFS:SetText(Locale.ILVLREF_WINDOW_TITLE)
+    titleFS:SetText(GetIlvlRefWindowTitle(Locale))
 
     -- Close button: branded ✕ matching the addon theme.
     local closeBtn = Addon.Controls.NewCloseButton(win, function() win:Hide() end)
@@ -419,11 +660,11 @@ local function BuildIlvlRefWindow()
         return secFrame, secWidth, secHeight
     end
 
-    local secTracks,  wTracks,  hTracks  = BuildSection(Locale.ILVLREF_SEC_TRACKS,   trackCols, TRACKS)
-    local secCrafted, wCrafted, hCrafted = BuildSection(Locale.ILVLREF_SEC_CRAFTED,   craftCols, CRAFTED)
-    local secDungs,   wDungs,   hDungs   = BuildSection(Locale.ILVLREF_SEC_DUNGEONS,  dungCols,  DUNGEONS)
-    local secRaid,    wRaid,    hRaid    = BuildSection(Locale.ILVLREF_SEC_RAID,       raidCols,  RAID)
-    local secDelves,  wDelves,  hDelves  = BuildSection(Locale.ILVLREF_SEC_DELVES,    delveCols, DELVES)
+    local secTracks,  wTracks,  hTracks  = BuildSection(Locale.ILVLREF_SEC_TRACKS,   trackCols, trackRows)
+    local secCrafted, wCrafted, hCrafted = BuildSection(Locale.ILVLREF_SEC_CRAFTED,   craftCols, craftRows)
+    local secDungs,   wDungs,   hDungs   = BuildSection(Locale.ILVLREF_SEC_DUNGEONS,  dungCols,  dungRows)
+    local secRaid,    wRaid,    hRaid    = BuildSection(Locale.ILVLREF_SEC_RAID,       raidCols,  raidRows)
+    local secDelves,  wDelves,  hDelves  = BuildSection(Locale.ILVLREF_SEC_DELVES,    delveCols, delveRows)
 
     -- Natural column widths for multi-column layouts
     local wMid    = math.max(wCrafted, wDungs)        -- 3-col: middle column

@@ -74,7 +74,8 @@ end
 
 local function GetNpcIDFromGUID(guid)
     if type(guid) ~= "string" then return nil end
-    local id = guid:match("^%w+%-%d+%-%d+%-%d+%-%d+%-(%d+)%-")
+    -- Use string.match to avoid method lookup on a secure GUID string.
+    local id = string.match(guid, "^%w+%-%d+%-%d+%-%d+%-%d+%-(%d+)%-")
     return tonumber(id)
 end
 

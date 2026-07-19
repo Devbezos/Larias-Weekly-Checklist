@@ -73,6 +73,82 @@ do
         return dst
     end
 
+    -- Applies season overrides from tracking.seasonVariants.
+    --
+    -- Supported shape:
+    -- tracking.seasonVariants = {
+    --   { name = "Season 1", mythicPlusSeason = 1, startsAt = 0, data = { ...override keys... } },
+    --   { name = "Season 2", mythicPlusSeason = 2, startsAt = 1780790400, data = { ...override keys... } },
+    -- }
+    --
+    -- Selection rules:
+    -- 1) If C_MythicPlus.GetCurrentSeason() is available and at least one variant
+    --    defines mythicPlusSeason, choose the highest mythicPlusSeason <= current.
+    -- 2) Otherwise, choose by startsAt timestamp (newest startsAt <= now).
+    -- 3) If no variant is active yet, base tracking values remain unchanged.
+    local function ApplySeasonVariants(tracking)
+        if type(tracking) ~= "table" then return tracking end
+
+        local variants = tracking.seasonVariants
+        if type(variants) ~= "table" or #variants == 0 then return tracking end
+
+        local now = tonumber(time and time()) or 0
+        local selected, selectedStart, selectedMPlusSeason = nil, nil, nil
+
+        local currentMPlusSeason = nil
+        if C_MythicPlus and C_MythicPlus.GetCurrentSeason then
+            currentMPlusSeason = tonumber(C_MythicPlus.GetCurrentSeason())
+        end
+
+        local sawMPlusVariant = false
+
+        -- Primary path: in-game Mythic+ season index.
+        if currentMPlusSeason and currentMPlusSeason > 0 then
+            for i = 1, #variants do
+                local candidate = variants[i]
+                if type(candidate) == "table" then
+                    local seasonNumber = tonumber(candidate.mythicPlusSeason or candidate.seasonNumber)
+                    if seasonNumber then
+                        sawMPlusVariant = true
+                        if seasonNumber <= currentMPlusSeason and (selectedMPlusSeason == nil or seasonNumber >= selectedMPlusSeason) then
+                            selected = candidate
+                            selectedMPlusSeason = seasonNumber
+                            selectedStart = tonumber(candidate.startsAt or candidate.releaseAt or candidate.activateAt) or 0
+                        end
+                    end
+                end
+            end
+        end
+
+        -- Fallback path: timestamp gating.
+        if not selected and not sawMPlusVariant then
+            for i = 1, #variants do
+                local candidate = variants[i]
+                if type(candidate) == "table" then
+                    local start = tonumber(candidate.startsAt or candidate.releaseAt or candidate.activateAt) or 0
+                    if start <= now and (selectedStart == nil or start >= selectedStart) then
+                        selected = candidate
+                        selectedStart = start
+                    end
+                end
+            end
+        end
+
+        if type(selected) ~= "table" then return tracking end
+
+        local data = type(selected.data) == "table" and selected.data or selected
+        for k, v in pairs(data) do
+            if k ~= "name" and k ~= "startsAt" and k ~= "releaseAt" and k ~= "activateAt" and k ~= "data" then
+                tracking[k] = DeepCopyTable(v)
+            end
+        end
+
+        tracking._activeSeasonName = selected.name
+        tracking._activeSeasonStartsAt = selectedStart
+        tracking._activeSeasonNumber = selectedMPlusSeason
+        return tracking
+    end
+
     -- Load tracking/constants from the constants file and apply defaults.
     -- NOTE: this intentionally replaces Addon.TRACKING as a whole to make
     -- "remove a key" edits in the constants file take effect immediately.
@@ -153,6 +229,7 @@ do
             -- Constants are authoritative: replace the whole tracking table.
             -- This makes "remove a key" (e.g. commenting out an ID) take effect immediately.
             self.TRACKING = DeepCopyTable(trackingConstants)
+            self.TRACKING = ApplySeasonVariants(self.TRACKING)
             -- Feature flags live inside the constants file so there is one edit spot.
             self.FEATURE_FLAGS = type(trackingConstants.featureFlags) == "table"
                 and DeepCopyTable(trackingConstants.featureFlags)
@@ -403,6 +480,119 @@ function Addon:GetSupportLinks()
     }
 end
 
+function Addon:MaybeShowGuideUpdatePopup()
+    local gdb = self:EnsurePrefs()
+    if type(gdb) ~= "table" then return end
+
+    local supportLinks = self.TRACKING and self.TRACKING.supportLinks or nil
+    local currentGuideUrl = tostring((supportLinks and supportLinks.doc) or "")
+    if currentGuideUrl == "" then return end
+
+    local lastSeenGuideUrl = tostring(gdb._seenGuideDocUrl or "")
+    if lastSeenGuideUrl == "" then
+        gdb._seenGuideDocUrl = currentGuideUrl
+        return
+    end
+    if lastSeenGuideUrl == currentGuideUrl then return end
+
+    -- Record immediately so this URL change prompts only once.
+    gdb._seenGuideDocUrl = currentGuideUrl
+
+    local locale = self.L or {}
+    local popupKey = "LARIAS_GUIDE_UPDATE"
+    local dialog = StaticPopupDialogs[popupKey] or {}
+    dialog.text = locale.GUIDE_UPDATE_POPUP_TEXT or "A new guide is available. Open it now?"
+    dialog.button1 = locale.GUIDE_UPDATE_OPEN_BTN or "Open Guide"
+    dialog.button2 = locale.GUIDE_UPDATE_LATER_BTN or "Later"
+    dialog.timeout = 0
+    dialog.whileDead = true
+    dialog.hideOnEscape = true
+    dialog.preferredIndex = 3
+    dialog.OnAccept = function(self_)
+        local targetUrl = (self_ and self_.data) or currentGuideUrl
+        if Addon.OpenSupportLink then
+            Addon.OpenSupportLink(targetUrl)
+        elseif C_Browser and C_Browser.OpenLink and targetUrl and targetUrl ~= "" then
+            C_Browser.OpenLink(targetUrl)
+        end
+    end
+    StaticPopupDialogs[popupKey] = dialog
+    StaticPopup_Show(popupKey, nil, nil, currentGuideUrl)
+    return
+
+    -- NOTE: Intentional early return above. We only show one guide-related popup
+    -- per login trigger to avoid stacking dialogs.
+end
+
+function Addon:MaybeShowFutureSeasonGuidePopup()
+    local gdb = self:EnsurePrefs()
+    if type(gdb) ~= "table" then return end
+
+    local currentMPlusSeason = nil
+    if C_MythicPlus and C_MythicPlus.GetCurrentSeason then
+        currentMPlusSeason = tonumber(C_MythicPlus.GetCurrentSeason())
+    end
+    if not (currentMPlusSeason and currentMPlusSeason > 0) then return end
+
+    local tracking = self.TRACKING
+    local variants = tracking and tracking.seasonVariants
+    if type(variants) ~= "table" or #variants == 0 then return end
+
+    local bestSeason = nil
+    local bestVariant = nil
+    local bestGuideUrl = ""
+
+    for i = 1, #variants do
+        local candidate = variants[i]
+        if type(candidate) == "table" then
+            local seasonNumber = tonumber(candidate.mythicPlusSeason or candidate.seasonNumber)
+            if seasonNumber and seasonNumber > currentMPlusSeason and (bestSeason == nil or seasonNumber < bestSeason) then
+                local data = type(candidate.data) == "table" and candidate.data or candidate
+                local links = type(data.supportLinks) == "table" and data.supportLinks
+                    or (type(candidate.supportLinks) == "table" and candidate.supportLinks)
+                    or nil
+                local futureGuideUrl = tostring((links and links.doc) or "")
+                if futureGuideUrl ~= "" then
+                    bestSeason = seasonNumber
+                    bestVariant = candidate
+                    bestGuideUrl = futureGuideUrl
+                end
+            end
+        end
+    end
+
+    if not bestSeason or bestGuideUrl == "" then return end
+
+    gdb._seenFutureGuideAnnouncements = type(gdb._seenFutureGuideAnnouncements) == "table" and gdb._seenFutureGuideAnnouncements or {}
+    local announcementKey = tostring(bestSeason) .. "|" .. bestGuideUrl
+    if gdb._seenFutureGuideAnnouncements[announcementKey] then return end
+
+    -- Record immediately so this future guide prompt is one-time.
+    gdb._seenFutureGuideAnnouncements[announcementKey] = true
+
+    local locale = self.L or {}
+    local seasonLabel = tostring((bestVariant and bestVariant.name) or (locale.ILVLREF_SEASON_LABEL_FMT or "Season %d"):format(bestSeason))
+    local popupKey = "LARIAS_GUIDE_FUTURE_SEASON"
+    local dialog = StaticPopupDialogs[popupKey] or {}
+    dialog.text = (locale.GUIDE_FUTURE_POPUP_TEXT_FMT or "A new guide for %s is available. Open it now?"):format(seasonLabel)
+    dialog.button1 = locale.GUIDE_UPDATE_OPEN_BTN or "Open Guide"
+    dialog.button2 = locale.GUIDE_UPDATE_LATER_BTN or "Later"
+    dialog.timeout = 0
+    dialog.whileDead = true
+    dialog.hideOnEscape = true
+    dialog.preferredIndex = 3
+    dialog.OnAccept = function(self_)
+        local targetUrl = (self_ and self_.data) or bestGuideUrl
+        if Addon.OpenSupportLink then
+            Addon.OpenSupportLink(targetUrl)
+        elseif C_Browser and C_Browser.OpenLink and targetUrl and targetUrl ~= "" then
+            C_Browser.OpenLink(targetUrl)
+        end
+    end
+    StaticPopupDialogs[popupKey] = dialog
+    StaticPopup_Show(popupKey, nil, nil, bestGuideUrl)
+end
+
 -- ── Context menu ────────────────────────────────────────────────────────────
 -- Lightweight right-click context menu.  items = {{text=string, onClick=fn}, ...}
 -- Re-uses a single singleton popup panel so only one menu is open at a time.
@@ -591,6 +781,13 @@ function Addon:OnEnable()
     -- Register the Interface → AddOns settings panel.
     if self.RegisterSettingsPanel then
         self:RegisterSettingsPanel()
+    end
+
+    if self.MaybeShowGuideUpdatePopup then
+        self:MaybeShowGuideUpdatePopup()
+    end
+    if self.MaybeShowFutureSeasonGuidePopup then
+        self:MaybeShowFutureSeasonGuidePopup()
     end
 
     -- Version announce happens in CommsOnEnable.

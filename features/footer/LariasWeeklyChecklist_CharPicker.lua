@@ -205,20 +205,33 @@ function Addon:InitCharPickerUI(frame, styleFunc)
     local charPickerPanel -- floating dropdown Frame
 
     -- ── Button ────────────────────────────────────────────────────────────────
+    -- Adjust button width to fit text content dynamically.
+    local function AdjustButtonWidth(btn)
+        local tr = Addon.Controls.GetButtonFontString(btn)
+        if tr and tr.GetStringWidth then
+            local textW = tr:GetStringWidth()
+            -- Add padding: 6px left margin + 6px right margin + extra for arrow spacing
+            local minW = 70  -- minimum comfortable width
+            local w = max(minW, textW + 12)
+            btn:SetWidth(w)
+        end
+    end
+
     local function EnsureBtn()
         if charPickerBtn then return charPickerBtn end
         local btn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        btn:SetSize(108, 22)
+        btn:SetHeight(22)
+        btn:SetWidth(108)  -- initial width; will be adjusted when text is set
         if styleFunc then styleFunc(btn) end
         charPickerBtn              = btn
         frame._lariasCharPickerBtn = btn
         -- Ensure text is left-aligned so the arrow glyph stays within the
         -- button bounds and doesn't visually overlap the centered section title.
+        -- Use only LEFT anchor to allow text to expand naturally without constraint.
         local tr = Addon.Controls.GetButtonFontString(btn)
         if tr and tr.ClearAllPoints and tr.SetPoint then
             tr:ClearAllPoints()
             tr:SetPoint("LEFT",  btn, "LEFT",  6, 0)
-            tr:SetPoint("RIGHT", btn, "RIGHT", -4, 0)
             if tr.SetJustifyH then tr:SetJustifyH("LEFT") end
         end
         btn:SetScript("OnEnter", function(self_)
@@ -266,6 +279,8 @@ function Addon:InitCharPickerUI(frame, styleFunc)
                 Addon.Controls.ApplyThemeTextColor(tr)
             end
         end
+        -- Adjust button width to fit the new text content.
+        AdjustButtonWidth(btn)
     end
 
     -- ── Panel ─────────────────────────────────────────────────────────────────
@@ -311,11 +326,10 @@ function Addon:InitCharPickerUI(frame, styleFunc)
             if tr then
                 if tr.SetJustifyH then tr:SetJustifyH("LEFT") end
                 if tr.SetJustifyV then tr:SetJustifyV("MIDDLE") end
-                -- StyleMainTabButton pins text to CENTER; override to fill left-to-right.
+                -- Allow text to expand naturally without RIGHT constraint to prevent overlap.
                 if tr.ClearAllPoints and tr.SetPoint then
                     tr:ClearAllPoints()
                     tr:SetPoint("LEFT",  btn, "LEFT",  6, 0)
-                    tr:SetPoint("RIGHT", btn, "RIGHT", -4, 0)
                 end
             end
         end

@@ -317,10 +317,24 @@ end
 
 --  Quest helpers 
 local function GetTrackedQuestID(key)
-    local q = Addon.TRACKING and Addon.TRACKING.questIDs and Addon.TRACKING.questIDs[key]
+    local questIDs = Addon.TRACKING and Addon.TRACKING.questIDs
+    local q = questIDs and questIDs[key]
+    if (tonumber(q) or 0) <= 0 and key == "delveBoss" then
+        q = questIDs and questIDs.nullaeusSpoils
+    end
     q = tonumber(q) or 0
     if q <= 0 then return nil end
     return q
+end
+
+local function GetTrackedQuestItemID(key)
+    local itemIDs = Addon.TRACKING and Addon.TRACKING.questItemIDs
+    local itemID = itemIDs and itemIDs[key]
+    if (tonumber(itemID) or 0) <= 0 and key == "delveBoss" then
+        itemID = itemIDs and itemIDs.nullaeusSpoils
+    end
+    itemID = tonumber(itemID) or 0
+    return itemID > 0 and itemID or 0
 end
 
 local function GetQuestDoneRaw(questKey)
@@ -364,9 +378,9 @@ local function GetWeeklyPreyParts()
     return GetQuestDoneParts(L.TRACKING_QUEST_WEEKLY_PREY or "", "weeklyPrey", { as01 = true })
 end
 
-local function GetNullaeusSpoilsParts()
-    if not GetTrackedQuestID("nullaeusSpoils") then return "", "" end
-    return GetQuestDoneParts(L.TRACKING_QUEST_NULLAEUS_SPOILS or "", "nullaeusSpoils", { as01 = true })
+local function GetDelveBossParts()
+    if not GetTrackedQuestID("delveBoss") then return "", "" end
+    return GetQuestDoneParts(L.TRACKING_QUEST_DELVE_BOSS or L.TRACKING_QUEST_NULLAEUS_SPOILS or "", "delveBoss", { as01 = true })
 end
 
 --  Sparks 
@@ -1222,11 +1236,11 @@ function Addon:GetCurrencyPanelRows()
         end
     end
 
-    -- Spoils of Nullaeus (quest)
-    if n < RIGHT_LINE_COUNT and not Addon:IsQuestHidden("nullaeusSpoils") then
-        local sLbl, sVal = GetNullaeusSpoilsParts()
+    -- Delve Boss (quest)
+    if n < RIGHT_LINE_COUNT and not Addon:IsQuestHidden("delveBoss") then
+        local sLbl, sVal = GetDelveBossParts()
         if IsNonEmptyText(sLbl) or IsNonEmptyText(sVal) then
-            local sItemID = tracking and tracking.questItemIDs and tonumber(tracking.questItemIDs.nullaeusSpoils) or 0
+            local sItemID = GetTrackedQuestItemID("delveBoss")
             if not (sItemID > 0 and Addon:IsItemHidden(sItemID)) then
                 n = n + 1
                 local sIcon, sLblFinal = nil, sLbl
@@ -1238,7 +1252,7 @@ function Addon:GetCurrencyPanelRows()
                         sLblFinal = ColorWrap(qhex, itemName)
                     end
                 end
-                FillRow(n, sLblFinal, sVal, sIcon, nil, nil, nil, sItemID > 0 and sItemID or nil, "nullaeusSpoils")
+                FillRow(n, sLblFinal, sVal, sIcon, nil, nil, nil, sItemID > 0 and sItemID or nil, "delveBoss")
             end
         end
     end
@@ -1368,12 +1382,12 @@ function Addon:FillCurrencySnapshot(snap)
         row.key = "delversBounty"
         row.done = bDone
     end
-    local sDone = GetQuestDoneRaw("nullaeusSpoils")
+    local sDone = GetQuestDoneRaw("delveBoss")
     if sDone ~= nil then
         rowCount = rowCount + 1
         local row = AcquireSnapshotRow(rows, rowCount)
         row.type = SNAP_TYPES.QUEST
-        row.key = "nullaeusSpoils"
+        row.key = "delveBoss"
         row.done = sDone
     end
     local pDone = GetQuestDoneRaw("weeklyPrey")
@@ -1484,7 +1498,7 @@ function Addon:RenderCurrencySnapshotRow(row)
         local done = row.done
         local labelText = ""
         if key == "delversBounty" then labelText = L.TRACKING_QUEST_DELVERS_BOUNTY or ""
-        elseif key == "nullaeusSpoils" then labelText = L.TRACKING_QUEST_NULLAEUS_SPOILS or ""
+        elseif key == "delveBoss" or key == "nullaeusSpoils" then labelText = L.TRACKING_QUEST_DELVE_BOSS or L.TRACKING_QUEST_NULLAEUS_SPOILS or ""
         elseif key == "weeklyPrey" then labelText = L.TRACKING_QUEST_WEEKLY_PREY or "" end
         if not IsNonEmptyText(labelText) then return "", "" end
         local lbl = ColorWrap(COLORS.dim, labelText)

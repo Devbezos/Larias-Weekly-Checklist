@@ -82,7 +82,7 @@ jobs:
 
           # Normalize toc early so TOC_CHANGED reflects the final toc content.
           sed -i "s/^## Version:.*/## Version: $VERSION/" "$TOC"
-          sed -i "s/^## Title:.*/## Title: Larias's Weekly Checklist/" "$TOC"
+          sed -i "s/^## Title:.*/## Title: Larias' Weekly Checklist/" "$TOC"
 
           TOC_CHANGED=false
           if ! git diff --quiet -- "$TOC"; then TOC_CHANGED=true; fi
@@ -286,7 +286,7 @@ jobs:
 
           payload=$(cat <<EOF
           {
-            "content": " **Larias's Weekly Checklist ${TAG}** is live!\n\n GitHub: ${RELEASE_URL}${CURSE_URL:+\n CurseForge: ${CURSE_URL}}\n Workflow: ${RUN_URL}"
+            "content": " **Larias' Weekly Checklist ${TAG}** is live!\n\n GitHub: ${RELEASE_URL}${CURSE_URL:+\n CurseForge: ${CURSE_URL}}\n Workflow: ${RUN_URL}"
           }
           EOF
           )

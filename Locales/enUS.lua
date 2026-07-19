@@ -17,6 +17,10 @@ local STRINGS = {
 
 	-- Update popup
 	UPDATE_AVAILABLE_TEXT = "New version available",
+	GUIDE_UPDATE_POPUP_TEXT = "A new guide version is available. Open it now?",
+	GUIDE_FUTURE_POPUP_TEXT_FMT = "A new guide for %s is available. Open it now?",
+	GUIDE_UPDATE_OPEN_BTN = "Open Guide",
+	GUIDE_UPDATE_LATER_BTN = "Later",
 
 	-- Options tab
 	OPTIONS_HIDE_COMPLETED_TASKS = "Hide Finished Tasks",
@@ -99,6 +103,7 @@ local STRINGS = {
 	TRACKING_GV_RAID     = "Raid",
 	TRACKING_GV_DUNGEONS = "M+",
 	TRACKING_GV_WORLD    = "World",
+	ALT_SUMMARY_GV_DUNGEONS = "M+ / Delve",
 	TRACKING_NA = "\226\128\148",
 
 	TRACKING_SPARKS_LABEL = "Sparks",
@@ -108,7 +113,8 @@ local STRINGS = {
 	TRACKING_QUEST_DELVERS_BOUNTY = "Trovehunter's Bounty",
 	TRACKING_QUEST_DELVERS_BOUNTY_TOOLTIP = "Complete a Tier 8 Delve to earn this weekly bounty item, which guarantees a Hidden Trove at the end of your next Tier 4+ Delve.",
 	TRACKING_QUEST_WEEKLY_PREY = "Weekly Prey",
-	TRACKING_QUEST_NULLAEUS_SPOILS = "Spoils of Nullaeus",
+	TRACKING_QUEST_DELVE_BOSS = "Delve Boss",
+	TRACKING_QUEST_NULLAEUS_SPOILS = "Delve Boss",
 
 	TRACKING_NO_ID = "No ID",
 	TRACKING_TRADE_UP_SUFFIX = " Convert)",
@@ -205,6 +211,8 @@ local STRINGS = {
 
 	-- Item level reference popup
 	ILVLREF_WINDOW_TITLE  = "Midnight Season 1 Item Level Reference",
+	ILVLREF_WINDOW_TITLE_FMT = "Midnight %s Item Level Reference",
+	ILVLREF_SEASON_LABEL_FMT = "Season %d",
 
 	ILVLREF_SEC_TRACKS    = "Upgrade Tracks  (20 crests per step)",
 	ILVLREF_SEC_CRAFTED   = "Crafted Item Levels",
