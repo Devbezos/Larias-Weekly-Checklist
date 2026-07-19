@@ -39,6 +39,16 @@ local tracking = { -- https://www.wowhead.com/currencies/season-1
                 cofferKeysCurrencyID = 3310,
                 cofferKeysDisplayCurrencyID = 3028,
                 bonusRollCurrencyID = 3418,
+                ilvlBase = 220,
+                ilvlTrackStep = 13,
+                ilvlRankOffsets = { 0, 4, 7, 10, 13, 17 },
+                ilvlMythExtraLevels = {},
+                crestUpgradeFreeRanks = { 0, 0, 0, 0, 0 },
+                supportLinks = {
+                    doc       = "https://docs.google.com/document/d/e/2PACX-1vTGkZ2Cjr0jlv90XqW9vy9VXsVucd-yMCgHdyCvX_kQfOrexNDAC7Lf3LifuhqxrcWqJ0W3zIhvK3ii/pub",
+                    checklist = "https://docs.google.com/spreadsheets/d/1iK2SZUcz_ljnkdTG7KW6pqfzaUDuSgnlh1HupcLrkus",
+                    discord   = "https://discord.gg/postnerfclarity",
+                },
                 crestTradeBatch = { 30, 10 },
                 crestUpgradeCostPerStep = { 20, 20, 20, 20, 20 },
                 crestUpgradeCostReduced = { 10, 10, 10, 10, 10 },
@@ -137,10 +147,16 @@ local tracking = { -- https://www.wowhead.com/currencies/season-1
                 cofferKeysCurrencyID = 0,
                 cofferKeysDisplayCurrencyID = 0,
                 bonusRollCurrencyID = 3511,
+                supportLinks = {
+                    doc       = "https://docs.google.com/document/d/e/2PACX-1vQE61MBpAnZR342cdIpz3AujVaeeg8JYB5Ltzuua884lXKqLqtjg8OfWmEd6uuVQONZ-vUQ_jzWDY0E/pub",
+                    checklist = "https://docs.google.com/spreadsheets/d/1iK2SZUcz_ljnkdTG7KW6pqfzaUDuSgnlh1HupcLrkus",
+                    discord   = "https://discord.gg/postnerfclarity",
+                },
                 ilvlBase = 266,
                 ilvlTrackStep = 13,
                 ilvlRankOffsets = { 0, 3, 6, 10, 13, 16 },
                 ilvlMythExtraLevels = { 337, 341, 344 },
+                crestUpgradeFreeRanks = { 0, 0, 0, 0, 0 },
                 crestTradeBatch = { 30, 10 },
                 crestUpgradeCostPerStep = { 20, 20, 20, 20, 20 },
                 crestUpgradeCostReduced = { 10, 10, 10, 10, 10 },
@@ -262,12 +278,6 @@ local tracking = { -- https://www.wowhead.com/currencies/season-1
         "Professions-Icon-Quality-Tier3",
         "Professions-Icon-Quality-Tier4",
         "Professions-Icon-Quality-Tier5",
-    },
-    -- Support / social links shown in the gear popup and settings panel.
-    supportLinks = {
-        doc       = "https://docs.google.com/document/d/e/2PACX-1vTGkZ2Cjr0jlv90XqW9vy9VXsVucd-yMCgHdyCvX_kQfOrexNDAC7Lf3LifuhqxrcWqJ0W3zIhvK3ii/pub",
-        checklist = "https://docs.google.com/spreadsheets/d/1iK2SZUcz_ljnkdTG7KW6pqfzaUDuSgnlh1HupcLrkus",
-        discord   = "https://discord.gg/postnerfclarity",
     },
     -- Master switches for optional UI features.  Set a flag to false to
     -- completely disable that feature (no button, no gear-popup checkbox).

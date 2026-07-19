@@ -20,20 +20,8 @@ local function DisableReminderForever()
 end
 
 local function ApplyReminderTheme()
-    if not reminderFrame then return end
-    local txt = Addon.THEME and Addon.THEME.text
-    local bg = Addon.THEME and Addon.THEME.bg
-    local vs = Addon.VISUAL_STYLE or {}
-    if reminderFrame.label and reminderFrame.label.SetTextColor then
-        if txt then
-            reminderFrame.label:SetTextColor(txt.r, txt.g, txt.b, txt.a or 1)
-        end
-        if reminderFrame.label.SetShadowColor and bg then
-            reminderFrame.label:SetShadowColor(bg.r, bg.g, bg.b, vs.textShadowA or bg.a or 1)
-        end
-    end
-    if reminderFrame.disableBtn and Addon.Controls and Addon.Controls.StyleButton then
-        Addon.Controls.StyleButton(reminderFrame.disableBtn)
+    if Addon.RefreshAddonModalTheme then
+        Addon:RefreshAddonModalTheme("raid_bonus_roll_reminder")
     end
 end
 
@@ -43,11 +31,10 @@ end
 
 local function HideReminder()
     autoHideToken = autoHideToken + 1
-    if reminderFrame and reminderFrame.holder then
+    if Addon.HideAddonModal then
+        Addon:HideAddonModal("raid_bonus_roll_reminder")
+    elseif reminderFrame and reminderFrame.holder then
         reminderFrame.holder:Hide()
-    end
-    if reminderFrame and reminderFrame.disableBtn then
-        reminderFrame.disableBtn:Hide()
     end
 end
 
@@ -156,60 +143,27 @@ end
 
 local function EnsureReminderFrame()
     if reminderFrame then return reminderFrame end
-
-    local PAD_W = 14
-    local BTN_H = 24
-    local PANEL_W = 300
-    local PANEL_H = 108
-
-    local holder = Addon:NewThemedFrame(nil, UIParent)
-    holder:SetFrameStrata("DIALOG")
-    holder:SetFrameLevel(210)
-    holder:SetSize(PANEL_W, PANEL_H)
-    holder:SetPoint("TOP", UIParent, "TOP", 0, -220)
-    holder:SetClampedToScreen(true)
-    holder:EnableMouse(true)
-    Addon:ApplyOpaquePopupTheme(holder)
-    holder:Hide()
-
-    local closeBtn = Addon.Controls.NewCloseButton(holder, function()
+    local modal = Addon:EnsureAddonModal("raid_bonus_roll_reminder", {
+        width = 360,
+        minHeight = 108,
+        topOffset = -220,
+        maxButtons = 1,
+        buttonWidth = 170,
+        buttonHeight = 24,
+        justifyH = "LEFT",
+    })
+    modal.onClose = function()
         DisableReminderForever()
         HideReminder()
         if Addon.RefreshSettingsCheckboxes then Addon:RefreshSettingsCheckboxes() end
         if Addon.SyncGearPopup then Addon:SyncGearPopup() end
-    end)
-    closeBtn:SetPoint("TOPRIGHT", holder, "TOPRIGHT", -2, -2)
-
-    local label = holder:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    label:SetPoint("TOPLEFT", holder, "TOPLEFT", PAD_W, -(PAD_W + 8))
-    label:SetPoint("TOPRIGHT", holder, "TOPRIGHT", -PAD_W, -(PAD_W + 8))
-    label:SetJustifyH("LEFT")
-    label:SetSpacing(1)
-    label:SetWordWrap(true)
-    label:SetShadowOffset(1, -1)
-
-    local disableBtn = Addon.Controls.NewActionButton(holder, 170, BTN_H)
-    disableBtn:SetFrameStrata("DIALOG")
-    disableBtn:SetFrameLevel(209)
-    disableBtn:SetPoint("BOTTOM", holder, "BOTTOM", 0, PAD_W)
-    disableBtn:SetText(L.RAID_BONUS_ROLL_REMINDER_DISABLE_BTN or "Hide Raid Reminder")
-    disableBtn:SetScript("OnEnter", function(self)
-        Addon.AddonUtils.SetTooltip(self, L.RAID_BONUS_ROLL_REMINDER_DISABLE_TOOLTIP or "Disable future raid-entry bonus-roll reminders.", "ANCHOR_BOTTOM")
-    end)
-    disableBtn:SetScript("OnLeave", Addon.AddonUtils.HideTooltip)
-    disableBtn:SetScript("OnClick", function()
-        DisableReminderForever()
-        HideReminder()
-        if Addon.RefreshSettingsCheckboxes then Addon:RefreshSettingsCheckboxes() end
-        if Addon.SyncGearPopup then Addon:SyncGearPopup() end
-    end)
-    disableBtn:Hide()
+    end
 
     reminderFrame = {
-        holder = holder,
-        label = label,
-        closeBtn = closeBtn,
-        disableBtn = disableBtn,
+        holder = modal.holder,
+        label = modal.label,
+        closeBtn = modal.closeBtn,
+        disableBtn = modal.buttons and modal.buttons[1] or nil,
     }
     ApplyReminderTheme()
     return reminderFrame
@@ -252,10 +206,31 @@ function Addon:UpdateRaidBonusRollReminder()
     reminderState.lastProgressKey = progressKey
     prefs.raidBonusRollReminderLastShownInstanceKey = instanceKey
 
-    local frame = EnsureReminderFrame()
-    frame.label:SetText(L.RAID_BONUS_ROLL_REMINDER_MSG or "You have bonus rolls available for purchase.")
-    frame.holder:Show()
-    frame.disableBtn:Show()
+    EnsureReminderFrame()
+    Addon:ShowAddonModal("raid_bonus_roll_reminder", {
+        width = 360,
+        minHeight = 108,
+        topOffset = -220,
+        text = L.RAID_BONUS_ROLL_REMINDER_MSG or "You have bonus rolls available for purchase.",
+        buttons = {
+            {
+                text = L.RAID_BONUS_ROLL_REMINDER_DISABLE_BTN or "Hide Bonus Rolls Reminder",
+                tooltip = L.RAID_BONUS_ROLL_REMINDER_DISABLE_TOOLTIP or "Disable future raid-entry bonus-roll reminders.",
+                onClick = function(_, modal)
+                    DisableReminderForever()
+                    modal.holder:Hide()
+                    if Addon.RefreshSettingsCheckboxes then Addon:RefreshSettingsCheckboxes() end
+                    if Addon.SyncGearPopup then Addon:SyncGearPopup() end
+                end,
+            },
+        },
+        onClose = function()
+            DisableReminderForever()
+            HideReminder()
+            if Addon.RefreshSettingsCheckboxes then Addon:RefreshSettingsCheckboxes() end
+            if Addon.SyncGearPopup then Addon:SyncGearPopup() end
+        end,
+    })
 
     autoHideToken = autoHideToken + 1
     local myToken = autoHideToken

@@ -480,45 +480,343 @@ function Addon:GetSupportLinks()
     }
 end
 
+function Addon:ApplyThemedStaticPopup(popupFrame)
+    if not popupFrame then return end
+
+    -- StaticPopup frames are small and content-dense; avoid the heavy
+    -- window-surface gradients used by large custom panels.
+    self:ApplyTheme(popupFrame)
+    self:ApplyPopupBorder(popupFrame)
+    if popupFrame.SetBackdropColor and self.THEME and self.THEME.bg then
+        local bg = self.THEME.bg
+        popupFrame:SetBackdropColor(bg.r, bg.g, bg.b, 0.96)
+    end
+    if popupFrame._lariaBgTex then popupFrame._lariaBgTex:Hide() end
+    if popupFrame._lariasSurfaceTop then popupFrame._lariasSurfaceTop:Hide() end
+    if popupFrame._lariasSurfaceBottom then popupFrame._lariasSurfaceBottom:Hide() end
+
+    local txt = self.THEME and self.THEME.text or { r = 1, g = 1, b = 1, a = 1 }
+
+    if popupFrame._lariasBrandFill then popupFrame._lariasBrandFill:Hide() end
+    if popupFrame._lariasBrandGlow then popupFrame._lariasBrandGlow:Hide() end
+    if popupFrame._lariasBrandDivider then popupFrame._lariasBrandDivider:Hide() end
+    if popupFrame._lariasBrandFS then popupFrame._lariasBrandFS:Hide() end
+
+    if popupFrame.text and popupFrame.text.SetTextColor then
+        popupFrame.text:SetTextColor(txt.r, txt.g, txt.b, txt.a or 1)
+        if popupFrame.text.SetSpacing then
+            popupFrame.text:SetSpacing(2)
+        end
+    end
+    for i = 1, 3 do
+        local btn = popupFrame["button" .. i]
+        if btn then
+            if self.Controls and self.Controls.StyleButton then
+                self.Controls.StyleButton(btn)
+            end
+            local fs = btn.Text or (btn.GetFontString and btn:GetFontString())
+            if fs and fs.SetTextColor then
+                fs:SetTextColor(txt.r, txt.g, txt.b, txt.a or 1)
+            end
+        end
+    end
+
+    local eb = popupFrame.editBox
+    if eb then
+        self:ApplyTheme(eb)
+        if eb.SetBackdropColor and self.THEME and self.THEME.bg then
+            local bg = self.THEME.bg
+            eb:SetBackdropColor(bg.r, bg.g, bg.b, 0.95)
+        end
+        if eb.SetBackdropBorderColor and self.THEME and self.THEME.border then
+            local bd = self.THEME.border
+            eb:SetBackdropBorderColor(bd.r, bd.g, bd.b, 0.9)
+        end
+        if eb.SetTextColor then
+            eb:SetTextColor(txt.r, txt.g, txt.b, txt.a or 1)
+        end
+    end
+end
+
+function Addon:ShowThemedStaticPopup(popupKey, textArg1, textArg2, data)
+    local frame = StaticPopup_Show(popupKey, textArg1, textArg2, data)
+    if frame and self.ApplyThemedStaticPopup then
+        self:ApplyThemedStaticPopup(frame)
+    end
+    return frame
+end
+
+function Addon:HideAddonModal(modalKey)
+    local registry = self._addonModalRegistry
+    local modal = registry and registry[modalKey]
+    if modal and modal.holder then
+        modal.holder:Hide()
+    end
+end
+
+function Addon:RefreshAddonModalTheme(modalKey)
+    local registry = self._addonModalRegistry
+    local modal = registry and registry[modalKey]
+    if not modal then return end
+
+    local txt = self.THEME and self.THEME.text
+    local hdr = self.THEME and self.THEME.header
+    local bg = self.THEME and self.THEME.bg
+    local vs = self.VISUAL_STYLE or {}
+    if modal.headerDivider and hdr then
+        modal.headerDivider:SetColorTexture(hdr.r, hdr.g, hdr.b, (vs.dividerA or 0.22) + 0.12)
+    end
+    if modal.holder and modal.holder._lariasSurfaceTop then
+        modal.holder._lariasSurfaceTop:Hide()
+    end
+    if modal.title and modal.title.SetTextColor and hdr then
+        modal.title:SetTextColor(hdr.r, hdr.g, hdr.b, 1)
+        if modal.title.SetShadowColor and bg then
+            modal.title:SetShadowColor(bg.r, bg.g, bg.b, vs.textShadowA or bg.a or 1)
+        end
+    end
+    if modal.label and modal.label.SetTextColor and txt then
+        modal.label:SetTextColor(txt.r, txt.g, txt.b, txt.a or 1)
+        if modal.label.SetShadowColor and bg then
+            modal.label:SetShadowColor(bg.r, bg.g, bg.b, vs.textShadowA or bg.a or 1)
+        end
+    end
+    if modal.buttons then
+        for i = 1, #modal.buttons do
+            local btn = modal.buttons[i]
+            if btn and self.Controls and self.Controls.StyleButton then
+                self.Controls.StyleButton(btn)
+            end
+        end
+    end
+end
+
+function Addon:EnsureAddonModal(modalKey, opts)
+    self._addonModalRegistry = self._addonModalRegistry or {}
+    local modal = self._addonModalRegistry[modalKey]
+    if modal then return modal end
+
+    opts = opts or {}
+    local pad = tonumber(opts.pad) or 14
+    local buttonHeight = tonumber(opts.buttonHeight) or 24
+    local width = tonumber(opts.width) or 320
+    local minHeight = tonumber(opts.minHeight) or 108
+    local topOffset = tonumber(opts.topOffset) or -220
+    local buttonGap = tonumber(opts.buttonGap) or 10
+    local maxButtons = math.max(1, tonumber(opts.maxButtons) or 2)
+
+    local holder = self:NewThemedFrame(nil, UIParent)
+    holder:SetFrameStrata("DIALOG")
+    holder:SetFrameLevel(210)
+    holder:SetSize(width, minHeight)
+    holder:SetPoint("TOP", UIParent, "TOP", 0, topOffset)
+    holder:SetClampedToScreen(true)
+    holder:EnableMouse(true)
+    holder:SetMovable(true)
+    holder:RegisterForDrag("LeftButton")
+    holder:SetScript("OnDragStart", holder.StartMoving)
+    holder:SetScript("OnDragStop", holder.StopMovingOrSizing)
+    self:RegisterWindowSurface(holder, {
+        opacityMode = "opaque",
+        borderStyle = "popup",
+        surfaceTopA = 0,
+    })
+    holder:Hide()
+
+    local closeBtn = self.Controls.NewCloseButton(holder, function()
+        if modal and modal.onClose then
+            modal.onClose()
+        else
+            holder:Hide()
+        end
+    end)
+    closeBtn:SetPoint("TOPRIGHT", holder, "TOPRIGHT", -2, -2)
+
+    local headerDivider = holder:CreateTexture(nil, "OVERLAY")
+    headerDivider:SetPoint("TOPLEFT", holder, "TOPLEFT", 1, -28)
+    headerDivider:SetPoint("TOPRIGHT", holder, "TOPRIGHT", -1, -28)
+    headerDivider:SetHeight(1)
+
+    local title = holder:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    title:SetPoint("TOPLEFT", holder, "TOPLEFT", pad, -10)
+    title:SetPoint("TOPRIGHT", holder, "TOPRIGHT", -28, -10)
+    title:SetJustifyH("LEFT")
+    title:SetShadowOffset(1, -1)
+
+    local label = holder:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    label:SetPoint("TOPLEFT", holder, "TOPLEFT", pad, -(pad + 24))
+    label:SetPoint("TOPRIGHT", holder, "TOPRIGHT", -pad, -(pad + 24))
+    label:SetJustifyH(opts.justifyH or "LEFT")
+    label:SetJustifyV("TOP")
+    label:SetWordWrap(true)
+    label:SetSpacing(1)
+    label:SetShadowOffset(1, -1)
+
+    local buttons = {}
+    for i = 1, maxButtons do
+        local btn = self.Controls.NewActionButton(holder, tonumber(opts.buttonWidth) or 132, buttonHeight)
+        btn:Hide()
+        buttons[i] = btn
+    end
+
+    modal = {
+        holder = holder,
+        headerDivider = headerDivider,
+        title = title,
+        label = label,
+        closeBtn = closeBtn,
+        buttons = buttons,
+        pad = pad,
+        buttonGap = buttonGap,
+        buttonHeight = buttonHeight,
+        minHeight = minHeight,
+        topOffset = topOffset,
+        width = width,
+        justifyH = opts.justifyH or "LEFT",
+        onClose = nil,
+        payload = nil,
+    }
+    self._addonModalRegistry[modalKey] = modal
+    self:RefreshAddonModalTheme(modalKey)
+    return modal
+end
+
+function Addon:ShowAddonModal(modalKey, opts)
+    opts = opts or {}
+    local modal = self:EnsureAddonModal(modalKey, opts)
+    if not modal then return nil end
+
+    local holder = modal.holder
+    local label = modal.label
+    local pad = tonumber(opts.pad) or modal.pad or 14
+    local buttonGap = tonumber(opts.buttonGap) or modal.buttonGap or 10
+    local buttonHeight = tonumber(opts.buttonHeight) or modal.buttonHeight or 24
+    local minHeight = tonumber(opts.minHeight) or modal.minHeight or 108
+    local topOffset = tonumber(opts.topOffset) or modal.topOffset or -220
+    local bodyTop = tonumber(opts.bodyTop) or (pad + 24)
+    local buttons = type(opts.buttons) == "table" and opts.buttons or {}
+
+    modal.onClose = opts.onClose
+    modal.payload = opts.payload
+    modal.pad = pad
+    modal.buttonGap = buttonGap
+    modal.buttonHeight = buttonHeight
+    modal.minHeight = minHeight
+    modal.topOffset = topOffset
+
+    holder:SetWidth(tonumber(opts.width) or modal.width or 320)
+    holder:ClearAllPoints()
+    holder:SetPoint("TOP", UIParent, "TOP", 0, topOffset)
+
+    if modal.title then
+        modal.title:SetText(tostring(opts.title or self.DISPLAY_NAME or (self.L and self.L.DISPLAY_NAME) or "Larias' Weekly Checklist"))
+    end
+
+    label:ClearAllPoints()
+    label:SetPoint("TOPLEFT", holder, "TOPLEFT", pad, -bodyTop)
+    label:SetPoint("TOPRIGHT", holder, "TOPRIGHT", -pad, -bodyTop)
+    label:SetJustifyH(opts.justifyH or modal.justifyH or "LEFT")
+    label:SetText(tostring(opts.text or ""))
+
+    local textHeight = math.max(24, math.ceil(label:GetStringHeight() or 24))
+
+    for i = 1, #modal.buttons do
+        local btn = modal.buttons[i]
+        local btnSpec = buttons[i]
+        if btn and btnSpec then
+            btn:SetWidth(tonumber(btnSpec.width) or tonumber(opts.buttonWidth) or btn:GetWidth())
+            btn:SetHeight(tonumber(btnSpec.height) or buttonHeight)
+            btn:SetText(tostring(btnSpec.text or ""))
+            btn:SetScript("OnClick", function(self_)
+                if btnSpec.onClick then
+                    btnSpec.onClick(self_, modal)
+                else
+                    holder:Hide()
+                end
+            end)
+            btn:SetScript("OnEnter", nil)
+            btn:SetScript("OnLeave", nil)
+            if btnSpec.tooltip then
+                btn:SetScript("OnEnter", function(self_)
+                    Addon.AddonUtils.SetTooltip(self_, btnSpec.tooltip, btnSpec.tooltipAnchor or "ANCHOR_BOTTOM")
+                end)
+                btn:SetScript("OnLeave", Addon.AddonUtils.HideTooltip)
+            end
+            btn:Show()
+        elseif btn then
+            btn:Hide()
+        end
+    end
+
+    if #buttons == 1 and modal.buttons[1] then
+        local btn = modal.buttons[1]
+        btn:ClearAllPoints()
+        btn:SetPoint("BOTTOM", holder, "BOTTOM", 0, pad)
+    elseif #buttons >= 2 and modal.buttons[1] and modal.buttons[2] then
+        modal.buttons[1]:ClearAllPoints()
+        modal.buttons[1]:SetPoint("BOTTOMRIGHT", holder, "BOTTOM", -(buttonGap / 2), pad)
+        modal.buttons[2]:ClearAllPoints()
+        modal.buttons[2]:SetPoint("BOTTOMLEFT", holder, "BOTTOM", buttonGap / 2, pad)
+    end
+
+    local panelHeight = math.max(minHeight, bodyTop + textHeight + buttonHeight + (pad * 2) - 4)
+    holder:SetHeight(panelHeight)
+    self:RefreshAddonModalTheme(modalKey)
+    holder:Show()
+    return modal
+end
+
 function Addon:MaybeShowGuideUpdatePopup()
     local gdb = self:EnsurePrefs()
-    if type(gdb) ~= "table" then return end
+    if type(gdb) ~= "table" then return false end
+    if self._guidePopupShownThisSession then return false end
 
     local supportLinks = self.TRACKING and self.TRACKING.supportLinks or nil
     local currentGuideUrl = tostring((supportLinks and supportLinks.doc) or "")
-    if currentGuideUrl == "" then return end
+    if currentGuideUrl == "" then return false end
 
     local lastSeenGuideUrl = tostring(gdb._seenGuideDocUrl or "")
     if lastSeenGuideUrl == "" then
         gdb._seenGuideDocUrl = currentGuideUrl
-        return
+        return false
     end
-    if lastSeenGuideUrl == currentGuideUrl then return end
+    if lastSeenGuideUrl == currentGuideUrl then return false end
 
     -- Record immediately so this URL change prompts only once.
     gdb._seenGuideDocUrl = currentGuideUrl
 
     local locale = self.L or {}
-    local popupKey = "LARIAS_GUIDE_UPDATE"
-    local dialog = StaticPopupDialogs[popupKey] or {}
-    dialog.text = locale.GUIDE_UPDATE_POPUP_TEXT or "A new guide is available. Open it now?"
-    dialog.button1 = locale.GUIDE_UPDATE_OPEN_BTN or "Open Guide"
-    dialog.button2 = locale.GUIDE_UPDATE_LATER_BTN or "Later"
-    dialog.timeout = 0
-    dialog.whileDead = true
-    dialog.hideOnEscape = true
-    dialog.preferredIndex = 3
-    dialog.OnAccept = function(self_)
-        local targetUrl = (self_ and self_.data) or currentGuideUrl
-        if Addon.OpenSupportLink then
-            Addon.OpenSupportLink(targetUrl)
-        elseif C_Browser and C_Browser.OpenLink and targetUrl and targetUrl ~= "" then
-            C_Browser.OpenLink(targetUrl)
-        end
-    end
-    StaticPopupDialogs[popupKey] = dialog
-    StaticPopup_Show(popupKey, nil, nil, currentGuideUrl)
-    return
+    local bodyText = locale.GUIDE_UPDATE_POPUP_TEXT or "A new guide is available. Open it now?"
+    self:ShowAddonModal("guide_announcement", {
+        width = 360,
+        minHeight = 108,
+        topOffset = -220,
+        text = bodyText,
+        payload = { url = currentGuideUrl },
+        buttons = {
+            {
+                text = locale.GUIDE_UPDATE_OPEN_BTN or "Open Guide",
+                onClick = function(_, modal)
+                    local targetUrl = modal and modal.payload and modal.payload.url or currentGuideUrl
+                    modal.holder:Hide()
+                    if Addon.OpenSupportLink and targetUrl and targetUrl ~= "" then
+                        Addon.OpenSupportLink(targetUrl)
+                    end
+                end,
+            },
+            {
+                text = locale.GUIDE_UPDATE_LATER_BTN or "Later",
+                onClick = function(_, modal)
+                    modal.holder:Hide()
+                end,
+            },
+        },
+        onClose = function()
+            Addon:HideAddonModal("guide_announcement")
+        end,
+    })
+    self._guidePopupShownThisSession = true
+    return true
 
     -- NOTE: Intentional early return above. We only show one guide-related popup
     -- per login trigger to avoid stacking dialogs.
@@ -526,17 +824,19 @@ end
 
 function Addon:MaybeShowFutureSeasonGuidePopup()
     local gdb = self:EnsurePrefs()
-    if type(gdb) ~= "table" then return end
+    if type(gdb) ~= "table" then return false end
+    if self._guidePopupShownThisSession then return false end
 
     local currentMPlusSeason = nil
     if C_MythicPlus and C_MythicPlus.GetCurrentSeason then
         currentMPlusSeason = tonumber(C_MythicPlus.GetCurrentSeason())
     end
-    if not (currentMPlusSeason and currentMPlusSeason > 0) then return end
+    if not (currentMPlusSeason and currentMPlusSeason > 0) then return false end
 
     local tracking = self.TRACKING
+    local currentGuideUrl = tostring((((tracking or {}).supportLinks or {}).doc) or "")
     local variants = tracking and tracking.seasonVariants
-    if type(variants) ~= "table" or #variants == 0 then return end
+    if type(variants) ~= "table" or #variants == 0 then return false end
 
     local bestSeason = nil
     local bestVariant = nil
@@ -552,7 +852,7 @@ function Addon:MaybeShowFutureSeasonGuidePopup()
                     or (type(candidate.supportLinks) == "table" and candidate.supportLinks)
                     or nil
                 local futureGuideUrl = tostring((links and links.doc) or "")
-                if futureGuideUrl ~= "" then
+                if futureGuideUrl ~= "" and futureGuideUrl ~= currentGuideUrl then
                     bestSeason = seasonNumber
                     bestVariant = candidate
                     bestGuideUrl = futureGuideUrl
@@ -561,36 +861,48 @@ function Addon:MaybeShowFutureSeasonGuidePopup()
         end
     end
 
-    if not bestSeason or bestGuideUrl == "" then return end
+    if not bestSeason or bestGuideUrl == "" then return false end
 
     gdb._seenFutureGuideAnnouncements = type(gdb._seenFutureGuideAnnouncements) == "table" and gdb._seenFutureGuideAnnouncements or {}
     local announcementKey = tostring(bestSeason) .. "|" .. bestGuideUrl
-    if gdb._seenFutureGuideAnnouncements[announcementKey] then return end
+    if gdb._seenFutureGuideAnnouncements[announcementKey] then return false end
 
     -- Record immediately so this future guide prompt is one-time.
     gdb._seenFutureGuideAnnouncements[announcementKey] = true
 
     local locale = self.L or {}
     local seasonLabel = tostring((bestVariant and bestVariant.name) or (locale.ILVLREF_SEASON_LABEL_FMT or "Season %d"):format(bestSeason))
-    local popupKey = "LARIAS_GUIDE_FUTURE_SEASON"
-    local dialog = StaticPopupDialogs[popupKey] or {}
-    dialog.text = (locale.GUIDE_FUTURE_POPUP_TEXT_FMT or "A new guide for %s is available. Open it now?"):format(seasonLabel)
-    dialog.button1 = locale.GUIDE_UPDATE_OPEN_BTN or "Open Guide"
-    dialog.button2 = locale.GUIDE_UPDATE_LATER_BTN or "Later"
-    dialog.timeout = 0
-    dialog.whileDead = true
-    dialog.hideOnEscape = true
-    dialog.preferredIndex = 3
-    dialog.OnAccept = function(self_)
-        local targetUrl = (self_ and self_.data) or bestGuideUrl
-        if Addon.OpenSupportLink then
-            Addon.OpenSupportLink(targetUrl)
-        elseif C_Browser and C_Browser.OpenLink and targetUrl and targetUrl ~= "" then
-            C_Browser.OpenLink(targetUrl)
-        end
-    end
-    StaticPopupDialogs[popupKey] = dialog
-    StaticPopup_Show(popupKey, nil, nil, bestGuideUrl)
+    local bodyText = (locale.GUIDE_FUTURE_POPUP_TEXT_FMT or "A new guide for %s is available. Open it now?"):format(seasonLabel)
+    self:ShowAddonModal("guide_announcement", {
+        width = 360,
+        minHeight = 108,
+        topOffset = -220,
+        text = bodyText,
+        payload = { url = bestGuideUrl },
+        buttons = {
+            {
+                text = locale.GUIDE_UPDATE_OPEN_BTN or "Open Guide",
+                onClick = function(_, modal)
+                    local targetUrl = modal and modal.payload and modal.payload.url or bestGuideUrl
+                    modal.holder:Hide()
+                    if Addon.OpenSupportLink and targetUrl and targetUrl ~= "" then
+                        Addon.OpenSupportLink(targetUrl)
+                    end
+                end,
+            },
+            {
+                text = locale.GUIDE_UPDATE_LATER_BTN or "Later",
+                onClick = function(_, modal)
+                    modal.holder:Hide()
+                end,
+            },
+        },
+        onClose = function()
+            Addon:HideAddonModal("guide_announcement")
+        end,
+    })
+    self._guidePopupShownThisSession = true
+    return true
 end
 
 -- ── Context menu ────────────────────────────────────────────────────────────
@@ -723,6 +1035,10 @@ function Addon:OnInitialize()
         self:ApplyLocaleOverride()
     end
     SetupMinimapIcon()
+    if self.RegisterEvent and not self._listeningForPlayerEnteringWorld then
+        self._listeningForPlayerEnteringWorld = true
+        self:RegisterEvent("PLAYER_ENTERING_WORLD", "OnPlayerEnteringWorld")
+    end
     -- Register the Blizzard Interface Options panel early so it appears
     -- in the Interface -> AddOns list even before the window is opened.
     if self.CreateBlizzOptionsPanel then
@@ -783,14 +1099,25 @@ function Addon:OnEnable()
         self:RegisterSettingsPanel()
     end
 
-    if self.MaybeShowGuideUpdatePopup then
+    -- Version announce happens in CommsOnEnable.
+end
+
+function Addon:OnPlayerEnteringWorld(_, isInitialLogin, isReloadingUi)
+    if self.UnregisterEvent then
+        self:UnregisterEvent("PLAYER_ENTERING_WORLD")
+    end
+    self._listeningForPlayerEnteringWorld = false
+
+    if isReloadingUi then return end
+    if isInitialLogin == false then return end
+
+    local shown = false
+    if self.MaybeShowFutureSeasonGuidePopup then
+        shown = self:MaybeShowFutureSeasonGuidePopup() == true
+    end
+    if (not shown) and self.MaybeShowGuideUpdatePopup then
         self:MaybeShowGuideUpdatePopup()
     end
-    if self.MaybeShowFutureSeasonGuidePopup then
-        self:MaybeShowFutureSeasonGuidePopup()
-    end
-
-    -- Version announce happens in CommsOnEnable.
 end
 
 -- Called when *any* addon loads; we only care about the localization companion.

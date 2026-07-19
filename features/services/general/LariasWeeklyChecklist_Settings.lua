@@ -30,6 +30,11 @@ StaticPopupDialogs["LARIAS_LOCALE_RELOAD"] = StaticPopupDialogs["LARIAS_LOCALE_R
     whileDead = true,
     hideOnEscape = true,
     preferredIndex = 3,
+    OnShow = function(self)
+        if Addon.ApplyThemedStaticPopup then
+            Addon:ApplyThemedStaticPopup(self)
+        end
+    end,
 }
 
 -- (GetSupportLinks removed; use Addon:GetSupportLinks() instead.)
@@ -47,6 +52,9 @@ StaticPopupDialogs["LARIAS_COPY_LINK"] = {
     hideOnEscape = true,
     preferredIndex = 5,
     OnShow = function(self)
+        if Addon.ApplyThemedStaticPopup then
+            Addon:ApplyThemedStaticPopup(self)
+        end
         -- Defer one frame: WoW positions the editBox *after* calling OnShow.
         C_Timer.After(0, function()
             local eb = self.editBox or _G[self:GetName() and (self:GetName() .. "EditBox")]
@@ -77,7 +85,11 @@ function Addon.OpenSupportLink(url)
         C_Browser.OpenLink(url)
     else
         Addon._pendingCopyUrl = url
-        StaticPopup_Show("LARIAS_COPY_LINK", nil, nil, url)
+        if Addon.ShowThemedStaticPopup then
+            Addon:ShowThemedStaticPopup("LARIAS_COPY_LINK", nil, nil, url)
+        else
+            StaticPopup_Show("LARIAS_COPY_LINK", nil, nil, url)
+        end
     end
 end
 
@@ -274,7 +286,11 @@ local function BuildPanel()
                 end
                 langDropBtn:SetText(GetLocaleFriendlyName(_code))
                 Addon.Controls.StyleButton(langDropBtn)
-                StaticPopup_Show("LARIAS_LOCALE_RELOAD")
+                if Addon.ShowThemedStaticPopup then
+                    Addon:ShowThemedStaticPopup("LARIAS_LOCALE_RELOAD")
+                else
+                    StaticPopup_Show("LARIAS_LOCALE_RELOAD")
+                end
             end)
         end
         return langPopup
