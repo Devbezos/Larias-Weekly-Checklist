@@ -68,31 +68,6 @@ local function ClearActions()
     for k in pairs(_actions) do _actions[k] = nil end
 end
 
-local function GetNpcIDFromGUID(guid)
-    if type(guid) ~= "string" then return nil end
-    -- Use string.match to avoid method lookup on a secure GUID string.
-    local id = string.match(guid, "^%w+%-%d+%-%d+%-%d+%-%d+%-(%d+)%-")
-    return tonumber(id)
-end
-
-local function GetNpcIDFromUnit(unitToken)
-    if not (UnitGUID and unitToken) then return nil end
-    local ok, guid = pcall(UnitGUID, unitToken)
-    if not ok then return nil end
-    return GetNpcIDFromGUID(guid)
-end
-
-local function IsCrestExchangeVendor()
-    local npcID = GetNpcIDFromUnit("npc") or GetNpcIDFromUnit("target")
-    local allowed = Addon.TRACKING and Addon.TRACKING.crestExchangeNpcIDs
-    if not (npcID and type(allowed) == "table") then return false end
-
-    for _, allowedID in ipairs(allowed) do
-        if npcID == tonumber(allowedID) then return true end
-    end
-    return false
-end
-
 -- Returns a tier-coloured short crest name for use in warning text.
 -- e.g. tier 1 → "|cFF1EFF00Adv|r"
 local function GetCrestShort(tierIdx)
@@ -460,7 +435,6 @@ evFrame:SetScript("OnEvent", function(_, event)
         C_Timer.After(0.05, function()
             local prefs = Addon.EnsurePrefs and Addon:EnsurePrefs()
             if prefs and prefs.crestConvertDisabled then return end
-            if not IsCrestExchangeVendor() then return end
 
             ScanMerchant()
             if HasAnyActions() then
