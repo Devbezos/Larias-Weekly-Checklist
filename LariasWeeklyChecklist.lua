@@ -1108,8 +1108,7 @@ function Addon:OnPlayerEnteringWorld(_, isInitialLogin, isReloadingUi)
     end
     self._listeningForPlayerEnteringWorld = false
 
-    if isReloadingUi then return end
-    if isInitialLogin == false then return end
+    if not isInitialLogin and not isReloadingUi then return end
 
     local shown = false
     if self.MaybeShowFutureSeasonGuidePopup then
