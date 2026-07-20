@@ -22,24 +22,17 @@ reg.sheet_version = "30"
 local DATASET = {
 
     {
-        id = "067d2566",
-        title = "Week 5 - Apr 14 - Done with Heroic Crests",
+        id = "03316bcb",
+        title = "Week 1 - Aug 11?? - Pre-Season",
         items = {
-            { id = "9375e497", text = "Open vault (272+ myth item)" },
-            { id = "83fd4310", text = "Complete weekly world event quest for spark from Lady Liadrin" },
-            { id = "1db5f946", text = "Farm +10s for vault + crests" },
-            { id = "da97880d", text = "Catch up the Voidforge storyline so you can get bonus rolls next week" },
-            { id = "f9978f0e", text = "Do not craft if you can get vault items higher than 1/6" },
+            { id = "facfee6f", text = "I've published a new guide outlining what's coming. Week by Week advice will be added closer to season launch" },
         },
     },
     {
-        id = "599ab6a0",
-        title = "Week 6 - Apr 21 - Bonus Rolls Unlock",
+        id = "fe096bf2",
+        title = "Week 2 on - Aug 18?? - Season starts",
         items = {
-            { id = "f9978f0e", text = "Do not craft if you can get vault items higher than 1/6" },
-            { id = "66e83cc1", text = "Upgrade Mythic items as you get them, preferring to jump them to 289 for the +4 jump" },
-            { id = "90409a11", text = "Complete Blizzard's Voidforge storyline quest to unlock bonus rolls - check guide on best use of Bonus rolls going forward" },
-            { id = "f9978f0e", text = "Do not craft if you can get vault items higher than 1/6" },
+            { id = "a55dc6cf", text = "TBD - check guide" },
         },
     },
 }
