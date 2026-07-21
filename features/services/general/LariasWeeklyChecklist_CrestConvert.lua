@@ -39,11 +39,9 @@ local COL_COUNT_X = 162   -- ratio "[30->10]" fits in 108..161
 -- ── Module state ──────────────────────────────────────────────────────────────
 local _panel          -- outer panel frame (created lazily on first merchant visit)
 local _btns  = {}     -- [ci] = UIPanelButton for conversion tier ci (1-4)
-local _modeBtn        -- toggles upgrade/downgrade display
 local _allBtn         -- "Convert All" button
 local _disableBtn     -- "Disable" button at the bottom of the panel
-local _actions = { upgrade = {}, downgrade = {} }
-local _mode = "upgrade"
+local _actions = {}
 local _pendingConvert -- callback stored while the confirm dialog is open
 
 -- ── Helpers ───────────────────────────────────────────────────────────────────
@@ -67,33 +65,7 @@ local function BuildItemIndex(values)
 end
 
 local function ClearActions()
-    for _, list in pairs(_actions) do
-        for k in pairs(list) do list[k] = nil end
-    end
-end
-
-local function GetNpcIDFromGUID(guid)
-    if type(guid) ~= "string" then return nil end
-    local id = guid:match("^%w+%-%d+%-%d+%-%d+%-%d+%-(%d+)%-")
-    return tonumber(id)
-end
-
-local function GetNpcIDFromUnit(unitToken)
-    if not (UnitGUID and unitToken) then return nil end
-    local ok, guid = pcall(UnitGUID, unitToken)
-    if not ok then return nil end
-    return GetNpcIDFromGUID(guid)
-end
-
-local function IsCrestExchangeVendor()
-    local npcID = GetNpcIDFromUnit("npc") or GetNpcIDFromUnit("target")
-    local allowed = Addon.TRACKING and Addon.TRACKING.crestExchangeNpcIDs
-    if not (npcID and type(allowed) == "table") then return false end
-
-    for _, allowedID in ipairs(allowed) do
-        if npcID == tonumber(allowedID) then return true end
-    end
-    return false
+    for k in pairs(_actions) do _actions[k] = nil end
 end
 
 -- Returns a tier-coloured short crest name for use in warning text.
@@ -159,39 +131,17 @@ local function GetMaxConv(action)
     return math.floor(held / costPer)
 end
 
-local function AddAction(mode, action)
-    local list = _actions[mode]
-    if not (list and action and action.destTier) then return end
-    list[#list + 1] = action
+local function AddAction(action)
+    if not (action and action.destTier) then return end
+    _actions[#_actions + 1] = action
 end
 
 local function GetCurrentActions()
-    return _actions[_mode] or _actions.upgrade
+    return _actions
 end
 
 local function HasAnyActions()
-    return #(_actions.upgrade or {}) > 0 or #(_actions.downgrade or {}) > 0
-end
-
-local function GetModeLabel()
-    if _mode == "downgrade" then
-        return L.CREST_CONVERT_MODE_DOWNGRADE or "Mode: Downgrade"
-    end
-    return L.CREST_CONVERT_MODE_UPGRADE or "Mode: Upgrade"
-end
-
-local function ToggleMode()
-    _mode = (_mode == "upgrade") and "downgrade" or "upgrade"
-    Addon:RefreshCrestConvertPanel()
-end
-
-local function SelectAvailableMode()
-    if #GetCurrentActions() > 0 then return end
-    if #(_actions.upgrade or {}) > 0 then
-        _mode = "upgrade"
-    elseif #(_actions.downgrade or {}) > 0 then
-        _mode = "downgrade"
-    end
+    return #_actions > 0
 end
 
 -- Scans the open merchant and groups conversion rows by direction.
@@ -210,20 +160,12 @@ local function ScanMerchant()
             if outputTier then
                 local costPer, costTier = GetMerchantCostDetails(i)
                 if (not costTier) or costTier < outputTier then
-                    AddAction("upgrade", {
+                    AddAction({
                         merchantIdx = i,
                         sourceTier  = costTier or itemTierIdx,
                         destTier    = outputTier,
                         costPer     = costPer,
                         gainPer     = GetGainPerPurchase(),
-                    })
-                elseif costTier and costTier > outputTier then
-                    AddAction("downgrade", {
-                        merchantIdx = i,
-                        sourceTier  = costTier,
-                        destTier    = outputTier,
-                        costPer     = 1,
-                        gainPer     = 1,
                     })
                 end
             end
@@ -238,6 +180,11 @@ StaticPopupDialogs["LWMC_CREST_CONVERT"] = StaticPopupDialogs["LWMC_CREST_CONVER
     text         = "%s",
     button1      = L.CREST_CONVERT_CONFIRM_BTN or "Convert",
     button2      = CANCEL or "Cancel",
+    OnShow       = function(self)
+        if Addon.ApplyThemedStaticPopup then
+            Addon:ApplyThemedStaticPopup(self)
+        end
+    end,
     OnAccept     = function()
         local cb = _pendingConvert
         _pendingConvert = nil
@@ -254,7 +201,11 @@ StaticPopupDialogs["LWMC_CREST_CONVERT"] = StaticPopupDialogs["LWMC_CREST_CONVER
 
 local function ShowConfirm(warnText, callback)
     _pendingConvert = callback
-    StaticPopup_Show("LWMC_CREST_CONVERT", warnText)
+    if Addon.ShowThemedStaticPopup then
+        Addon:ShowThemedStaticPopup("LWMC_CREST_CONVERT", warnText)
+    else
+        StaticPopup_Show("LWMC_CREST_CONVERT", warnText)
+    end
 end
 
 -- ── Panel creation ────────────────────────────────────────────────────────────
@@ -287,16 +238,6 @@ local function BuildPanel()
     else
         holder:SetPoint("CENTER", UIParent, "CENTER", 350, 0)
     end
-
-    local modeBtn = Addon.Controls.NewActionButton(holder, BTN_W, BTN_H)
-    modeBtn:SetText(GetModeLabel())
-    modeBtn:SetScript("OnClick", ToggleMode)
-    modeBtn:SetScript("OnEnter", function(self_)
-        Addon.AddonUtils.SetTooltip(self_, L.CREST_CONVERT_MODE_TOOLTIP or "Toggle between upgrading crests and downgrading crests.")
-    end)
-    modeBtn:SetScript("OnLeave", Addon.AddonUtils.HideTooltip)
-    modeBtn:Hide()
-    _modeBtn = modeBtn
 
     -- Create one button per visible conversion row; shown/positioned in Refresh.
     -- Each button uses 3 FontStrings at fixed x offsets so columns stay aligned
@@ -420,7 +361,6 @@ function Addon:RefreshCrestConvertPanel()
         if _btns[ci] then _btns[ci]:Hide() end
     end
     if _allBtn then _allBtn:Hide() end
-    if _modeBtn then _modeBtn:Hide() end
 
     if not HasAnyActions() then
         _panel:Hide()
@@ -430,12 +370,6 @@ function Addon:RefreshCrestConvertPanel()
     -- Layout: title sits at the top; buttons stack downward.
     local anyAvail = false
     local yOff     = -(PAD + TITLE_H + SEP)
-
-    _modeBtn:ClearAllPoints()
-    _modeBtn:SetPoint("TOP", _panel, "TOP", 0, yOff)
-    _modeBtn:SetText(GetModeLabel())
-    _modeBtn:Show()
-    yOff = yOff - (BTN_H + SEP)
 
     for rowIdx, action in ipairs(visible) do
         local btn      = _btns[rowIdx]
@@ -501,11 +435,9 @@ evFrame:SetScript("OnEvent", function(_, event)
         C_Timer.After(0.05, function()
             local prefs = Addon.EnsurePrefs and Addon:EnsurePrefs()
             if prefs and prefs.crestConvertDisabled then return end
-            if not IsCrestExchangeVendor() then return end
 
             ScanMerchant()
             if HasAnyActions() then
-                SelectAvailableMode()
                 BuildPanel()
                 Addon:RefreshCrestConvertPanel()
             elseif _panel then

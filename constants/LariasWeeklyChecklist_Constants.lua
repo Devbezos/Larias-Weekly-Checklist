@@ -13,23 +13,8 @@ local addonName = ...
 local constantsKey = tostring(addonName or "") .. "_CONSTANTS"
 
 -- Season data: update these every new season.
+-- Optional seasonVariants are auto-selected by mythicPlusSeason, then startsAt.
 local tracking = { -- https://www.wowhead.com/currencies/season-1
-    -- Crest currencies, index 1 (lowest) through 5 (highest).
-    crestCurrencyIDs = {
-        3383,  -- wowhead.com/currency=3383  Adventurer Dawncrest
-        3341,  -- wowhead.com/currency=3341  Veteran Dawncrest
-        3343,  -- wowhead.com/currency=3343  Champion Dawncrest
-        3345,  -- wowhead.com/currency=3345  Hero Dawncrest
-        3347,  -- wowhead.com/currency=3347  Myth Dawncrest
-    },
-    -- Items sold by Crest Exchange vendors to trade lower-tier crests upward.
-    -- Index ci maps source crest tier ci to destination tier ci + 1.
-    crestConvertItemIDs = {
-        263977, -- Adventurer Dawncrest -> Veteran Dawncrest
-        246751, -- Veteran Dawncrest    -> Champion Dawncrest
-        246752, -- Champion Dawncrest   -> Hero Dawncrest
-        246753, -- Hero Dawncrest       -> Myth Dawncrest
-    },
     -- NPCs that should show the crest conversion side panel.
     crestExchangeNpcIDs = {
         239676, -- Vaskarn <Crest Exchange>, Silvermoon City (Midnight)
@@ -37,50 +22,232 @@ local tracking = { -- https://www.wowhead.com/currencies/season-1
         216449, -- Vaskarn <Awakened Crest Exchange>
         203404, -- Vaskarn <Shadowflame Crest Exchange>
     },
-    -- Achievement IDs for each crest tier (earn-X-crests achievements), same order.
-    crestAchievementIDs = {
-        61809,  -- wowhead.com/achievement=61809  Adventurer
-        42767,  -- wowhead.com/achievement=42767  Veteran
-        42768,  -- wowhead.com/achievement=42768  Champion
-        42769,  -- wowhead.com/achievement=42769  Hero
-        42770,  -- wowhead.com/achievement=42770  Myth
-    },
-    sparkCurrencyID              = 3212,   -- wowhead.com/currency=3212  Radiant Spark Dust
-    sparkItemID                  = 232875, -- wowhead.com/item=232875    Spark of Radiance (reagent)
-    sparkQuestID                 = 95245,  -- wowhead.com/quest=95245    Midnight: World Tour
-    catalystCurrencyID           = 3378,   -- wowhead.com/currency=3378  Dawnlight Manaflux
-    cofferKeysCurrencyID         = 3310,   -- wowhead.com/currency=3310  Coffer Key Shards
-    cofferKeysDisplayCurrencyID  = 3028,   -- wowhead.com/currency=3028  Restored Coffer Key
-    miscCurrencyIDs = {
-        3418,  -- wowhead.com/currency=3418  Resonance Crystals
-    },
-    questIDs = {
-        delversBounty  = 0,
-        weeklyPrey     = 0,
-        nullaeusSpoils = 0,      -- TODO: fill in quest ID for Spoils of Nullaeus
-    },
-    questItemIDs = {
-        delversBounty  = 0,
-        weeklyPrey     = 0,
-        nullaeusSpoils = 254253,  -- wowhead.com/item=254253   Spoils of Nullaeus
+    -- Keep season-scoped IDs in seasonVariants only.
+    seasonVariants = {
+        {
+            name = "Season 1",
+            mythicPlusSeason = 17,
+            startsAt = 0,
+            data = {
+                crestCurrencyIDs = { 3383, 3341, 3343, 3345, 3347 },
+                crestConvertItemIDs = { 263977, 246751, 246752, 246753 },
+                crestAchievementIDs = { 61809, 42767, 42768, 42769, 42770 },
+                sparkCurrencyID = 3212,
+                sparkItemID = 232875,
+                sparkQuestID = 95245,
+                catalystCurrencyID = 3378,
+                cofferKeysCurrencyID = 3310,
+                cofferKeysDisplayCurrencyID = 3028,
+                bonusRollCurrencyID = 3418,
+                ilvlBase = 220,
+                ilvlTrackStep = 13,
+                ilvlRankOffsets = { 0, 4, 7, 10, 13, 17 },
+                ilvlMythExtraLevels = {},
+                crestUpgradeFreeRanks = { 0, 0, 0, 0, 0 },
+                supportLinks = {
+                    doc       = "https://docs.google.com/document/d/e/2PACX-1vQE61MBpAnZR342cdIpz3AujVaeeg8JYB5Ltzuua884lXKqLqtjg8OfWmEd6uuVQONZ-vUQ_jzWDY0E/pub",
+                    checklist = "https://docs.google.com/spreadsheets/d/1iK2SZUcz_ljnkdTG7KW6pqfzaUDuSgnlh1HupcLrkus",
+                    discord   = "https://discord.gg/postnerfclarity",
+                },
+                crestTradeBatch = { 30, 10 },
+                crestUpgradeCostPerStep = { 20, 20, 20, 20, 20 },
+                crestUpgradeCostReduced = { 10, 10, 10, 10, 10 },
+                ilvlRefTables = {
+                    -- tracks row schema:
+                    -- { tier = <1-5>, rank = <1-7>, ilvl = <number> }
+                    -- Overlap is auto-inferred when ilvl also exists on the next tier (e.g. T1 R6 == T2 R1).
+                    tracks = {
+                        { "ILVLREF_COL_ILVL", "ILVLREF_COL_TRACK", "ILVLREF_COL_CREST_NEEDED" },
+                        { tier = 1, rank = 1, ilvl = 220 }, { tier = 1, rank = 2, ilvl = 224 },
+                        { tier = 1, rank = 3, ilvl = 227 }, { tier = 1, rank = 4, ilvl = 230 },
+                        { tier = 1, rank = 5, ilvl = 233 }, { tier = 1, rank = 6, ilvl = 237 },
+                        { tier = 2, rank = 3, ilvl = 240 }, { tier = 2, rank = 4, ilvl = 243 },
+                        { tier = 2, rank = 5, ilvl = 246 }, { tier = 2, rank = 6, ilvl = 250 },
+                        { tier = 3, rank = 3, ilvl = 253 }, { tier = 3, rank = 4, ilvl = 256 },
+                        { tier = 3, rank = 5, ilvl = 259 }, { tier = 3, rank = 6, ilvl = 263 },
+                        { tier = 4, rank = 3, ilvl = 266 }, { tier = 4, rank = 4, ilvl = 269 },
+                        { tier = 4, rank = 5, ilvl = 272 }, { tier = 4, rank = 6, ilvl = 276 },
+                        { tier = 5, rank = 3, ilvl = 279 }, { tier = 5, rank = 4, ilvl = 282 },
+                        { tier = 5, rank = 5, ilvl = 285 }, { tier = 5, rank = 6, ilvl = 289 },
+                    },
+                    -- crafted row schema: { quality, crest1Ilvl, crest2Ilvl, crest3Ilvl, crest4Ilvl, crest5Ilvl }
+                    crafted = {
+                        { "ILVLREF_COL_QUALITY", "CREST_1", "CREST_2", "CREST_3", "CREST_4", "CREST_5" },
+                        { 1, 220, 233, 246, 259, 272 },
+                        { 2, 224, 237, 250, 263, 276 },
+                        { 3, 227, 240, 253, 266, 279 },
+                        { 4, 230, 243, 256, 269, 282 },
+                        { 5, 233, 246, 259, 272, 285 },
+                    },
+                    -- dungeons row schema: { sourceLabel, endLootIlvl, greatVaultIlvl }
+                    dungeons = {
+                        { "ILVLREF_COL_SOURCE", "ILVLREF_COL_END_LOOT", "ILVLREF_COL_GREAT_VAULT" },
+                        { "ILVLREF_DUNGEON_HEROIC", 230, 243 },
+                        { "ILVLREF_DUNGEON_MYTHIC", 246, 256 },
+                        { "M2",  250, 259 },
+                        { "M3",  250, 259 },
+                        { "M4",  253, 263 },
+                        { "M5",  256, 263 },
+                        { "M6",  259, 266 },
+                        { "M7",  259, 269 },
+                        { "M8",  263, 269 },
+                        { "M9",  263, 269 },
+                        { "M10", 266, 272 },
+                        { "M11", 266, 272 },
+                        { "M12", 266, 272 },
+                    },
+                    -- raid row schema: { difficultyLabel, boss1Ilvl, boss2Ilvl, boss3Ilvl, boss4Ilvl }
+                    raid = {
+                        { "ILVLREF_COL_DIFFICULTY", "ILVLREF_COL_BOSS1", "ILVLREF_COL_BOSS2", "ILVLREF_COL_BOSS3", "ILVLREF_COL_BOSS4" },
+                        { "ILVLREF_RAID_LFR",    233, 237, 240, 243 },
+                        { "ILVLREF_RAID_NORMAL", 246, 250, 253, 256 },
+                        { "ILVLREF_RAID_HEROIC", 259, 263, 266, 269 },
+                        { "ILVLREF_RAID_MYTHIC", 272, 276, 279, 282 },
+                    },
+                    -- delves row schema: { delveTierNumber, endLootIlvl, mapDropIlvlOrDash, greatVaultIlvl }
+                    delves = {
+                        { "ILVLREF_COL_TIER", "ILVLREF_COL_END_LOOT", "ILVLREF_COL_MAP_DROP", "ILVLREF_COL_GREAT_VAULT" },
+                        { 1,  220, "-", 233 },
+                        { 2,  224, "-", 237 },
+                        { 3,  227, "-", 240 },
+                        { 4,  230, 237, 243 },
+                        { 5,  233, 243, 246 },
+                        { 6,  237, 250, 253 },
+                        { 7,  250, 256, 256 },
+                        { 8,  250, 259, 259 },
+                        { 9,  250, 259, 259 },
+                        { 10, 250, 259, 259 },
+                        { 11, 250, 259, 259 },
+                    },
+                },
+                -- questIDs = {
+                --     delversBounty = 0,
+                --     weeklyPrey = 0,
+                --     delveBoss = 0,
+                -- },
+                questItemIDs = {
+                    delversBounty = 0,
+                    weeklyPrey = 0,
+                    delveBoss = 254253,
+                },
+            },
+        },
+        {
+            name = "Season 2",
+            mythicPlusSeason = 18,
+            startsAt = 1893456000,
+            data = {
+                crestCurrencyIDs = { 3442, 3443, 3444, 3445, 3446 },
+                crestConvertItemIDs = { 0, 0, 0, 0 },
+                crestAchievementIDs = { 62410, 62411, 62412, 62414, 62416 },
+                sparkCurrencyID = 0,
+                sparkItemID = 0,
+                sparkQuestID = 0,
+                catalystCurrencyID = 3465,
+                cofferKeysCurrencyID = 0,
+                cofferKeysDisplayCurrencyID = 0,
+                bonusRollCurrencyID = 3511,
+                supportLinks = {
+                    doc       = "https://docs.google.com/document/d/e/2PACX-1vQE61MBpAnZR342cdIpz3AujVaeeg8JYB5Ltzuua884lXKqLqtjg8OfWmEd6uuVQONZ-vUQ_jzWDY0E/pub",
+                    checklist = "https://docs.google.com/spreadsheets/d/1iK2SZUcz_ljnkdTG7KW6pqfzaUDuSgnlh1HupcLrkus",
+                    discord   = "https://discord.gg/postnerfclarity",
+                },
+                ilvlBase = 266,
+                ilvlTrackStep = 13,
+                ilvlRankOffsets = { 0, 3, 6, 10, 13, 16 },
+                ilvlMythExtraLevels = { 337, 341, 344 },
+                crestUpgradeFreeRanks = { 0, 0, 0, 0, 0 },
+                crestTradeBatch = { 30, 10 },
+                crestUpgradeCostPerStep = { 20, 20, 20, 20, 20 },
+                crestUpgradeCostReduced = { 10, 10, 10, 10, 10 },
+                ilvlRefTables = {
+                    -- tracks row schema:
+                    -- { tier = <1-5>, rank = <1-9>, ilvl = <number> }
+                    -- Overlap is auto-inferred when ilvl also exists on the next tier (e.g. T1 R6 == T2 R1).
+                    tracks = {
+                        { "ILVLREF_COL_ILVL", "ILVLREF_COL_TRACK", "ILVLREF_COL_CREST_NEEDED" },
+                        { tier = 1, rank = 1, ilvl = 266 }, { tier = 1, rank = 2, ilvl = 269 },
+                        { tier = 1, rank = 3, ilvl = 272 }, { tier = 1, rank = 4, ilvl = 276 },
+                        { tier = 1, rank = 5, ilvl = 279 }, { tier = 1, rank = 6, ilvl = 282 },
+                        { tier = 2, rank = 3, ilvl = 285 }, { tier = 2, rank = 4, ilvl = 289 },
+                        { tier = 2, rank = 5, ilvl = 292 }, { tier = 2, rank = 6, ilvl = 295 },
+                        { tier = 3, rank = 3, ilvl = 298 }, { tier = 3, rank = 4, ilvl = 302 },
+                        { tier = 3, rank = 5, ilvl = 305 }, { tier = 3, rank = 6, ilvl = 308 },
+                        { tier = 4, rank = 3, ilvl = 311 }, { tier = 4, rank = 4, ilvl = 315 },
+                        { tier = 4, rank = 5, ilvl = 318 }, { tier = 4, rank = 6, ilvl = 321 },
+                        { tier = 5, rank = 3, ilvl = 324 }, { tier = 5, rank = 4, ilvl = 328 },
+                        { tier = 5, rank = 5, ilvl = 331 }, { tier = 5, rank = 6, ilvl = 334 },
+                        { tier = 5, rank = 7, ilvl = 337 },
+                        { tier = 5, rank = 8, ilvl = 341 },
+                        { tier = 5, rank = 9, ilvl = 344 },
+                    },
+                    -- crafted row schema: { quality, crest1Ilvl, crest2Ilvl, crest3Ilvl, crest4Ilvl, crest5Ilvl }
+                    crafted = {
+                        { "ILVLREF_COL_QUALITY", "CREST_1", "CREST_2", "CREST_3", "CREST_4", "CREST_5" },
+                        { 1, 266, 279, 292, 305, 318 },
+                        { 2, 269, 282, 295, 308, 321 },
+                        { 3, 272, 285, 298, 311, 324 },
+                        { 4, 276, 289, 302, 315, 328 },
+                        { 5, 279, 292, 305, 318, 331 },
+                    },
+                    -- dungeons row schema: { sourceLabel, endLootIlvl, greatVaultIlvl }
+                    dungeons = {
+                        { "ILVLREF_COL_SOURCE", "ILVLREF_COL_END_LOOT", "ILVLREF_COL_GREAT_VAULT" },
+                        { "ILVLREF_DUNGEON_HEROIC", 276, "-" },
+                        { "ILVLREF_DUNGEON_MYTHIC", 292, 298 },
+                        { "M2",  295, 305 },
+                        { "M3",  295, 305 },
+                        { "M4",  298, 308 },
+                        { "M5",  302, 308 },
+                        { "M6",  305, 311 },
+                        { "M7",  305, 315 },
+                        { "M8",  308, 315 },
+                        { "M9",  308, 315 },
+                        { "M10", 311, 318 },
+                        { "M11", 311, 318 },
+                        { "M12", 311, 318 },
+                    },
+                    -- raid row schema: { difficultyLabel, boss1Ilvl, boss2Ilvl, boss3Ilvl, boss4Ilvl }
+                    raid = {
+                        { "ILVLREF_COL_DIFFICULTY", "Boss 1", "Bosses 2/3", "Bosses 4/5/6", "Bosses 7/8" },
+                        { "ILVLREF_RAID_LFR",    279, 282, 285, 289 },
+                        { "ILVLREF_RAID_NORMAL", 292, 295, 298, 302 },
+                        { "ILVLREF_RAID_HEROIC", 305, 308, 311, 315 },
+                        { "ILVLREF_RAID_MYTHIC", 318, 321, 324, 344 },
+                    },
+                    -- delves row schema: { delveTierNumber, endLootIlvl, mapDropIlvlOrDash, greatVaultIlvl }
+                    delves = {
+                        { "ILVLREF_COL_TIER", "ILVLREF_COL_END_LOOT", "ILVLREF_COL_MAP_DROP", "ILVLREF_COL_GREAT_VAULT" },
+                        { 1,  266, "-", 279 },
+                        { 2,  269, "-", 282 },
+                        { 3,  272, "-", 285 },
+                        { 4,  276, 282, 289 },
+                        { 5,  279, 289, 292 },
+                        { 6,  282, 292, 298 },
+                        { 7,  292, 295, 302 },
+                        { 8,  295, 305, 305 },
+                        { 9,  295, 305, 305 },
+                        { 10, 295, 305, 305 },
+                        { 11, 295, 305, 305 },
+                    },
+                },
+                -- questIDs = {
+                --     delversBounty = 0,
+                --     weeklyPrey = 0,
+                --     delveBoss = 0,
+                -- },
+                questItemIDs = {
+                    delversBounty = 0,
+                    weeklyPrey = 0,
+                    delveBoss = 0,
+                },
+            },
+        },
     },
     -- Starting ilvl for rank 1 of the lowest crest tier (Adventurer).
     -- Each tier's base = ilvlBase + ilvlTrackStep * (tierIndex - 1).
     ilvlBase      = 220,
     ilvlTrackStep = 13,   -- a new track starts every 13 ilvls (rank-5 of each track)
-
-    -- Stable data: unlikely to change between seasons.
-    -- How many crests trade up to the next tier and how many are produced.
-    crestTradeBatch = { 30, 10 },
-
-    -- Crests required per single rank upgrade, indexed by crest tier.
-    -- Order matches crestCurrencyIDs: Adventurer through Myth.
-    -- Adjust if Blizzard changes upgrade costs mid-season.
-    crestUpgradeCostPerStep = {20, 20, 20, 20, 20},
-
-    -- Reduced crest cost per step when the character has the upgrade cost reduction
-    -- (account-wide or character-specific discount, toggled per character in Alt Summary).
-    crestUpgradeCostReduced = {10, 10, 10, 10, 10},
 
     -- Free rank upgrades per tier granted account-wide (e.g. 2 = first 2 ranks cost 0 crests).
     -- Set to the appropriate value when Blizzard activates alt-upgrade discounts.
@@ -111,12 +278,6 @@ local tracking = { -- https://www.wowhead.com/currencies/season-1
         "Professions-Icon-Quality-Tier3",
         "Professions-Icon-Quality-Tier4",
         "Professions-Icon-Quality-Tier5",
-    },
-    -- Support / social links shown in the gear popup and settings panel.
-    supportLinks = {
-        doc       = "https://docs.google.com/document/d/e/2PACX-1vTGkZ2Cjr0jlv90XqW9vy9VXsVucd-yMCgHdyCvX_kQfOrexNDAC7Lf3LifuhqxrcWqJ0W3zIhvK3ii/pub",
-        checklist = "https://docs.google.com/spreadsheets/d/1iK2SZUcz_ljnkdTG7KW6pqfzaUDuSgnlh1HupcLrkus",
-        discord   = "https://discord.gg/postnerfclarity",
     },
     -- Master switches for optional UI features.  Set a flag to false to
     -- completely disable that feature (no button, no gear-popup checkbox).

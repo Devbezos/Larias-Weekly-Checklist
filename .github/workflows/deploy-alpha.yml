@@ -81,7 +81,7 @@ jobs:
           # Update toc for this build.  Commit on a detached HEAD so the source
           # branch is never touched -- only the tag carries the change.
           sed -i "s/^## Version:.*/## Version: $ALPHA_VERSION/" "$TOC"
-          sed -i "s/^## Title:.*/## Title: Larias's Weekly Checklist (ALPHA)/" "$TOC"
+          sed -i "s/^## Title:.*/## Title: Larias' Weekly Checklist (ALPHA)/" "$TOC"
 
           git checkout --detach HEAD
           git add "$TOC"
@@ -163,7 +163,7 @@ jobs:
 
           payload=$(cat <<EOF
           {
-            "content": " **Larias's Weekly Checklist ${TAG}** (ALPHA from \`${BRANCH}\`) is ready!\n\n GitHub: ${RELEASE_URL}${CURSE_URL:+\n CurseForge: ${CURSE_URL}}\n Workflow: ${RUN_URL}"
+            "content": " **Larias' Weekly Checklist ${TAG}** (ALPHA from \`${BRANCH}\`) is ready!\n\n GitHub: ${RELEASE_URL}${CURSE_URL:+\n CurseForge: ${CURSE_URL}}\n Workflow: ${RUN_URL}"
           }
           EOF
           )

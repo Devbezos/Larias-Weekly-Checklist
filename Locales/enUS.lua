@@ -17,6 +17,10 @@ local STRINGS = {
 
 	-- Update popup
 	UPDATE_AVAILABLE_TEXT = "New version available",
+	GUIDE_UPDATE_POPUP_TEXT = "A new guide version is available. Open it now?",
+	GUIDE_FUTURE_POPUP_TEXT_FMT = "A new guide for %s is available. Open it now?",
+	GUIDE_UPDATE_OPEN_BTN = "Open Guide",
+	GUIDE_UPDATE_LATER_BTN = "Dismiss",
 
 	-- Options tab
 	OPTIONS_HIDE_COMPLETED_TASKS = "Hide Finished Tasks",
@@ -28,7 +32,7 @@ local STRINGS = {
 	OPTIONS_HIDE_SLIDERS         = "Hide Sliders",
 	OPTIONS_HIDE_UPDATE_NOTICE   = "Hide Update Warnings",
 	OPTIONS_DISABLE_UPGRADE_WARN = "Hide Upgrade Warnings",
-	OPTIONS_DISABLE_RAID_BONUS_ROLL_REMINDER = "Hide Raid Bonus Roll Reminder",
+	OPTIONS_DISABLE_RAID_BONUS_ROLL_REMINDER = "Hide Bonus Rolls Reminder",
 	OPTIONS_DISABLE_CREST_CONVERT     = "Hide Crest Conversion Panel",
 	OPTIONS_HIDE_MINIMAP_BTN     = "Hide Minimap Button",
 	OPTIONS_HIDE_ALT_SUMMARY     = "Hide Alt Summary Button",
@@ -77,7 +81,7 @@ local STRINGS = {
 	UPGRADE_WARN_DISABLE_TOOLTIP = "Check Larias' guide for more information.",
 	RAID_BONUS_ROLL_REMINDER_TITLE = "Bonus Rolls",
 	RAID_BONUS_ROLL_REMINDER_MSG = "You have bonus rolls available for purchase.",
-	RAID_BONUS_ROLL_REMINDER_DISABLE_BTN = "Hide Raid Reminder",
+	RAID_BONUS_ROLL_REMINDER_DISABLE_BTN = "Hide Bonus Rolls Reminder",
 	RAID_BONUS_ROLL_REMINDER_DISABLE_TOOLTIP = "Disable future raid-entry bonus-roll currency reminders.",
 	-- Color picker swatch labels (gear popup)
 	COLOR_PICKER_BG             = "Background",
@@ -99,6 +103,7 @@ local STRINGS = {
 	TRACKING_GV_RAID     = "Raid",
 	TRACKING_GV_DUNGEONS = "M+",
 	TRACKING_GV_WORLD    = "World",
+	ALT_SUMMARY_GV_DUNGEONS = "M+ / Delve",
 	TRACKING_NA = "\226\128\148",
 
 	TRACKING_SPARKS_LABEL = "Sparks",
@@ -108,7 +113,8 @@ local STRINGS = {
 	TRACKING_QUEST_DELVERS_BOUNTY = "Trovehunter's Bounty",
 	TRACKING_QUEST_DELVERS_BOUNTY_TOOLTIP = "Complete a Tier 8 Delve to earn this weekly bounty item, which guarantees a Hidden Trove at the end of your next Tier 4+ Delve.",
 	TRACKING_QUEST_WEEKLY_PREY = "Weekly Prey",
-	TRACKING_QUEST_NULLAEUS_SPOILS = "Spoils of Nullaeus",
+	TRACKING_QUEST_DELVE_BOSS = "Delve Boss",
+	TRACKING_QUEST_NULLAEUS_SPOILS = "Delve Boss",
 
 	TRACKING_NO_ID = "No ID",
 	TRACKING_TRADE_UP_SUFFIX = " Convert)",
@@ -205,6 +211,8 @@ local STRINGS = {
 
 	-- Item level reference popup
 	ILVLREF_WINDOW_TITLE  = "Midnight Season 1 Item Level Reference",
+	ILVLREF_WINDOW_TITLE_FMT = "Midnight %s Item Level Reference",
+	ILVLREF_SEASON_LABEL_FMT = "Season %d",
 
 	ILVLREF_SEC_TRACKS    = "Upgrade Tracks  (20 crests per step)",
 	ILVLREF_SEC_CRAFTED   = "Crafted Item Levels",

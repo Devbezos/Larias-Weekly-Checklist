@@ -128,6 +128,8 @@ function Addon:SetupAddonDB()
             showScaleSlider       = true,
             showOpacitySlider     = true,
             hideUpdateNotice      = false,
+            _seenGuideDocUrl      = "",
+            _seenFutureGuideAnnouncements = {},
             localeOverride        = "",  -- "" = auto
             -- Per-character data, keyed by "CharName - Realm".
             chars = {},
@@ -202,11 +204,13 @@ local function GetBuiltInTrackedConfigEntries(self)
     if pushCurrency(tracking and tracking.sparkCurrencyID)    then return out end
     if pushCurrency(tracking and tracking.cofferKeysDisplayCurrencyID) then return out end
 
-    local miscIDs = tracking and tracking.miscCurrencyIDs
-    if type(miscIDs) == "table" then
-        for i = 1, #miscIDs do
-            if pushCurrency(miscIDs[i]) then return out end
+    local bonusRollValue = tracking and (tracking.bonusRollCurrencyID or tracking.bonusRollCurrencyIDs or tracking.miscCurrencyIDs)
+    if type(bonusRollValue) == "table" then
+        for i = 1, #bonusRollValue do
+            if pushCurrency(bonusRollValue[i]) then return out end
         end
+    else
+        if pushCurrency(bonusRollValue) then return out end
     end
 
     for i = 1, #BUILTIN_TRACKED_ITEM_ENTRIES do
@@ -249,11 +253,13 @@ local function IsBuiltInTrackedCurrencyID(self, currencyID)
     if tonumber(tracking.sparkCurrencyID) == id then return true end
     if tonumber(tracking.cofferKeysDisplayCurrencyID) == id then return true end
 
-    local miscIDs = tracking.miscCurrencyIDs
-    if type(miscIDs) == "table" then
-        for i = 1, #miscIDs do
-            if tonumber(miscIDs[i]) == id then return true end
+    local bonusRollValue = tracking.bonusRollCurrencyID or tracking.bonusRollCurrencyIDs or tracking.miscCurrencyIDs
+    if type(bonusRollValue) == "table" then
+        for i = 1, #bonusRollValue do
+            if tonumber(bonusRollValue[i]) == id then return true end
         end
+    elseif tonumber(bonusRollValue) == id then
+        return true
     end
 
     return false
@@ -416,7 +422,10 @@ end
 function Addon:IsQuestHidden(questKey)
     if not questKey then return false end
     local cdb = ReadCharDB(self)
-    return cdb and cdb.hiddenQuests and cdb.hiddenQuests[questKey] == true
+    if not (cdb and cdb.hiddenQuests) then return false end
+    if cdb.hiddenQuests[questKey] == true then return true end
+    if questKey == "delveBoss" and cdb.hiddenQuests.nullaeusSpoils == true then return true end
+    return false
 end
 
 function Addon:SetQuestHidden(questKey, hidden)
@@ -424,6 +433,9 @@ function Addon:SetQuestHidden(questKey, hidden)
     if not cdb then return end
     cdb.hiddenQuests = cdb.hiddenQuests or {}
     cdb.hiddenQuests[questKey] = hidden or nil
+    if questKey == "delveBoss" then
+        cdb.hiddenQuests.nullaeusSpoils = hidden or nil
+    end
     RefreshAfterHiddenChange(self)
 end
 
@@ -452,7 +464,8 @@ function Addon:GetHiddenQuestList()
     local questNames = {
         delversBounty  = L.TRACKING_QUEST_DELVERS_BOUNTY  or "Trovehunter's Bounty",
         weeklyPrey     = L.TRACKING_QUEST_WEEKLY_PREY     or "Weekly Prey",
-        nullaeusSpoils = L.TRACKING_QUEST_NULLAEUS_SPOILS or "Spoils of Nullaeus",
+        delveBoss      = L.TRACKING_QUEST_DELVE_BOSS      or L.TRACKING_QUEST_NULLAEUS_SPOILS or "Delve Boss",
+        nullaeusSpoils = L.TRACKING_QUEST_DELVE_BOSS      or L.TRACKING_QUEST_NULLAEUS_SPOILS or "Delve Boss",
     }
     local result = {}
     for qKey in pairs(hidden) do
