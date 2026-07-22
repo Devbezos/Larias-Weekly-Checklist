@@ -1,8 +1,8 @@
 # watch_deploy.ps1
-# Watches the addon source every 5 minutes and deploys when both are true:
-#   1. The source TOC version differs from the deployed TOC version.
-#   2. The combined content hash of TOC-loaded source files changed since the
-#      last successful deploy in this watcher session.
+# Watches the addon source every 5 minutes and deploys when either the source
+# version or any TOC-loaded content differs from what is currently deployed.
+# The deployed TOC's "-dev" suffix and stamped dev deploy timestamp are
+# normalised away during comparison so they do not cause false positives.
 #
 # Run this in a persistent terminal. Press Ctrl+C to stop.
 
@@ -16,6 +16,7 @@ $srcTocPath = Join-Path $repoRoot "LariasWeeklyChecklist.toc"
 
 $destBase    = "D:\Battle.NET\World Of Warcraft\_retail_\Interface\AddOns\LariasWeeklyChecklist"
 $destTocPath = Join-Path $destBase "LariasWeeklyChecklist.toc"
+$devMetadataRelativePath = "features\services\general\LariasWeeklyChecklist_DevMetadata.lua"
 
 function Get-TocVersion {
     param([string]$TocPath)
@@ -32,32 +33,82 @@ function Get-TocVersion {
     return $version -replace '-dev$', ''
 }
 
-function Get-SourceHash {
-    $tocLines = @()
-    if (Test-Path -LiteralPath $srcTocPath) {
-        $tocLines = Get-Content -LiteralPath $srcTocPath |
-            ForEach-Object { $_.Trim() } |
-            Where-Object { $_ -and -not $_.StartsWith("##") -and -not $_.StartsWith("#") } |
-            ForEach-Object { $_ -replace '\\', '\' -replace '/', '\' }
+function Get-TocAddonFiles {
+    param([string]$TocPath)
+
+    if (-not (Test-Path -LiteralPath $TocPath -PathType Leaf)) {
+        return @()
+    }
+
+    return Get-Content -LiteralPath $TocPath |
+        ForEach-Object { $_.Trim() } |
+        Where-Object { $_ -and -not $_.StartsWith("##") -and -not $_.StartsWith("#") } |
+        ForEach-Object { $_ -replace '\\', '\' -replace '/', '\' }
+}
+
+function Get-NormalizedFileBytes {
+    param(
+        [string]$FilePath,
+        [string]$RelativePath,
+        [switch]$NormalizeDeployedArtifacts
+    )
+
+    $bytes = [System.IO.File]::ReadAllBytes($FilePath)
+    if (-not $NormalizeDeployedArtifacts) {
+        return $bytes
+    }
+
+    if ($RelativePath -ieq "LariasWeeklyChecklist.toc") {
+        $text = [System.Text.Encoding]::UTF8.GetString($bytes)
+        $text = $text -replace '(?m)^(##\s*Version:\s*[^\r\n]+?)-dev(\s*)$', '$1$2'
+        return [System.Text.Encoding]::UTF8.GetBytes($text)
+    }
+
+    if ($RelativePath -ieq $devMetadataRelativePath) {
+        $text = [System.Text.Encoding]::UTF8.GetString($bytes)
+        $text = $text -replace '(?m)^Addon\.DEV_DEPLOY_TIMESTAMP\s*=\s*.+$', 'Addon.DEV_DEPLOY_TIMESTAMP = nil'
+        return [System.Text.Encoding]::UTF8.GetBytes($text)
+    }
+
+    return $bytes
+}
+
+function Get-AddonHash {
+    param(
+        [string]$BasePath,
+        [string]$TocPath,
+        [switch]$NormalizeDeployedArtifacts
+    )
+
+    if (-not (Test-Path -LiteralPath $TocPath -PathType Leaf)) {
+        return $null
     }
 
     $sha = [System.Security.Cryptography.SHA256]::Create()
-    $files = @($srcTocPath)
+    $files = @(
+        [PSCustomObject]@{
+            RelativePath = "LariasWeeklyChecklist.toc"
+            FullPath = $TocPath
+        }
+    )
 
-    foreach ($relativePath in $tocLines) {
-        $fullPath = Join-Path $repoRoot $relativePath
+    foreach ($relativePath in Get-TocAddonFiles -TocPath $TocPath) {
+        $fullPath = Join-Path $BasePath $relativePath
         if (Test-Path -LiteralPath $fullPath -PathType Leaf) {
-            $files += $fullPath
+            $files += [PSCustomObject]@{
+                RelativePath = $relativePath
+                FullPath = $fullPath
+            }
         }
     }
 
     $combined = New-Object System.IO.MemoryStream
     foreach ($file in $files) {
         try {
-            $bytes = [System.IO.File]::ReadAllBytes($file)
+            $bytes = Get-NormalizedFileBytes -FilePath $file.FullPath -RelativePath $file.RelativePath -NormalizeDeployedArtifacts:$NormalizeDeployedArtifacts
             $combined.Write($bytes, 0, $bytes.Length)
         } catch {
-            Write-Warning "Could not hash $file"
+            Write-Warning "Could not hash $($file.FullPath)"
         }
     }
 
@@ -79,8 +130,6 @@ Write-Host "Deployed: $destTocPath"
 Write-Host "Press Ctrl+C to stop."
 Write-Host ""
 
-$lastDeployedHash = $null
-
 while ($true) {
     $timestamp = Get-Date -Format "HH:mm:ss"
 
@@ -88,13 +137,16 @@ while ($true) {
     $destVersion = Get-TocVersion -TocPath $destTocPath
     $versionChanged = ($srcVersion -ne $null) -and ($srcVersion -ne $destVersion)
 
-    $currentHash = Get-SourceHash
-    $contentChanged = ($currentHash -ne $lastDeployedHash)
+    $sourceHash = Get-AddonHash -BasePath $repoRoot -TocPath $srcTocPath
+    $deployedHash = Get-AddonHash -BasePath $destBase -TocPath $destTocPath -NormalizeDeployedArtifacts
+    $contentChanged = ($sourceHash -ne $null) -and ($sourceHash -ne $deployedHash)
 
-    if ($versionChanged -and $contentChanged) {
-        Write-Host "[$timestamp] Version $destVersion -> $srcVersion | content changed -> deploying..." -ForegroundColor Cyan
+    if ($versionChanged -or $contentChanged) {
+        $reasons = @()
+        if ($versionChanged) { $reasons += "version $destVersion -> $srcVersion" }
+        if ($contentChanged) { $reasons += "content changed" }
+        Write-Host "[$timestamp] $($reasons -join ' | ') -> deploying..." -ForegroundColor Cyan
         & $deployScript -WowAddonPath $destBase
-        $lastDeployedHash = $currentHash
         Write-Host "[$timestamp] Deploy complete." -ForegroundColor Green
     } else {
         $reason = @()
