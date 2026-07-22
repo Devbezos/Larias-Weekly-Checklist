@@ -131,6 +131,40 @@ jobs:
             if ! git diff --quiet -- "$TOC";       then TOC_CHANGED=true;  fi
           fi
 
+          LAST_STABLE_TAG=$(git tag --list "v*" --sort=-version:refname | grep -v -- '-alpha$' | head -n 1 || true)
+          DAYS_SINCE_LAST_STABLE=99999
+          if [ -n "${LAST_STABLE_TAG:-}" ]; then
+            LAST_STABLE_TS=$(git for-each-ref --format='%(creatordate:unix)' "refs/tags/${LAST_STABLE_TAG}" | head -n 1)
+            NOW_TS=$(date -u +%s)
+            DAYS_SINCE_LAST_STABLE=$(( (NOW_TS - LAST_STABLE_TS) / 86400 ))
+          fi
+
+          RANGE="HEAD"
+          if [ -n "${LAST_STABLE_TAG:-}" ]; then
+            RANGE="${LAST_STABLE_TAG}..HEAD"
+          fi
+
+          PENDING_BRANCH_CHANGES=false
+          PENDING_LINES=$(git log "$RANGE" --pretty=format:"- %s" --no-merges \
+            | grep -v -E "^- Post-release:"        \
+            | grep -v -E "^- Release v"            \
+            | grep -v -E "^- Auto-update data/toc" \
+            | grep -v -E "\(#[0-9]+\)$"            \
+            | grep -v -E "^- [A-Za-z]+/[^[:space:]]" \
+            || true)
+          if [ -n "${PENDING_LINES:-}" ]; then
+            PENDING_BRANCH_CHANGES=true
+          fi
+
+          WEEKLY_BRANCH_RELEASE=false
+          if [ "${{ github.event_name }}" = "schedule" ] \
+            && [ "$DATA_CHANGED" != "true" ] \
+            && [ "$TOC_CHANGED" != "true" ] \
+            && [ "$PENDING_BRANCH_CHANGES" = "true" ] \
+            && [ "$DAYS_SINCE_LAST_STABLE" -ge 7 ]; then
+            WEEKLY_BRANCH_RELEASE=true
+          fi
+
           SHOULD_RELEASE=false
           if [ "$FAST_TOC_ONLY" = "true" ]; then
             SHOULD_RELEASE=true
@@ -142,16 +176,16 @@ jobs:
             # Any Wago-driven Interface version bump should publish a release,
             # including patch bumps like 12.0.5 -> 12.0.7.
             SHOULD_RELEASE=true
-          fi
-
-          # Scheduled runs should only publish when the toc actually changed.
-          if [ "${{ github.event_name }}" = "schedule" ] && [ "$TOC_CHANGED" != "true" ]; then
-            SHOULD_RELEASE=false
+          elif [ "$WEEKLY_BRANCH_RELEASE" = "true" ]; then
+            SHOULD_RELEASE=true
           fi
 
           echo "should_release=$SHOULD_RELEASE" >> "$GITHUB_OUTPUT"
-          echo "data_changed=$DATA_CHANGED"   >> "$GITHUB_OUTPUT"
-          echo "toc_changed=$TOC_CHANGED"    >> "$GITHUB_OUTPUT"
+          echo "data_changed=$DATA_CHANGED"                   >> "$GITHUB_OUTPUT"
+          echo "toc_changed=$TOC_CHANGED"                     >> "$GITHUB_OUTPUT"
+          echo "pending_branch_changes=$PENDING_BRANCH_CHANGES" >> "$GITHUB_OUTPUT"
+          echo "weekly_branch_release=$WEEKLY_BRANCH_RELEASE" >> "$GITHUB_OUTPUT"
+          echo "days_since_last_stable=$DAYS_SINCE_LAST_STABLE" >> "$GITHUB_OUTPUT"
 
       - name: Commit data/toc update (no release)
         if: steps.check.outputs.should_release == 'false'
