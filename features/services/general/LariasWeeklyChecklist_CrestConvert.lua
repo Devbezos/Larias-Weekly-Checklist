@@ -64,6 +64,22 @@ local function BuildItemIndex(values)
     return count > 0 and byItemID or nil
 end
 
+local function GetNpcIDFromGUID(guid)
+    if type(guid) ~= "string" then return nil end
+    local _, _, _, _, _, npcID = strsplit("-", guid)
+    return tonumber(npcID)
+end
+
+local function IsCrestExchangeMerchant()
+    local npcIDs = Addon.TRACKING and Addon.TRACKING.crestExchangeNpcIDs
+    local allowed = BuildItemIndex(npcIDs)
+    if not allowed then return true end
+
+    local guid = UnitGUID and (UnitGUID("npc") or UnitGUID("target"))
+    local npcID = GetNpcIDFromGUID(guid)
+    return npcID and allowed[npcID] or false
+end
+
 local function ClearActions()
     for k in pairs(_actions) do _actions[k] = nil end
 end
@@ -435,6 +451,7 @@ evFrame:SetScript("OnEvent", function(_, event)
         C_Timer.After(0.05, function()
             local prefs = Addon.EnsurePrefs and Addon:EnsurePrefs()
             if prefs and prefs.crestConvertDisabled then return end
+            if not IsCrestExchangeMerchant() then return end
 
             ScanMerchant()
             if HasAnyActions() then
