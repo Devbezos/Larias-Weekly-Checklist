@@ -29,7 +29,7 @@ local DATASET = {
             { id = "1799862a", text = "Recraft any embellishments to cloak/bracers/boots so that you can keep the power of the embellishments as you upgrade more important slots and to let you hold off crafting as long as possible. Look for loot for your armor type from the Tidebound Grotto and the first 2 bosses of Venomous Abyss to pick which slots to craft in." },
             { id = "1222989f", text = "Complete the campaign that is currently on the live servers - this is required to enter the new zones in Season 2!" },
             { id = "89973dea", text = "Finish your Omnium Foil questline - this power lasts through the entire expansion" },
-            { id = "c386743b", text = "Optional degenerate crest save character strategy - checking guide for more info" },
+            { id = "abbe6f81", text = "Optional degenerate crest save character strategy - check guide for more info" },
             { id = "facfee6f", text = "I've published a new guide outlining what's coming. Week by Week advice will be added closer to season launch" },
         },
     },
