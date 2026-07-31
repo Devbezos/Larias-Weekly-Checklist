@@ -56,7 +56,7 @@ function C.StyleButton(btn)
     if btn.Middle and btn.Middle.Hide then btn.Middle:Hide() end
     if btn.Right  and btn.Right.Hide  then btn.Right:Hide()  end
 
-    if btn.SetTextInsets then btn:SetTextInsets(12, 12, 4, 4) end
+    if btn.SetTextInsets then btn:SetTextInsets(0, 0, 0, 0) end
 
     if btn.CreateTexture and T then
         if not btn._lariasButtonFill then
@@ -85,6 +85,7 @@ function C.StyleButton(btn)
 
     local tr = btn.Text or (btn.GetFontString and btn:GetFontString())
     if tr then
+        if tr.SetJustifyH then tr:SetJustifyH("CENTER") end
         if tr.SetJustifyV then tr:SetJustifyV("MIDDLE") end
         if tr.ClearAllPoints and tr.SetPoint then
             tr:ClearAllPoints()

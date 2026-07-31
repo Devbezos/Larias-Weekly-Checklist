@@ -63,10 +63,19 @@ end
 function Addon:CreateHeader(frame)
     local L = self.L or {}
     local C = Addon.Controls
+    local headerMargin = Addon.UI.padOuterX or 14
 
     -- ── Close button ─────────────────────────────────────────────────────────
     local closeBtn = C.NewCloseButton(frame, function() frame:Hide() end)
-    closeBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -Addon.UI.closeInset, -Addon.UI.closeInset)
+    closeBtn:SetSize(22, 22)
+    local closeText = closeBtn.GetFontString and closeBtn:GetFontString()
+    if closeText then
+        closeText:SetFont("Fonts\\FRIZQT__.TTF", 16, "OUTLINE")
+        closeText:SetText("X")
+        closeText:ClearAllPoints()
+        closeText:SetPoint("CENTER", closeBtn, "CENTER", 0, -2)
+    end
+    closeBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -headerMargin, -headerMargin)
     frame._lariasCloseBtn = closeBtn
 
     -- ── Gear / settings button ────────────────────────────────────────────────
@@ -75,7 +84,8 @@ function Addon:CreateHeader(frame)
         useTextColorOnHover = true,
         restAlpha = 1,
     })
-    gearBtn:SetPoint("RIGHT", closeBtn, "LEFT", -2, 0)
+    gearBtn:SetSize(22, 22)
+    gearBtn:SetPoint("TOPRIGHT", closeBtn, "TOPLEFT", -4, 0)
     gearBtn:SetScript("OnClick", function()
         if Addon.ToggleGearPopup then Addon:ToggleGearPopup(gearBtn, true) end
     end)
@@ -445,8 +455,7 @@ function Addon:CreateHeader(frame)
                 end
             end)
             btn:ClearAllPoints()
-            local cwPadX = Addon.UI.padOuterX or 14
-            btn:SetPoint("TOPLEFT", frame, "TOPLEFT", cwPadX, -(Addon.UI.padOuterTop or 10) - 2)
+            btn:SetPoint("TOPLEFT", frame, "TOPLEFT", headerMargin, -headerMargin)
             btn:Show()
         elseif changeWeekBtn then
             changeWeekBtn:Hide()
@@ -459,8 +468,7 @@ function Addon:CreateHeader(frame)
         if cp and cp.EnsureBtn then
             local cpBtn = cp.EnsureBtn()
             cpBtn:ClearAllPoints()
-            local cwPadX = Addon.UI.padOuterX or 14
-            cpBtn:SetPoint("TOPLEFT", frame, "TOPLEFT", cwPadX, -(Addon.UI.padOuterTop or 10) - 2)
+            cpBtn:SetPoint("TOPLEFT", frame, "TOPLEFT", headerMargin, -headerMargin)
             if showCP then
                 cpBtn:RegisterForClicks("AnyUp")
                 cpBtn:SetText(L.ALT_SUMMARY_TITLE or "Alt Summary")
@@ -498,7 +506,7 @@ function Addon:CreateHeader(frame)
         if showIR then
             local btn = EnsureIlvlRefBtn_()
             btn:ClearAllPoints()
-            btn:SetPoint("TOPRIGHT", gearBtn, "TOPLEFT", -4, 0)
+            btn:SetPoint("TOPRIGHT", gearBtn, "TOPLEFT", -8, 0)
             btn:Show()
         elseif ilvlRefBtn then
             ilvlRefBtn:Hide()
@@ -509,10 +517,10 @@ function Addon:CreateHeader(frame)
         end
 
         -- Enforce minimum frame width based on visible button footprint.
-        local _insetX = (Addon.UI.padOuterX or 14) + (Addon.UI.sectionInsetX or 14)
-        local _leftW  = (Addon.UI.padOuterX or 14) + ((showCW or showCP) and (108 + 6) or 0)
-        local _rightW = (Addon.UI.closeInset or 4) + 32 + 2 + 20
-        if showIR then _rightW = _rightW + 4 + 140 end
+        local _insetX = headerMargin + (Addon.UI.sectionInsetX or 14)
+        local _leftW  = headerMargin + ((showCW or showCP) and (108 + 6) or 0)
+        local _rightW = headerMargin + 22 + 4 + 20
+        if showIR then _rightW = _rightW + 8 + 140 end
         local _minW   = _leftW + 20 + _rightW
         local _absMinW = math.floor(Addon.UI.frameW * 0.8)
         _minW = math.max(_minW, _absMinW)

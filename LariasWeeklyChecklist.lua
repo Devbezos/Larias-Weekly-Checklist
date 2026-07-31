@@ -191,7 +191,7 @@ do
             frameH = 737,
             padOuterX = 14,
             padOuterTop = 10,
-            closeInset = 4,
+            closeInset = 14,
             topRowH = 26,
             topRowRightInset = 34,
             scrollTop = 38,
