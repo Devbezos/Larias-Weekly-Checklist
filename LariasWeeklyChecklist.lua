@@ -96,7 +96,11 @@ do
         local selected, selectedStart, selectedMPlusSeason = nil, nil, nil
 
         local currentMPlusSeason = nil
-        if C_MythicPlus and C_MythicPlus.GetCurrentSeason then
+        local prefs = Addon and Addon.db and Addon.db.global
+        local devOverride = prefs and tonumber(prefs.devSeasonOverride)
+        if devOverride and devOverride > 0 then
+            currentMPlusSeason = devOverride
+        elseif C_MythicPlus and C_MythicPlus.GetCurrentSeason then
             currentMPlusSeason = tonumber(C_MythicPlus.GetCurrentSeason())
         end
 

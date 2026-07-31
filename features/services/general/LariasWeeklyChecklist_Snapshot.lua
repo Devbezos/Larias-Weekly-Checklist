@@ -28,7 +28,17 @@ setmetatable(API, {
 })
 
 local function IsItemEmbellished(itemLink)
-    if not (itemLink and API.TooltipInfo and API.TooltipInfo.GetHyperlink) then
+    if not itemLink then return false end
+
+    -- Primary check: bonus ID 8836 is the "Embellishment (2 Maximum)" restriction
+    -- marker embedded in crafted item links across Dragonflight, TWW, and Midnight.
+    -- Checking the raw link is locale-independent; the tooltip text approach below
+    -- only matches English clients and misses every other WoW client language.
+    if itemLink:find(":8836[:|]") then return true end
+
+    -- Fallback: tooltip text scan for English clients and forward compatibility
+    -- in case the bonus ID ever changes in a future patch.
+    if not (API.TooltipInfo and API.TooltipInfo.GetHyperlink) then
         return false
     end
 
@@ -113,7 +123,71 @@ local function ShouldReplaceWatermarkSlot(current, previous)
     return false
 end
 
+function Addon:GetTrackingSeasonKey()
+    local tracking = self.TRACKING or {}
+    local seasonNumber = tonumber(tracking._activeSeasonNumber)
+    if seasonNumber then
+        return "mplus:" .. tostring(seasonNumber)
+    end
+
+    local startsAt = tonumber(tracking._activeSeasonStartsAt)
+    if startsAt then
+        return "start:" .. tostring(startsAt)
+    end
+
+    local name = tracking._activeSeasonName
+    if type(name) == "string" and name ~= "" then
+        return "name:" .. name
+    end
+
+    return nil
+end
+
+function Addon:IsTrackingSnapshotCurrentSeason(snap)
+    if type(snap) ~= "table" then return false end
+
+    local currentKey = self.GetTrackingSeasonKey and self:GetTrackingSeasonKey() or nil
+    if not currentKey then return true end
+
+    if snap.seasonKey ~= nil then
+        return snap.seasonKey == currentKey
+    end
+
+    local tracking = self.TRACKING or {}
+    local activeCrests = tracking.crestCurrencyIDs
+    local rows = snap.rightRows
+    if type(activeCrests) ~= "table" or type(rows) ~= "table" then return false end
+
+    local activeByID = {}
+    for i = 1, #activeCrests do
+        local id = tonumber(activeCrests[i])
+        if id and id > 0 then activeByID[id] = true end
+    end
+
+    local sawCrest = false
+    for i = 1, #rows do
+        local row = rows[i]
+        if type(row) == "table" and row.type == "crest" then
+            local id = tonumber(row.id)
+            if id and id > 0 then
+                sawCrest = true
+                if not activeByID[id] then
+                    return false
+                end
+            end
+        end
+    end
+
+    return sawCrest
+end
+
 function Addon:BuildTrackingSnapshot(snap)
+    local tracking = Addon.TRACKING or {}
+    snap.seasonKey = Addon.GetTrackingSeasonKey and Addon:GetTrackingSeasonKey() or nil
+    snap.seasonName = tracking._activeSeasonName
+    snap.seasonNumber = tracking._activeSeasonNumber
+    snap.seasonStartsAt = tracking._activeSeasonStartsAt
+
     -- Left column: Great Vault via the GreatVault module API.
     local gridBlocks, gvLines = Addon:GetGVData()
 

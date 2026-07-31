@@ -5,7 +5,10 @@ if not Addon then return end
 
 local L = Addon.L or {}
 
-local BONUS_ROLL_CURRENCY_ID = 3418
+local function GetBonusRollCurrencyID()
+    local tracking = Addon.TRACKING or {}
+    return tonumber(tracking.bonusRollCurrencyID) or 0
+end
 
 local reminderFrame
 local reminderState = {
@@ -63,7 +66,10 @@ end
 local function GetBonusRollProgress()
     if not (C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo) then return nil end
 
-    local info = C_CurrencyInfo.GetCurrencyInfo(BONUS_ROLL_CURRENCY_ID)
+    local bonusRollCurrencyID = GetBonusRollCurrencyID()
+    if bonusRollCurrencyID <= 0 then return nil end
+
+    local info = C_CurrencyInfo.GetCurrencyInfo(bonusRollCurrencyID)
     if type(info) ~= "table" then return nil end
 
     local weeklyCap = tonumber(info.maxWeeklyQuantity) or 0
@@ -92,7 +98,7 @@ local function GetBonusRollProgress()
     earned = math.max(0, tonumber(earned) or 0)
 
     return {
-        id = BONUS_ROLL_CURRENCY_ID,
+        id = bonusRollCurrencyID,
         name = info.name or (L.RAID_BONUS_ROLL_REMINDER_TITLE or "Bonus Rolls"),
         earned = earned,
         cap = weeklyCap,

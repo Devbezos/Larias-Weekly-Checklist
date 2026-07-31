@@ -1864,9 +1864,11 @@ local function RenderSnapshotIntoPanel(snap)
                     iconID = itemTexture
                 end
             elseif row.type == "weapupg" then
-                itemID = 268552
-                local _, _, _, _, _, _, _, _, _, itemTexture = GetItemInfo(itemID)
-                iconID = itemTexture
+                itemID = Addon.GetWeaponUpgradeCombinedItemID and Addon:GetWeaponUpgradeCombinedItemID() or nil
+                if itemID and itemID > 0 then
+                    local _, _, _, _, _, _, _, _, _, itemTexture = GetItemInfo(itemID)
+                    iconID = itemTexture
+                end
             end
             if (not questKey or not Addon:IsQuestHidden(questKey))
                     and (not itemID or not Addon:IsItemHidden(itemID))

@@ -41,15 +41,40 @@ Addon.SNAP_TYPES = {
 }
 local SNAP_TYPES = Addon.SNAP_TYPES
 
--- ── Weapon/trinket upgrade item constants ─────────────────────────────────────
--- Item 268650: shard  (5 shards = 1 combined)
--- Item 268552: combined sigil (1 per slot to upgrade from 289 → 298)
--- Affected slots: 13 = Trinket 1, 14 = Trinket 2, 16 = Main Hand, 17 = Off Hand
-local WEAP_UPG_SHARD_ID    = 268650
-local WEAP_UPG_COMBINED_ID = 268552
-local WEAP_UPG_MAX_ILVL    = 298
-local WEAP_UPG_SHARDS_PER  = 5   -- shards required per combined sigil
-local WEAP_UPG_SLOTS       = { 13, 14, 16, 17 }
+-- Weapon-upgrade config is season data; keep it in TRACKING constants instead
+-- of hard-coding IDs in code paths.
+local function GetWeaponUpgradeConfig()
+    local cfg = Addon.TRACKING and Addon.TRACKING.weaponUpgrade
+    return type(cfg) == "table" and cfg or nil
+end
+
+function Addon:GetWeaponUpgradeCombinedItemID()
+    local cfg = GetWeaponUpgradeConfig()
+    return tonumber(cfg and cfg.combinedItemID) or 0
+end
+
+function Addon:GetWeaponUpgradeShardItemID()
+    local cfg = GetWeaponUpgradeConfig()
+    return tonumber(cfg and cfg.shardItemID) or 0
+end
+
+function Addon:GetWeaponUpgradeMaxItemLevel()
+    local cfg = GetWeaponUpgradeConfig()
+    return tonumber(cfg and cfg.maxItemLevel) or 0
+end
+
+function Addon:GetWeaponUpgradeShardsPerCombined()
+    local cfg = GetWeaponUpgradeConfig()
+    local value = tonumber(cfg and cfg.shardsPerCombined)
+    return (value and value > 0) and value or 1
+end
+
+function Addon:GetWeaponUpgradeSlotIDs()
+    local cfg = GetWeaponUpgradeConfig()
+    local slotIDs = cfg and cfg.slotIDs
+    return type(slotIDs) == "table" and slotIDs or {}
+end
+
 local GEAR_SLOT_IDS        = (Addon.TRACKING and Addon.TRACKING.gearSlotIDs)
 
 -- Returns the number of weapon/trinket slots the current character still needs
@@ -64,13 +89,16 @@ end
 
 local function GetWeaponUpgradeNeedFromGearSlots(gearSlots)
     if type(gearSlots) ~= "table" then return nil end
+    local maxIlvl = Addon:GetWeaponUpgradeMaxItemLevel()
+    local slotIDs = Addon:GetWeaponUpgradeSlotIDs()
+    if maxIlvl <= 0 or #slotIDs == 0 then return nil end
     local count = 0
     local sawGear = false
-    for _, sid in ipairs(WEAP_UPG_SLOTS) do
+    for _, sid in ipairs(slotIDs) do
         local slotData = gearSlots[sid]
         local ilvl = type(slotData) == "table" and tonumber(slotData.ilvl) or 0
         if ilvl > 0 then sawGear = true end
-        if ilvl > 0 and ilvl < WEAP_UPG_MAX_ILVL then
+        if ilvl > 0 and ilvl < maxIlvl then
             count = count + 1
         end
     end
@@ -82,12 +110,15 @@ local function GetWeaponUpgradeNeedCount(snap)
     if snapshotNeed ~= nil then return snapshotNeed end
 
     if not (GetInventoryItemLink and GetDetailedItemLevelInfo) then return 0 end
+    local maxIlvl = Addon:GetWeaponUpgradeMaxItemLevel()
+    local slotIDs = Addon:GetWeaponUpgradeSlotIDs()
+    if maxIlvl <= 0 or #slotIDs == 0 then return 0 end
     local count = 0
-    for _, sid in ipairs(WEAP_UPG_SLOTS) do
+    for _, sid in ipairs(slotIDs) do
         local link = GetInventoryItemLink("player", sid)
         if link then
             local ilvl = tonumber((GetDetailedItemLevelInfo(link))) or 0
-            if ilvl > 0 and ilvl < WEAP_UPG_MAX_ILVL then
+            if ilvl > 0 and ilvl < maxIlvl then
                 count = count + 1
             end
         end
@@ -131,13 +162,15 @@ local QUALITY_HEX = {
 
 -- Some Midnight currencies/items currently report common quality through the
 -- runtime APIs even though they should read as epic in the UI.
-local CURRENCY_QUALITY_OVERRIDES = {
-    [3212] = 4, -- Radiant Spark Dust
-}
+local function GetCurrencyQualityOverrides()
+    local overrides = Addon.TRACKING and Addon.TRACKING.currencyQualityOverrides
+    return type(overrides) == "table" and overrides or {}
+end
 
-local ITEM_QUALITY_OVERRIDES = {
-    [WEAP_UPG_COMBINED_ID] = 4, -- Upgrade Sigil
-}
+local function GetItemQualityOverrides()
+    local overrides = Addon.TRACKING and Addon.TRACKING.itemQualityOverrides
+    return type(overrides) == "table" and overrides or {}
+end
 
 local function GetQualityHex(quality, fallbackHex)
     return QUALITY_HEX[tonumber(quality) or 0] or fallbackHex or COLORS.white
@@ -152,7 +185,7 @@ local function GetItemDisplayQuality(itemID)
     if quality and quality > 1 then
         return quality
     end
-    return ITEM_QUALITY_OVERRIDES[tonumber(itemID) or 0] or quality
+    return GetItemQualityOverrides()[tonumber(itemID) or 0] or quality
 end
 
 local function FormatCurrencyProgressParts(currencyID)
@@ -165,7 +198,7 @@ local function FormatCurrencyProgressParts(currencyID)
     -- If the currency has a weekly earn cap, display weekly-earned / weekly-cap so
     -- that spending the currency doesn't reset the display back to 0 (e.g. 0/2
     -- after spending 2 earned → should show 2/2).  Use >= so this also catches
-    -- currencies where wallet cap equals weekly cap (e.g. ID 3418, cap=2).
+    -- currencies where wallet cap equals weekly cap.
     if info.hasWeeklyLimit and wkAmount > 0 and wkAmount >= walletCap then
         local weeklyEarned = tonumber(info.quantityEarnedThisWeek) or tonumber(info.weeklyQuantity) or 0
         return weeklyEarned, wkAmount
@@ -225,7 +258,7 @@ local function GetCurrencyQualityColor(currencyID)
     if q and q > 1 then
         return GetQualityHex(q, COLORS.gold)
     end
-    local overrideQ = CURRENCY_QUALITY_OVERRIDES[id]
+    local overrideQ = GetCurrencyQualityOverrides()[id]
     if overrideQ then
         return GetQualityHex(overrideQ, COLORS.gold)
     end
@@ -305,6 +338,34 @@ local function BuildCrestLabels(ids, crestCount)
     _crestLabelsCache.key    = key
     _crestLabelsCache.labels = labels
     return labels
+end
+
+local function GetCrestDisplayName(tracking, tierIdx, currencyID, crestLabels)
+    local displayByTier = tracking and tracking.crestDisplayNamesByTier
+    if type(displayByTier) == "table" then
+        local override = displayByTier[tonumber(tierIdx) or 0]
+        if IsNonEmptyText(override) then
+            return override
+        end
+    end
+
+    local displayByID = tracking and tracking.crestDisplayNamesByID
+    if type(displayByID) == "table" then
+        local override = displayByID[tonumber(currencyID) or 0]
+        if IsNonEmptyText(override) then
+            return override
+        end
+    end
+
+    -- Locale companion can supply translated names via numeric currency-ID keys
+    -- (e.g. L[3383] = "Aventurero" in esMX).  Check before falling back to the
+    -- game API, which may return identical names for all tiers in some locales.
+    local localeOverride = currencyID and L[tonumber(currencyID)]
+    if IsNonEmptyText(localeOverride) then
+        return localeOverride
+    end
+
+    return (crestLabels and crestLabels[currencyID]) or GetCurrencyName(currencyID) or tostring(currencyID)
 end
 
 --  Crest achievement helpers 
@@ -593,7 +654,7 @@ function Addon:GetTrackedCurrencyEntries(includeDisabled)
                 row.id = nil
                 row.itemID = itemID
                 row.enabled = entry.enabled ~= false
-                row.type = (itemID == WEAP_UPG_COMBINED_ID) and SNAP_TYPES.WEAPUPG or nil
+                row.type = (itemID == Addon:GetWeaponUpgradeCombinedItemID()) and SNAP_TYPES.WEAPUPG or nil
                 row.kind = entry.kind or "item"
                 row.crestIdx = nil
                 out[n] = row
@@ -716,6 +777,17 @@ function Addon:GetCrestTierFromCosts(costs)
     return bestTier, bestCurrencyID, bestCost
 end
 
+local function ResolveTierCost(value, tierIdx, fallback)
+    if type(value) == "table" then
+        local n = tonumber(value[tierIdx])
+        if n ~= nil then return n end
+    else
+        local n = tonumber(value)
+        if n ~= nil then return n end
+    end
+    return fallback
+end
+
 function Addon:GetCrestSlotUpgradeCost(_slotID, slotData, snap, tierIdx, effectiveMax)
     if not (type(slotData) == "table" and slotData.rank and effectiveMax) then return 0 end
     local rank = tonumber(slotData.rank)
@@ -732,9 +804,8 @@ function Addon:GetCrestSlotUpgradeCost(_slotID, slotData, snap, tierIdx, effecti
     local normalList  = tracking.crestUpgradeCostPerStep
     local reducedList = tracking.crestUpgradeCostReduced
     local normalCost  = (snap and snap.upgradeCostPerStep and snap.upgradeCostPerStep[tierIdx])
-                     or (normalList and normalList[tierIdx]) or 20
-    local reducedCost = (reducedList and reducedList[tierIdx]) or math.max(1, math.floor(normalCost / 2))
-    local freeRanks   = (tracking.crestUpgradeFreeRanks and tracking.crestUpgradeFreeRanks[tierIdx]) or 0
+                     or ResolveTierCost(normalList, tierIdx, 20)
+    local reducedCost = ResolveTierCost(reducedList, tierIdx, math.max(1, math.floor(normalCost / 2)))
     local offsets     = tracking.ilvlRankOffsets or {}
     local tierBase    = (tracking.ilvlBase or 0) + ((tracking.ilvlTrackStep or 0) * ((tierIdx or 1) - 1))
     local currentIlvl = tonumber(slotData.ilvl) or 0
@@ -746,9 +817,7 @@ function Addon:GetCrestSlotUpgradeCost(_slotID, slotData, snap, tierIdx, effecti
     local computedCost = 0
     for nextRank = rank + 1, effectiveMax do
         local stepCost = normalCost
-        if nextRank <= (freeRanks + 1) then
-            stepCost = 0
-        elseif hasDiscount then
+        if hasDiscount then
             local targetIlvl = tierBase + (tonumber(offsets[nextRank]) or 0)
             if targetIlvl > 0 and bestIlvl >= targetIlvl then
                 stepCost = reducedCost
@@ -777,6 +846,10 @@ function Addon:IsSlotLimitedCrafted(slotData, effectiveMax)
 end
 
 function Addon:CalcTierUpgradeCost(snap, tierIdx)
+    if self.IsTrackingSnapshotCurrentSeason and not self:IsTrackingSnapshotCurrentSeason(snap) then
+        return 0
+    end
+
     local gearSlots = self:GetUpgradeGearSlots(snap)
     if type(gearSlots) ~= "table" then return 0 end
 
@@ -933,7 +1006,7 @@ local function GetCrestLines()
     for i = 1, crestCount do
         local id = ids[i]
         if id then
-            local name = crestLabels[id] or GetCurrencyName(id) or tostring(id)
+            local name = GetCrestDisplayName(tracking, i, id, crestLabels)
             if name then
                 local earned = cache.earned[i]    or 0  -- totalEarned toward weekly cap
                 local wkMax  = cache.weeklyMax[i] or 0  -- weekly soft cap
@@ -1138,6 +1211,12 @@ function Addon:ReleaseCurrencyRuntimeCaches()
     Wipe(_panelRowPool)
     Wipe(_trackedEntryBuf)
     Wipe(_trackedEntryPool)
+    -- Currency quantities are read live each render, but label/icon/quality are
+    -- cached per ID. Clear those static caches whenever tracking is reinitialized
+    -- so season overrides or ID table edits refresh display metadata immediately.
+    Wipe(_currencyStaticCache)
+    _crestLabelsCache.key = nil
+    _crestLabelsCache.labels = nil
 end
 
 --- Returns an ordered list of currency rows ready to display in the right column.
@@ -1182,17 +1261,20 @@ function Addon:GetCurrencyPanelRows()
                 FillRow(n, kLbl, kVal, GetCurrencyIconID(id), id, nil, kTip)
             end
         elseif entry.type == SNAP_TYPES.WEAPUPG then
-            local shardHeld    = (GetItemCount and GetItemCount(WEAP_UPG_SHARD_ID))    or 0
-            local combinedHeld = (GetItemCount and GetItemCount(WEAP_UPG_COMBINED_ID)) or 0
+            local shardItemID = Addon:GetWeaponUpgradeShardItemID()
+            local combinedItemID = Addon:GetWeaponUpgradeCombinedItemID()
+            local shardsPerCombined = Addon:GetWeaponUpgradeShardsPerCombined()
+            local shardHeld    = (shardItemID > 0 and GetItemCount and GetItemCount(shardItemID)) or 0
+            local combinedHeld = (combinedItemID > 0 and GetItemCount and GetItemCount(combinedItemID)) or 0
             local needCount    = GetWeaponUpgradeNeedCount()
-            local total        = combinedHeld + shardHeld / WEAP_UPG_SHARDS_PER
-            local iName, _, iQuality, _, _, _, _, _, _, iTex = GetItemInfo and GetItemInfo(WEAP_UPG_COMBINED_ID) or nil
+            local total        = combinedHeld + shardHeld / shardsPerCombined
+            local iName, _, iQuality, _, _, _, _, _, _, iTex = (combinedItemID > 0 and GetItemInfo and GetItemInfo(combinedItemID)) or nil
             if not iTex and C_Item and C_Item.GetItemIconByID then
-                iTex = C_Item.GetItemIconByID(WEAP_UPG_COMBINED_ID)
+                iTex = combinedItemID > 0 and C_Item.GetItemIconByID(combinedItemID) or nil
             end
             local lbl
             if iName then
-                local qhex = GetQualityHex(GetItemDisplayQuality(WEAP_UPG_COMBINED_ID) or iQuality, COLORS.white)
+                local qhex = GetQualityHex(GetItemDisplayQuality(combinedItemID) or iQuality, COLORS.white)
                 lbl = ColorWrap(qhex, iName)
             else
                 lbl = ColorWrap(COLORS.gold, L.TRACKING_UPGRADE_SIGIL or "Upgrade Sigil")
@@ -1205,7 +1287,7 @@ function Addon:GetCurrencyPanelRows()
                 val = ColorWrap(COLORS.green, FormatSigilAmount(total))
             end
             n = n + 1
-            FillRow(n, lbl, val, iTex, nil, nil, nil, WEAP_UPG_COMBINED_ID)
+            FillRow(n, lbl, val, iTex, nil, nil, nil, combinedItemID > 0 and combinedItemID or nil)
         else
             local lbl, val, tip = GetGenericCurrencyParts(id)
             if IsNonEmptyText(lbl) or IsNonEmptyText(val) then
@@ -1313,11 +1395,13 @@ function Addon:FillCurrencySnapshot(snap)
     for _, entry in ipairs(self:GetTrackedCurrencyEntries(true)) do
         local id = tonumber(entry.id)
         if entry.type == SNAP_TYPES.WEAPUPG then
+            local shardItemID = Addon:GetWeaponUpgradeShardItemID()
+            local combinedItemID = Addon:GetWeaponUpgradeCombinedItemID()
             rowCount = rowCount + 1
             local row = AcquireSnapshotRow(rows, rowCount)
             row.type        = SNAP_TYPES.WEAPUPG
-            row.shardQty    = (GetItemCount and GetItemCount(WEAP_UPG_SHARD_ID))    or 0
-            row.combinedQty = (GetItemCount and GetItemCount(WEAP_UPG_COMBINED_ID)) or 0
+            row.shardQty    = (shardItemID > 0 and GetItemCount and GetItemCount(shardItemID)) or 0
+            row.combinedQty = (combinedItemID > 0 and GetItemCount and GetItemCount(combinedItemID)) or 0
             row.need        = GetWeaponUpgradeNeedCount(snap)
         elseif id and id > 0 then
             if entry.type == SNAP_TYPES.CREST and crestCache and entry.crestIdx then
@@ -1413,7 +1497,14 @@ function Addon:RenderCurrencySnapshotRow(row)
         local tracking = self.TRACKING
         local crestIDs, crestCount = GetCrestIDsAndCount(tracking or {})
         local crestLabels = BuildCrestLabels(crestIDs, crestCount)
-        local name  = crestLabels[id] or GetCurrencyName(id) or tostring(id or "?")
+        local tierIdx
+        for i = 1, crestCount do
+            if tonumber(crestIDs[i]) == tonumber(id) then
+                tierIdx = i
+                break
+            end
+        end
+        local name  = GetCrestDisplayName(tracking, tierIdx, id, crestLabels)
         local lbl   = ColorWrap(GetCurrencyQualityColor(id), tostring(name))
         local cap = tonumber(row.cap) or 0
         if cap <= 0 then
@@ -1506,14 +1597,16 @@ function Addon:RenderCurrencySnapshotRow(row)
         elseif done   then return lbl, ColorWrap(COLORS.green, "1/1")
         else               return lbl, ColorWrap(COLORS.red,   "0/1") end
     elseif t == "weapupg" then
+        local combinedItemID = Addon:GetWeaponUpgradeCombinedItemID()
+        local shardsPerCombined = Addon:GetWeaponUpgradeShardsPerCombined()
         local shardQty    = tonumber(row.shardQty)    or 0
         local combinedQty = tonumber(row.combinedQty) or 0
         local need        = tonumber(row.need)        or 0
-        local total       = combinedQty + shardQty / WEAP_UPG_SHARDS_PER
-        local iName, _, iQuality = GetItemInfo and GetItemInfo(WEAP_UPG_COMBINED_ID) or nil
+        local total       = combinedQty + shardQty / shardsPerCombined
+        local iName, _, iQuality = (combinedItemID > 0 and GetItemInfo and GetItemInfo(combinedItemID)) or nil
         local lbl
         if iName then
-            local qhex = GetQualityHex(GetItemDisplayQuality(WEAP_UPG_COMBINED_ID) or iQuality, COLORS.white)
+            local qhex = GetQualityHex(GetItemDisplayQuality(combinedItemID) or iQuality, COLORS.white)
             lbl = ColorWrap(qhex, iName)
         else
             lbl = ColorWrap(COLORS.gold, L.TRACKING_UPGRADE_SIGIL or "Upgrade Sigil")

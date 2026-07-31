@@ -25,37 +25,72 @@ local ICON_SIZE  = 15          -- currency icon width/height in row labels
 local COL_HDR_H  = 36          -- class bar + name + ilvl; date lives in the tooltip
 
 local NUM_CRESTS = 5
-local CREST_ABBREV = { "Adv", "Vet", "Chp", "Hero", "Myth" }
-local GV_NAMES     = {
-    L.TRACKING_GV_RAID or "Raid",
-    L.ALT_SUMMARY_GV_DUNGEONS or L.TRACKING_GV_DUNGEONS or "M+ / Delve",
-    L.TRACKING_GV_WORLD or "World",
+-- Crest abbreviation keys match the ILVLREF_CREST_* entries so the locale
+-- companion's translations are used at call time instead of a static table.
+local CREST_ABBREV_KEYS = {
+    "ILVLREF_CREST_ADV", "ILVLREF_CREST_VET", "ILVLREF_CREST_CHAMP",
+    "ILVLREF_CREST_HERO", "ILVLREF_CREST_MYTH",
 }
+-- GV row names are read lazily so the localization companion's L values are
+-- available by the time PopulateSummary runs (they wouldn't be at file-load time).
+local function GetGVName(gi)
+    if gi == 1 then return L.TRACKING_GV_RAID or "Raid"
+    elseif gi == 2 then return L.ALT_SUMMARY_GV_DUNGEONS or L.TRACKING_GV_DUNGEONS or "M+ / Delve"
+    elseif gi == 3 then return L.TRACKING_GV_WORLD or "World"
+    end
+    return ""
+end
 local GV_THRESHOLDS = { {2,4,6}, {1,4,8}, {2,4,8} }
 
 -- Read from TRACKING so Overlay.lua (which captures the data) uses the same list.
 local GEAR_SLOT_IDS  = (Addon.TRACKING and Addon.TRACKING.gearSlotIDs)
                        or {1,2,3,5,6,7,8,9,10,11,12,13,14,15,16,17}
-local GEAR_SLOT_NAMES = {
-    [1]=L.ALT_SUMMARY_GEAR_SLOT_HEAD or "Head",
-    [2]=L.ALT_SUMMARY_GEAR_SLOT_NECK or "Neck",
-    [3]=L.ALT_SUMMARY_GEAR_SLOT_SHOULDERS or "Shoulders",
-    [5]=L.ALT_SUMMARY_GEAR_SLOT_CHEST or "Chest",
-    [6]=L.ALT_SUMMARY_GEAR_SLOT_WAIST or "Waist",
-    [7]=L.ALT_SUMMARY_GEAR_SLOT_LEGS or "Legs",
-    [8]=L.ALT_SUMMARY_GEAR_SLOT_FEET or "Feet",
-    [9]=L.ALT_SUMMARY_GEAR_SLOT_WRISTS or "Wrists",
-    [10]=L.ALT_SUMMARY_GEAR_SLOT_HANDS or "Hands",
-    [11]=L.ALT_SUMMARY_GEAR_SLOT_RING1 or "Ring 1",
-    [12]=L.ALT_SUMMARY_GEAR_SLOT_RING2 or "Ring 2",
-    [13]=L.ALT_SUMMARY_GEAR_SLOT_TRINKET1 or "Trinket 1",
-    [14]=L.ALT_SUMMARY_GEAR_SLOT_TRINKET2 or "Trinket 2",
-    [15]=L.ALT_SUMMARY_GEAR_SLOT_BACK or "Back",
-    [16]=L.ALT_SUMMARY_GEAR_SLOT_MAIN_HAND or "Main Hand",
-    [17]=L.ALT_SUMMARY_GEAR_SLOT_OFF_HAND or "Off Hand",
+-- Gear slot names are resolved at call time so the localization companion's
+-- translated values are used. A static table built at file-load time would
+-- capture enUS strings before the companion addon has had a chance to load.
+local _GEAR_SLOT_KEY_SUFFIX = {
+    [1]="HEAD",      [2]="NECK",      [3]="SHOULDERS",
+    [5]="CHEST",     [6]="WAIST",     [7]="LEGS",
+    [8]="FEET",      [9]="WRISTS",    [10]="HANDS",
+    [11]="RING1",    [12]="RING2",    [13]="TRINKET1",
+    [14]="TRINKET2", [15]="BACK",     [16]="MAIN_HAND",
+    [17]="OFF_HAND",
 }
-local WEAP_UPG_MAX_ILVL = 298
-local WEAP_UPG_SLOTS    = { 13, 14, 16, 17 }
+local _GEAR_SLOT_DEFAULT = {
+    [1]="Head",      [2]="Neck",      [3]="Shoulders",
+    [5]="Chest",     [6]="Waist",     [7]="Legs",
+    [8]="Feet",      [9]="Wrists",    [10]="Hands",
+    [11]="Ring 1",   [12]="Ring 2",   [13]="Trinket 1",
+    [14]="Trinket 2",[15]="Back",     [16]="Main Hand",
+    [17]="Off Hand",
+}
+local function GetGearSlotName(sid)
+    local suf = _GEAR_SLOT_KEY_SUFFIX[sid]
+    if suf then return L["ALT_SUMMARY_GEAR_SLOT_" .. suf] or _GEAR_SLOT_DEFAULT[sid] end
+    return "Slot " .. sid
+end
+
+local function GetWeaponUpgradeCombinedItemID()
+    if Addon.GetWeaponUpgradeCombinedItemID then
+        return tonumber(Addon:GetWeaponUpgradeCombinedItemID()) or 0
+    end
+    return 0
+end
+
+local function GetWeaponUpgradeMaxItemLevel()
+    if Addon.GetWeaponUpgradeMaxItemLevel then
+        return tonumber(Addon:GetWeaponUpgradeMaxItemLevel()) or 0
+    end
+    return 0
+end
+
+local function GetWeaponUpgradeSlotIDs()
+    if Addon.GetWeaponUpgradeSlotIDs then
+        local slotIDs = Addon:GetWeaponUpgradeSlotIDs()
+        if type(slotIDs) == "table" then return slotIDs end
+    end
+    return {}
+end
 
 -- ── Alpha constants ────────────────────────────────────────────────────
 local A_FULL    = 1.00   -- present, data available
@@ -259,7 +294,7 @@ ShowGearPopup = function(anchor, charKey, charName, cr, cg, cb, snap)
             lblFS:SetJustifyH("LEFT")
             lblFS:SetJustifyV("MIDDLE")
             lblFS:SetTextColor(0.52, 0.52, 0.52, 1)
-            lblFS:SetText(GEAR_SLOT_NAMES[sid])
+            lblFS:SetText(GetGearSlotName(sid))
 
             local nameFS = f:CreateFontString(nil, "OVERLAY")
             nameFS:SetFont(FONT_FACE, 10, FONT_FLAGS)
@@ -798,13 +833,16 @@ local function CalcWeaponUpgradeNeed(snap)
     local gearSlots = Addon.GetUpgradeGearSlots and Addon:GetUpgradeGearSlots(snap)
                    or (type(snap) == "table" and snap.gearSlots)
     if type(gearSlots) ~= "table" then return nil end
+    local maxIlvl = GetWeaponUpgradeMaxItemLevel()
+    local slotIDs = GetWeaponUpgradeSlotIDs()
+    if maxIlvl <= 0 or #slotIDs == 0 then return nil end
     local count = 0
     local sawGear = false
-    for _, sid in ipairs(WEAP_UPG_SLOTS) do
+    for _, sid in ipairs(slotIDs) do
         local sd = gearSlots[sid]
         local ilvl = type(sd) == "table" and tonumber(sd.ilvl) or 0
         if ilvl > 0 then sawGear = true end
-        if ilvl > 0 and ilvl < WEAP_UPG_MAX_ILVL then
+        if ilvl > 0 and ilvl < maxIlvl then
             count = count + 1
         end
     end
@@ -898,8 +936,13 @@ local function BuildRowDefs(tracking, LAYOUT, chars)
     end
 
     local function CrestTierInfo(i)
-        local name = (Addon.IlvlUtils and Addon.IlvlUtils.GetCrestTrackName(i))
-                     or CREST_ABBREV[i] or ("Tier " .. i)
+        local ids = tracking and tracking.crestCurrencyIDs
+        local id  = ids and ids[i]
+        -- Locale companion can override crest names via numeric keys (e.g. L[3383] = "Aventurero").
+        local name = (id and L[id])
+                     or (Addon.IlvlUtils and Addon.IlvlUtils.GetCrestTrackName(i))
+                     or (CREST_ABBREV_KEYS[i] and L[CREST_ABBREV_KEYS[i]])
+                     or ("Tier " .. i)
         local hex  = tracking and tracking.crestColors and tracking.crestColors[i]
         local cr, cg, cb = HexToRGB(hex)
         return name, cr, cg, cb
@@ -1016,14 +1059,15 @@ local function BuildRowDefs(tracking, LAYOUT, chars)
             end
         end
 
-        if not Addon:IsItemHidden(268552) then
+        local combinedItemID = GetWeaponUpgradeCombinedItemID()
+        if combinedItemID > 0 and AnyVisibleCharNeedsWeapUpg(chars) and not Addon:IsItemHidden(combinedItemID) then
             if not addedUpgradeRows then
                 addSec("upgradecost", L.ALT_SUMMARY_SECTION_UPGRADE_COST or "Upgrade Cost", nil)
                 addedUpgradeRows = true
             end
-            local combinedName, combinedTex, wr, wg, wb = GetCachedItemRowMeta(268552)
+            local combinedName, combinedTex, wr, wg, wb = GetCachedItemRowMeta(combinedItemID)
             addRow("weapupg", combinedName or (L.TRACKING_UPGRADE_SIGIL or "Upgrade Sigil"), {
-                itemID = 268552,
+                itemID = combinedItemID,
                 iconID = combinedTex,
                 cr = wr, cg = wg, cb = wb,
             })
@@ -1034,7 +1078,7 @@ local function BuildRowDefs(tracking, LAYOUT, chars)
     addRow("keystone", L.ALT_SUMMARY_KEYSTONE or "Keystone", {})
     for gi = 1, 3 do
         if not Addon:IsGVBlockHidden(gi) then
-            addRow("gv", GV_NAMES[gi], { gvBlock = gi })
+            addRow("gv", GetGVName(gi), { gvBlock = gi })
         end
     end
 
@@ -1492,7 +1536,9 @@ local function RenderKeystoneCell(cell, row, snap, noSnap, alpha, th)
     end
     local name    = (ks.name and ks.name ~= "") and ks.name or nil
     local abbrev  = name and (name:match("^%S+") or name) or nil
-    local display = abbrev and ("+" .. level .. " " .. abbrev) or ("+" .. level)
+    local display = abbrev
+        and (L.ALT_SUMMARY_KEYSTONE_LEVEL_FMT or "+%d %s"):format(level, abbrev)
+        or  (L.ALT_SUMMARY_KEYSTONE_LEVEL_SHORT_FMT or "+%d"):format(level)
     local kr, kg, kb
     if     level >= 10 then kr, kg, kb = 0.64, 0.21, 0.93
     elseif level >=  7 then kr, kg, kb = 0.12, 0.44, 0.85
@@ -1506,9 +1552,9 @@ local function RenderKeystoneCell(cell, row, snap, noSnap, alpha, th)
         GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
         GameTooltip:SetText(L.ALT_SUMMARY_KEYSTONE or "Keystone", 1, 0.82, 0)
         if _name then
-            GameTooltip:AddLine("+" .. _level .. " " .. _name, 1, 1, 1)
+            GameTooltip:AddLine((L.ALT_SUMMARY_KEYSTONE_LEVEL_FMT or "+%d %s"):format(_level, _name), 1, 1, 1)
         else
-            GameTooltip:AddLine("+" .. _level, 1, 1, 1)
+            GameTooltip:AddLine((L.ALT_SUMMARY_KEYSTONE_LEVEL_SHORT_FMT or "+%d"):format(_level), 1, 1, 1)
         end
         GameTooltip:Show()
     end)
@@ -1569,6 +1615,17 @@ local function RenderUpgradeCostCell(cell, row, snap, noSnap, alpha, th)
     end
 
     local targetTier = row.tierIdx
+    if Addon.IsTrackingSnapshotCurrentSeason and not Addon:IsTrackingSnapshotCurrentSeason(snap) then
+        SetPlaceholder(cell, th, alpha * A_DIM)
+        cell:SetScript("OnEnter", function(s_)
+            GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
+            GameTooltip:SetText(L.ALT_SUMMARY_STALE_SEASON_SNAPSHOT or "Snapshot is from a different season.", 1, 0.6, 0, true)
+            GameTooltip:AddLine(L.ALT_SUMMARY_LOG_IN_REFRESH or "Log in as this character to refresh.", 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        return
+    end
+
     local totalCost = Addon.CalcTierUpgradeCost and Addon:CalcTierUpgradeCost(snap, targetTier) or 0
 
     if totalCost == 0 then
@@ -1624,7 +1681,7 @@ local function RenderUpgradeCostCell(cell, row, snap, noSnap, alpha, th)
                                     GameTooltip:AddLine(" ")
                                     hasAny = true
                                 end
-                                local slotName = GEAR_SLOT_NAMES[sid] or ("Slot " .. sid)
+                                local slotName = GetGearSlotName(sid)
                                 if isEmbellished then
                                     -- Limited crafted items cannot be upgraded to the full track max.
                                     GameTooltip:AddLine(
@@ -1702,7 +1759,7 @@ local function RenderGVCell(cell, row, snap, noSnap, alpha)
         local thresh = GV_THRESHOLDS[_bi]
         local cmplt  = blk and tonumber(blk.complete) or 0
         GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
-        GameTooltip:SetText(GV_NAMES[_bi], 1, 0.82, 0)
+        GameTooltip:SetText(GetGVName(_bi), 1, 0.82, 0)
         if not blk then
             GameTooltip:AddLine(L.ALT_SUMMARY_NO_SNAPSHOT or "No snapshot data", 0.6, 0.6, 0.6)
             GameTooltip:Show()
