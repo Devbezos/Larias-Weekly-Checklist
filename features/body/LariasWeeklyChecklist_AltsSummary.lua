@@ -637,15 +637,16 @@ local function EnsurePanel()
     f:SetScript("OnDragStop",  function(self_) self_:StopMovingOrSizing(); self_._wasMoved = true end)
     f:Hide()
     Addon._altsSummaryFrame = f
-    Addon:RegisterWindowSurface(f, { opacityMode = "ui", borderStyle = "panel" })
+    Addon:RegisterWindowSurface(f, { opacityMode = "ui", borderStyle = "panel", surfaceTopA = 0 })
 
     local th = Addon.THEME
 
     -- Title strip.
     local titleBgTex = f:CreateTexture(nil, "BACKGROUND")
-    titleBgTex:SetColorTexture(th.header.r, th.header.g, th.header.b, STYLE.sectionBandA * GetPanelChromeAlpha())
+    titleBgTex:SetColorTexture(0, 0, 0, 0)
     titleBgTex:SetPoint("TOPLEFT",  f, "TOPLEFT", PAD - 6, -1)
     titleBgTex:SetHeight(TITLE_H + 2)
+    titleBgTex:Hide()
     f._altsTitleBgTex = titleBgTex
 
     local titleFS = MakeFS(f, 13, "OUTLINE")
@@ -1836,7 +1837,7 @@ PopulateSummary = function(panel)
     local colW = COL_W
     local CONTENT_TOP, COL_HDR_TOP, ROWS_TOP, FOOTER_TOP, TOTAL_H
     local showCompletionNotice = (not isInline) and panel._completionRedirect == true
-    if panel._altsTitleBgTex then panel._altsTitleBgTex:SetShown(not isInline) end
+    if panel._altsTitleBgTex then panel._altsTitleBgTex:Hide() end
     if panel._altsTitleFS    then panel._altsTitleFS:SetShown(not isInline)    end
     if panel._altsCloseBtn   then panel._altsCloseBtn:SetShown(not isInline)   end
     if panel._altsCompletionNoticeFS then
@@ -1976,11 +1977,12 @@ PopulateSummary = function(panel)
             -- Refresh title strip & label with the current header color.
             local h = Addon.THEME.header
             if panel._altsTitleBgTex then
-                panel._altsTitleBgTex:SetColorTexture(h.r, h.g, h.b, STYLE.sectionBandA * GetPanelChromeAlpha())
+                panel._altsTitleBgTex:SetColorTexture(0, 0, 0, 0)
                 panel._altsTitleBgTex:ClearAllPoints()
                 panel._altsTitleBgTex:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD - 6, -1)
                 panel._altsTitleBgTex:SetWidth(math.max(32, (panel._altsTitleFS and panel._altsTitleFS:GetStringWidth() or 0) + 14))
                 panel._altsTitleBgTex:SetHeight(TITLE_H + 2)
+                panel._altsTitleBgTex:Hide()
             end
             if panel._altsTitleFS    then panel._altsTitleFS:SetTextColor(h.r, h.g, h.b, 1)          end
         end
@@ -2240,12 +2242,13 @@ PopulateSummary = function(panel)
         return c
     end
 
-    -- ── Column-header background strip ───────────────────────────────────────
+    -- ── Column-header divider ────────────────────────────────────────────────
     local hdrBg = GetDiv()
-    hdrBg:SetColorTexture(brd.r, brd.g, brd.b, STYLE.headerBandA * chromeA)
+    hdrBg:SetColorTexture(0, 0, 0, 0)
     hdrBg:SetPoint("TOPLEFT",  panel, "TOPLEFT",  1,  COL_HDR_TOP)
     hdrBg:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -1, COL_HDR_TOP)
     hdrBg:SetHeight(COL_HDR_H + 2)
+    hdrBg:Hide()
 
     -- Horizontal divider below column headers.
     local hdrDiv = GetDiv()
@@ -2283,10 +2286,11 @@ PopulateSummary = function(panel)
                 section._dragIndex = #sectionDragEntries
             end
             local secBg = GetDiv()
-            secBg:SetColorTexture(header.r, header.g, header.b, STYLE.sectionBandA * chromeA)
+            secBg:SetColorTexture(0, 0, 0, 0)
             secBg:SetPoint("TOPLEFT",  panel, "TOPLEFT",   1, curRowY)
             secBg:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -1, curRowY)
             secBg:SetHeight(h)
+            secBg:Hide()
 
             local secTopLine = GetDiv()
             secTopLine:SetHeight(1)

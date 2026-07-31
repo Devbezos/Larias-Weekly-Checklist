@@ -665,8 +665,8 @@ function Addon:RefreshCurrencyConfigPopup(statusText)
         p._titleBg:ClearAllPoints()
         p._titleBg:SetPoint("TOPLEFT", p._titleFS, "TOPLEFT", -8, 4)
         p._titleBg:SetPoint("BOTTOMRIGHT", p._titleFS, "BOTTOMRIGHT", 8, -4)
-        p._titleBg:SetColorTexture(themeHeader.r, themeHeader.g, themeHeader.b, 0.08)
-        p._titleBg:Show()
+        p._titleBg:SetColorTexture(0, 0, 0, 0)
+        p._titleBg:Hide()
     end
     if p._helpFS then
         p._helpFS:Hide()

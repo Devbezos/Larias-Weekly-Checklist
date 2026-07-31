@@ -72,6 +72,7 @@ function Addon:CreateHeader(frame)
     -- ── Gear / settings button ────────────────────────────────────────────────
     local gearBtn = C.NewIconButton(frame, "Interface\\Buttons\\UI-OptionsButton", nil, L.TAB_OPTIONS or "Options", {
         useTextColorAtRest = true,
+        useTextColorOnHover = true,
         restAlpha = 1,
     })
     gearBtn:SetPoint("RIGHT", closeBtn, "LEFT", -2, 0)
@@ -87,7 +88,6 @@ function Addon:CreateHeader(frame)
 
     -- ── Lazy header button locals ─────────────────────────────────────────────
     local changeWeekBtn
-    local devDumpBtn
     local ilvlRefBtn
 
     -- ── EnsureChangeWeekBtn_ ──────────────────────────────────────────────────
@@ -130,41 +130,6 @@ function Addon:CreateHeader(frame)
         end)
         ilvlRefBtn              = btn
         frame._lariasIlvlRefBtn = btn
-        return btn
-    end
-
-    local function EnsureDevDumpBtn_()
-        if devDumpBtn then return devDumpBtn end
-        local btn = Addon.Controls.NewActionButton(frame, 46, 22)
-        btn:SetText("DEV")
-        btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-        btn:SetScript("OnEnter", function(self_)
-            local tracking = Addon.TRACKING or {}
-            local seasonNumber = tostring(tracking._activeSeasonNumber or "?")
-            local seasonName = tostring(tracking._activeSeasonName or "Unknown")
-            local tip = "Left-click: cycle dev season override and refresh.\nRight-click: open the dev tracking dump.\nCurrent: " .. seasonName .. " (" .. seasonNumber .. ")"
-            Addon.AddonUtils.SetTooltip(self_, tip, "ANCHOR_BOTTOMLEFT")
-        end)
-        btn:SetScript("OnLeave", Addon.AddonUtils.HideTooltip)
-        btn:SetScript("OnClick", function(_, button)
-            if button == "RightButton" then
-                if Addon.ShowDevTrackingDumpModal then
-                    Addon:ShowDevTrackingDumpModal()
-                end
-                if GameTooltip and GameTooltip:IsOwned(frame._lariasDevDumpBtn) then
-                    GameTooltip:Hide()
-                end
-                return
-            end
-            if Addon.CycleDevSeasonOverride then
-                Addon:CycleDevSeasonOverride()
-            end
-            if GameTooltip and GameTooltip:IsOwned(frame._lariasDevDumpBtn) then
-                GameTooltip:Hide()
-            end
-        end)
-        devDumpBtn = btn
-        frame._lariasDevDumpBtn = btn
         return btn
     end
 
@@ -530,23 +495,10 @@ function Addon:CreateHeader(frame)
         end
 
         -- ilvlRefBtn: left of gearBtn.
-        local showDevDump = Addon.IsDevBuild and Addon:IsDevBuild() or false
-        local rightAnchor = gearBtn
-        if showDevDump then
-            local btn = EnsureDevDumpBtn_()
-            btn:ClearAllPoints()
-            btn:SetPoint("TOPRIGHT", gearBtn, "TOPLEFT", -4, 0)
-            btn:Show()
-            rightAnchor = btn
-        elseif devDumpBtn then
-            devDumpBtn:Hide()
-        end
-
-        -- ilvlRefBtn: left of the dev button when present, otherwise left of gearBtn.
         if showIR then
             local btn = EnsureIlvlRefBtn_()
             btn:ClearAllPoints()
-            btn:SetPoint("TOPRIGHT", rightAnchor, "TOPLEFT", -4, 0)
+            btn:SetPoint("TOPRIGHT", gearBtn, "TOPLEFT", -4, 0)
             btn:Show()
         elseif ilvlRefBtn then
             ilvlRefBtn:Hide()
@@ -560,7 +512,6 @@ function Addon:CreateHeader(frame)
         local _insetX = (Addon.UI.padOuterX or 14) + (Addon.UI.sectionInsetX or 14)
         local _leftW  = (Addon.UI.padOuterX or 14) + ((showCW or showCP) and (108 + 6) or 0)
         local _rightW = (Addon.UI.closeInset or 4) + 32 + 2 + 20
-        if showDevDump then _rightW = _rightW + 4 + 46 end
         if showIR then _rightW = _rightW + 4 + 140 end
         local _minW   = _leftW + 20 + _rightW
         local _absMinW = math.floor(Addon.UI.frameW * 0.8)

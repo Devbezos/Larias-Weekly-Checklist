@@ -612,8 +612,8 @@ local function BuildIlvlRefWindow()
     win:SetFrameLevel(100)
     win:Hide()
 
-    -- Override bg to fully opaque (NewThemedFrame sets theme defaults; bg.a is 0.65).
-    Addon:ApplyOpaquePopupTheme(win)
+    -- Opaque popup without the shared header-color surface tint.
+    Addon:RegisterWindowSurface(win, { opacityMode = "opaque", borderStyle = "popup", surfaceTopA = 0 })
 
     -- Title (centered, leaves room for close button on the right)
     local titleFS = win:CreateFontString(nil, "ARTWORK", "GameFontNormal")

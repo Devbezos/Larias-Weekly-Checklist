@@ -67,6 +67,10 @@ local STRINGS = {
 	SETTINGS_TAB_DISPLAY = "Display",
 	SETTINGS_TAB_WARNINGS = "Warnings",
 	SETTINGS_TAB_APPEARANCE = "Appearance",
+	SETTINGS_DEBUG_CHECKBOX = "Debug",
+	SETTINGS_DEBUG_TOOLTIP = "Shows development/debug tools in this settings panel.",
+	SETTINGS_DEBUG_DEV_BUTTON = "DEV",
+	SETTINGS_DEBUG_DEV_TOOLTIP = "Left-click: cycle dev season override and refresh.\nRight-click: open the dev tracking dump.",
 	WARNING_PANEL_TITLE = "Warning",
 	-- Settings panel color-row labels
 	SETTINGS_COLOR_RESET       = "Reset",

@@ -281,7 +281,7 @@ Addon.VISUAL_STYLE = Addon.VISUAL_STYLE or {
     sectionAccentA   = 0.58,
     trackingBorderA  = 0.26,
     trackingInnerA   = 0.10,
-    surfaceTopA      = 0.045,
+    surfaceTopA      = 0,
     surfaceBottomA   = 0.12,
 }
 
@@ -1474,7 +1474,7 @@ function Addon:ApplyWindowSurface(frameObj, opts)
         local hdr = self.THEME and self.THEME.header or bg
         local surfaceTopA = opts.surfaceTopA
         if surfaceTopA == nil then
-            surfaceTopA = vs.surfaceTopA or 0.04
+            surfaceTopA = vs.surfaceTopA or 0
         end
         if frameObj._lariasSurfaceTop then
             frameObj._lariasSurfaceTop:SetColorTexture(hdr.r, hdr.g, hdr.b, surfaceTopA * alpha)
@@ -1525,7 +1525,7 @@ end
 
 function Addon:ApplyOpaquePopupTheme(frameObj)
     if not frameObj then return end
-    self:RegisterWindowSurface(frameObj, { opacityMode = "opaque", borderStyle = "popup" })
+    self:RegisterWindowSurface(frameObj, { opacityMode = "opaque", borderStyle = "popup", surfaceTopA = 0 })
 end
 
 function Addon:ApplyWarningPanelTheme(frameObj, opts)
@@ -1560,7 +1560,8 @@ function Addon:ApplyWarningPanelTheme(frameObj, opts)
         frameObj._lariasWarnHeaderFill = fill
     end
     if frameObj._lariasWarnHeaderFill then
-        frameObj._lariasWarnHeaderFill:SetColorTexture(hdr.r, hdr.g, hdr.b, 0.08)
+        frameObj._lariasWarnHeaderFill:SetColorTexture(0, 0, 0, 0)
+        frameObj._lariasWarnHeaderFill:Hide()
     end
 
     if not frameObj._lariasWarnTitle and frameObj.CreateFontString then
@@ -1643,9 +1644,9 @@ local function ApplyThemeBackdrops(self)
         end
         if not _asf._inline then
             local h = self.THEME.header
-            local vs = self.VISUAL_STYLE or {}
             if _asf._altsTitleBgTex then
-                _asf._altsTitleBgTex:SetColorTexture(h.r, h.g, h.b, (vs.sectionBandA or 0.09) * bgA)
+                _asf._altsTitleBgTex:SetColorTexture(0, 0, 0, 0)
+                _asf._altsTitleBgTex:Hide()
             end
             if _asf._altsTitleFS    then _asf._altsTitleFS:SetTextColor(h.r, h.g, h.b, 1)          end
         end
@@ -1772,6 +1773,7 @@ function Addon:ApplyScrollLayout()
 
     scrollFrame:ClearAllPoints()
     local listInset = Addon.UI.sectionInsetX or Addon.UI.padOuterX or 14
+    local scrollRight = Addon.UI.scrollRight or 30
     scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", listInset, -Addon.UI.scrollTop)
 
     -- Slider + banner space must always be reserved, even when the tracking panel
@@ -1798,7 +1800,13 @@ function Addon:ApplyScrollLayout()
         extra = extra + trackingHeight + Addon.UI.trackTopPad
     end
 
-    scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -listInset, Addon.UI.scrollBottom + extra)
+    scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -(listInset + scrollRight), Addon.UI.scrollBottom + extra)
+    local sb = scrollFrame.ScrollBar
+    if sb and sb.ClearAllPoints then
+        sb:ClearAllPoints()
+        sb:SetPoint("TOPLEFT", scrollFrame, "TOPRIGHT", 4, -16)
+        sb:SetPoint("BOTTOMLEFT", scrollFrame, "BOTTOMRIGHT", 4, 16)
+    end
 
     -- Keep the scroll child width in sync with the scroll frame so that
     -- section frames anchored TOPLEFT+TOPRIGHT to scrollChild get a real width.
@@ -2032,10 +2040,17 @@ local function ApplySectionHeaderTint(sectionFrame)
         sectionFrame._title:SetTextColor(h.r, h.g, h.b, h.a)
     end
     if sectionFrame._headerBg then
-        sectionFrame._headerBg:SetColorTexture(h.r, h.g, h.b, vs.sectionBandA or 0.10)
+        sectionFrame._headerBg:SetColorTexture(0, 0, 0, 0)
     end
-    if sectionFrame._headerAccent then
-        sectionFrame._headerAccent:SetColorTexture(h.r, h.g, h.b, vs.sectionAccentA or 0.32)
+    if sectionFrame._headerBorder then
+        local alpha = vs.sectionAccentA or 0.32
+        for _, tex in pairs(sectionFrame._headerBorder) do
+            if tex then tex:SetColorTexture(h.r, h.g, h.b, alpha) end
+        end
+    end
+    if sectionFrame._expandDivider then
+        local alpha = vs.sectionAccentA or 0.32
+        sectionFrame._expandDivider:SetColorTexture(h.r, h.g, h.b, alpha)
     end
 end
 
@@ -2068,20 +2083,6 @@ local function AcquireSectionFrame()
     headerBg:SetAllPoints(header)
     sectionFrame._headerBg = headerBg
 
-    local headerAccent = header:CreateTexture(nil, "ARTWORK")
-    headerAccent:SetPoint("TOPLEFT", header, "TOPLEFT", 2, -1)
-    headerAccent:SetPoint("TOPRIGHT", header, "TOPRIGHT", -2, -1)
-    headerAccent:SetHeight(1)
-    sectionFrame._headerAccent = headerAccent
-
-    local title = header:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    title:SetPoint("LEFT",  header, "LEFT",  3, 0)
-    title:SetPoint("RIGHT", header, "RIGHT", -3, 0)
-    title:SetJustifyH("CENTER")
-    if title.SetWordWrap then title:SetWordWrap(true) end
-    sectionFrame._title = title
-    ApplySectionHeaderTint(sectionFrame)
-
     -- Expand/collapse toggle button anchored to the right of the header.
     -- Parented to sectionFrame (not the Button header) so it is a sibling
     -- rather than a nested button, avoiding click-propagation issues.
@@ -2089,8 +2090,42 @@ local function AcquireSectionFrame()
         sectionFrame, nil, true,
         L and L.EXPAND_SECTION  or "Expand section",
         L and L.COLLAPSE_SECTION or "Collapse section")
+    expandBtn:SetSize(20, 20)
     expandBtn:SetPoint("RIGHT", sectionFrame._header, "RIGHT", -4, 0)
     sectionFrame._expandBtn = expandBtn
+
+    local headerBorder = {}
+    headerBorder.top = header:CreateTexture(nil, "ARTWORK")
+    headerBorder.top:SetPoint("TOPLEFT", header, "TOPLEFT", 2, -1)
+    headerBorder.top:SetPoint("TOPRIGHT", expandBtn, "TOPLEFT", 0, -1)
+    headerBorder.top:SetHeight(1)
+    headerBorder.bottom = header:CreateTexture(nil, "ARTWORK")
+    headerBorder.bottom:SetPoint("BOTTOMLEFT", header, "BOTTOMLEFT", 2, 1)
+    headerBorder.bottom:SetPoint("BOTTOMRIGHT", expandBtn, "BOTTOMLEFT", 0, 1)
+    headerBorder.bottom:SetHeight(1)
+    headerBorder.left = header:CreateTexture(nil, "ARTWORK")
+    headerBorder.left:SetPoint("TOPLEFT", header, "TOPLEFT", 2, -1)
+    headerBorder.left:SetPoint("BOTTOMLEFT", header, "BOTTOMLEFT", 2, 1)
+    headerBorder.left:SetWidth(1)
+    headerBorder.right = header:CreateTexture(nil, "ARTWORK")
+    headerBorder.right:SetPoint("TOPRIGHT", expandBtn, "TOPLEFT", 0, -1)
+    headerBorder.right:SetPoint("BOTTOMRIGHT", expandBtn, "BOTTOMLEFT", 0, 1)
+    headerBorder.right:SetWidth(1)
+    sectionFrame._headerBorder = headerBorder
+
+    local expandDivider = expandBtn:CreateTexture(nil, "OVERLAY")
+    expandDivider:SetPoint("TOPLEFT", expandBtn, "TOPLEFT", 0, 0)
+    expandDivider:SetPoint("BOTTOMLEFT", expandBtn, "BOTTOMLEFT", 0, 0)
+    expandDivider:SetWidth(1)
+    sectionFrame._expandDivider = expandDivider
+
+    local title = header:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    title:SetPoint("LEFT",  header, "LEFT",  3, 0)
+    title:SetPoint("RIGHT", expandBtn, "LEFT", -8, 0)
+    title:SetJustifyH("CENTER")
+    if title.SetWordWrap then title:SetWordWrap(true) end
+    sectionFrame._title = title
+    ApplySectionHeaderTint(sectionFrame)
 
     -- Transparent hover zone covering only the title text (left of the expand button).
     -- Used to scope the "click to change week" tooltip to just the label area.
@@ -2976,11 +3011,16 @@ local function ApplySectionVisuals(want, haveBefore, dataChanged, database, chil
         end
         if sectionFrame._expandBtn then
             sectionFrame._expandBtn:SetFrameLevel(SECTION_FRAME_LEVEL + 2)
+            sectionFrame._expandBtn:SetSize(20, 20)
             sectionFrame._expandBtn._sectionFrame = sectionFrame
             sectionFrame._expandBtn._opensWeekPicker = nil
             sectionFrame._expandBtn:SetScript("OnClick", OnSectionExpandButtonClick)
-            sectionFrame._expandBtn:SetScript("OnEnter", nil)
-            sectionFrame._expandBtn:SetScript("OnLeave", nil)
+            if sectionFrame._expandBtn.RestoreDefaultHoverScripts then
+                sectionFrame._expandBtn:RestoreDefaultHoverScripts()
+            else
+                sectionFrame._expandBtn:SetScript("OnEnter", nil)
+                sectionFrame._expandBtn:SetScript("OnLeave", nil)
+            end
         end
         sectionFrame._sectionId             = sectionId
         sectionFrame._index                 = i
@@ -3273,7 +3313,7 @@ function Addon:CreateFrame()
     -- the protected SetPropagateKeyboardInput (which triggers ADDON_ACTION_BLOCKED).
     tinsert(UISpecialFrames, "LariasWeeklyChecklistFrame")
 
-    self:RegisterWindowSurface(frame, { opacityMode = "ui", borderStyle = "panel" })
+    self:RegisterWindowSurface(frame, { opacityMode = "ui", borderStyle = "panel", surfaceTopA = 0 })
     -- Header: close/gear/change-week/ilvl-ref/char-picker buttons + week-picker popup.
     -- Defined in features/header/LariasWeeklyChecklist_Header.lua.
     self:CreateHeader(frame)
