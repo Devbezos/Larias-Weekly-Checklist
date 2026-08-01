@@ -145,7 +145,7 @@ local tracking = { -- https://www.wowhead.com/currencies/season-1
         {
             name = "Season 2",
             mythicPlusSeason = 18,
-            startsAt = 1893456000,
+            startsAt = 1786456800,
             data = {
                 crestCurrencyIDs = { 3442, 3443, 3444, 3445, 3446 },
                 crestConvertItemIDs = { 269867, 26986, 269865, 269866 },
