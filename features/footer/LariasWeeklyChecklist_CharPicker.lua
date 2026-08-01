@@ -225,14 +225,12 @@ function Addon:InitCharPickerUI(frame, styleFunc)
         if styleFunc then styleFunc(btn) end
         charPickerBtn              = btn
         frame._lariasCharPickerBtn = btn
-        -- Ensure text is left-aligned so the arrow glyph stays within the
-        -- button bounds and doesn't visually overlap the centered section title.
-        -- Use only LEFT anchor to allow text to expand naturally without constraint.
         local tr = Addon.Controls.GetButtonFontString(btn)
         if tr and tr.ClearAllPoints and tr.SetPoint then
             tr:ClearAllPoints()
-            tr:SetPoint("LEFT",  btn, "LEFT",  6, 0)
-            if tr.SetJustifyH then tr:SetJustifyH("LEFT") end
+            tr:SetPoint("CENTER", btn, "CENTER", 0, 0)
+            if tr.SetJustifyH then tr:SetJustifyH("CENTER") end
+            if tr.SetJustifyV then tr:SetJustifyV("MIDDLE") end
         end
         btn:SetScript("OnEnter", function(self_)
             local L = Addon.L or {}

@@ -11,6 +11,7 @@ local panelFrame        -- outer canvas WoW hosts
 local _displaySync      -- shared pane sync closure (Display tab)
 local _warningsSync     -- shared pane sync closure (Warnings tab)
 local _appearanceSync   -- shared pane sync closure (Appearance tab)
+local _debugSync        -- settings-only debug checkbox/button sync
 local _langDropdownBtn  -- reference to locale dropdown button; synced in OnShow
 -- Holds the URL for the most-recently clicked support button so the
 -- LARIAS_COPY_LINK popup can reliably display it (self.data can be nil
@@ -322,7 +323,72 @@ local function BuildPanel()
         btn:SetText(sl.label)
         btn:SetScript("OnClick", function() Addon.OpenSupportLink(_url) end)
     end
-    curY = curY - BTN_H - PAD
+    curY = curY - BTN_H - 14
+
+    -- Debug controls. The DEV action stays out of the in-world checklist and is
+    -- only exposed here after the user explicitly enables debug mode.
+    Addon.Controls.NewDivider(canvas, curY, PAD, PAD)
+    curY = curY - 8
+
+    local debugCb = Addon.Controls.NewCheckBox(canvas, function(v)
+        local gdb = Addon:EnsurePrefs()
+        gdb.debug = v or nil
+        if _debugSync then _debugSync() end
+    end)
+    debugCb:SetPoint("TOPLEFT", canvas, "TOPLEFT", PAD, curY)
+    debugCb:SetHeight(TILE_H)
+    if debugCb._label then
+        debugCb._label:SetText(L.SETTINGS_DEBUG_CHECKBOX or "Debug")
+        debugCb._label:SetPoint("RIGHT", canvas, "TOPLEFT", PAD + 220, 0)
+        local t = Addon.THEME and Addon.THEME.text
+        if t and debugCb._label.SetTextColor then
+            debugCb._label:SetTextColor(t.r, t.g, t.b, t.a or 1)
+        end
+    end
+    if debugCb._hit then
+        debugCb._hit:SetPoint("TOPLEFT", canvas, "TOPLEFT", PAD, curY)
+        debugCb._hit:SetPoint("TOPRIGHT", canvas, "TOPLEFT", PAD + 220, curY)
+        debugCb._hit:SetHeight(TILE_H)
+    end
+    debugCb:SetScript("OnEnter", function(self_)
+        Addon.AddonUtils.SetTooltip(self_, L.SETTINGS_DEBUG_TOOLTIP or "Shows development/debug tools in this settings panel.", "ANCHOR_RIGHT")
+    end)
+    debugCb:SetScript("OnLeave", Addon.AddonUtils.HideTooltip)
+
+    local devBtn = Addon.Controls.NewActionButton(canvas, 90, BTN_H)
+    devBtn:SetPoint("LEFT", debugCb, "RIGHT", 120, 0)
+    devBtn:SetText(L.SETTINGS_DEBUG_DEV_BUTTON or "DEV")
+    devBtn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    devBtn:SetScript("OnEnter", function(self_)
+        local tracking = Addon.TRACKING or {}
+        local seasonNumber = tostring(tracking._activeSeasonNumber or "?")
+        local seasonName = tostring(tracking._activeSeasonName or "Unknown")
+        local tip = L.SETTINGS_DEBUG_DEV_TOOLTIP
+            or "Left-click: cycle dev season override and refresh.\nRight-click: open the dev tracking dump."
+        Addon.AddonUtils.SetTooltip(self_, tip .. "\nCurrent: " .. seasonName .. " (" .. seasonNumber .. ")", "ANCHOR_RIGHT")
+    end)
+    devBtn:SetScript("OnLeave", Addon.AddonUtils.HideTooltip)
+    devBtn:SetScript("OnClick", function(_, button)
+        if button == "RightButton" then
+            if Addon.ShowDevTrackingDumpModal then Addon:ShowDevTrackingDumpModal() end
+        elseif Addon.CycleDevSeasonOverride then
+            Addon:CycleDevSeasonOverride()
+        end
+    end)
+
+    _debugSync = function()
+        local gdb = Addon:EnsurePrefs()
+        local enabled = gdb and gdb.debug and true or false
+        debugCb:SetChecked(enabled)
+        if debugCb._label then
+            debugCb._label:SetText((Addon.L or {}).SETTINGS_DEBUG_CHECKBOX or "Debug")
+        end
+        devBtn:SetShown(enabled)
+        devBtn:SetText((Addon.L or {}).SETTINGS_DEBUG_DEV_BUTTON or "DEV")
+    end
+    _debugSync()
+
+    curY = curY - TILE_H - PAD
 
     canvas:SetHeight(math.abs(curY) + PAD)
 
@@ -331,6 +397,7 @@ local function BuildPanel()
         if _displaySync    then _displaySync()    end
         if _warningsSync   then _warningsSync()   end
         if _appearanceSync then _appearanceSync() end
+        if _debugSync      then _debugSync()      end
         if _langDropdownBtn then
             local savedCode = (Addon.db and Addon.db.global and Addon.db.global.localeOverride) or "auto"
             if savedCode == "" then savedCode = "auto" end
@@ -358,6 +425,7 @@ end
 function Addon:RefreshSettingsCheckboxes()
     if _displaySync  then _displaySync()  end
     if _warningsSync then _warningsSync() end
+    if _debugSync    then _debugSync()    end
 end
 
 --- Called from OnEnable to register the panel with the WoW UI.

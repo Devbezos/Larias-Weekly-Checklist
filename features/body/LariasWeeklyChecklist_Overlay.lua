@@ -665,8 +665,8 @@ function Addon:RefreshCurrencyConfigPopup(statusText)
         p._titleBg:ClearAllPoints()
         p._titleBg:SetPoint("TOPLEFT", p._titleFS, "TOPLEFT", -8, 4)
         p._titleBg:SetPoint("BOTTOMRIGHT", p._titleFS, "BOTTOMRIGHT", 8, -4)
-        p._titleBg:SetColorTexture(themeHeader.r, themeHeader.g, themeHeader.b, 0.08)
-        p._titleBg:Show()
+        p._titleBg:SetColorTexture(0, 0, 0, 0)
+        p._titleBg:Hide()
     end
     if p._helpFS then
         p._helpFS:Hide()
@@ -1052,6 +1052,11 @@ function Addon:ToggleCurrencyConfigPopup(anchor)
         local dragInsert = p:CreateTexture(nil, "OVERLAY")
         dragInsert:Hide()
         p._dragInsertTex = dragInsert
+        p._dragUpdate = function(self_)
+            if self_._dragReorderController then
+                self_._dragReorderController:Update()
+            end
+        end
         p._dragReorderController = CreateDragReorderController(p, {
             threshold = CURRENCY_CONFIG_DRAG_THRESHOLD,
             getCursorValue = function(self_)
@@ -1080,13 +1085,10 @@ function Addon:ToggleCurrencyConfigPopup(anchor)
                 MoveTrackedCurrencyConfigEntryByVisibleOrder(nextCfg, frame_._displayEntries, state.entryKey, targetIdx)
                 Addon:SetTrackedCurrencyConfig(nextCfg)
             end,
+            setUpdating = function(frame_, enabled)
+                frame_:SetScript("OnUpdate", enabled and frame_._dragUpdate or nil)
+            end,
         })
-
-        p:SetScript("OnUpdate", function(self_)
-            if self_._dragReorderController then
-                self_._dragReorderController:Update()
-            end
-        end)
         p:HookScript("OnHide", function(self_)
             if self_._dragReorderController then
                 self_._dragReorderController:Clear()
@@ -1864,9 +1866,11 @@ local function RenderSnapshotIntoPanel(snap)
                     iconID = itemTexture
                 end
             elseif row.type == "weapupg" then
-                itemID = 268552
-                local _, _, _, _, _, _, _, _, _, itemTexture = GetItemInfo(itemID)
-                iconID = itemTexture
+                itemID = Addon.GetWeaponUpgradeCombinedItemID and Addon:GetWeaponUpgradeCombinedItemID() or nil
+                if itemID and itemID > 0 then
+                    local _, _, _, _, _, _, _, _, _, itemTexture = GetItemInfo(itemID)
+                    iconID = itemTexture
+                end
             end
             if (not questKey or not Addon:IsQuestHidden(questKey))
                     and (not itemID or not Addon:IsItemHidden(itemID))

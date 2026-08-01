@@ -140,6 +140,12 @@ function Addon:SetupAddonDB()
     -- enumeration, but all actual addon data lives in global.chars.
     self.db = LibStub("AceDB-3.0"):New(addonName .. "DB", defaults)
     MigrateProfileDataToGlobalChars(self)
+
+    local gdb = self.db and self.db.global
+    if gdb and not gdb._raidBonusRollReminderReenabled then
+        gdb._raidBonusRollReminderReenabled = true
+        gdb.raidBonusRollReminderDisabled = nil
+    end
 end
 
 local function RefreshAfterHiddenChange(self)
@@ -168,14 +174,26 @@ local function RefreshAfterTrackedCurrencyConfigChange(self)
     if self.RefreshCurrencyConfigPopup then self:RefreshCurrencyConfigPopup() end
 end
 
-local BUILTIN_TRACKED_ITEM_ENTRIES = {
-    {
-        itemID = 268552,
-        enabled = true,
-        source = "builtin-item",
-        kind = "item",
-    },
-}
+local function GetBuiltInTrackedItemEntries(self)
+    -- Weapon/trinket upgrade reminders were removed. Keep this hook returning an
+    -- empty list so the broader item-row plumbing can stay available if needed.
+    return {}
+end
+
+local function IsRemovedBuiltInTrackedItemID(itemID)
+    itemID = tonumber(itemID)
+    if not itemID then return false end
+
+    local tracking = Addon and Addon.TRACKING or {}
+    local weaponUpgrade = tracking and tracking.weaponUpgrade
+    local combinedItemID = tonumber(weaponUpgrade and weaponUpgrade.combinedItemID)
+    if combinedItemID and combinedItemID > 0 and itemID == combinedItemID then
+        return true
+    end
+
+    -- Previous Midnight Season 1 combined weapon/trinket upgrade item.
+    return itemID == 268552
+end
 
 local function GetBuiltInTrackedConfigEntries(self)
     local tracking = self and self.TRACKING or {}
@@ -213,8 +231,9 @@ local function GetBuiltInTrackedConfigEntries(self)
         if pushCurrency(bonusRollValue) then return out end
     end
 
-    for i = 1, #BUILTIN_TRACKED_ITEM_ENTRIES do
-        local entry = BUILTIN_TRACKED_ITEM_ENTRIES[i]
+    local builtInItems = GetBuiltInTrackedItemEntries(self)
+    for i = 1, #builtInItems do
+        local entry = builtInItems[i]
         local itemID = tonumber(entry and entry.itemID)
         if itemID then
             local key = "item:" .. itemID
@@ -233,8 +252,27 @@ local function GetBuiltInTrackedConfigEntries(self)
     return out
 end
 
+local NormalizeTrackedCurrencyConfig
+
 local function BuildDefaultTrackedCurrencyConfig(self)
     return GetBuiltInTrackedConfigEntries(self)
+end
+
+local function BuildTrackedCurrencyConfigForActiveSeason(self)
+    local entries = BuildDefaultTrackedCurrencyConfig and BuildDefaultTrackedCurrencyConfig(self) or {}
+    if NormalizeTrackedCurrencyConfig then
+        return NormalizeTrackedCurrencyConfig(self, entries, false)
+    end
+    return entries
+end
+
+function Addon:ResetTrackedCurrencyConfigForActiveSeason()
+    local gdb = self:EnsurePrefs()
+    if type(gdb) ~= "table" then return end
+
+    -- Season swaps should track the active season's built-in currencies by default.
+    -- This replaces stale prior-season IDs that would otherwise remain enabled.
+    gdb.trackedCurrencyConfig = BuildTrackedCurrencyConfigForActiveSeason(self)
 end
 
 local function IsBuiltInTrackedCurrencyID(self, currencyID)
@@ -265,11 +303,12 @@ local function IsBuiltInTrackedCurrencyID(self, currencyID)
     return false
 end
 
-local function IsBuiltInTrackedItemID(itemID)
+local function IsBuiltInTrackedItemID(self, itemID)
     itemID = tonumber(itemID)
     if not itemID then return false end
-    for i = 1, #BUILTIN_TRACKED_ITEM_ENTRIES do
-        if tonumber(BUILTIN_TRACKED_ITEM_ENTRIES[i].itemID) == itemID then
+    local builtInItems = GetBuiltInTrackedItemEntries(self)
+    for i = 1, #builtInItems do
+        if tonumber(builtInItems[i].itemID) == itemID then
             return true
         end
     end
@@ -297,7 +336,7 @@ local function NormalizeTrackedCurrencyConfig(self, entries, allowEmpty)
                     out[#out + 1] = {
                         itemID = itemID,
                         enabled = not (type(entry) == "table" and entry.enabled == false),
-                        source = (type(entry) == "table" and entry.source) or (IsBuiltInTrackedItemID(itemID) and "builtin-item") or "custom-item",
+                        source = (type(entry) == "table" and entry.source) or (IsBuiltInTrackedItemID(self, itemID) and "builtin-item") or "custom-item",
                         kind = (type(entry) == "table" and entry.kind) or "item",
                     }
                 end
@@ -600,6 +639,16 @@ function Addon:GetTrackedCurrencyConfig()
                     id = cofferID,
                     enabled = true,
                 })
+            end
+        end
+    end
+
+    if not gdb._trackedCurrencyConfigRemovedWeaponUpgrade then
+        gdb._trackedCurrencyConfigRemovedWeaponUpgrade = true
+        for i = #gdb.trackedCurrencyConfig, 1, -1 do
+            local entry = gdb.trackedCurrencyConfig[i]
+            if IsRemovedBuiltInTrackedItemID(entry and entry.itemID) then
+                table.remove(gdb.trackedCurrencyConfig, i)
             end
         end
     end

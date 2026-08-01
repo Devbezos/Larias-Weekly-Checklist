@@ -173,6 +173,9 @@ function AddonUtils.CreateDragReorderController(frame, opts)
         if opts.hideIndicator then
             opts.hideIndicator(self.frame)
         end
+        if opts.setUpdating then
+            opts.setUpdating(self.frame, false)
+        end
     end
 
     function controller:Begin(state)
@@ -184,6 +187,9 @@ function AddonUtils.CreateDragReorderController(frame, opts)
         state.startCursor = cursorValue
         state.targetIdx = state.targetIdx or state.sourceIdx
         self.state = state
+        if opts.setUpdating then
+            opts.setUpdating(self.frame, true)
+        end
         return true
     end
 
