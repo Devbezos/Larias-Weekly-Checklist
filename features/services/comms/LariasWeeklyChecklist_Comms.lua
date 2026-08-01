@@ -161,6 +161,12 @@ local function SheetVersionToNum(s)
     return n
 end
 
+local function IsStaleSheetVersionAfterReset(mySheetVersion, remoteSheetVersion)
+    local myNum = SheetVersionToNum(mySheetVersion)
+    local remoteNum = SheetVersionToNum(remoteSheetVersion)
+    return myNum > 0 and myNum <= 5 and (remoteNum - myNum) >= 10
+end
+
 function Addon:GetMyVersion()
     -- Cached in CommsOnEnable.
     return self._myVersion or ""
@@ -173,6 +179,10 @@ function Addon:ShouldShowSheetUpdateNotice()
     if myVer == "" or not IsLiveVersion(myVer) then return false end
     local newestSV = tostring(database._newestSeenRemoteSheetVersion or "")
     if newestSV == "" then return false end
+    if IsStaleSheetVersionAfterReset(GetMySheetVersion(), newestSV) then
+        database._newestSeenRemoteSheetVersion = ""
+        return false
+    end
     return SheetVersionToNum(newestSV) > SheetVersionToNum(GetMySheetVersion())
 end
 
@@ -312,7 +322,9 @@ function Addon:OnAddonMessage(prefix, message, sender)
     local remoteSV = (type(decoded.sv) == "string" and decoded.sv ~= "") and decoded.sv or nil
     if remoteSV then
         local database = self:EnsureDB()
-        if SheetVersionToNum(remoteSV) > SheetVersionToNum(GetMySheetVersion()) then
+        local mySV = GetMySheetVersion()
+        if not IsStaleSheetVersionAfterReset(mySV, remoteSV)
+        and SheetVersionToNum(remoteSV) > SheetVersionToNum(mySV) then
             local storedSV = tostring(database._newestSeenRemoteSheetVersion or "")
             if storedSV == "" or SheetVersionToNum(remoteSV) > SheetVersionToNum(storedSV) then
                 database._newestSeenRemoteSheetVersion = remoteSV
@@ -343,6 +355,12 @@ function Addon:CommsOnEnable()
             database._newestSeenRemoteVersion = ""
             database._newestSeenRemoteSender  = ""
         end
+    end
+
+    local mySheetVersion = GetMySheetVersion()
+    local storedSheetVersion = tostring(database._newestSeenRemoteSheetVersion or "")
+    if storedSheetVersion ~= "" and IsStaleSheetVersionAfterReset(mySheetVersion, storedSheetVersion) then
+        database._newestSeenRemoteSheetVersion = ""
     end
 
     if C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix then
