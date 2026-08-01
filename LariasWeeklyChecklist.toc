@@ -4,7 +4,7 @@
 ## Author: Dev
 ## X-Credits: Larias (checklist content and data)
 ## Author: Larias
-## Version: 2.1.45
+## Version: 2.1.46
 ## SavedVariables: LariasWeeklyChecklistDB
 ## OptionalDeps: LariasWeeklyChecklist_Localization
 ## IconTexture: Interface\AddOns\LariasWeeklyChecklist\assets\icon
@@ -34,6 +34,7 @@ constants\LariasWeeklyChecklist_Constants.lua
 LariasWeeklyChecklist.lua
 features\services\general\LariasWeeklyChecklist_DevMetadata.lua
 features\services\general\LariasWeeklyChecklist_Database.lua
+features\services\general\LariasWeeklyChecklist_Popups.lua
 
 # Reusable UI components (must follow main file)
 components\LariasWeeklyChecklist_Buttons.lua

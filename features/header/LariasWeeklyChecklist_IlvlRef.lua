@@ -208,7 +208,7 @@ local function BuildIlvlRefWindow()
     local ilvlBase      = tracking.ilvlBase      or 220
     local ilvlTrackStep = tracking.ilvlTrackStep or 13
     local RANK_OFFSETS  = tracking.ilvlRankOffsets or { 0, 4, 7, 10, 13, 17 }
-        local MYTH_EXTRA_ILVLS = (type(tracking.ilvlMythExtraLevels) == "table") and tracking.ilvlMythExtraLevels or {}
+    local MYTH_EXTRA_ILVLS = (type(tracking.ilvlMythExtraLevels) == "table") and tracking.ilvlMythExtraLevels or {}
 
     local TIERS = {
         { id="ADV",   color=ADV,   ilvlBase=ilvlBase + ilvlTrackStep * 0,
@@ -254,7 +254,7 @@ local function BuildIlvlRefWindow()
         end
 
         local crestCell
-        if rank == 6 and nextTier then
+        if isOverlap and (rank - 4) == 2 then
             crestCell = tier.color .. tier.crestShort .. COLOR_RESET
                      .. " - (|cFFFF2020" .. (Locale.ILVLREF_DO_NOT_USE_CRESTS_FMT or "DO NOT USE %s CRESTS"):format(nextTier.crest) .. "|r)"
         else
@@ -278,12 +278,11 @@ local function BuildIlvlRefWindow()
             table.insert(DEFAULT_TRACKS_TABLE, makeTrackRow(tier, rank, nextTier))
         end
     end
-    for extraRank = 1, #MYTH_EXTRA_ILVLS do
-        local displayRank = 6 + extraRank
-        local ilvl = MYTH_EXTRA_ILVLS[extraRank]
+    if #MYTH_EXTRA_ILVLS > 0 then
+        local ilvl = MYTH_EXTRA_ILVLS[#MYTH_EXTRA_ILVLS]
         table.insert(DEFAULT_TRACKS_TABLE, {
             MYTH .. ilvl .. COLOR_RESET,
-            MYTH .. TIERS[5].trackName .. " " .. displayRank .. "/6" .. COLOR_RESET,
+            MYTH .. TIERS[5].trackName .. " 9/6" .. COLOR_RESET,
             MYTH .. TIERS[5].crest .. COLOR_RESET,
         })
     end
@@ -438,7 +437,7 @@ local function BuildIlvlRefWindow()
                 local explicitIlvl = tonumber(row.ilvl or row[4])
 
                 local tier = tierIndex and TIERS[tierIndex]
-                if tier and rank then
+                if tier and rank and (rank <= 6 or (tierIndex == #TIERS and rank == 9)) then
                     local ilvl = explicitIlvl or (tier.ilvlBase + (RANK_OFFSETS[rank] or 0))
                     local inferredNextTierIndex = 0
                     local inferredNextRank = nil
@@ -469,7 +468,7 @@ local function BuildIlvlRefWindow()
                     end
 
                     local crestCell
-                    if rank == 6 and nextTier then
+                    if isOverlap and nextRank == 2 then
                         crestCell = tier.color .. tier.crestShort .. COLOR_RESET
                             .. " - (|cFFFF2020" .. (Locale.ILVLREF_DO_NOT_USE_CRESTS_FMT or "DO NOT USE %s CRESTS"):format(nextTier.crest) .. "|r)"
                     else
@@ -613,8 +612,8 @@ local function BuildIlvlRefWindow()
     win:SetFrameLevel(100)
     win:Hide()
 
-    -- Override bg to fully opaque (NewThemedFrame sets theme defaults; bg.a is 0.65).
-    Addon:ApplyOpaquePopupTheme(win)
+    -- Opaque popup without the shared header-color surface tint.
+    Addon:RegisterWindowSurface(win, { opacityMode = "opaque", borderStyle = "popup", surfaceTopA = 0 })
 
     -- Title (centered, leaves room for close button on the right)
     local titleFS = win:CreateFontString(nil, "ARTWORK", "GameFontNormal")

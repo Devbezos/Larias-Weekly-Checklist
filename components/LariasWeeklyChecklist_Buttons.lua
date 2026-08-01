@@ -56,7 +56,7 @@ function C.StyleButton(btn)
     if btn.Middle and btn.Middle.Hide then btn.Middle:Hide() end
     if btn.Right  and btn.Right.Hide  then btn.Right:Hide()  end
 
-    if btn.SetTextInsets then btn:SetTextInsets(12, 12, 4, 4) end
+    if btn.SetTextInsets then btn:SetTextInsets(0, 0, 0, 0) end
 
     if btn.CreateTexture and T then
         if not btn._lariasButtonFill then
@@ -85,6 +85,7 @@ function C.StyleButton(btn)
 
     local tr = btn.Text or (btn.GetFontString and btn:GetFontString())
     if tr then
+        if tr.SetJustifyH then tr:SetJustifyH("CENTER") end
         if tr.SetJustifyV then tr:SetJustifyV("MIDDLE") end
         if tr.ClearAllPoints and tr.SetPoint then
             tr:ClearAllPoints()
@@ -228,10 +229,18 @@ function C.NewIconButton(parent, texturePath, onClick, tooltip, opts)
             local h = Addon.THEME.header
             return h.r, h.g, h.b, opts.restAlpha or 1
         end
+        if opts.useTextColorAtRest and Addon.THEME and Addon.THEME.text then
+            local t = Addon.THEME.text
+            return t.r, t.g, t.b, opts.restAlpha or t.a or 1
+        end
         return REST_R, REST_G, REST_B, REST_A
     end
 
     local function GetHoverColor()
+        if opts.useTextColorOnHover and Addon.THEME and Addon.THEME.text then
+            local t = Addon.THEME.text
+            return t.r, t.g, t.b
+        end
         if opts.useHeaderColorAtRest and Addon.THEME and Addon.THEME.header then
             local h = Addon.THEME.header
             return h.r, h.g, h.b
@@ -306,6 +315,7 @@ function C.NewExpandButton(parent, onToggle, initialExpanded, expandTip, shrinkT
     local btn = CreateFrame("Button", nil, parent)
     btn:SetSize(20, 20)
     ApplyFixedBackdrop(btn)
+    if btn.SetHitRectInsets then btn:SetHitRectInsets(0, 0, 0, 0) end
 
     -- Fixed colors — intentionally NOT driven by theme so the arrow never
     -- changes color when the user adjusts header/background theme colors.
@@ -352,18 +362,21 @@ function C.NewExpandButton(parent, onToggle, initialExpanded, expandTip, shrinkT
 
     RefreshGlyph()
 
-    btn:SetScript("OnEnter", function(self_)
-        normTex:SetVertexColor(HOV_R, HOV_G, HOV_B, 1)
-        local tip = self_._expanded and _shrinkTip or _expandTip
-        GameTooltip:SetOwner(self_, "ANCHOR_BOTTOMLEFT")
-        GameTooltip:SetText(tip, 1, 1, 1, 1, true)
-        GameTooltip:Show()
-    end)
-    btn:SetScript("OnLeave", function()
-        normTex:SetVertexColor(REST_R, REST_G, REST_B, REST_A)
-        pushedTex:Hide()
-        GameTooltip:Hide()
-    end)
+    function btn:RestoreDefaultHoverScripts()
+        self:SetScript("OnEnter", function(self_)
+            normTex:SetVertexColor(HOV_R, HOV_G, HOV_B, 1)
+            local tip = self_._expanded and _shrinkTip or _expandTip
+            GameTooltip:SetOwner(self_, "ANCHOR_BOTTOMLEFT")
+            GameTooltip:SetText(tip, 1, 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        self:SetScript("OnLeave", function()
+            normTex:SetVertexColor(REST_R, REST_G, REST_B, REST_A)
+            pushedTex:Hide()
+            GameTooltip:Hide()
+        end)
+    end
+    btn:RestoreDefaultHoverScripts()
     btn:SetScript("OnMouseDown", function()
         pushedTex:Show()
         normTex:SetVertexColor(HOV_R * 0.45, HOV_G * 0.45, HOV_B * 0.45, 1)

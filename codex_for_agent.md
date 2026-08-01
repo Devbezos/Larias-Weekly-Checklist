@@ -11,3 +11,7 @@
 ---
 
 This is an agent-friendly copy of `codex.md`. I will keep it concise and use it when making edits in this repository.
+
+> **WoW terminology**: when any task involves locale strings or in-game noun names, consult
+> `translation-context.json` in the companion repo (`Larias-Weekly-Midnight-Checklist_Locales/`).
+> It lists the correct in-game term per locale. Do not guess or use dictionary translations.

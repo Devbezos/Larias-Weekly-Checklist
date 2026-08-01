@@ -16,20 +16,26 @@ local LOCALE_REGISTRY_KEY = Addon.LOCALE_REGISTRY_KEY
 local TRACKED_ALT_LOOT_SECTION_ID = "larias_tracked_alt_loot"
 
 local function BuildTrackedAltLootSection(self)
-    if type(self.GetTrackedLootCharKeys) ~= "function" then return nil end
+    if type(self.GetTrackedLootCharKeys) ~= "function" then return nil, "" end
 
     local L = self.L or {}
     local trackedKeys = self:GetTrackedLootCharKeys()
-    if #trackedKeys == 0 then return nil end
+    if #trackedKeys == 0 then return nil, "" end
 
     local gdb = self.db and self.db.global
     local items = {}
+    local sigParts = {
+        tostring(L.TRACKED_ALT_LOOT_SECTION_TITLE or "Tracked Alt Loot"),
+        tostring(L.TRACKED_ALT_LOOT_ITEM_ILVL_FMT or "Max loot on %s (ilvl %d)"),
+        tostring(L.TRACKED_ALT_LOOT_ITEM_FMT or "Max loot on %s"),
+    }
 
     for _, profileKey in ipairs(trackedKeys) do
         local cdb = gdb and gdb.chars and gdb.chars[profileKey]
         local charName = (profileKey:match("^(.-)%s*%-") or profileKey):gsub("^%s+", ""):gsub("%s+$", "")
         if charName == "" then charName = profileKey end
         local ilvl = tonumber(cdb and cdb.ilvl) or 0
+        sigParts[#sigParts + 1] = profileKey .. ":" .. tostring(math.floor(ilvl))
 
         local text
         if ilvl > 0 then
@@ -44,13 +50,33 @@ local function BuildTrackedAltLootSection(self)
         }
     end
 
-    if #items == 0 then return nil end
+    if #items == 0 then return nil, "" end
 
     return {
         id = TRACKED_ALT_LOOT_SECTION_ID,
         title = L.TRACKED_ALT_LOOT_SECTION_TITLE or "Tracked Alt Loot",
         items = items,
-    }
+    }, table.concat(sigParts, "|")
+end
+
+local function MergeTrackedAltLootSection(self, data, trackedSection, trackedSig)
+    if not trackedSection then return data end
+    if self._cachedListMergedBase == data
+            and self._cachedListMergedTrackedSig == trackedSig
+            and type(self._cachedListMergedData) == "table" then
+        return self._cachedListMergedData
+    end
+
+    local merged = {}
+    for i, section in ipairs(data) do
+        merged[i] = section
+    end
+    merged[#merged + 1] = trackedSection
+
+    self._cachedListMergedBase = data
+    self._cachedListMergedTrackedSig = trackedSig
+    self._cachedListMergedData = merged
+    return merged
 end
 
 -- Return the checklist dataset for the current effective locale.
@@ -63,48 +89,24 @@ function Addon:GetListData()
     local localeCode = self:GetEffectiveLocaleCode()
 
     if self._cachedListLocaleCode == localeCode and type(self._cachedListData) == "table" then
-        local trackedSection = BuildTrackedAltLootSection(self)
-        if not trackedSection then
-            return self._cachedListData
-        end
-        local merged = {}
-        for i, section in ipairs(self._cachedListData) do
-            merged[i] = section
-        end
-        merged[#merged + 1] = trackedSection
-        return merged
+        local trackedSection, trackedSig = BuildTrackedAltLootSection(self)
+        return MergeTrackedAltLootSection(self, self._cachedListData, trackedSection, trackedSig)
     end
 
     local data = dataByLocale[localeCode]
     if type(data) == "table" then
         self._cachedListLocaleCode = localeCode
         self._cachedListData = data
-        local trackedSection = BuildTrackedAltLootSection(self)
-        if not trackedSection then
-            return data
-        end
-        local merged = {}
-        for i, section in ipairs(data) do
-            merged[i] = section
-        end
-        merged[#merged + 1] = trackedSection
-        return merged
+        local trackedSection, trackedSig = BuildTrackedAltLootSection(self)
+        return MergeTrackedAltLootSection(self, data, trackedSection, trackedSig)
     end
 
     data = dataByLocale.enUS
     if type(data) == "table" then
         self._cachedListLocaleCode = "enUS"
         self._cachedListData = data
-        local trackedSection = BuildTrackedAltLootSection(self)
-        if not trackedSection then
-            return data
-        end
-        local merged = {}
-        for i, section in ipairs(data) do
-            merged[i] = section
-        end
-        merged[#merged + 1] = trackedSection
-        return merged
+        local trackedSection, trackedSig = BuildTrackedAltLootSection(self)
+        return MergeTrackedAltLootSection(self, data, trackedSection, trackedSig)
     end
 
     return {}

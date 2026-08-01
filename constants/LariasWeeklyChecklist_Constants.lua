@@ -15,6 +15,11 @@ local constantsKey = tostring(addonName or "") .. "_CONSTANTS"
 -- Season data: update these every new season.
 -- Optional seasonVariants are auto-selected by mythicPlusSeason, then startsAt.
 local tracking = { -- https://www.wowhead.com/currencies/season-1
+    supportLinks = {
+        doc       = "https://docs.google.com/document/d/e/2PACX-1vQE61MBpAnZR342cdIpz3AujVaeeg8JYB5Ltzuua884lXKqLqtjg8OfWmEd6uuVQONZ-vUQ_jzWDY0E/pub",
+        checklist = "https://docs.google.com/spreadsheets/d/1iK2SZUcz_ljnkdTG7KW6pqfzaUDuSgnlh1HupcLrkus",
+        discord   = "https://discord.gg/postnerfclarity",
+    },
     -- NPCs that should show the crest conversion side panel.
     crestExchangeNpcIDs = {
         239676, -- Vaskarn <Crest Exchange>, Silvermoon City (Midnight)
@@ -43,15 +48,9 @@ local tracking = { -- https://www.wowhead.com/currencies/season-1
                 ilvlTrackStep = 13,
                 ilvlRankOffsets = { 0, 4, 7, 10, 13, 17 },
                 ilvlMythExtraLevels = {},
-                crestUpgradeFreeRanks = { 0, 0, 0, 0, 0 },
-                supportLinks = {
-                    doc       = "https://docs.google.com/document/d/e/2PACX-1vQE61MBpAnZR342cdIpz3AujVaeeg8JYB5Ltzuua884lXKqLqtjg8OfWmEd6uuVQONZ-vUQ_jzWDY0E/pub",
-                    checklist = "https://docs.google.com/spreadsheets/d/1iK2SZUcz_ljnkdTG7KW6pqfzaUDuSgnlh1HupcLrkus",
-                    discord   = "https://discord.gg/postnerfclarity",
-                },
                 crestTradeBatch = { 30, 10 },
-                crestUpgradeCostPerStep = { 20, 20, 20, 20, 20 },
-                crestUpgradeCostReduced = { 10, 10, 10, 10, 10 },
+                crestUpgradeCostPerStep = 20,
+                crestUpgradeCostReduced = 10,
                 ilvlRefTables = {
                     -- tracks row schema:
                     -- { tier = <1-5>, rank = <1-7>, ilvl = <number> }
@@ -130,15 +129,26 @@ local tracking = { -- https://www.wowhead.com/currencies/season-1
                     weeklyPrey = 0,
                     delveBoss = 254253,
                 },
+                weaponUpgrade = {
+                    shardItemID = 0,
+                    combinedItemID = 0,
+                    maxItemLevel = 0,
+                    shardsPerCombined = 0,
+                    slotIDs = {},
+                },
+                currencyQualityOverrides = {
+                    [3212] = 4,
+                },
+                itemQualityOverrides = {},
             },
         },
         {
             name = "Season 2",
             mythicPlusSeason = 18,
-            startsAt = 1893456000,
+            startsAt = 1786456800,
             data = {
                 crestCurrencyIDs = { 3442, 3443, 3444, 3445, 3446 },
-                crestConvertItemIDs = { 0, 0, 0, 0 },
+                crestConvertItemIDs = { 269867, 26986, 269865, 269866 },
                 crestAchievementIDs = { 62410, 62411, 62412, 62414, 62416 },
                 sparkCurrencyID = 0,
                 sparkItemID = 0,
@@ -147,19 +157,13 @@ local tracking = { -- https://www.wowhead.com/currencies/season-1
                 cofferKeysCurrencyID = 0,
                 cofferKeysDisplayCurrencyID = 0,
                 bonusRollCurrencyID = 3511,
-                supportLinks = {
-                    doc       = "https://docs.google.com/document/d/e/2PACX-1vQE61MBpAnZR342cdIpz3AujVaeeg8JYB5Ltzuua884lXKqLqtjg8OfWmEd6uuVQONZ-vUQ_jzWDY0E/pub",
-                    checklist = "https://docs.google.com/spreadsheets/d/1iK2SZUcz_ljnkdTG7KW6pqfzaUDuSgnlh1HupcLrkus",
-                    discord   = "https://discord.gg/postnerfclarity",
-                },
                 ilvlBase = 266,
                 ilvlTrackStep = 13,
                 ilvlRankOffsets = { 0, 3, 6, 10, 13, 16 },
                 ilvlMythExtraLevels = { 337, 341, 344 },
-                crestUpgradeFreeRanks = { 0, 0, 0, 0, 0 },
                 crestTradeBatch = { 30, 10 },
-                crestUpgradeCostPerStep = { 20, 20, 20, 20, 20 },
-                crestUpgradeCostReduced = { 10, 10, 10, 10, 10 },
+                crestUpgradeCostPerStep = 20,
+                crestUpgradeCostReduced = 10,
                 ilvlRefTables = {
                     -- tracks row schema:
                     -- { tier = <1-5>, rank = <1-9>, ilvl = <number> }
@@ -241,22 +245,18 @@ local tracking = { -- https://www.wowhead.com/currencies/season-1
                     weeklyPrey = 0,
                     delveBoss = 0,
                 },
+                weaponUpgrade = {
+                    shardItemID = 0,
+                    combinedItemID = 0,
+                    maxItemLevel = 0,
+                    shardsPerCombined = 0,
+                    slotIDs = {},
+                },
+                currencyQualityOverrides = {},
+                itemQualityOverrides = {},
             },
         },
     },
-    -- Starting ilvl for rank 1 of the lowest crest tier (Adventurer).
-    -- Each tier's base = ilvlBase + ilvlTrackStep * (tierIndex - 1).
-    ilvlBase      = 220,
-    ilvlTrackStep = 13,   -- a new track starts every 13 ilvls (rank-5 of each track)
-
-    -- Free rank upgrades per tier granted account-wide (e.g. 2 = first 2 ranks cost 0 crests).
-    -- Set to the appropriate value when Blizzard activates alt-upgrade discounts.
-    crestUpgradeFreeRanks = {0, 0, 0, 0, 0},
-
-    -- Per-rank ilvl offsets within any track (rank 1 = +0, rank 6 = +17).
-    -- Gaps are 4, 3, 3, 3, 4 and are constant across seasons and tiers.
-    ilvlRankOffsets = { 0, 4, 7, 10, 13, 17 },
-
     -- Equipment slot IDs captured for the gear popup and upgrade-cost rows.
     -- Slot 4 (shirt) and ranged/ammo slots are intentionally excluded.
     gearSlotIDs = {1,2,3,5,6,7,8,9,10,11,12,13,14,15,16,17},
