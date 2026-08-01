@@ -70,10 +70,12 @@ function Addon:CreateHeader(frame)
     closeBtn:SetSize(22, 22)
     local closeText = closeBtn.GetFontString and closeBtn:GetFontString()
     if closeText then
-        closeText:SetFont("Fonts\\FRIZQT__.TTF", 16, "OUTLINE")
-        closeText:SetText("X")
+        closeText:SetFont("Fonts\\FRIZQT__.TTF", 18, "OUTLINE")
+        closeText:SetText("\195\151")
         closeText:ClearAllPoints()
-        closeText:SetPoint("CENTER", closeBtn, "CENTER", 0, -2)
+        closeText:SetAllPoints(closeBtn)
+        if closeText.SetJustifyH then closeText:SetJustifyH("CENTER") end
+        if closeText.SetJustifyV then closeText:SetJustifyV("MIDDLE") end
     end
     closeBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -headerMargin, -headerMargin)
     frame._lariasCloseBtn = closeBtn

@@ -2449,6 +2449,8 @@ function Addon:UpdateCompletionEasterEgg(db)
     end
 end
 
+local RebuildDataIndex
+
 local function CalcDataSig(data)
     if type(data) ~= "table" then return 0 end
 
@@ -2456,10 +2458,8 @@ local function CalcDataSig(data)
     -- NOTE: This assumes list data doesn't mutate in-place without clearing __lariasSig.
     local cached = rawget(data, "__lariasSig")
     if type(cached) == "number" then
-    return cached
-end
-
-local RebuildDataIndex
+        return cached
+    end
 
     -- Memory-friendly signature: numeric hash, no big temp tables / concatenated strings.
     -- (Collision risk is extremely low for our static dataset; acceptable for change detection.)

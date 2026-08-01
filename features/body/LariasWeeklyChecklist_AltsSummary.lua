@@ -729,14 +729,15 @@ local function EnsurePanel()
     rowDragInsert:Hide()
     f._rowDragInsertTex = rowDragInsert
 
-    f:SetScript("OnUpdate", function(self_)
+    f._dragUpdate = function(self_)
         if self_._dragReorderController then
             self_._dragReorderController:Update()
         end
         if self_._rowDragReorderController then
             self_._rowDragReorderController:Update()
         end
-    end)
+    end
+    f:SetScript("OnUpdate", nil)
 
     altSummaryFrame = f
     -- Register with UISpecialFrames so ESC closes this window.
@@ -2031,6 +2032,9 @@ PopulateSummary = function(panel)
                 Addon:SetAltSummaryCharOrder(orderKeys)
             end
         end,
+        setUpdating = function(frame_, enabled)
+            frame_:SetScript("OnUpdate", enabled and frame_._dragUpdate or nil)
+        end,
     })
     panel._rowDragReorderController = CreateDragReorderController(panel, {
         threshold = DRAG_THRESHOLD,
@@ -2074,6 +2078,9 @@ PopulateSummary = function(panel)
             if Addon.SetAltSummaryRowOrder then
                 Addon:SetAltSummaryRowOrder(sectionKey, orderKeys)
             end
+        end,
+        setUpdating = function(frame_, enabled)
+            frame_:SetScript("OnUpdate", enabled and frame_._dragUpdate or nil)
         end,
     })
 

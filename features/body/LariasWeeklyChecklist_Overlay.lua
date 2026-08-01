@@ -1052,6 +1052,11 @@ function Addon:ToggleCurrencyConfigPopup(anchor)
         local dragInsert = p:CreateTexture(nil, "OVERLAY")
         dragInsert:Hide()
         p._dragInsertTex = dragInsert
+        p._dragUpdate = function(self_)
+            if self_._dragReorderController then
+                self_._dragReorderController:Update()
+            end
+        end
         p._dragReorderController = CreateDragReorderController(p, {
             threshold = CURRENCY_CONFIG_DRAG_THRESHOLD,
             getCursorValue = function(self_)
@@ -1080,13 +1085,10 @@ function Addon:ToggleCurrencyConfigPopup(anchor)
                 MoveTrackedCurrencyConfigEntryByVisibleOrder(nextCfg, frame_._displayEntries, state.entryKey, targetIdx)
                 Addon:SetTrackedCurrencyConfig(nextCfg)
             end,
+            setUpdating = function(frame_, enabled)
+                frame_:SetScript("OnUpdate", enabled and frame_._dragUpdate or nil)
+            end,
         })
-
-        p:SetScript("OnUpdate", function(self_)
-            if self_._dragReorderController then
-                self_._dragReorderController:Update()
-            end
-        end)
         p:HookScript("OnHide", function(self_)
             if self_._dragReorderController then
                 self_._dragReorderController:Clear()
