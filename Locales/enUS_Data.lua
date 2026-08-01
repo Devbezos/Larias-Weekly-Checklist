@@ -48,7 +48,7 @@ local DATASET = {
         id = "a932c06c",
         title = "Week 1 - Aug 18 - Season Starts",
         items = {
-            { id = "77d4d31b", text = "Take a bonus roll if it's available, a tier piece if your guild doesn't do splits, and a socket if your guild does" },
+            { id = "f68afbf5", text = "Take a bonus roll if it's available, otherwise take a tier piece if your guild doesn't do splits, and a socket if your guild does" },
             { id = "1ad52558", text = "Do LFR for tier pieces." },
             { id = "70348198", text = "Complete weekly spark quest" },
             { id = "02a1debb", text = "Complete ?? Azta'rec the for 60 uncapped hero Crests and 30 uncapped Myth Crests - this can be completed in a group for the crests. Unconfirmed for Season 2." },
