@@ -38,7 +38,7 @@ local DATASET = {
         items = {
             { id = "4de0b2be", text = "Complete the new zone intro campaign" },
             { id = "7508a529", text = "Complete a world tour of M0's for 292 ilvl gear" },
-            { id = "1cbf10d3", text = "Complete 2x Hard Prey for 292 ilvl gear" },
+            { id = "e2863827", text = "Complete 2x Hard Prey for 279 ilvl gear if needed" },
             { id = "66e39766", text = "Complete the new Lair raid boss on story mode difficulty for fun and LFR gear." },
             { id = "59e21858", text = "Complete ? Azta'rec for 30 uncapped hero Crests and to practice for ?? next week" },
             { id = "1fa9d1cc", text = "Complete delves to finish out your world quest slots if you don't do splits" },
@@ -60,6 +60,7 @@ local DATASET = {
             { id = "c68ca026", text = "Full clear Normal/Heroic." },
             { id = "34c5bada", text = "Before entering Mythic, upgrade three 3/6 hero track items to 6/6 - the items you pick will depend on whether you plan on bonus rolling an item in that slot. This should take 180/180 hero crests." },
             { id = "f7ab089c", text = "As always, if you get a mythic item before the guide expects you to, upgrade it if you have the hero crests to save the myth crests" },
+            { id = "375a260d", text = "You can freely spend champion and below crests at any time." },
             { id = "d3caf44e", text = "Total Crests spent so far: 180/180 Heroic | 80/150 Mythic" },
         },
     },
