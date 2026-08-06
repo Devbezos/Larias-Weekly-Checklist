@@ -64,6 +64,12 @@ local function BuildItemIndex(values)
     return count > 0 and byItemID or nil
 end
 
+local function IsPlayerInInstance()
+    if not IsInInstance then return false end
+    local inInstance = IsInInstance()
+    return inInstance and true or false
+end
+
 local function GetNpcIDFromGUID(guid)
     if type(guid) ~= "string" then return nil end
     local _, _, _, _, _, npcID = strsplit("-", guid)
@@ -451,6 +457,7 @@ evFrame:SetScript("OnEvent", function(_, event)
         C_Timer.After(0.05, function()
             local prefs = Addon.EnsurePrefs and Addon:EnsurePrefs()
             if prefs and prefs.crestConvertDisabled then return end
+            if IsPlayerInInstance() then return end
             if not IsCrestExchangeMerchant() then return end
 
             ScanMerchant()
