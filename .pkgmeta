@@ -48,6 +48,7 @@ ignore:
   - __pycache__
   - "*.pyc"
   - LLM.md
+  - codex_for_agent.md
   - README.md
   - REVIEW_NOTES.md
   - scripts
