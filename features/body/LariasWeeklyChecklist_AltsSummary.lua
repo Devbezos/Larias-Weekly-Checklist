@@ -633,8 +633,21 @@ local function EnsurePanel()
     f:SetMovable(true)
     f:EnableMouse(true)
     f:RegisterForDrag("LeftButton")
-    f:SetScript("OnDragStart", function(self_) self_:StartMoving() end)
-    f:SetScript("OnDragStop",  function(self_) self_:StopMovingOrSizing(); self_._wasMoved = true end)
+    f:SetClampedToScreen(true)
+
+    local gdb = Addon:EnsurePrefs()
+    gdb.altSummaryWin = gdb.altSummaryWin or {}
+    local windowConfig = gdb.altSummaryWin
+    local LW = LibStub("LibWindow-1.1")
+    LW.RegisterConfig(f, windowConfig)
+    LW.MakeDraggable(f)
+    f:HookScript("OnDragStop", function(self_)
+        self_._wasMoved = true
+    end)
+    if windowConfig.x ~= nil and windowConfig.y ~= nil then
+        LW.RestorePosition(f)
+        f._wasMoved = true
+    end
     f:Hide()
     Addon._altsSummaryFrame = f
     Addon:RegisterWindowSurface(f, { opacityMode = "ui", borderStyle = "panel", surfaceTopA = 0 })
@@ -2736,7 +2749,6 @@ function Addon:OpenAltsSummary(anchorFrame, opts)
         else
             f:SetPoint("CENTER", UIParent, "CENTER", 0, 60)
         end
-        f:SetClampedToScreen(true)
     end
     f._inline  = false
     f._completionRedirect = opts.completionRedirect == true

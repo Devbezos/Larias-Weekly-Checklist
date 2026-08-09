@@ -1,8 +1,8 @@
 # watch_deploy.ps1
 # Watches the addon source every 5 minutes and deploys when either the source
 # version or any TOC-loaded content differs from what is currently deployed.
-# The deployed TOC's "-dev" suffix and stamped dev deploy timestamp are
-# normalised away during comparison so they do not cause false positives.
+# The deployed TOC's "-dev" suffix is normalised away during comparison so it
+# does not cause false positives.
 #
 # Run this in a persistent terminal. Press Ctrl+C to stop.
 
@@ -16,7 +16,6 @@ $srcTocPath = Join-Path $repoRoot "LariasWeeklyChecklist.toc"
 
 $destBase    = "D:\Battle.NET\World Of Warcraft\_retail_\Interface\AddOns\LariasWeeklyChecklist"
 $destTocPath = Join-Path $destBase "LariasWeeklyChecklist.toc"
-$devMetadataRelativePath = "features\services\general\LariasWeeklyChecklist_DevMetadata.lua"
 
 function Get-TocVersion {
     param([string]$TocPath)
@@ -61,12 +60,6 @@ function Get-NormalizedFileBytes {
     if ($RelativePath -ieq "LariasWeeklyChecklist.toc") {
         $text = [System.Text.Encoding]::UTF8.GetString($bytes)
         $text = $text -replace '(?m)^(##\s*Version:\s*[^\r\n]+?)-dev(\s*)$', '$1$2'
-        return [System.Text.Encoding]::UTF8.GetBytes($text)
-    }
-
-    if ($RelativePath -ieq $devMetadataRelativePath) {
-        $text = [System.Text.Encoding]::UTF8.GetString($bytes)
-        $text = $text -replace '(?m)^Addon\.DEV_DEPLOY_TIMESTAMP\s*=\s*.+$', 'Addon.DEV_DEPLOY_TIMESTAMP = nil'
         return [System.Text.Encoding]::UTF8.GetBytes($text)
     }
 

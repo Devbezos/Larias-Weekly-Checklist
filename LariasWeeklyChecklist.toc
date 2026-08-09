@@ -32,7 +32,7 @@ Locales\enUS_Data.lua
 # Core
 constants\LariasWeeklyChecklist_Constants.lua
 LariasWeeklyChecklist.lua
-features\services\general\LariasWeeklyChecklist_DevMetadata.lua
+features\services\general\LariasWeeklyChecklist_CoreLogic.lua
 features\services\general\LariasWeeklyChecklist_Database.lua
 features\services\general\LariasWeeklyChecklist_Popups.lua
 
