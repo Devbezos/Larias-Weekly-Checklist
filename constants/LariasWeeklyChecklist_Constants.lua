@@ -16,7 +16,7 @@ local constantsKey = tostring(addonName or "") .. "_CONSTANTS"
 -- Optional seasonVariants are auto-selected by mythicPlusSeason, then startsAt.
 local tracking = { -- https://www.wowhead.com/currencies/season-1
     supportLinks = {
-        doc       = "https://docs.google.com/document/d/e/2PACX-1vQE61MBpAnZR342cdIpz3AujVaeeg8JYB5Ltzuua884lXKqLqtjg8OfWmEd6uuVQONZ-vUQ_jzWDY0E/pub",
+        doc       = "https://lariasguide.com",
         checklist = "https://docs.google.com/spreadsheets/d/1iK2SZUcz_ljnkdTG7KW6pqfzaUDuSgnlh1HupcLrkus",
         discord   = "https://discord.gg/postnerfclarity",
     },
