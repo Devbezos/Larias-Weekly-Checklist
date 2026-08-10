@@ -144,6 +144,55 @@ Test.case("crest availability combines held and tradeup amounts", function()
     Test.equal(total, 21)
 end)
 
+Test.case("currency panel hides unknown currency ids", function()
+    local addon = loadFeatureAddon()
+    addon.TRACKING.crestCurrencyIDs = { 101, 999 }
+    addon.GetTrackedCurrencyConfig = function()
+        return {
+            { id = 101, enabled = true },
+            { id = 999, enabled = true },
+        }
+    end
+    addon.IsQuestHidden = function() return true end
+    addon.IsItemHidden = function() return false end
+    Harness.currencyInfo[101] = {
+        name = "Weathered Crest",
+        iconFileID = 1,
+        quantity = 3,
+        maxQuantity = 90,
+        totalEarned = 3,
+        quality = 4,
+    }
+
+    local rows = addon:GetCurrencyPanelRows()
+    Test.equal(#rows, 1)
+    Test.equal(rows[1].currencyID, 101)
+end)
+
+Test.case("currency snapshot omits unknown currency ids", function()
+    local addon = loadFeatureAddon()
+    addon.TRACKING.crestCurrencyIDs = { 101, 999 }
+    addon.GetTrackedCurrencyConfig = function()
+        return {
+            { id = 101, enabled = true },
+            { id = 999, enabled = true },
+        }
+    end
+    Harness.currencyInfo[101] = {
+        name = "Weathered Crest",
+        iconFileID = 1,
+        quantity = 3,
+        maxQuantity = 90,
+        totalEarned = 3,
+        quality = 4,
+    }
+
+    local snap = {}
+    addon:FillCurrencySnapshot(snap)
+    Test.equal(#snap.rightRows, 1)
+    Test.equal(snap.rightRows[1].id, 101)
+end)
+
 local function loadVaultAddon()
     local addon = Harness.newAddon()
     Harness.load(addon, "features/utils/LariasWeeklyChecklist_AddonUtils.lua")

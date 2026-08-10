@@ -13,11 +13,11 @@ local addonName = ...
 local constantsKey = tostring(addonName or "") .. "_CONSTANTS"
 
 -- Season data: update these every new season.
--- Optional seasonVariants are auto-selected by mythicPlusSeason, then startsAt.
+-- Optional seasonVariants are auto-selected by startsAt.
 local tracking = { -- https://www.wowhead.com/currencies/season-1
     supportLinks = {
         doc       = "https://lariasguide.com",
-        checklist = "https://docs.google.com/spreadsheets/d/1iK2SZUcz_ljnkdTG7KW6pqfzaUDuSgnlh1HupcLrkus",
+        checklist = "https://lariasguide.com/checklist",
         discord   = "https://discord.gg/postnerfclarity",
     },
     -- NPCs that should show the crest conversion side panel.
@@ -31,7 +31,6 @@ local tracking = { -- https://www.wowhead.com/currencies/season-1
     seasonVariants = {
         {
             name = "Season 1",
-            mythicPlusSeason = 17,
             startsAt = 0,
             data = {
                 crestCurrencyIDs = { 3383, 3341, 3343, 3345, 3347 },
@@ -144,7 +143,6 @@ local tracking = { -- https://www.wowhead.com/currencies/season-1
         },
         {
             name = "Season 2",
-            mythicPlusSeason = 18,
             startsAt = 1786456800,
             data = {
                 crestCurrencyIDs = { 3442, 3443, 3444, 3445, 3446 },
