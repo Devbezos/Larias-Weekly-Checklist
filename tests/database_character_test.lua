@@ -166,9 +166,13 @@ Test.case("Great Vault hidden blocks validate and sort", function()
     Test.equal(#result, 2)
 end)
 
-Test.case("database setup prunes deprecated season one currencies", function()
+Test.case("database setup prunes stale tracked currencies", function()
     local addon = Harness.newAddon()
     addon.GetCurrentProfileKey = function() return "Tester - Realm" end
+    addon.TRACKING.crestCurrencyIDs = { 3442, 3443, 3444, 3445, 3446 }
+    addon.TRACKING.sparkCurrencyID = 3509
+    addon.TRACKING.catalystCurrencyID = 3465
+    addon.TRACKING.bonusRollCurrencyID = 3511
     Harness.load(addon, "features/services/general/LariasWeeklyChecklist_Database.lua")
 
     _G.LibStub = function(name)
@@ -178,7 +182,7 @@ Test.case("database setup prunes deprecated season one currencies", function()
                 defaults.global.trackedCurrencyConfig = {
                     { id = 3383, enabled = true },
                     { id = 3442, enabled = true },
-                    { id = 3418, enabled = true },
+                    { id = 3511, enabled = true },
                     { id = 9999, enabled = true, source = "custom" },
                 }
                 defaults.global.chars = {
@@ -186,6 +190,7 @@ Test.case("database setup prunes deprecated season one currencies", function()
                         hiddenCurrencies = {
                             ["3341"] = true,
                             ["3443"] = true,
+                            ["9999"] = true,
                         },
                     },
                 }
@@ -202,10 +207,12 @@ Test.case("database setup prunes deprecated season one currencies", function()
 
     Test.same(addon.db.global.trackedCurrencyConfig, {
         { id = 3442, enabled = true },
+        { id = 3511, enabled = true },
         { id = 9999, enabled = true, source = "custom" },
     })
     Test.equal(addon.db.global.chars["Tester - Realm"].hiddenCurrencies["3341"], nil)
     Test.truthy(addon.db.global.chars["Tester - Realm"].hiddenCurrencies["3443"])
+    Test.equal(addon.db.global.chars["Tester - Realm"].hiddenCurrencies["9999"], nil)
 end)
 
 local function loadCharacterPicker()

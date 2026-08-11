@@ -13,18 +13,6 @@ local pairs = pairs
 local table_sort = table.sort
 
 local MAX_TRACKED_CURRENCIES = 12
-local DEPRECATED_SEASON_1_CURRENCY_IDS = {
-    [3383] = true, -- Adventurer Dawncrest
-    [3341] = true, -- Veteran Dawncrest
-    [3343] = true, -- Champion Dawncrest
-    [3345] = true, -- Hero Dawncrest
-    [3347] = true, -- Myth Dawncrest
-    [3212] = true, -- Spark
-    [3378] = true, -- Catalyst
-    [3310] = true, -- Coffer keys
-    [3028] = true, -- Coffer keys display currency
-    [3418] = true, -- Bonus roll
-}
 
 -- Default values applied to each character's data block on first access.
 -- Display-preference defaults live in db.global so they are shared across all
@@ -51,16 +39,51 @@ local function MigrateProfileDataToGlobalChars(self)
     Addon.CoreLogic.MigrateLegacyProfile(oldProf, cdb)
 end
 
-local function PruneDeprecatedSeasonOneCurrencies(globalDb)
-    if type(globalDb) ~= "table" or globalDb._seasonOneCurrenciesPruned then return end
-    globalDb._seasonOneCurrenciesPruned = true
+local function BuildActiveTrackedCurrencyIDSet(self)
+    local tracking = self and self.TRACKING or {}
+    local activeIDs = {}
+
+    local function addCurrency(value)
+        local id = tonumber(value)
+        if id and id > 0 then activeIDs[id] = true end
+    end
+
+    local function addCurrencyList(values)
+        if type(values) ~= "table" then return end
+        for i = 1, #values do
+            addCurrency(values[i])
+        end
+    end
+
+    addCurrencyList(tracking.crestCurrencyIDs)
+    addCurrency(tracking.catalystCurrencyID)
+    addCurrency(tracking.sparkCurrencyID)
+    addCurrency(tracking.cofferKeysCurrencyID)
+    addCurrency(tracking.cofferKeysDisplayCurrencyID)
+
+    local bonusRollValue = tracking.bonusRollCurrencyID or tracking.bonusRollCurrencyIDs or tracking.miscCurrencyIDs
+    if type(bonusRollValue) == "table" then
+        addCurrencyList(bonusRollValue)
+    else
+        addCurrency(bonusRollValue)
+    end
+
+    return activeIDs
+end
+
+local function PruneStaleTrackedCurrencies(self, globalDb)
+    if type(globalDb) ~= "table" then return end
+
+    local activeCurrencyIDs = BuildActiveTrackedCurrencyIDSet(self)
+    if not next(activeCurrencyIDs) then return end
 
     local config = globalDb.trackedCurrencyConfig
     if type(config) == "table" then
         for i = #config, 1, -1 do
             local entry = config[i]
             local id = type(entry) == "table" and tonumber(entry.id or entry.currencyID) or tonumber(entry)
-            if id and DEPRECATED_SEASON_1_CURRENCY_IDS[id] then
+            local source = type(entry) == "table" and entry.source or nil
+            if id and not activeCurrencyIDs[id] and source ~= "custom" then
                 table.remove(config, i)
             end
         end
@@ -73,7 +96,7 @@ local function PruneDeprecatedSeasonOneCurrencies(globalDb)
             if type(hidden) == "table" then
                 for idStr in pairs(hidden) do
                     local id = tonumber(idStr)
-                    if id and DEPRECATED_SEASON_1_CURRENCY_IDS[id] then
+                    if id and not activeCurrencyIDs[id] then
                         hidden[idStr] = nil
                     end
                 end
@@ -133,7 +156,7 @@ function Addon:SetupAddonDB()
     -- enumeration, but all actual addon data lives in global.chars.
     self.db = LibStub("AceDB-3.0"):New(addonName .. "DB", defaults)
     MigrateProfileDataToGlobalChars(self)
-    PruneDeprecatedSeasonOneCurrencies(self.db and self.db.global)
+    PruneStaleTrackedCurrencies(self, self.db and self.db.global)
 
     local gdb = self.db and self.db.global
     if gdb and not gdb._raidBonusRollReminderReenabled then
