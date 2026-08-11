@@ -166,6 +166,48 @@ Test.case("Great Vault hidden blocks validate and sort", function()
     Test.equal(#result, 2)
 end)
 
+Test.case("database setup prunes deprecated season one currencies", function()
+    local addon = Harness.newAddon()
+    addon.GetCurrentProfileKey = function() return "Tester - Realm" end
+    Harness.load(addon, "features/services/general/LariasWeeklyChecklist_Database.lua")
+
+    _G.LibStub = function(name)
+        if name ~= "AceDB-3.0" then return nil end
+        return {
+            New = function(_, _, defaults)
+                defaults.global.trackedCurrencyConfig = {
+                    { id = 3383, enabled = true },
+                    { id = 3442, enabled = true },
+                    { id = 3418, enabled = true },
+                    { id = 9999, enabled = true, source = "custom" },
+                }
+                defaults.global.chars = {
+                    ["Tester - Realm"] = {
+                        hiddenCurrencies = {
+                            ["3341"] = true,
+                            ["3443"] = true,
+                        },
+                    },
+                }
+                return {
+                    global = defaults.global,
+                    profile = {},
+                    sv = { profileKeys = {} },
+                }
+            end,
+        }
+    end
+
+    addon:SetupAddonDB()
+
+    Test.same(addon.db.global.trackedCurrencyConfig, {
+        { id = 3442, enabled = true },
+        { id = 9999, enabled = true, source = "custom" },
+    })
+    Test.equal(addon.db.global.chars["Tester - Realm"].hiddenCurrencies["3341"], nil)
+    Test.truthy(addon.db.global.chars["Tester - Realm"].hiddenCurrencies["3443"])
+end)
+
 local function loadCharacterPicker()
     local addon = loadDatabase()
     Harness.load(addon, "features/footer/LariasWeeklyChecklist_CharPicker.lua")

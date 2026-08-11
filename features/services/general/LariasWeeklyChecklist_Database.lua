@@ -13,6 +13,18 @@ local pairs = pairs
 local table_sort = table.sort
 
 local MAX_TRACKED_CURRENCIES = 12
+local DEPRECATED_SEASON_1_CURRENCY_IDS = {
+    [3383] = true, -- Adventurer Dawncrest
+    [3341] = true, -- Veteran Dawncrest
+    [3343] = true, -- Champion Dawncrest
+    [3345] = true, -- Hero Dawncrest
+    [3347] = true, -- Myth Dawncrest
+    [3212] = true, -- Spark
+    [3378] = true, -- Catalyst
+    [3310] = true, -- Coffer keys
+    [3028] = true, -- Coffer keys display currency
+    [3418] = true, -- Bonus roll
+}
 
 -- Default values applied to each character's data block on first access.
 -- Display-preference defaults live in db.global so they are shared across all
@@ -37,6 +49,37 @@ local function MigrateProfileDataToGlobalChars(self)
 
     local oldProf = self.db and self.db.profile
     Addon.CoreLogic.MigrateLegacyProfile(oldProf, cdb)
+end
+
+local function PruneDeprecatedSeasonOneCurrencies(globalDb)
+    if type(globalDb) ~= "table" or globalDb._seasonOneCurrenciesPruned then return end
+    globalDb._seasonOneCurrenciesPruned = true
+
+    local config = globalDb.trackedCurrencyConfig
+    if type(config) == "table" then
+        for i = #config, 1, -1 do
+            local entry = config[i]
+            local id = type(entry) == "table" and tonumber(entry.id or entry.currencyID) or tonumber(entry)
+            if id and DEPRECATED_SEASON_1_CURRENCY_IDS[id] then
+                table.remove(config, i)
+            end
+        end
+    end
+
+    local chars = globalDb.chars
+    if type(chars) == "table" then
+        for _, charDb in pairs(chars) do
+            local hidden = type(charDb) == "table" and charDb.hiddenCurrencies or nil
+            if type(hidden) == "table" then
+                for idStr in pairs(hidden) do
+                    local id = tonumber(idStr)
+                    if id and DEPRECATED_SEASON_1_CURRENCY_IDS[id] then
+                        hidden[idStr] = nil
+                    end
+                end
+            end
+        end
+    end
 end
 
 function Addon:SetupAddonDB()
@@ -90,6 +133,7 @@ function Addon:SetupAddonDB()
     -- enumeration, but all actual addon data lives in global.chars.
     self.db = LibStub("AceDB-3.0"):New(addonName .. "DB", defaults)
     MigrateProfileDataToGlobalChars(self)
+    PruneDeprecatedSeasonOneCurrencies(self.db and self.db.global)
 
     local gdb = self.db and self.db.global
     if gdb and not gdb._raidBonusRollReminderReenabled then
