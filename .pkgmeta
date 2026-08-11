@@ -45,9 +45,11 @@ ignore:
   - .gitignore
   - .luacheckrc
   - .venv
+  - .vscode
   - __pycache__
   - "*.pyc"
   - LLM.md
+  - codex.md
   - codex_for_agent.md
   - README.md
   - REVIEW_NOTES.md
