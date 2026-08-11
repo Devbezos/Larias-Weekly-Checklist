@@ -9,7 +9,7 @@ local Addon = _G[addonName]
 if not Addon then return end
 
 local type, tostring = type, tostring
-local pairs, next = pairs, next
+local pairs = pairs
 local table_sort = table.sort
 
 local MAX_TRACKED_CURRENCIES = 12
@@ -20,21 +20,6 @@ local MAX_TRACKED_CURRENCIES = 12
 local CHAR_DEFAULTS = {
     startAtSectionId = "",
 }
-
-local function HasLegacyProfilePayload(profile)
-    if type(profile) ~= "table" then return false end
-    if type(profile.checked) == "table" and next(profile.checked) then return true end
-    if type(profile.collapsedSections) == "table" and next(profile.collapsedSections) then return true end
-    if type(profile.trackingSnapshot) == "table" and next(profile.trackingSnapshot) then return true end
-    if type(profile.startAtSectionId) == "string" and profile.startAtSectionId ~= "" then return true end
-    for _, key in ipairs({
-        "hideCompletedSections", "showGreatVault", "showCurrency",
-        "showChangeWeekBtn", "showIlvlRefBtn", "debug",
-    }) do
-        if profile[key] ~= nil then return true end
-    end
-    return false
-end
 
 local function MigrateProfileDataToGlobalChars(self)
     if not (self and self.db and self.db.global) then return end
@@ -51,45 +36,73 @@ local function MigrateProfileDataToGlobalChars(self)
     cdb._migrated = true
 
     local oldProf = self.db and self.db.profile
-    if not HasLegacyProfilePayload(oldProf) then return end
+    Addon.CoreLogic.MigrateLegacyProfile(oldProf, cdb)
+end
 
-    local function shallowCopy(src, dest)
-        if type(src) ~= "table" then return end
-        for k, v in pairs(src) do dest[k] = v end
-    end
+local function BuildActiveTrackedCurrencyIDSet(self)
+    local tracking = self and self.TRACKING or {}
+    local activeIDs = {}
 
-    if type(oldProf.checked) == "table" and next(oldProf.checked) then
-        cdb.checked = {}
-        shallowCopy(oldProf.checked, cdb.checked)
-    end
-    if type(oldProf.collapsedSections) == "table" and next(oldProf.collapsedSections) then
-        cdb.collapsedSections = {}
-        shallowCopy(oldProf.collapsedSections, cdb.collapsedSections)
-    end
-    if type(oldProf.startAtSectionId) == "string" and oldProf.startAtSectionId ~= "" then
-        cdb.startAtSectionId = oldProf.startAtSectionId
-    end
-    if type(oldProf.trackingSnapshot) == "table" and next(oldProf.trackingSnapshot) then
-        cdb.trackingSnapshot = {}
-        shallowCopy(oldProf.trackingSnapshot, cdb.trackingSnapshot)
-    end
-    for _, key in ipairs({
-        "hideCompletedSections", "showGreatVault", "showCurrency",
-        "showChangeWeekBtn", "showIlvlRefBtn", "debug",
-    }) do
-        if oldProf[key] ~= nil then cdb[key] = oldProf[key] end
+    local function addCurrency(value)
+        local id = tonumber(value)
+        if id and id > 0 then activeIDs[id] = true end
     end
 
-    oldProf.checked = nil
-    oldProf.collapsedSections = nil
-    oldProf.startAtSectionId = nil
-    oldProf.trackingSnapshot = nil
-    oldProf.hideCompletedSections = nil
-    oldProf.showGreatVault = nil
-    oldProf.showCurrency = nil
-    oldProf.showChangeWeekBtn = nil
-    oldProf.showIlvlRefBtn = nil
-    oldProf.debug = nil
+    local function addCurrencyList(values)
+        if type(values) ~= "table" then return end
+        for i = 1, #values do
+            addCurrency(values[i])
+        end
+    end
+
+    addCurrencyList(tracking.crestCurrencyIDs)
+    addCurrency(tracking.catalystCurrencyID)
+    addCurrency(tracking.sparkCurrencyID)
+    addCurrency(tracking.cofferKeysCurrencyID)
+    addCurrency(tracking.cofferKeysDisplayCurrencyID)
+
+    local bonusRollValue = tracking.bonusRollCurrencyID or tracking.bonusRollCurrencyIDs or tracking.miscCurrencyIDs
+    if type(bonusRollValue) == "table" then
+        addCurrencyList(bonusRollValue)
+    else
+        addCurrency(bonusRollValue)
+    end
+
+    return activeIDs
+end
+
+local function PruneStaleTrackedCurrencies(self, globalDb)
+    if type(globalDb) ~= "table" then return end
+
+    local activeCurrencyIDs = BuildActiveTrackedCurrencyIDSet(self)
+    if not next(activeCurrencyIDs) then return end
+
+    local config = globalDb.trackedCurrencyConfig
+    if type(config) == "table" then
+        for i = #config, 1, -1 do
+            local entry = config[i]
+            local id = type(entry) == "table" and tonumber(entry.id or entry.currencyID) or tonumber(entry)
+            local source = type(entry) == "table" and entry.source or nil
+            if id and not activeCurrencyIDs[id] and source ~= "custom" then
+                table.remove(config, i)
+            end
+        end
+    end
+
+    local chars = globalDb.chars
+    if type(chars) == "table" then
+        for _, charDb in pairs(chars) do
+            local hidden = type(charDb) == "table" and charDb.hiddenCurrencies or nil
+            if type(hidden) == "table" then
+                for idStr in pairs(hidden) do
+                    local id = tonumber(idStr)
+                    if id and not activeCurrencyIDs[id] then
+                        hidden[idStr] = nil
+                    end
+                end
+            end
+        end
+    end
 end
 
 function Addon:SetupAddonDB()
@@ -117,6 +130,9 @@ function Addon:SetupAddonDB()
             altSummaryCharOrder = {}, -- ordered profileKeys for manual Alt Summary priority
             altSummarySectionOrder = {}, -- ordered section keys for Alt Summary categories
             altSummaryRowOrder = {}, -- [sectionKey] = ordered row keys for Alt Summary rows
+            altSummaryWin = false, -- LibWindow-1.1 position storage
+            currencyConfigWin = false, -- LibWindow-1.1 position storage
+            crestConvertWin = false, -- LibWindow-1.1 position storage
             -- Account-wide display preferences.
             hideCompletedSections = true,
             showGreatVault        = true,
@@ -140,6 +156,7 @@ function Addon:SetupAddonDB()
     -- enumeration, but all actual addon data lives in global.chars.
     self.db = LibStub("AceDB-3.0"):New(addonName .. "DB", defaults)
     MigrateProfileDataToGlobalChars(self)
+    PruneStaleTrackedCurrencies(self, self.db and self.db.global)
 
     local gdb = self.db and self.db.global
     if gdb and not gdb._raidBonusRollReminderReenabled then
@@ -319,7 +336,7 @@ function Addon:IsBuiltInTrackedCurrencyID(currencyID)
     return IsBuiltInTrackedCurrencyID(self, currencyID)
 end
 
-local function NormalizeTrackedCurrencyConfig(self, entries, allowEmpty)
+NormalizeTrackedCurrencyConfig = function(self, entries, allowEmpty)
     local out = {}
     local seen = {}
 

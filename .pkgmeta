@@ -43,12 +43,18 @@ ignore:
   - .gitattributes
   - .github
   - .gitignore
+  - .luacheckrc
   - .venv
+  - .vscode
   - __pycache__
   - "*.pyc"
   - LLM.md
+  - codex.md
+  - codex_for_agent.md
   - README.md
+  - REVIEW_NOTES.md
   - scripts
+  - tests
   - data
   - SETUP.md
   - setup-libs.ps1

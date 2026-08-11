@@ -3,6 +3,7 @@ scripts/__pycache__/
 __pycache__/
 *.pyc
 .venv/
+.vscode/
 
 # Libraries are fetched by the packager via .pkgmeta externals.
 # Keep them on disk for local dev but do not commit them.

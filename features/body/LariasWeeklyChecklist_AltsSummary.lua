@@ -633,8 +633,21 @@ local function EnsurePanel()
     f:SetMovable(true)
     f:EnableMouse(true)
     f:RegisterForDrag("LeftButton")
-    f:SetScript("OnDragStart", function(self_) self_:StartMoving() end)
-    f:SetScript("OnDragStop",  function(self_) self_:StopMovingOrSizing(); self_._wasMoved = true end)
+    f:SetClampedToScreen(true)
+
+    local gdb = Addon:EnsurePrefs()
+    gdb.altSummaryWin = gdb.altSummaryWin or {}
+    local windowConfig = gdb.altSummaryWin
+    local LW = LibStub("LibWindow-1.1")
+    LW.RegisterConfig(f, windowConfig)
+    LW.MakeDraggable(f)
+    f:HookScript("OnDragStop", function(self_)
+        self_._wasMoved = true
+    end)
+    if windowConfig.x ~= nil and windowConfig.y ~= nil then
+        LW.RestorePosition(f)
+        f._wasMoved = true
+    end
     f:Hide()
     Addon._altsSummaryFrame = f
     Addon:RegisterWindowSurface(f, { opacityMode = "ui", borderStyle = "panel", surfaceTopA = 0 })
@@ -747,6 +760,15 @@ end
 
 -- ── Snapshot helpers ─────────────────────────────────────────────────────────
 
+local function SnapshotHasSummaryData(snap)
+    if type(snap) ~= "table" then return false end
+    if type(snap.rightRows) == "table" and #snap.rightRows > 0 then return true end
+    if type(snap.leftLines) == "table" and #snap.leftLines > 0 then return true end
+    if type(snap.leftGrid) == "table" and next(snap.leftGrid) then return true end
+    if type(snap.gearSlots) == "table" and next(snap.gearSlots) then return true end
+    return false
+end
+
 local function BuildCharList(gdb, ownKey, allKeys, maxLvl)
     local th    = Addon.THEME.text
     local chars = {}
@@ -766,20 +788,22 @@ local function BuildCharList(gdb, ownKey, allKeys, maxLvl)
         if isMaxLevel and (isOwn or not isHidden or _showHidden) and classToken then
             local cdb  = gdb and gdb.chars and gdb.chars[charKey]
             local snap = cdb and cdb.trackingSnapshot
-            local cr, cg, cb = th.r, th.g, th.b
-            local cc = RAID_CLASS_COLORS and RAID_CLASS_COLORS[classToken]
-            if cc then cr, cg, cb = cc.r, cc.g, cc.b end
-            chars[#chars + 1] = {
-                key = charKey, snap = snap,
-                checked = cdb and cdb.checked,
-                sectionCompleted = cdb and cdb.sectionCompleted,
-                isOwn = isOwn, isHidden = isHidden,
-                classToken = classToken,
-                cr = cr, cg = cg, cb = cb,
-                alpha = isHidden and 0.45 or 1.0,
-                ilvl  = cdb and cdb.ilvl,
-                sortIdx = orderMap[charKey],
-            }
+            if isOwn or SnapshotHasSummaryData(snap) then
+                local cr, cg, cb = th.r, th.g, th.b
+                local cc = RAID_CLASS_COLORS and RAID_CLASS_COLORS[classToken]
+                if cc then cr, cg, cb = cc.r, cc.g, cc.b end
+                chars[#chars + 1] = {
+                    key = charKey, snap = snap,
+                    checked = cdb and cdb.checked,
+                    sectionCompleted = cdb and cdb.sectionCompleted,
+                    isOwn = isOwn, isHidden = isHidden,
+                    classToken = classToken,
+                    cr = cr, cg = cg, cb = cb,
+                    alpha = isHidden and 0.45 or 1.0,
+                    ilvl  = cdb and cdb.ilvl,
+                    sortIdx = orderMap[charKey],
+                }
+            end
         end
     end
     -- Manual reordering wins when present; otherwise sort strictly by ilvl.
@@ -821,7 +845,9 @@ local function HasHiddenSummaryChars(gdb, ownKey, allKeys, maxLvl)
         local isOwn      = (charKey == ownKey) or (ownKey and charKey:lower() == ownKey:lower())
         local charLevel  = gdb and gdb.charLevels and gdb.charLevels[charKey]
         local isMaxLevel = isOwn or (charLevel and charLevel >= maxLvl)
-        if isHidden and not isOwn and isMaxLevel and classToken then
+        local cdb        = gdb and gdb.chars and gdb.chars[charKey]
+        local snap       = cdb and cdb.trackingSnapshot
+        if isHidden and not isOwn and isMaxLevel and classToken and SnapshotHasSummaryData(snap) then
             return true
         end
     end
@@ -2736,7 +2762,6 @@ function Addon:OpenAltsSummary(anchorFrame, opts)
         else
             f:SetPoint("CENTER", UIParent, "CENTER", 0, 60)
         end
-        f:SetClampedToScreen(true)
     end
     f._inline  = false
     f._completionRedirect = opts.completionRedirect == true

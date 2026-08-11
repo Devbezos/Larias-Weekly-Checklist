@@ -235,10 +235,14 @@ local function GetCurrencyStaticInfo(currencyID)
     if cached ~= nil then return cached or nil end
     if not (C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo) then return nil end
     local info = C_CurrencyInfo.GetCurrencyInfo(id)
-    if not info then return nil end
+    if type(info) ~= "table" or type(info.name) ~= "string" or info.name == "" then return nil end
     local s = { name = info.name, iconFileID = info.iconFileID, quality = tonumber(info.quality) }
     _currencyStaticCache[id] = s
     return s
+end
+
+local function IsKnownCurrencyID(currencyID)
+    return GetCurrencyStaticInfo(currencyID) ~= nil
 end
 
 local function GetCurrencyIconID(currencyID)
@@ -448,6 +452,7 @@ end
 local function GetSparksParts()
     local id = Addon.TRACKING and Addon.TRACKING.sparkCurrencyID
     if not (id and tonumber(id) and tonumber(id) > 0) then return "", "" end
+    if not IsKnownCurrencyID(id) then return "", "", nil end
     local name  = GetCurrencyName(id) or L.TRACKING_SPARKS_LABEL or ""
     local label = ColorWrap(GetCurrencyQualityColor(id), name)
     local earned, cap = FormatCurrencyProgressParts(id)
@@ -516,6 +521,7 @@ local function GetCofferKeysParts()
     local shardsID = tracking and tonumber(tracking.cofferKeysCurrencyID)
     local displayID = tracking and tonumber(tracking.cofferKeysDisplayCurrencyID)
     if not (shardsID and shardsID > 0) then return "", "" end
+    if not IsKnownCurrencyID(shardsID) then return "", "", nil end
 
     local displayName = (displayID and displayID > 0 and GetCurrencyName(displayID))
         or L.TRACKING_COFFER_KEYS_LABEL
@@ -1005,7 +1011,7 @@ local function GetCrestLines()
     local amountTooltipTexts  = ClearTooltipRefs(_crestAmountTooltipTexts, crestCount)
     for i = 1, crestCount do
         local id = ids[i]
-        if id then
+        if id and IsKnownCurrencyID(id) then
             local name = GetCrestDisplayName(tracking, i, id, crestLabels)
             if name then
                 local earned = cache.earned[i]    or 0  -- totalEarned toward weekly cap
@@ -1120,6 +1126,7 @@ end
 local function GetCatalystParts()
     local id    = Addon.TRACKING and Addon.TRACKING.catalystCurrencyID
     local hasID = (id and tonumber(id) and tonumber(id) > 0) and true or false
+    if hasID and not IsKnownCurrencyID(tonumber(id)) then return "", "", nil end
     local catName  = (hasID and GetCurrencyName(tonumber(id))) or L.TRACKING_CATALYST_LABEL or ""
     local catColor = (hasID and GetCurrencyQualityColor(tonumber(id))) or COLORS.dim
     local cur, cap = GetCatalystRawQtyCap()
@@ -1149,6 +1156,7 @@ end
 local function GetGenericCurrencyParts(id)
     id = tonumber(id)
     if not (id and id > 0) then return "", "" end
+    if not IsKnownCurrencyID(id) then return "", "", nil end
 
     local earned, cap = FormatCurrencyProgressParts(id)
     earned = tonumber(earned) or 0
@@ -1268,7 +1276,10 @@ function Addon:GetCurrencyPanelRows()
             local combinedHeld = (combinedItemID > 0 and GetItemCount and GetItemCount(combinedItemID)) or 0
             local needCount    = GetWeaponUpgradeNeedCount()
             local total        = combinedHeld + shardHeld / shardsPerCombined
-            local iName, _, iQuality, _, _, _, _, _, _, iTex = (combinedItemID > 0 and GetItemInfo and GetItemInfo(combinedItemID)) or nil
+            local iName, iQuality, iTex
+            if combinedItemID > 0 and GetItemInfo then
+                iName, _, iQuality, _, _, _, _, _, _, iTex = GetItemInfo(combinedItemID)
+            end
             if not iTex and C_Item and C_Item.GetItemIconByID then
                 iTex = combinedItemID > 0 and C_Item.GetItemIconByID(combinedItemID) or nil
             end
@@ -1403,7 +1414,7 @@ function Addon:FillCurrencySnapshot(snap)
             row.shardQty    = (shardItemID > 0 and GetItemCount and GetItemCount(shardItemID)) or 0
             row.combinedQty = (combinedItemID > 0 and GetItemCount and GetItemCount(combinedItemID)) or 0
             row.need        = GetWeaponUpgradeNeedCount(snap)
-        elseif id and id > 0 then
+        elseif id and id > 0 and IsKnownCurrencyID(id) then
             if entry.type == SNAP_TYPES.CREST and crestCache and entry.crestIdx then
                 local i = entry.crestIdx
                 local tradeup = crestTradeups and crestTradeups[i]
@@ -1493,6 +1504,7 @@ function Addon:RenderCurrencySnapshotRow(row)
     local t = row.type
     if t == "crest" then
         local id  = row.id
+        if not IsKnownCurrencyID(id) then return "", "" end
         local qty = tonumber(row.qty) or 0
         local tracking = self.TRACKING
         local crestIDs, crestCount = GetCrestIDsAndCount(tracking or {})
@@ -1519,6 +1531,7 @@ function Addon:RenderCurrencySnapshotRow(row)
         local qty = tonumber(row.qty) or 0
         local tracking = self.TRACKING
         local catID = tracking and tonumber(tracking.catalystCurrencyID)
+        if catID and catID > 0 and not IsKnownCurrencyID(catID) then return "", "" end
         local catLabel = (catID and catID > 0 and GetCurrencyName(catID)) or L.TRACKING_CATALYST_LABEL or ""
         local lbl = ColorWrap(GetCurrencyQualityColor(catID), catLabel)
         local cap = tonumber(row.cap) or 0
@@ -1529,6 +1542,7 @@ function Addon:RenderCurrencySnapshotRow(row)
     elseif t == "sparks" then
         local qty = tonumber(row.qty) or 0
         local id  = tonumber(row.id) or (self.TRACKING and tonumber(self.TRACKING.sparkCurrencyID))
+        if not IsKnownCurrencyID(id) then return "", "" end
         local name  = (id and id > 0 and GetCurrencyName(id)) or L.TRACKING_SPARKS_LABEL or ""
         local lbl   = ColorWrap(GetCurrencyQualityColor(id), name)
         local cap = tonumber(row.cap) or 0
@@ -1558,6 +1572,7 @@ function Addon:RenderCurrencySnapshotRow(row)
         local id  = tonumber(row.id)
             or (self.TRACKING and tonumber(self.TRACKING.cofferKeysDisplayCurrencyID))
             or (self.TRACKING and tonumber(self.TRACKING.cofferKeysCurrencyID))
+        if not IsKnownCurrencyID(id) then return "", "" end
         local name = (id and id > 0 and GetCurrencyName(id)) or L.TRACKING_COFFER_KEYS_LABEL or "Coffer Keys"
         local lbl = ColorWrap(GetCurrencyQualityColor(id), name)
         local displayHeld = held or qty
@@ -1570,6 +1585,7 @@ function Addon:RenderCurrencySnapshotRow(row)
         return lbl, ColorWrap((displayHeld <= 0) and COLORS.red or COLORS.yellow, tostring(displayHeld))
     elseif t == "misc" then
         local id  = tonumber(row.id)
+        if not IsKnownCurrencyID(id) then return "", "" end
         local qty = tonumber(row.qty) or 0
         local name = (id and id > 0 and GetCurrencyName(id)) or tostring(id or "?")
         local lbl  = ColorWrap(GetCurrencyQualityColor(id), name)
@@ -1603,7 +1619,10 @@ function Addon:RenderCurrencySnapshotRow(row)
         local combinedQty = tonumber(row.combinedQty) or 0
         local need        = tonumber(row.need)        or 0
         local total       = combinedQty + shardQty / shardsPerCombined
-        local iName, _, iQuality = (combinedItemID > 0 and GetItemInfo and GetItemInfo(combinedItemID)) or nil
+        local iName, iQuality
+        if combinedItemID > 0 and GetItemInfo then
+            iName, _, iQuality = GetItemInfo(combinedItemID)
+        end
         local lbl
         if iName then
             local qhex = GetQualityHex(GetItemDisplayQuality(combinedItemID) or iQuality, COLORS.white)
@@ -1623,6 +1642,7 @@ end
 --- Expose icon/name helpers for use by the Overlay snapshot renderer.
 function Addon:GetCurrencyIcon(id) return GetCurrencyIconID(id) end
 function Addon:GetCurrencyName(id) return GetCurrencyName(id) end
+function Addon:IsKnownCurrencyID(id) return IsKnownCurrencyID(id) end
 
 --- Expose crest ordering so consumers don't duplicate the fallback logic.
 function Addon:GetCrestIDsAndCount()
