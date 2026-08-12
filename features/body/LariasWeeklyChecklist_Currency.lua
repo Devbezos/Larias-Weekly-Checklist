@@ -88,6 +88,13 @@ function Addon:GetUpgradeGearSlots(snap)
     return nil
 end
 
+function Addon:GetEquippedUpgradeGearSlots(snap)
+    if type(snap) ~= "table" then return nil end
+    if type(snap.gearSlots) == "table" then return snap.gearSlots end
+    if type(snap.bestGearSlots) == "table" then return snap.bestGearSlots end
+    return nil
+end
+
 local function GetWeaponUpgradeNeedFromGearSlots(gearSlots)
     if type(gearSlots) ~= "table" then return nil end
     local maxIlvl = Addon:GetWeaponUpgradeMaxItemLevel()
@@ -434,6 +441,39 @@ local function GetCrestAchievementID(i)
     if type(ach) ~= "table" then return nil end
     local idx = tonumber(i)
     return idx and ach[idx] or nil
+end
+
+function Addon:GetCrestAchievementID(tierIdx)
+    return GetCrestAchievementID(tierIdx)
+end
+
+function Addon:GetCrestAchievementName(tierIdx)
+    local achievementID = GetCrestAchievementID(tierIdx)
+    if achievementID and GetAchievementInfo then
+        local _, name = GetAchievementInfo(achievementID)
+        if type(name) == "string" and name ~= "" then return name end
+    end
+
+    local trackName = self.IlvlUtils and self.IlvlUtils.GetCrestTrackName
+        and self.IlvlUtils.GetCrestTrackName(tierIdx)
+    return trackName and (trackName .. " Achievement") or nil
+end
+
+function Addon:GetCrestAchievementTooltipInfo(tierIdx)
+    local achievementID = GetCrestAchievementID(tierIdx)
+    if not (achievementID and GetAchievementInfo) then return nil end
+
+    local _, name, _, completed, _, _, _, description, _, icon, rewardText = GetAchievementInfo(achievementID)
+    if type(name) ~= "string" or name == "" then return nil end
+
+    return {
+        id = achievementID,
+        name = name,
+        description = (type(description) == "string" and description ~= "") and description or nil,
+        rewardText = (type(rewardText) == "string" and rewardText ~= "") and rewardText or nil,
+        completed = completed and true or false,
+        icon = icon,
+    }
 end
 
 --  Quest helpers 
@@ -821,6 +861,42 @@ local function ResolveTierCost(value, tierIdx, fallback)
     return fallback
 end
 
+function Addon:GetCrestAchievementBreakpoints(tierIdx)
+    local tracking = self.TRACKING or {}
+    tierIdx = tonumber(tierIdx)
+    local base = tonumber(tracking.ilvlBase)
+    local step = tonumber(tracking.ilvlTrackStep)
+    local offsets = tracking.ilvlRankOffsets
+    local crestIDs = tracking.crestCurrencyIDs
+    if not (tierIdx and tierIdx > 1 and base and step and type(offsets) == "table"
+            and #offsets > 0 and type(crestIDs) == "table") then
+        return nil
+    end
+
+    local startRank = 3
+    local targetRank = #offsets
+    if tierIdx == #crestIDs and targetRank > startRank then
+        targetRank = targetRank - 1
+    end
+    if targetRank < startRank then return nil end
+
+    local tierBase = base + step * (tierIdx - 1)
+    local breakpoints = {}
+    for rank = startRank, targetRank do
+        local offset = tonumber(offsets[rank])
+        if offset then
+            breakpoints[#breakpoints + 1] = tierBase + offset
+        end
+    end
+    return (#breakpoints > 0) and breakpoints or nil
+end
+
+function Addon:GetMinimumDisplayedItemLevel()
+    local tracking = self.TRACKING or {}
+    local base = tonumber(tracking.ilvlBase)
+    return base and base > 0 and base or 0
+end
+
 function Addon:GetCrestSlotUpgradeCost(_slotID, slotData, snap, tierIdx, effectiveMax)
     if not (type(slotData) == "table" and slotData.rank and effectiveMax) then return 0 end
     local rank = tonumber(slotData.rank)
@@ -839,22 +915,19 @@ function Addon:GetCrestSlotUpgradeCost(_slotID, slotData, snap, tierIdx, effecti
     local normalCost  = (snap and snap.upgradeCostPerStep and snap.upgradeCostPerStep[tierIdx])
                      or ResolveTierCost(normalList, tierIdx, 20)
     local reducedCost = ResolveTierCost(reducedList, tierIdx, math.max(1, math.floor(normalCost / 2)))
-    local offsets     = tracking.ilvlRankOffsets or {}
-    local tierBase    = (tracking.ilvlBase or 0) + ((tracking.ilvlTrackStep or 0) * ((tierIdx or 1) - 1))
-    local currentIlvl = tonumber(slotData.ilvl) or 0
-    -- WoW stores the account/character high-watermark internally per item
-    -- redundancy slot; this is the source of truth for crest discounts.
-    local bestIlvl    = self:GetItemUpgradeHighWatermark(slotData.link)
-    local hasDiscount = self:IsCrestDiscountUnlocked(tierIdx) and bestIlvl >= currentIlvl
+    local bestSlot = type(snap) == "table" and type(snap.bestGearSlots) == "table"
+        and snap.bestGearSlots[_slotID] or nil
+    local bestRank = 0
+    if type(bestSlot) == "table" and tonumber(bestSlot.tierIdx) == tonumber(tierIdx) then
+        bestRank = tonumber(bestSlot.rank) or 0
+    end
+    local hasDiscount = self:IsCrestDiscountUnlocked(tierIdx)
 
     local computedCost = 0
     for nextRank = rank + 1, effectiveMax do
         local stepCost = normalCost
-        if hasDiscount then
-            local targetIlvl = tierBase + (tonumber(offsets[nextRank]) or 0)
-            if targetIlvl > 0 and bestIlvl >= targetIlvl then
-                stepCost = reducedCost
-            end
+        if hasDiscount and bestRank >= nextRank then
+            stepCost = reducedCost
         end
         computedCost = computedCost + stepCost
     end
@@ -878,9 +951,74 @@ function Addon:IsSlotLimitedCrafted(slotData, effectiveMax)
     return effectiveMax and slotData.maxRank and effectiveMax < slotData.maxRank
 end
 
+function Addon:ShouldCountSlotUpgradeCost(slotID, slotData, snap, tierIdx, effectiveMax)
+    if not (type(slotData) == "table" and slotData.rank and effectiveMax) then return false end
+    if slotData.rank >= effectiveMax then return false end
+    if self:IsSlotLimitedCrafted(slotData, effectiveMax) then return false end
+
+    local bestSlot = type(snap) == "table" and type(snap.bestGearSlots) == "table"
+        and snap.bestGearSlots[slotID] or nil
+    if type(bestSlot) == "table" then
+        local bestTier = tonumber(bestSlot.tierIdx)
+        local bestRank = tonumber(bestSlot.rank) or 0
+        if bestTier and bestTier > tonumber(tierIdx) then return false end
+        if bestTier == tonumber(tierIdx) and bestRank >= effectiveMax then return false end
+    end
+
+    return true
+end
+
 function Addon:CalcTierUpgradeCost(snap, tierIdx)
     if self.IsTrackingSnapshotCurrentSeason and not self:IsTrackingSnapshotCurrentSeason(snap) then
         return 0
+    end
+
+    local gearSlots = self:GetEquippedUpgradeGearSlots(snap)
+    if type(gearSlots) ~= "table" then return 0 end
+
+    local totalCost = 0
+    local function addSlotCost(slotID)
+        local slotData = gearSlots[slotID]
+        local effectiveMax = self:GetSlotEffectiveMax(slotData)
+        if type(slotData) == "table" and slotData.tierIdx == tierIdx
+                and self:ShouldCountSlotUpgradeCost(slotID, slotData, snap, tierIdx, effectiveMax) then
+            totalCost = totalCost + self:GetCrestSlotUpgradeCost(slotID, slotData, snap, tierIdx, effectiveMax)
+        end
+    end
+
+    if type(GEAR_SLOT_IDS) == "table" then
+        for _, slotID in ipairs(GEAR_SLOT_IDS) do addSlotCost(slotID) end
+    else
+        for slotID in pairs(gearSlots) do addSlotCost(slotID) end
+    end
+    return totalCost
+end
+
+function Addon:CalcTierAchievementCost(snap, tierIdx)
+    if self.IsTrackingSnapshotCurrentSeason and not self:IsTrackingSnapshotCurrentSeason(snap) then
+        return 0
+    end
+    if self:IsCrestDiscountUnlocked(tierIdx) then return 0 end
+
+    local watermarks = type(snap) == "table" and snap.itemUpgradeWatermarks or nil
+    if type(watermarks) == "table" then
+        local breakpoints = self:GetCrestAchievementBreakpoints(tierIdx)
+        if type(breakpoints) ~= "table" then return 0 end
+
+        local costPerStep = ResolveTierCost((self.TRACKING or {}).crestUpgradeCostPerStep, tierIdx, 20)
+        local minimumWatermark = self:GetMinimumDisplayedItemLevel()
+        local totalCost = 0
+        for _, value in pairs(watermarks) do
+            local watermark = tonumber(value) or 0
+            if watermark >= minimumWatermark then
+                for _, breakpoint in ipairs(breakpoints) do
+                    if watermark < breakpoint then
+                        totalCost = totalCost + costPerStep
+                    end
+                end
+            end
+        end
+        return totalCost
     end
 
     local gearSlots = self:GetUpgradeGearSlots(snap)
@@ -891,8 +1029,7 @@ function Addon:CalcTierUpgradeCost(snap, tierIdx)
         local slotData = gearSlots[slotID]
         local effectiveMax = self:GetSlotEffectiveMax(slotData)
         if type(slotData) == "table" and slotData.tierIdx == tierIdx
-                and slotData.rank and effectiveMax and slotData.rank < effectiveMax
-                and not self:IsSlotLimitedCrafted(slotData, effectiveMax) then
+                and self:ShouldCountSlotUpgradeCost(slotID, slotData, snap, tierIdx, effectiveMax) then
             totalCost = totalCost + self:GetCrestSlotUpgradeCost(slotID, slotData, snap, tierIdx, effectiveMax)
         end
     end
@@ -940,28 +1077,6 @@ local function ComputeCrestTradeup(cache, crestCount, batchLower, batchHigher)
         effective[i] = (cache.cur[i] or 0) + tradeFromPrev
     end
     return highestTradeTarget, gained
-end
-
--- Returns a table [tierIdx] = crestsNeeded (0 = all slots maxed) built from the
--- stored gear snapshot.  Returns nil when no snapshot data is available yet.
--- Only slots with a real item link are counted.  Limited crafted items store
--- trueMaxRank below maxRank; skip them because they cannot upgrade to track max.
-local _crestsNeededByTier = {}
-local function ComputeCrestsNeededByTier(tracking)
-    local db     = Addon.db and Addon.db.global
-    local ownKey = Addon.GetCurrentProfileKey and Addon:GetCurrentProfileKey()
-    local snap   = ownKey and db and db.chars and db.chars[ownKey]
-                   and db.chars[ownKey].trackingSnapshot
-    if type(Addon:GetUpgradeGearSlots(snap)) ~= "table" then return nil end
-
-    Wipe(_crestsNeededByTier)
-    local needed = _crestsNeededByTier
-    local _, crestCount = GetCrestIDsAndCount(tracking or {})
-    for tierIdx = 1, crestCount do
-        needed[tierIdx] = Addon:CalcTierUpgradeCost(snap, tierIdx)
-    end
-
-    return needed
 end
 
 local _crestConvertTooltipTexts = {}
@@ -1033,7 +1148,6 @@ local function GetCrestLines()
     PopulateCrestUnlocked(cache, crestCount)
     local highestTradeTarget, gained = ComputeCrestTradeup(cache, crestCount, batchLower, batchHigher)
     local crestLabels = BuildCrestLabels(ids, crestCount)
-    local crestsNeededByTier = ComputeCrestsNeededByTier(tracking)
     local convertTooltipTexts = ClearTooltipRefs(_crestConvertTooltipTexts, crestCount)
     local amountTooltipTexts  = ClearTooltipRefs(_crestAmountTooltipTexts, crestCount)
     for i = 1, crestCount do
@@ -1069,26 +1183,6 @@ local function GetCrestLines()
                 end
                 if tipBonus > 0 then
                     AddTooltipLine(tipTbl, (L.TRACKING_BONUS_TRADEUP_FMT or "Bonus (trade-up): +%d"):format(tipBonus), 0.6, 0.8, 1.0)
-                end
-                -- Gear upgrade cost for this crest tier (from snapshot).
-                -- Reduce the shortfall by this tier's own available trade-up only;
-                -- lower-tier conversions should not be shared across crest types.
-                local needed = crestsNeededByTier and crestsNeededByTier[i]
-                if needed ~= nil then
-                    if needed == 0 then
-                        AddTooltipLine(tipTbl, L.TRACKING_GEAR_UPGRADE_ALL_MAXED or "Gear upgrade: all slots maxed", 0.3, 1.0, 0.3)
-                    else
-                        local available = held + (tonumber(gained[i]) or 0)
-                        local deficit = math.max(0, needed - available)
-                        if deficit == 0 then
-                            AddTooltipLine(tipTbl, (L.TRACKING_GEAR_UPGRADE_HAVE_ENOUGH_FMT or "Gear upgrade: need %d  (have enough)"):format(needed), 0.3, 1.0, 0.3)
-                        else
-                            AddTooltipLine(tipTbl, (L.TRACKING_GEAR_UPGRADE_SHORT_FMT or "Gear upgrade: need %d  (%d short)"):format(needed, deficit), 1.0, 0.5, 0.3)
-                        end
-                        if available ~= held then
-                            AddTooltipLine(tipTbl, (L.TRACKING_AVAILABLE_AFTER_TRADEUP_FMT or "Available after trade-up: %d"):format(available), 0.6, 0.8, 1.0)
-                        end
-                    end
                 end
                 if (tipTbl._count or 0) == 0 then AddTooltipLine(tipTbl, (L.TRACKING_HELD_FMT or "Held: %d"):format(held)) end
                 amountTooltipTexts[i] = FinishTooltipTable(tipTbl)
@@ -1239,7 +1333,6 @@ local function FillRow(n, lbl, val, iconID, currencyID, tooltipText, amountToolt
 end
 
 function Addon:ReleaseCurrencyRuntimeCaches()
-    Wipe(_crestsNeededByTier)
     Wipe(_crestConvertTooltipTexts)
     Wipe(_crestAmountTooltipTexts)
     Wipe(_crestConvertTooltipPool)
