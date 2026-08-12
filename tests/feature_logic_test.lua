@@ -9,6 +9,13 @@ local function loadFeatureAddon()
     return addon
 end
 
+local function loadAltSummaryAddon()
+    local addon = loadFeatureAddon()
+    Harness.load(addon, "features/services/general/LariasWeeklyChecklist_Snapshot.lua")
+    Harness.load(addon, "features/body/LariasWeeklyChecklist_AltsSummary.lua")
+    return addon
+end
+
 Test.case("weapon upgrade configuration has safe defaults", function()
     local addon = loadFeatureAddon()
     Test.equal(addon:GetWeaponUpgradeCombinedItemID(), 0)
@@ -144,7 +151,7 @@ Test.case("crest availability combines held and tradeup amounts", function()
     Test.equal(total, 21)
 end)
 
-Test.case("currency panel hides unknown currency ids", function()
+Test.case("currency panel keeps fallback rows for unknown currency ids", function()
     local addon = loadFeatureAddon()
     addon.TRACKING.crestCurrencyIDs = { 101, 999 }
     addon.GetTrackedCurrencyConfig = function()
@@ -165,11 +172,39 @@ Test.case("currency panel hides unknown currency ids", function()
     }
 
     local rows = addon:GetCurrencyPanelRows()
-    Test.equal(#rows, 1)
+    Test.equal(#rows, 2)
     Test.equal(rows[1].currencyID, 101)
+    Test.equal(rows[2].currencyID, 999)
 end)
 
-Test.case("currency snapshot omits unknown currency ids", function()
+Test.case("currency panel shows cap zero crests as not earnable yet", function()
+    local addon = loadFeatureAddon()
+    addon.L.TRACKING_NOT_EARNABLE_YET = "Not earnable yet"
+    addon.TRACKING.crestCurrencyIDs = { 3445 }
+    addon.GetTrackedCurrencyConfig = function()
+        return {
+            { id = 3445, enabled = true },
+        }
+    end
+    addon.IsQuestHidden = function() return true end
+    addon.IsItemHidden = function() return false end
+    Harness.currencyInfo[3445] = {
+        name = "Heroic Crest",
+        iconFileID = 1,
+        quantity = 0,
+        maxQuantity = 0,
+        totalEarned = 0,
+        quality = 4,
+    }
+
+    local rows = addon:GetCurrencyPanelRows()
+    Test.equal(#rows, 1)
+    Test.equal(rows[1].currencyID, 3445)
+    Test.truthy(rows[1].amountTooltipText)
+    Test.equal(rows[1].amountTooltipText[1].text, "Not earnable yet")
+end)
+
+Test.case("currency snapshot keeps unknown currency ids", function()
     local addon = loadFeatureAddon()
     addon.TRACKING.crestCurrencyIDs = { 101, 999 }
     addon.GetTrackedCurrencyConfig = function()
@@ -189,8 +224,137 @@ Test.case("currency snapshot omits unknown currency ids", function()
 
     local snap = {}
     addon:FillCurrencySnapshot(snap)
-    Test.equal(#snap.rightRows, 1)
+    Test.equal(#snap.rightRows, 2)
     Test.equal(snap.rightRows[1].id, 101)
+    Test.equal(snap.rightRows[2].id, 999)
+end)
+
+Test.case("currency snapshots store alt amounts without caps", function()
+    local addon = loadFeatureAddon()
+    addon.TRACKING.crestCurrencyIDs = { 101 }
+    addon.GetTrackedCurrencyConfig = function()
+        return {
+            { id = 101, enabled = true },
+        }
+    end
+    Harness.currencyInfo[101] = {
+        name = "Heroic Crest",
+        iconFileID = 1,
+        quantity = 7,
+        maxQuantity = 90,
+        totalEarned = 7,
+        quality = 4,
+    }
+
+    local snap = {}
+    addon:FillCurrencySnapshot(snap)
+    Test.equal(#snap.rightRows, 1)
+    Test.equal(snap.rightRows[1].qty, 7)
+    Test.equal(snap.rightRows[1].earned, 7)
+    Test.equal(snap.rightRows[1].cap, nil)
+end)
+
+Test.case("alt summary resets all currencies when a saved cap is above current cap", function()
+    local addon = loadAltSummaryAddon()
+    addon.TRACKING.crestCurrencyIDs = { 3445 }
+    addon.TRACKING.sparkCurrencyID = 3509
+    Harness.currencyInfo[3445] = {
+        name = "Heroic Crest",
+        iconFileID = 1,
+        quantity = 0,
+        maxQuantity = 0,
+        totalEarned = 0,
+        quality = 4,
+    }
+    Harness.currencyInfo[3509] = {
+        name = "Spark",
+        iconFileID = 2,
+        quantity = 0,
+        maxQuantity = 1,
+        totalEarned = 0,
+        quality = 4,
+    }
+    Harness.currencyInfo[1234] = {
+        name = "Old Spark",
+        iconFileID = 3,
+        quantity = 0,
+        maxQuantity = 24,
+        totalEarned = 0,
+        quality = 4,
+    }
+
+    local sd = addon:_ExtractAltSummarySnapDataForTest({
+        rightRows = {
+            { type = addon.SNAP_TYPES.CREST, id = 3445, qty = 11, earned = 11, cap = 90, tradeup = 5 },
+            { type = addon.SNAP_TYPES.SPARKS, id = 1234, qty = 8, held = 8, cap = 24 },
+        },
+    }, { 3445 })
+
+    Test.equal(sd.crestQtys[1], 0)
+    Test.equal(sd.crestEarneds[1], 0)
+    Test.equal(sd.crestCaps[1], 0)
+    Test.equal(sd.crestTradeups[1], 0)
+    Test.equal(sd.sprkQty, 0)
+    Test.equal(sd.sprkCap, 1)
+end)
+
+Test.case("alt summary resets capless currencies from stale season snapshots", function()
+    local addon = loadAltSummaryAddon()
+    addon.TRACKING._activeSeasonNumber = 2
+    addon.TRACKING.crestCurrencyIDs = { 3445 }
+    addon.TRACKING.sparkCurrencyID = 3509
+    Harness.currencyInfo[3445] = {
+        name = "Heroic Crest",
+        iconFileID = 1,
+        quantity = 0,
+        maxQuantity = 0,
+        totalEarned = 0,
+        quality = 4,
+    }
+    Harness.currencyInfo[3509] = {
+        name = "Spark",
+        iconFileID = 2,
+        quantity = 0,
+        maxQuantity = 1,
+        totalEarned = 0,
+        quality = 4,
+    }
+
+    local sd = addon:_ExtractAltSummarySnapDataForTest({
+        seasonKey = "mplus:1",
+        rightRows = {
+            { type = addon.SNAP_TYPES.CREST, id = 3445, qty = 11, earned = 11, tradeup = 5 },
+            { type = addon.SNAP_TYPES.SPARKS, id = 3509, qty = 8, held = 8 },
+        },
+    }, { 3445 })
+
+    Test.equal(sd.crestQtys[1], 0)
+    Test.equal(sd.crestEarneds[1], 0)
+    Test.equal(sd.crestTradeups[1], 0)
+    Test.equal(sd.sprkQty, 0)
+    Test.equal(sd.sprkCap, 1)
+end)
+
+Test.case("alt summary clamps season misc currencies when current cap is zero", function()
+    local addon = loadAltSummaryAddon()
+    addon.TRACKING.bonusRollCurrencyID = 3418
+    Harness.currencyInfo[3418] = {
+        name = "Nebulous Voidcore",
+        iconFileID = 1,
+        quantity = 0,
+        maxQuantity = 0,
+        totalEarned = 0,
+        quality = 4,
+    }
+
+    local sd = addon:_ExtractAltSummarySnapDataForTest({
+        rightRows = {
+            { type = addon.SNAP_TYPES.MISC, id = 3418, qty = 26, held = 26, cap = 90 },
+        },
+    }, {})
+
+    Test.equal(sd.miscQtys[3418], 0)
+    Test.equal(sd.miscCaps[3418], 0)
 end)
 
 local function loadVaultAddon()
