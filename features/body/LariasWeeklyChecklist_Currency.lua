@@ -899,32 +899,49 @@ local function CalcWatermarkUpgradeCost(watermark, breakpoints, minimumWatermark
     return cost
 end
 
-local function CalcWatermarkWeaponGroupCost(watermarks, slots, breakpoints, minimumWatermark, costPerStep)
-    local cost = 0
-    for _, slot in ipairs(slots) do
-        local slotCost = CalcWatermarkUpgradeCost(watermarks[slot], breakpoints, minimumWatermark, costPerStep)
-        if slotCost == nil then return nil end
-        cost = cost + slotCost
-    end
-    return cost
-end
-
-local WATERMARK_WEAPON_GROUPS = {
-    { WATERMARK_TWOHAND_SLOT },
-    { WATERMARK_MAINHAND_SLOT, WATERMARK_OFFHAND_SLOT },
-    { WATERMARK_ONEHAND_SLOT, WATERMARK_ONEHAND_SECOND_SLOT },
+local WATERMARK_WEAPON_SLOTS = {
+    WATERMARK_TWOHAND_SLOT,
+    WATERMARK_MAINHAND_SLOT,
+    WATERMARK_ONEHAND_SLOT,
+    WATERMARK_ONEHAND_SECOND_SLOT,
+    WATERMARK_OFFHAND_SLOT,
 }
 
-local function GetCheapestWatermarkWeaponGroup(watermarks, breakpoints, minimumWatermark, costPerStep)
-    local weaponCost, weaponSlots
-    for _, slots in ipairs(WATERMARK_WEAPON_GROUPS) do
-        local groupCost = CalcWatermarkWeaponGroupCost(watermarks, slots, breakpoints, minimumWatermark, costPerStep)
-        if groupCost and (not weaponCost or groupCost < weaponCost) then
-            weaponCost = groupCost
-            weaponSlots = slots
+local function GetPreferredWatermarkWeaponSlots(watermarks, minimumWatermark)
+    local minimum = tonumber(minimumWatermark) or 0
+    local twoHandWatermark = tonumber(watermarks[WATERMARK_TWOHAND_SLOT]) or 0
+    local highestWeaponWatermark = twoHandWatermark
+
+    for _, slot in ipairs(WATERMARK_WEAPON_SLOTS) do
+        local watermark = tonumber(watermarks[slot]) or 0
+        if watermark > highestWeaponWatermark then
+            highestWeaponWatermark = watermark
         end
     end
-    return weaponCost, weaponSlots
+
+    if twoHandWatermark >= minimum and twoHandWatermark >= highestWeaponWatermark then
+        return { WATERMARK_TWOHAND_SLOT }
+    end
+
+    local ranked = {}
+    for _, slot in ipairs(WATERMARK_WEAPON_SLOTS) do
+        local watermark = tonumber(watermarks[slot]) or 0
+        if watermark >= minimum then
+            ranked[#ranked + 1] = { slot = slot, watermark = watermark }
+        end
+    end
+    table.sort(ranked, function(a, b)
+        if a.watermark == b.watermark then
+            return a.slot < b.slot
+        end
+        return a.watermark > b.watermark
+    end)
+
+    local weaponSlots = {}
+    for i = 1, math.min(2, #ranked) do
+        weaponSlots[#weaponSlots + 1] = ranked[i].slot
+    end
+    return weaponSlots
 end
 
 local function ForEachAchievementWatermark(watermarks, minimumWatermark, weaponSlots, fn)
@@ -945,7 +962,7 @@ end
 
 local function CalcWatermarkAchievementCost(watermarks, breakpoints, minimumWatermark, costPerStep)
     local totalCost = 0
-    local weaponCost, weaponSlots = GetCheapestWatermarkWeaponGroup(watermarks, breakpoints, minimumWatermark, costPerStep)
+    local weaponSlots = GetPreferredWatermarkWeaponSlots(watermarks, minimumWatermark)
     ForEachAchievementWatermark(watermarks, minimumWatermark, weaponSlots, function(watermark)
         totalCost = totalCost + (CalcWatermarkUpgradeCost(watermark, breakpoints, minimumWatermark, costPerStep) or 0)
     end)
