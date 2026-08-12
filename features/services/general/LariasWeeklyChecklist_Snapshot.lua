@@ -362,13 +362,16 @@ function Addon:BuildTrackingSnapshot(snap, dirtyDomains)
     snap.itemUpgradeWatermarks = WipeTable(snap.itemUpgradeWatermarks)
     snap.itemUpgradeWatermarksCaptured = false
     if API.ItemUpgrade and type(API.ItemUpgrade.GetHighWatermarkForSlot) == "function" then
+        local capturedCount = 0
         for _, redundancySlot in ipairs(ITEM_REDUNDANCY_SLOT_IDS) do
             local ok, watermark = pcall(API.ItemUpgrade.GetHighWatermarkForSlot, redundancySlot)
-            if ok then
-                snap.itemUpgradeWatermarks[redundancySlot] = tonumber(watermark) or 0
-                snap.itemUpgradeWatermarksCaptured = true
+            watermark = ok and tonumber(watermark) or nil
+            if watermark then
+                snap.itemUpgradeWatermarks[redundancySlot] = watermark
+                capturedCount = capturedCount + 1
             end
         end
+        snap.itemUpgradeWatermarksCaptured = capturedCount == #ITEM_REDUNDANCY_SLOT_IDS
     end
 
     -- Equipment slots: full item data for the gear popup and upgrade-cost rows.
@@ -399,6 +402,15 @@ function Addon:BuildTrackingSnapshot(snap, dirtyDomains)
         if ilvl == 0 and link then
             local rawIlvl = API.GetInventoryItemLevel and API.GetInventoryItemLevel("player", sid)
             ilvl = tonumber(rawIlvl) or 0
+        end
+        local itemUpgradeHighWatermark = 0
+        if link and API.ItemUpgrade and type(API.ItemUpgrade.GetHighWatermarkForItem) == "function" then
+            local ok, characterHighWatermark, accountHighWatermark =
+                pcall(API.ItemUpgrade.GetHighWatermarkForItem, link)
+            if ok then
+                itemUpgradeHighWatermark = math.max(tonumber(characterHighWatermark) or 0,
+                                                    tonumber(accountHighWatermark) or 0)
+            end
         end
 
         local tierIdx, rank, maxRank, upgradeTrackString
@@ -432,6 +444,7 @@ function Addon:BuildTrackingSnapshot(snap, dirtyDomains)
         end
         slotData.link = link
         slotData.ilvl = ilvl
+        slotData.itemUpgradeHighWatermark = itemUpgradeHighWatermark
         slotData.rank = rank
         slotData.maxRank = maxRank
         slotData.tierIdx = tierIdx

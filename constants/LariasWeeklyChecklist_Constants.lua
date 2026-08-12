@@ -31,6 +31,7 @@ local tracking = {
     crestCurrencyIDs = { 3442, 3443, 3444, 3445, 3446 },
     crestConvertItemIDs = { 269867, 26986, 269865, 269866 },
     crestAchievementIDs = { [2] = 62411, [3] = 62412, [4] = 62414, [5] = 62416 },
+    crestTradeupAchievementIDs = { 62410, 62411, 62412, 62414, 62416 },
     sparkCurrencyID = 3509,
     sparkItemID = 274476,
     catalystCurrencyID = 3465,

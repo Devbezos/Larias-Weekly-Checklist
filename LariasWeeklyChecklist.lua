@@ -2568,8 +2568,8 @@ local function RecordCharacterMetadata(self)
         gdb.charLevels = gdb.charLevels or {}
         gdb.charLevels[profileKey] = UnitLevel("player") or 0
         if GetAverageItemLevel then
-            local _, _, equipped = GetAverageItemLevel()
-            local ilvl = math.floor(tonumber(equipped) or 0)
+            local average, equipped = GetAverageItemLevel()
+            local ilvl = tonumber(equipped) or tonumber(average) or 0
             if ilvl > 0 then
                 gdb.chars = gdb.chars or {}
                 gdb.chars[profileKey] = gdb.chars[profileKey] or {}

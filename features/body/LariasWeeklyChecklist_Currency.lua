@@ -443,6 +443,17 @@ local function GetCrestAchievementID(i)
     return idx and ach[idx] or nil
 end
 
+local function GetCrestTradeupAchievementID(i)
+    local tracking = Addon.TRACKING
+    local ach = tracking and tracking.crestTradeupAchievementIDs
+    if type(ach) ~= "table" then
+        ach = tracking and tracking.crestAchievementIDs
+    end
+    if type(ach) ~= "table" then return nil end
+    local idx = tonumber(i)
+    return idx and ach[idx] or nil
+end
+
 function Addon:GetCrestAchievementID(tierIdx)
     return GetCrestAchievementID(tierIdx)
 end
@@ -803,7 +814,7 @@ end
 
 local function PopulateCrestUnlocked(cache, crestCount)
     for i = 1, crestCount do
-        local achID = GetCrestAchievementID(i)
+        local achID = GetCrestTradeupAchievementID(i)
         cache.unlocked[i] = achID and IsAchievementEarnedByMeSafe(achID) or false
     end
 end
@@ -861,13 +872,41 @@ local function ResolveTierCost(value, tierIdx, fallback)
     return fallback
 end
 
-local WATERMARK_FINGER_SLOT = 9
-local WATERMARK_TRINKET_SLOT = 10
 local WATERMARK_TWOHAND_SLOT = 12
 local WATERMARK_MAINHAND_SLOT = 13
 local WATERMARK_ONEHAND_SLOT = 14
 local WATERMARK_ONEHAND_SECOND_SLOT = 15
 local WATERMARK_OFFHAND_SLOT = 16
+
+local WATERMARK_AVERAGE_LABELS = {
+    [0]  = "Head",
+    [1]  = "Neck",
+    [2]  = "Shoulder",
+    [3]  = "Chest",
+    [4]  = "Waist",
+    [5]  = "Legs",
+    [6]  = "Feet",
+    [7]  = "Wrist",
+    [8]  = "Hands",
+    [11] = "Cloak",
+}
+
+local PHYSICAL_SLOT_LABELS = {
+    [11] = "Finger 1",
+    [12] = "Finger 2",
+    [13] = "Trinket 1",
+    [14] = "Trinket 2",
+    [16] = "Main Hand",
+    [17] = "Off Hand",
+}
+
+local function HasCompleteItemUpgradeWatermarks(watermarks)
+    if type(watermarks) ~= "table" then return false end
+    for slot = 0, 16 do
+        if tonumber(watermarks[slot]) == nil then return false end
+    end
+    return true
+end
 
 local function CalcWatermarkUpgradeCost(watermark, breakpoints, minimumWatermark, costPerStep)
     watermark = tonumber(watermark) or 0
@@ -892,30 +931,133 @@ local function CalcWatermarkWeaponGroupCost(watermarks, slots, breakpoints, mini
     return cost
 end
 
-local function CalcWatermarkAchievementCost(watermarks, breakpoints, minimumWatermark, costPerStep)
-    local totalCost = 0
-    for slot = 0, 11 do
-        local slotCost = CalcWatermarkUpgradeCost(watermarks[slot], breakpoints, minimumWatermark, costPerStep)
-        if slotCost then
-            local weight = (slot == WATERMARK_FINGER_SLOT or slot == WATERMARK_TRINKET_SLOT) and 2 or 1
-            totalCost = totalCost + slotCost * weight
-        end
-    end
+local WATERMARK_WEAPON_GROUPS = {
+    { WATERMARK_TWOHAND_SLOT },
+    { WATERMARK_MAINHAND_SLOT, WATERMARK_OFFHAND_SLOT },
+    { WATERMARK_ONEHAND_SLOT, WATERMARK_ONEHAND_SECOND_SLOT },
+}
 
-    local weaponCost
-    local weaponGroups = {
-        { WATERMARK_TWOHAND_SLOT },
-        { WATERMARK_MAINHAND_SLOT, WATERMARK_OFFHAND_SLOT },
-        { WATERMARK_ONEHAND_SLOT, WATERMARK_ONEHAND_SECOND_SLOT },
-    }
-    for _, slots in ipairs(weaponGroups) do
+local function GetCheapestWatermarkWeaponGroup(watermarks, breakpoints, minimumWatermark, costPerStep)
+    local weaponCost, weaponSlots
+    for _, slots in ipairs(WATERMARK_WEAPON_GROUPS) do
         local groupCost = CalcWatermarkWeaponGroupCost(watermarks, slots, breakpoints, minimumWatermark, costPerStep)
         if groupCost and (not weaponCost or groupCost < weaponCost) then
             weaponCost = groupCost
+            weaponSlots = slots
+        end
+    end
+    return weaponCost, weaponSlots
+end
+
+local function ForEachAchievementWatermark(watermarks, minimumWatermark, weaponSlots, fn)
+    for slot = 0, 11 do
+        local watermark = tonumber(watermarks[slot]) or 0
+        if watermark >= minimumWatermark then
+            fn(watermark)
         end
     end
 
-    return totalCost + (weaponCost or 0)
+    for _, slot in ipairs(weaponSlots or {}) do
+        local watermark = tonumber(watermarks[slot]) or 0
+        if watermark >= minimumWatermark then
+            fn(watermark)
+        end
+    end
+end
+
+local function PushHighestPhysicalSlotWatermarks(values, gearSlots, slotIDs, limit, minimumWatermark)
+    if type(gearSlots) ~= "table" then return end
+    local found = {}
+    for _, slotID in ipairs(slotIDs or {}) do
+        local slotData = gearSlots[slotID]
+        local watermark = type(slotData) == "table"
+            and (tonumber(slotData.ilvl) or 0)
+            or 0
+        if watermark >= (tonumber(minimumWatermark) or 0) then
+            found[#found + 1] = {
+                label = PHYSICAL_SLOT_LABELS[slotID] or ("Slot " .. tostring(slotID)),
+                ilvl = watermark,
+                source = "equipped",
+            }
+        end
+    end
+    table.sort(found, function(a, b) return (a.ilvl or 0) > (b.ilvl or 0) end)
+    for i = 1, math.min(tonumber(limit) or #found, #found) do
+        values[#values + 1] = found[i]
+    end
+end
+
+local function PushFallbackWatermark(values, watermark, count, label, minimumWatermark)
+    watermark = tonumber(watermark) or 0
+    if watermark < (tonumber(minimumWatermark) or 0) then return end
+    for i = 1, count or 1 do
+        values[#values + 1] = {
+            label = label and (label .. " " .. tostring(i)) or "Fallback",
+            ilvl = watermark,
+            source = "bucket",
+        }
+    end
+end
+
+local function BuildCrestAchievementAverageEntries(snap, watermarks, minimumWatermark, weaponSlots)
+    local entries = {}
+    for slot = 0, 11 do
+        if slot ~= 9 and slot ~= 10 then
+            local watermark = tonumber(watermarks[slot]) or 0
+            if watermark >= minimumWatermark then
+                entries[#entries + 1] = {
+                    label = WATERMARK_AVERAGE_LABELS[slot] or ("Slot " .. tostring(slot)),
+                    ilvl = watermark,
+                    source = "bucket",
+                }
+            end
+        end
+    end
+
+    local gearSlots = type(snap) == "table" and snap.gearSlots or nil
+
+    local before = #entries
+    PushHighestPhysicalSlotWatermarks(entries, gearSlots, { 11, 12 }, 2, minimumWatermark)
+    if #entries - before < 2 then
+        PushFallbackWatermark(entries, watermarks[9], 2 - (#entries - before), "Finger", minimumWatermark)
+    end
+
+    before = #entries
+    PushHighestPhysicalSlotWatermarks(entries, gearSlots, { 13, 14 }, 2, minimumWatermark)
+    if #entries - before < 2 then
+        PushFallbackWatermark(entries, watermarks[10], 2 - (#entries - before), "Trinket", minimumWatermark)
+    end
+
+    before = #entries
+    PushHighestPhysicalSlotWatermarks(entries, gearSlots, { 16, 17 }, 2, minimumWatermark)
+    if #entries - before < 2 then
+        local needed = 2 - (#entries - before)
+        for _, slot in ipairs(weaponSlots or {}) do
+            local watermark = tonumber(watermarks[slot]) or 0
+            if watermark >= minimumWatermark then
+                for i = 1, needed do
+                    entries[#entries + 1] = {
+                        label = (PHYSICAL_SLOT_LABELS[slot] or "Weapon") .. " " .. tostring(i),
+                        ilvl = watermark,
+                        source = "bucket",
+                    }
+                end
+                return entries
+            end
+        end
+    end
+
+    return entries
+end
+
+local function CalcWatermarkAchievementCost(watermarks, breakpoints, minimumWatermark, costPerStep)
+    local totalCost = 0
+    local weaponCost, weaponSlots = GetCheapestWatermarkWeaponGroup(watermarks, breakpoints, minimumWatermark, costPerStep)
+    ForEachAchievementWatermark(watermarks, minimumWatermark, weaponSlots, function(watermark)
+        totalCost = totalCost + (CalcWatermarkUpgradeCost(watermark, breakpoints, minimumWatermark, costPerStep) or 0)
+    end)
+
+    return totalCost
 end
 
 function Addon:GetCrestAchievementBreakpoints(tierIdx)
@@ -959,18 +1101,23 @@ function Addon:GetMinimumDisplayedItemLevel()
     return base and base > 0 and base or 0
 end
 
-function Addon:CalcCrestAchievementAverageItemLevel(snap)
+function Addon:CalcCrestAchievementAverageItemLevel(snap, tierIdx)
     local watermarks = type(snap) == "table" and snap.itemUpgradeWatermarks or nil
-    if type(watermarks) ~= "table" then return nil end
+    if type(watermarks) ~= "table" or not snap.itemUpgradeWatermarksCaptured
+            or not HasCompleteItemUpgradeWatermarks(watermarks) then
+        return nil
+    end
 
+    local breakpoints = self:GetCrestAchievementBreakpoints(tierIdx)
+    if type(breakpoints) ~= "table" then return nil end
     local minimumWatermark = self:GetMinimumDisplayedItemLevel()
-    local total, count = 0, 0
-    for _, value in pairs(watermarks) do
-        local watermark = tonumber(value) or 0
-        if watermark >= minimumWatermark then
-            total = total + watermark
-            count = count + 1
-        end
+    local costPerStep = self:GetCrestAchievementStepCost(tierIdx)
+    local weaponSlots = select(2, GetCheapestWatermarkWeaponGroup(watermarks, breakpoints, minimumWatermark, costPerStep))
+    local entries = BuildCrestAchievementAverageEntries(snap, watermarks, minimumWatermark, weaponSlots)
+    local total, count = 0, #entries
+
+    for i = 1, #entries do
+        total = total + (tonumber(entries[i].ilvl) or 0)
     end
 
     if count == 0 then return nil end
@@ -1091,7 +1238,8 @@ function Addon:CalcTierAchievementCost(snap, tierIdx)
     end
 
     local watermarks = type(snap) == "table" and snap.itemUpgradeWatermarks or nil
-    if type(watermarks) == "table" and snap.itemUpgradeWatermarksCaptured then
+    if type(watermarks) == "table" and snap.itemUpgradeWatermarksCaptured
+            and HasCompleteItemUpgradeWatermarks(watermarks) then
         local breakpoints = self:GetCrestAchievementBreakpoints(tierIdx)
         if type(breakpoints) ~= "table" then return 0 end
 

@@ -462,6 +462,12 @@ end
 -- ── Shared tooltip leave ──────────────────────────────────────────────────────
 local function OnCellLeave() GameTooltip:Hide() end
 
+local function HideContextMenuOnLeftClick(button)
+    if button == "LeftButton" and Addon.HideContextMenu then
+        Addon:HideContextMenu()
+    end
+end
+
 local function HideSummaryOverlays()
     if _gearPopupFrame and _gearPopupFrame.IsShown and _gearPopupFrame:IsShown() then
         _gearPopupFrame:Hide()
@@ -604,6 +610,9 @@ local function MakeCell(parent, w, h)
     local f = CreateFrame("Frame", nil, parent)
     f:SetSize(w, h)
     f:EnableMouse(true)
+    f:SetScript("OnMouseDown", function(_, button)
+        HideContextMenuOnLeftClick(button)
+    end)
     f:SetScript("OnLeave", OnCellLeave)
     local fs = MakeFS(f, 12)
     fs:SetPoint("TOPLEFT", f, "TOPLEFT", 4, 0)
@@ -639,6 +648,9 @@ local function EnsurePanel()
     f:SetFrameLevel(200)
     f:SetMovable(true)
     f:EnableMouse(true)
+    f:HookScript("OnMouseDown", function(_, button)
+        HideContextMenuOnLeftClick(button)
+    end)
     f:RegisterForDrag("LeftButton")
     f:SetClampedToScreen(true)
 
@@ -1759,8 +1771,8 @@ local function RenderUpgradeCostCell(cell, row, snap, noSnap, alpha, th)
         local _available = availableQty
         local _capWeeksNeeded = Addon.CalcCrestAchievementCapWeeksNeeded
             and Addon:CalcCrestAchievementCapWeeksNeeded(totalCost, heldQty, tradeupQty, earnableQty)
-        local _avgWatermarkText = FormatAverageItemLevel(Addon.CalcCrestAchievementAverageItemLevel
-            and Addon:CalcCrestAchievementAverageItemLevel(snap))
+        local _avgItemLevelText = FormatAverageItemLevel(Addon.CalcCrestAchievementAverageItemLevel
+            and Addon:CalcCrestAchievementAverageItemLevel(snap, targetTier))
         cell:SetScript("OnEnter", function(s_)
             GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
             GameTooltip:SetText((L.ALT_SUMMARY_UPGRADE_COST_TITLE_FMT or "%s Progress"):format(_name), _cr, _cg, _cb)
@@ -1776,9 +1788,9 @@ local function RenderUpgradeCostCell(cell, row, snap, noSnap, alpha, th)
             end
             local targetIlvl = Addon.GetCrestAchievementTargetItemLevel
                 and Addon:GetCrestAchievementTargetItemLevel(_tierIdx)
-            if _avgWatermarkText and targetIlvl then
+            if _avgItemLevelText and targetIlvl then
                 GameTooltip:AddLine((L.ALT_SUMMARY_ACHIEVEMENT_ILVL_FMT or "Item level: %s / %d")
-                    :format(_avgWatermarkText, targetIlvl), 0.85, 0.85, 0.85)
+                    :format(_avgItemLevelText, targetIlvl), 0.85, 0.85, 0.85)
             end
             GameTooltip:Show()
         end)
@@ -2397,6 +2409,7 @@ PopulateSummary = function(panel)
             secFS:SetSize(COL_LABEL - 4, h)
             secBg:EnableMouse(true)
             secBg:SetScript("OnMouseDown", function(_, button)
+                HideContextMenuOnLeftClick(button)
                 if button ~= "LeftButton" then return end
                 if not (IsAltKeyDown and IsAltKeyDown()) then return end
                 if not panel._rowDragReorderController then return end
@@ -2505,6 +2518,7 @@ PopulateSummary = function(panel)
             hit:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, curRowY)
             hit:SetSize(COL_LABEL - PAD, h - 1)
             hit:SetScript("OnMouseDown", function(_, button)
+                HideContextMenuOnLeftClick(button)
                 if button ~= "LeftButton" then return end
                 if not (IsAltKeyDown and IsAltKeyDown()) then return end
                 if not panel._rowDragReorderController then return end
@@ -2691,6 +2705,7 @@ PopulateSummary = function(panel)
                 GameTooltip:Show()
             end)
             col.hdrHit:SetScript("OnMouseDown", function(s_, button)
+                HideContextMenuOnLeftClick(button)
                 if button ~= "LeftButton" then return end
                 if not (IsAltKeyDown and IsAltKeyDown()) then return end
                 if not panel._dragReorderController then return end
