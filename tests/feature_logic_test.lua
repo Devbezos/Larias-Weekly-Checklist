@@ -250,7 +250,7 @@ Test.case("tier achievement cost uses redundancy slots and cheapest weapon water
     }, 5), 780)
 end)
 
-Test.case("tier achievement average item level expands redundant watermark slots", function()
+Test.case("tier achievement average item level uses watermark buckets", function()
     local addon = loadFeatureAddon()
     addon.TRACKING.ilvlBase = 266
     addon.TRACKING.ilvlTrackStep = 13
@@ -272,10 +272,10 @@ Test.case("tier achievement average item level expands redundant watermark slots
         itemUpgradeWatermarksCaptured = true,
     }, 5)
 
-    Test.equal(("%.2f"):format(average), "318.38")
+    Test.equal(("%.2f"):format(average), "319.47")
 end)
 
-Test.case("tier achievement average item level prefers equipped accessory slots", function()
+Test.case("tier achievement average item level ignores equipped physical slots", function()
     local addon = loadFeatureAddon()
     addon.TRACKING.ilvlBase = 266
     addon.TRACKING.ilvlTrackStep = 13
@@ -308,7 +308,7 @@ Test.case("tier achievement average item level prefers equipped accessory slots"
     }
 
     Test.equal(addon:CalcTierAchievementCost(snap, 5), 780)
-    Test.equal(("%.2f"):format(addon:CalcCrestAchievementAverageItemLevel(snap, 5)), "318.81")
+    Test.equal(("%.2f"):format(addon:CalcCrestAchievementAverageItemLevel(snap, 5)), "318.00")
 end)
 
 Test.case("tier achievement cost ignores watermarks below displayed item levels", function()
