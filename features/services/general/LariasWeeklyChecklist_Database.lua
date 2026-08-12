@@ -556,6 +556,23 @@ function Addon:SetItemHidden(itemID, hidden)
     RefreshAfterHiddenChange(self)
 end
 
+function Addon:IsCrestAchievementHidden(tierIdx)
+    tierIdx = tonumber(tierIdx)
+    if not tierIdx then return false end
+    local gdb = self.db and self.db.global
+    return gdb and gdb.hiddenCrestAchievements and gdb.hiddenCrestAchievements[tostring(tierIdx)] == true
+end
+
+function Addon:SetCrestAchievementHidden(tierIdx, hidden)
+    tierIdx = tonumber(tierIdx)
+    if not tierIdx then return end
+    local gdb = self.db and self.db.global
+    if not gdb then return end
+    gdb.hiddenCrestAchievements = gdb.hiddenCrestAchievements or {}
+    gdb.hiddenCrestAchievements[tostring(tierIdx)] = hidden or nil
+    RefreshAfterHiddenChange(self)
+end
+
 function Addon:GetHiddenQuestList()
     local cdb = ReadCharDB(self)
     local hidden = cdb and cdb.hiddenQuests
@@ -570,6 +587,23 @@ function Addon:GetHiddenQuestList()
     local result = {}
     for qKey in pairs(hidden) do
         result[#result + 1] = { key = qKey, name = questNames[qKey] or qKey }
+    end
+    table_sort(result, function(a, b) return a.name < b.name end)
+    return result
+end
+
+function Addon:GetHiddenCrestAchievementList()
+    local gdb = self.db and self.db.global
+    local hidden = gdb and gdb.hiddenCrestAchievements
+    if not hidden then return {} end
+    local result = {}
+    for tierStr in pairs(hidden) do
+        local tierIdx = tonumber(tierStr)
+        if tierIdx then
+            local name = self.GetCrestAchievementName and self:GetCrestAchievementName(tierIdx)
+                or ("Tier " .. tierIdx)
+            result[#result + 1] = { tierIdx = tierIdx, name = name }
+        end
     end
     table_sort(result, function(a, b) return a.name < b.name end)
     return result

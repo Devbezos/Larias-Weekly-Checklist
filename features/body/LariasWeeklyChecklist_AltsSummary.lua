@@ -45,6 +45,7 @@ local GV_THRESHOLDS = { {2,4,6}, {1,4,8}, {2,4,8} }
 -- Read from TRACKING so Overlay.lua (which captures the data) uses the same list.
 local GEAR_SLOT_IDS  = (Addon.TRACKING and Addon.TRACKING.gearSlotIDs)
                        or {1,2,3,5,6,7,8,9,10,11,12,13,14,15,16,17}
+local SHOW_ITEM_UPGRADE_COSTS = true
 -- Gear slot names are resolved at call time so the localization companion's
 -- translated values are used. A static table built at file-load time would
 -- capture enUS strings before the companion addon has had a chance to load.
@@ -461,6 +462,12 @@ end
 -- ── Shared tooltip leave ──────────────────────────────────────────────────────
 local function OnCellLeave() GameTooltip:Hide() end
 
+local function HideContextMenuOnLeftClick(button)
+    if button == "LeftButton" and Addon.HideContextMenu then
+        Addon:HideContextMenu()
+    end
+end
+
 local function HideSummaryOverlays()
     if _gearPopupFrame and _gearPopupFrame.IsShown and _gearPopupFrame:IsShown() then
         _gearPopupFrame:Hide()
@@ -494,6 +501,12 @@ local function ShowSummaryRowContextMenu(anchor, row)
         Addon:ShowContextMenu(anchor, {
             { text = L.CONTEXT_HIDE_THIS_ROW or "Hide this row", onClick = function()
                 Addon:SetQuestHidden(row.questKey, true)
+            end },
+        })
+    elseif row.type == "upgcost" and row.tierIdx and Addon.SetCrestAchievementHidden then
+        Addon:ShowContextMenu(anchor, {
+            { text = L.CONTEXT_HIDE_THIS_ROW or "Hide this row", onClick = function()
+                Addon:SetCrestAchievementHidden(row.tierIdx, true)
             end },
         })
     end
@@ -597,6 +610,9 @@ local function MakeCell(parent, w, h)
     local f = CreateFrame("Frame", nil, parent)
     f:SetSize(w, h)
     f:EnableMouse(true)
+    f:SetScript("OnMouseDown", function(_, button)
+        HideContextMenuOnLeftClick(button)
+    end)
     f:SetScript("OnLeave", OnCellLeave)
     local fs = MakeFS(f, 12)
     fs:SetPoint("TOPLEFT", f, "TOPLEFT", 4, 0)
@@ -632,6 +648,9 @@ local function EnsurePanel()
     f:SetFrameLevel(200)
     f:SetMovable(true)
     f:EnableMouse(true)
+    f:HookScript("OnMouseDown", function(_, button)
+        HideContextMenuOnLeftClick(button)
+    end)
     f:RegisterForDrag("LeftButton")
     f:SetClampedToScreen(true)
 
@@ -885,17 +904,11 @@ local function FormatSigilAmount(value)
     return ("%.1f"):format(value)
 end
 
--- Compute the total crest cost to max all items of crest tier `tierIdx`,
--- using the rank (x/y) stored in the snapshot.  No ilvl range math needed.
--- Returns totalCost.
-local function AnyVisibleCharNeedsUpgradeCost(chars, tierIdx)
-    if not chars then return false end
-    for _, char in ipairs(chars) do
-        if Addon.CalcTierUpgradeCost and Addon:CalcTierUpgradeCost(char.snap, tierIdx) > 0 then
-            return true
-        end
-    end
-    return false
+local function ShouldShowCrestAchievementRow(tracking, tierIdx)
+    if not SHOW_ITEM_UPGRADE_COSTS then return false end
+    if not (tracking and tracking.crestCurrencyIDs and tracking.crestCurrencyIDs[tierIdx]) then return false end
+    if Addon.GetCrestAchievementID and not Addon:GetCrestAchievementID(tierIdx) then return false end
+    return true
 end
 
 local function AnyVisibleCharNeedsWeapUpg(chars)
@@ -1071,26 +1084,30 @@ local function BuildRowDefs(tracking, LAYOUT, chars)
     do
         local addedUpgradeRows = false
         for i = 1, NUM_CRESTS do
-            if AnyVisibleCharNeedsUpgradeCost(chars, i) then
-                if not addedUpgradeRows then
-                    addSec("upgradecost", L.ALT_SUMMARY_SECTION_UPGRADE_COST or "Upgrade Cost", nil)
-                    addedUpgradeRows = true
+            if ShouldShowCrestAchievementRow(tracking, i) then
+                local hidden = Addon.IsCrestAchievementHidden and Addon:IsCrestAchievementHidden(i)
+                if not hidden then
+                    if not addedUpgradeRows then
+                        addSec("upgradecost", L.ALT_SUMMARY_SECTION_UPGRADE_COST or "Crest Achievements", nil)
+                        addedUpgradeRows = true
+                    end
+                    local fallbackName, cr, cg, cb = CrestTierInfo(i)
+                    local name = (Addon.GetCrestAchievementName and Addon:GetCrestAchievementName(i)) or fallbackName
+                    addRow("upgcost", name, {
+                        tierIdx = i,
+                        iconID = tracking and tracking.crestCurrencyIDs and GetCurrencyIcon(tracking.crestCurrencyIDs[i]),
+                        cr = cr,
+                        cg = cg,
+                        cb = cb,
+                    })
                 end
-                local name, cr, cg, cb = CrestTierInfo(i)
-                addRow("upgcost", name, {
-                    tierIdx = i,
-                    iconID = tracking and tracking.crestCurrencyIDs and GetCurrencyIcon(tracking.crestCurrencyIDs[i]),
-                    cr = cr,
-                    cg = cg,
-                    cb = cb,
-                })
             end
         end
 
         local combinedItemID = GetWeaponUpgradeCombinedItemID()
         if combinedItemID > 0 and AnyVisibleCharNeedsWeapUpg(chars) and not Addon:IsItemHidden(combinedItemID) then
             if not addedUpgradeRows then
-                addSec("upgradecost", L.ALT_SUMMARY_SECTION_UPGRADE_COST or "Upgrade Cost", nil)
+                addSec("upgradecost", L.ALT_SUMMARY_SECTION_UPGRADE_COST or "Crest Achievements", nil)
                 addedUpgradeRows = true
             end
             local combinedName, combinedTex, wr, wg, wb = GetCachedItemRowMeta(combinedItemID)
@@ -1244,7 +1261,7 @@ local function ExtractSnapData(snap, crestIDs, LAYOUT)
                     d.crestCaps[ii]     = cap
                     d.crestQtys[ii]     = resetCurrencies and 0 or ClampSnapshotAmountToCurrentCap(r_.qty, cap, hasCurrentCap)
                     d.crestEarneds[ii]  = resetCurrencies and 0 or ClampSnapshotAmountToCurrentCap(r_.earned, cap, hasCurrentCap)
-                    d.crestTradeups[ii] = r_.tradeup and (resetCurrencies and 0 or ClampSnapshotAmountToCurrentCap(r_.tradeup, cap, hasCurrentCap)) or nil
+                    d.crestTradeups[ii] = r_.tradeup and (resetCurrencies and 0 or (tonumber(r_.tradeup) or 0)) or nil
                     break
                 end
             end
@@ -1646,6 +1663,14 @@ local function RenderKeystoneCell(cell, row, snap, noSnap, alpha, th)
     end)
 end
 
+local function FormatAverageItemLevel(ilvl)
+    ilvl = tonumber(ilvl) or 0
+    if ilvl <= 0 then return nil end
+    local text = ("%.2f"):format(ilvl)
+    text = text:gsub("0+$", ""):gsub("%.$", "")
+    return text
+end
+
 local function RenderUpgradeCostCell(cell, row, snap, noSnap, alpha, th)
     cell._fs:SetFont(FONT_FACE, FONT_CELL, FONT_FLAGS)
     local cr, cg, cb = row.cr or th.r, row.cg or th.g, row.cb or th.b
@@ -1661,6 +1686,9 @@ local function RenderUpgradeCostCell(cell, row, snap, noSnap, alpha, th)
     local hasGearData = false
     local upgradeGearSlots = Addon.GetUpgradeGearSlots and Addon:GetUpgradeGearSlots(snap)
                           or (type(snap) == "table" and snap.gearSlots)
+    local hasWatermarkData = type(snap) == "table"
+                          and type(snap.itemUpgradeWatermarks) == "table"
+                          and snap.itemUpgradeWatermarksCaptured
     if upgradeGearSlots then
         for _, sid in ipairs(GEAR_SLOT_IDS) do
             local sd = upgradeGearSlots[sid]
@@ -1669,7 +1697,7 @@ local function RenderUpgradeCostCell(cell, row, snap, noSnap, alpha, th)
             end
         end
     end
-    if not hasGearData then
+    if not hasGearData and not hasWatermarkData then
         cell._fs:SetText("?")
         cell._fs:SetTextColor(cr, cg, cb, A_DIM)
         local _nil = not upgradeGearSlots
@@ -1705,24 +1733,26 @@ local function RenderUpgradeCostCell(cell, row, snap, noSnap, alpha, th)
         SetPlaceholder(cell, th, alpha * A_DIM)
         cell:SetScript("OnEnter", function(s_)
             GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
-            GameTooltip:SetText(L.ALT_SUMMARY_STALE_SEASON_SNAPSHOT or "Snapshot is from a different season.", 1, 0.6, 0, true)
+            GameTooltip:SetText(L.ALT_SUMMARY_STALE_SEASON_SNAPSHOT or "Snapshot is from a different season.")
             GameTooltip:AddLine(L.ALT_SUMMARY_LOG_IN_REFRESH or "Log in as this character to refresh.", 1, 1, 1, true)
             GameTooltip:Show()
         end)
         return
     end
 
-    local totalCost = Addon.CalcTierUpgradeCost and Addon:CalcTierUpgradeCost(snap, targetTier) or 0
+    local totalCost = Addon.CalcTierAchievementCost and Addon:CalcTierAchievementCost(snap, targetTier) or 0
 
     if totalCost == 0 then
-        SetPlaceholder(cell, th, alpha * A_DIM)
+        cell._fs:SetFont(FONT_FACE, FONT_CELL, FONT_FLAGS)
+        cell._fs:SetText("0")
+        cell._fs:SetTextColor(cr, cg, cb, alpha * A_DIM)
         cell:SetScript("OnEnter", nil)
     else
         -- Availability is per crest type: wallet balance plus this tier's own
         -- trade-up amount from lower crests, if that conversion is unlocked.
-        local heldQty, tradeupQty, availableQty = 0, 0, 0
+        local heldQty, tradeupQty, availableQty, earnableQty = 0, 0, 0, 0
         if Addon.GetCrestAvailabilityForTier then
-            heldQty, tradeupQty, availableQty = Addon:GetCrestAvailabilityForTier(snap, targetTier)
+            heldQty, tradeupQty, availableQty, earnableQty = Addon:GetCrestAvailabilityForTier(snap, targetTier)
         end
         local displayAvailable = math.min(availableQty, totalCost)
         cell._fs:SetText(displayAvailable .. "/" .. totalCost)
@@ -1739,53 +1769,28 @@ local function RenderUpgradeCostCell(cell, row, snap, noSnap, alpha, th)
         local _held  = heldQty
         local _tradeup = tradeupQty
         local _available = availableQty
+        local _capWeeksNeeded = Addon.CalcCrestAchievementCapWeeksNeeded
+            and Addon:CalcCrestAchievementCapWeeksNeeded(totalCost, heldQty, tradeupQty, earnableQty)
+        local _avgItemLevelText = FormatAverageItemLevel(Addon.CalcCrestAchievementAverageItemLevel
+            and Addon:CalcCrestAchievementAverageItemLevel(snap, targetTier))
         cell:SetScript("OnEnter", function(s_)
             GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
-            GameTooltip:SetText((L.ALT_SUMMARY_UPGRADE_COST_TITLE_FMT or "%s Upgrade Cost"):format(_name), _cr, _cg, _cb)
+            GameTooltip:SetText((L.ALT_SUMMARY_UPGRADE_COST_TITLE_FMT or "%s Progress"):format(_name), _cr, _cg, _cb)
             GameTooltip:AddLine((L.ALT_SUMMARY_AVAILABLE_NEED_FMT or "Available: %d  /  Need: %d"):format(_available, _total), 1, 1, 1)
             if _tradeup > 0 then
                 GameTooltip:AddLine((L.ALT_SUMMARY_HELD_TRADEUP_FMT or "Held: %d  +  Trade-up: %d"):format(_held, _tradeup), 0.65, 0.82, 1.0)
             else
                 GameTooltip:AddLine((L.TRACKING_HELD_FMT or "Held: %d"):format(_held), 0.75, 0.75, 0.75)
             end
-            local tooltipGearSlots = Addon.GetUpgradeGearSlots and Addon:GetUpgradeGearSlots(_snap)
-                                  or (type(_snap) == "table" and _snap.gearSlots)
-            if tooltipGearSlots then
-                local hasAny = false
-                for _, sid in ipairs(GEAR_SLOT_IDS) do
-                    local slotData = tooltipGearSlots[sid]
-                    if type(slotData) ~= "table" or slotData.tierIdx ~= _tierIdx
-                            or not slotData.rank then
-                        -- skip
-                    else
-                        local effectiveMax = Addon.GetSlotEffectiveMax and Addon:GetSlotEffectiveMax(slotData)
-                        if effectiveMax then
-                            local isEmbellished = Addon.IsSlotLimitedCrafted and Addon:IsSlotLimitedCrafted(slotData, effectiveMax)
-                            local needsUpgrade  = (slotData.rank < effectiveMax)
-                            if (needsUpgrade and not isEmbellished) or isEmbellished then
-                                if not hasAny then
-                                    GameTooltip:AddLine(" ")
-                                    hasAny = true
-                                end
-                                local slotName = GetGearSlotName(sid)
-                                if isEmbellished then
-                                    -- Limited crafted items cannot be upgraded to the full track max.
-                                    GameTooltip:AddLine(
-                                        "|cff666666" .. slotName .. "  "
-                                        .. slotData.rank .. "/" .. effectiveMax .. "|r"
-                                        .. "  |cffffcc00" .. (L.ALT_SUMMARY_LIMITED_CRAFTED_IGNORED or "(Embellished crafted - ignored)") .. "|r", 1, 1, 1)
-                                else
-                                    local slotCost = Addon.GetCrestSlotUpgradeCost
-                                        and Addon:GetCrestSlotUpgradeCost(sid, slotData, _snap, _tierIdx, effectiveMax)
-                                        or 0
-                                    GameTooltip:AddLine(
-                                        slotName .. "  " .. slotData.rank .. "/" .. effectiveMax
-                                        .. "   (" .. slotCost .. ")", 0.85, 0.85, 0.85)
-                                end
-                            end
-                        end
-                    end
-                end
+            if _capWeeksNeeded then
+                GameTooltip:AddLine((L.ALT_SUMMARY_ACHIEVEMENT_CAP_WEEKS_FMT or "More cap weeks needed: %d")
+                    :format(_capWeeksNeeded), 0.85, 0.85, 0.85)
+            end
+            local targetIlvl = Addon.GetCrestAchievementTargetItemLevel
+                and Addon:GetCrestAchievementTargetItemLevel(_tierIdx)
+            if _avgItemLevelText and targetIlvl then
+                GameTooltip:AddLine((L.ALT_SUMMARY_ACHIEVEMENT_ILVL_FMT or "Item level: %s / %d")
+                    :format(_avgItemLevelText, targetIlvl), 0.85, 0.85, 0.85)
             end
             GameTooltip:Show()
         end)
@@ -2404,6 +2409,7 @@ PopulateSummary = function(panel)
             secFS:SetSize(COL_LABEL - 4, h)
             secBg:EnableMouse(true)
             secBg:SetScript("OnMouseDown", function(_, button)
+                HideContextMenuOnLeftClick(button)
                 if button ~= "LeftButton" then return end
                 if not (IsAltKeyDown and IsAltKeyDown()) then return end
                 if not panel._rowDragReorderController then return end
@@ -2512,6 +2518,7 @@ PopulateSummary = function(panel)
             hit:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, curRowY)
             hit:SetSize(COL_LABEL - PAD, h - 1)
             hit:SetScript("OnMouseDown", function(_, button)
+                HideContextMenuOnLeftClick(button)
                 if button ~= "LeftButton" then return end
                 if not (IsAltKeyDown and IsAltKeyDown()) then return end
                 if not panel._rowDragReorderController then return end
@@ -2545,6 +2552,32 @@ PopulateSummary = function(panel)
                     if not _cid then return end
                     GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
                     GameTooltip:SetCurrencyByID(_cid)
+                    GameTooltip:Show()
+                end)
+            elseif row.type == "upgcost" then
+                local _tierIdx = row.tierIdx
+                local _fallbackName = row.label
+                local _cr, _cg, _cb = row.cr or th.r, row.cg or th.g, row.cb or th.b
+                hit:SetScript("OnEnter", function(s_)
+                    ShowHover(rowTop, h - 1)
+                    GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
+                    local info = Addon.GetCrestAchievementTooltipInfo
+                        and Addon:GetCrestAchievementTooltipInfo(_tierIdx)
+                    GameTooltip:SetText((info and info.name) or _fallbackName, _cr, _cg, _cb)
+                    if info and info.description then
+                        GameTooltip:AddLine(info.description, 1, 1, 1, true)
+                    end
+                    if info and info.rewardText then
+                        GameTooltip:AddLine(" ")
+                        GameTooltip:AddLine(info.rewardText, 0.35, 1.0, 0.35, true)
+                    end
+                    if info then
+                        local statusText = info.completed
+                            and (L.ALT_SUMMARY_ACHIEVEMENT_EARNED or "Achievement earned")
+                            or (L.ALT_SUMMARY_ACHIEVEMENT_NOT_EARNED or "Achievement not earned")
+                        GameTooltip:AddLine(" ")
+                        GameTooltip:AddLine(statusText, info.completed and 0.35 or 0.75, info.completed and 1.0 or 0.75, info.completed and 0.35 or 0.75)
+                    end
                     GameTooltip:Show()
                 end)
             else
@@ -2672,6 +2705,7 @@ PopulateSummary = function(panel)
                 GameTooltip:Show()
             end)
             col.hdrHit:SetScript("OnMouseDown", function(s_, button)
+                HideContextMenuOnLeftClick(button)
                 if button ~= "LeftButton" then return end
                 if not (IsAltKeyDown and IsAltKeyDown()) then return end
                 if not panel._dragReorderController then return end

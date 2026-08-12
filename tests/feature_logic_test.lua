@@ -43,8 +43,11 @@ Test.case("upgrade gear slots prefer best known watermark gear", function()
     local best = { [1] = { ilvl = 120 } }
     local equipped = { [1] = { ilvl = 110 } }
     Test.equal(addon:GetUpgradeGearSlots({ bestGearSlots = best, gearSlots = equipped }), best)
+    Test.equal(addon:GetEquippedUpgradeGearSlots({ bestGearSlots = best, gearSlots = equipped }), equipped)
     Test.equal(addon:GetUpgradeGearSlots({ gearSlots = equipped }), equipped)
+    Test.equal(addon:GetEquippedUpgradeGearSlots({ bestGearSlots = best }), best)
     Test.equal(addon:GetUpgradeGearSlots(nil), nil)
+    Test.equal(addon:GetEquippedUpgradeGearSlots(nil), nil)
 end)
 
 Test.case("item upgrade watermark uses the larger account value", function()
@@ -101,10 +104,13 @@ Test.case("crest discounts apply only through the high watermark", function()
     addon.TRACKING.crestUpgradeCostPerStep = { 20, 20, 20 }
     addon.TRACKING.crestUpgradeCostReduced = { 10, 10, 10 }
     addon.IsCrestDiscountUnlocked = function() return true end
-    addon.GetItemUpgradeHighWatermark = function() return 116 end
     local cost = addon:GetCrestSlotUpgradeCost(1, {
         rank = 1, maxRank = 6, ilvl = 110, link = "item:1",
-    }, {}, 2, 6)
+    }, {
+        bestGearSlots = {
+            [1] = { tierIdx = 2, rank = 4, maxRank = 6 },
+        },
+    }, 2, 6)
     Test.equal(cost, 70)
 end)
 
@@ -123,16 +129,293 @@ Test.case("limited crafted gear includes embellishments and rank caps", function
     Test.falsy(addon:IsSlotLimitedCrafted({ maxRank = 6 }, 6))
 end)
 
-Test.case("tier upgrade total excludes other tiers and limited gear", function()
+Test.case("tier upgrade total uses equipped gear and excludes other tiers and limited gear", function()
     local addon = loadFeatureAddon()
     addon.IsTrackingSnapshotCurrentSeason = function() return true end
     addon.GetCrestSlotUpgradeCost = function(_, slotID) return slotID * 10 end
-    local snap = { bestGearSlots = {
+    local snap = { gearSlots = {
         [1] = { tierIdx = 2, rank = 1, maxRank = 6 },
         [2] = { tierIdx = 3, rank = 1, maxRank = 6 },
         [3] = { tierIdx = 2, rank = 1, maxRank = 6, isEmbellished = true },
     } }
     Test.equal(addon:CalcTierUpgradeCost(snap, 2), 10)
+end)
+
+Test.case("tier upgrade total ignores equipped item when slot watermark is already maxed", function()
+    local addon = loadFeatureAddon()
+    addon.IsTrackingSnapshotCurrentSeason = function() return true end
+    addon.GetCrestSlotUpgradeCost = function(_, slotID) return slotID * 10 end
+    local snap = {
+        bestGearSlots = {
+            [1] = { tierIdx = 2, rank = 6, maxRank = 6 },
+        },
+        gearSlots = {
+            [1] = { tierIdx = 2, rank = 1, maxRank = 6 },
+        },
+    }
+    Test.equal(addon:CalcTierUpgradeCost(snap, 2), 0)
+end)
+
+Test.case("tier upgrade total ignores lower-track equipped item when slot watermark is higher", function()
+    local addon = loadFeatureAddon()
+    addon.IsTrackingSnapshotCurrentSeason = function() return true end
+    addon.GetCrestSlotUpgradeCost = function(_, slotID) return slotID * 10 end
+    local snap = {
+        bestGearSlots = {
+            [1] = { tierIdx = 3, rank = 1, maxRank = 6 },
+        },
+        gearSlots = {
+            [1] = { tierIdx = 2, rank = 4, maxRank = 6 },
+        },
+    }
+    Test.equal(addon:CalcTierUpgradeCost(snap, 2), 0)
+end)
+
+Test.case("tier upgrade total does not guess costs when snapshot has exact upgrade details", function()
+    local addon = loadFeatureAddon()
+    addon.IsTrackingSnapshotCurrentSeason = function() return true end
+    addon.IsCrestDiscountUnlocked = function() return false end
+    local snap = {
+        upgradeDetailsAvailable = true,
+        gearSlots = {
+            [1] = { tierIdx = 2, rank = 1, maxRank = 6, upgradeCostRemaining = 60 },
+            [2] = { tierIdx = 2, rank = 6, maxRank = 6 },
+            [3] = { tierIdx = 3, rank = 1, maxRank = 6 },
+        },
+    }
+    Test.equal(addon:CalcTierUpgradeCost(snap, 2), 60)
+end)
+
+Test.case("tier upgrade total discounts ranks covered by slot watermark", function()
+    local addon = loadFeatureAddon()
+    addon.IsTrackingSnapshotCurrentSeason = function() return true end
+    addon.IsCrestDiscountUnlocked = function() return true end
+    addon.TRACKING.crestUpgradeCostPerStep = 20
+    addon.TRACKING.crestUpgradeCostReduced = 10
+    local snap = {
+        gearSlots = {
+            [1] = { tierIdx = 4, rank = 1, maxRank = 6 },
+        },
+        bestGearSlots = {
+            [1] = { tierIdx = 4, rank = 3, maxRank = 6 },
+        },
+    }
+    Test.equal(addon:CalcTierUpgradeCost(snap, 4), 80)
+end)
+
+Test.case("tier achievement cost uses watermark gear instead of equipped gear", function()
+    local addon = loadFeatureAddon()
+    addon.IsTrackingSnapshotCurrentSeason = function() return true end
+    addon.IsCrestDiscountUnlocked = function() return false end
+    addon.TRACKING.crestUpgradeCostPerStep = 20
+    local watermarks = {}
+    for slot = 0, 16 do watermarks[slot] = 0 end
+    watermarks[0] = 124
+    watermarks[1] = 128
+    watermarks[2] = 131
+    local snap = {
+        itemUpgradeWatermarks = watermarks,
+        itemUpgradeWatermarksCaptured = true,
+        gearSlots = {
+            [1] = { tierIdx = 2, rank = 4, maxRank = 6 },
+        },
+        bestGearSlots = {
+            [1] = { tierIdx = 3, rank = 3, maxRank = 6 },
+        },
+    }
+    Test.equal(addon:CalcTierAchievementCost(snap, 2), 0)
+    Test.equal(addon:CalcTierAchievementCost(snap, 3), 80)
+end)
+
+Test.case("tier achievement cost uses redundancy slots and cheapest weapon watermark group", function()
+    local addon = loadFeatureAddon()
+    addon.IsTrackingSnapshotCurrentSeason = function() return true end
+    addon.IsCrestDiscountUnlocked = function() return false end
+    addon.TRACKING.ilvlBase = 266
+    addon.TRACKING.ilvlTrackStep = 13
+    addon.TRACKING.ilvlRankOffsets = { 0, 3, 6, 10, 13, 16 }
+    addon.TRACKING.crestCurrencyIDs = { 3442, 3443, 3444, 3445, 3446 }
+    addon.TRACKING.crestUpgradeCostPerStep = 20
+
+    local watermarks = {}
+    for slot = 0, 12 do watermarks[slot] = 318 end
+    watermarks[13] = 0
+    watermarks[14] = 0
+    watermarks[15] = 0
+    watermarks[16] = 0
+
+    Test.equal(addon:CalcTierAchievementCost({
+        itemUpgradeWatermarks = watermarks,
+        itemUpgradeWatermarksCaptured = true,
+    }, 5), 780)
+end)
+
+Test.case("tier achievement average item level expands redundant watermark slots", function()
+    local addon = loadFeatureAddon()
+    addon.TRACKING.ilvlBase = 266
+    addon.TRACKING.ilvlTrackStep = 13
+    addon.TRACKING.ilvlRankOffsets = { 0, 3, 6, 10, 13, 16 }
+    addon.TRACKING.crestCurrencyIDs = { 3442, 3443, 3444, 3445, 3446 }
+    addon.TRACKING.crestUpgradeCostPerStep = 20
+    addon.IsCrestDiscountUnlocked = function() return false end
+
+    local watermarks = {}
+    for slot = 0, 11 do watermarks[slot] = 318 end
+    watermarks[12] = 321
+    watermarks[13] = 321
+    watermarks[14] = 334
+    watermarks[15] = 318
+    watermarks[16] = 321
+
+    local average = addon:CalcCrestAchievementAverageItemLevel({
+        itemUpgradeWatermarks = watermarks,
+        itemUpgradeWatermarksCaptured = true,
+    }, 5)
+
+    Test.equal(("%.2f"):format(average), "318.38")
+end)
+
+Test.case("tier achievement average item level prefers equipped accessory slots", function()
+    local addon = loadFeatureAddon()
+    addon.TRACKING.ilvlBase = 266
+    addon.TRACKING.ilvlTrackStep = 13
+    addon.TRACKING.ilvlRankOffsets = { 0, 3, 6, 10, 13, 16 }
+    addon.TRACKING.crestCurrencyIDs = { 3442, 3443, 3444, 3445, 3446 }
+    addon.TRACKING.crestUpgradeCostPerStep = 20
+    addon.IsCrestDiscountUnlocked = function() return false end
+
+    local watermarks = {}
+    for slot = 0, 16 do watermarks[slot] = 318 end
+    local snap = {
+        itemUpgradeWatermarks = watermarks,
+        itemUpgradeWatermarksCaptured = true,
+        gearSlots = {
+            [11] = { ilvl = 321, itemUpgradeHighWatermark = 334 },
+            [12] = { ilvl = 318, itemUpgradeHighWatermark = 334 },
+            [13] = { ilvl = 318, itemUpgradeHighWatermark = 321 },
+            [14] = { ilvl = 321, itemUpgradeHighWatermark = 321 },
+            [16] = { ilvl = 328, itemUpgradeHighWatermark = 328 },
+            [17] = { ilvl = 315, itemUpgradeHighWatermark = 328 },
+        },
+        bestGearSlots = {
+            [11] = { itemUpgradeHighWatermark = 321 },
+            [12] = { itemUpgradeHighWatermark = 334 },
+            [13] = { itemUpgradeHighWatermark = 318 },
+            [14] = { itemUpgradeHighWatermark = 321 },
+            [16] = { itemUpgradeHighWatermark = 328 },
+            [17] = { itemUpgradeHighWatermark = 315 },
+        },
+    }
+
+    Test.equal(addon:CalcTierAchievementCost(snap, 5), 780)
+    Test.equal(("%.2f"):format(addon:CalcCrestAchievementAverageItemLevel(snap, 5)), "318.81")
+end)
+
+Test.case("tier achievement cost ignores watermarks below displayed item levels", function()
+    local addon = loadFeatureAddon()
+    addon.IsTrackingSnapshotCurrentSeason = function() return true end
+    addon.IsCrestDiscountUnlocked = function() return false end
+    addon.TRACKING.crestUpgradeCostPerStep = 20
+    addon.TRACKING.ilvlBase = 100
+    local snap = {
+        itemUpgradeWatermarks = {
+            [0] = 0,
+            [1] = 80,
+            [2] = 132,
+        },
+        itemUpgradeWatermarksCaptured = true,
+    }
+    Test.equal(addon:CalcTierAchievementCost(snap, 3), 0)
+end)
+
+Test.case("tier achievement breakpoints derive from the item level ladder", function()
+    local addon = loadFeatureAddon()
+    addon.TRACKING.ilvlBase = 266
+    addon.TRACKING.ilvlTrackStep = 13
+    addon.TRACKING.ilvlRankOffsets = { 0, 3, 6, 10, 13, 16 }
+    addon.TRACKING.crestCurrencyIDs = { 3442, 3443, 3444, 3445, 3446 }
+    Test.same(addon:GetCrestAchievementBreakpoints(1), { 272, 276, 279, 282 })
+    Test.same(addon:GetCrestAchievementBreakpoints(2), { 285, 289, 292, 295 })
+    Test.same(addon:GetCrestAchievementBreakpoints(3), { 298, 302, 305, 308 })
+    Test.same(addon:GetCrestAchievementBreakpoints(4), { 311, 315, 318, 321 })
+    Test.same(addon:GetCrestAchievementBreakpoints(5), { 324, 328, 331 })
+end)
+
+Test.case("tier achievement cost uses reduced steps after discount achievement is earned", function()
+    local addon = loadFeatureAddon()
+    addon.IsTrackingSnapshotCurrentSeason = function() return true end
+    addon.IsCrestDiscountUnlocked = function() return true end
+    addon.TRACKING.crestUpgradeCostPerStep = 20
+    addon.TRACKING.crestUpgradeCostReduced = 10
+    local watermarks = {}
+    for slot = 0, 16 do watermarks[slot] = 0 end
+    watermarks[0] = 124
+    watermarks[1] = 128
+    local snap = {
+        itemUpgradeWatermarks = watermarks,
+        itemUpgradeWatermarksCaptured = true,
+    }
+    Test.equal(addon:CalcTierAchievementCost(snap, 3), 40)
+end)
+
+Test.case("tier achievement cost falls back to best gear when slot watermarks are missing", function()
+    local addon = loadFeatureAddon()
+    addon.IsTrackingSnapshotCurrentSeason = function() return true end
+    addon.IsCrestDiscountUnlocked = function() return false end
+    addon.TRACKING.crestUpgradeCostPerStep = 20
+    local snap = {
+        gearSlots = {
+            [1] = { tierIdx = 2, rank = 4, maxRank = 6 },
+        },
+        bestGearSlots = {
+            [1] = { tierIdx = 3, rank = 3, maxRank = 6, ilvl = 124 },
+        },
+    }
+    Test.equal(addon:CalcTierAchievementCost(snap, 2), 0)
+    Test.equal(addon:CalcTierAchievementCost(snap, 3), 60)
+end)
+
+Test.case("tier achievement cost falls back when watermarks were not captured", function()
+    local addon = loadFeatureAddon()
+    addon.IsTrackingSnapshotCurrentSeason = function() return true end
+    addon.IsCrestDiscountUnlocked = function() return false end
+    addon.TRACKING.crestUpgradeCostPerStep = 20
+    local snap = {
+        itemUpgradeWatermarks = {},
+        itemUpgradeWatermarksCaptured = false,
+        bestGearSlots = {
+            [1] = { tierIdx = 3, rank = 3, maxRank = 6, ilvl = 124 },
+        },
+    }
+    Test.equal(addon:CalcTierAchievementCost(snap, 3), 60)
+end)
+
+Test.case("tier achievement cost falls back when captured watermarks are incomplete", function()
+    local addon = loadFeatureAddon()
+    addon.IsTrackingSnapshotCurrentSeason = function() return true end
+    addon.IsCrestDiscountUnlocked = function() return false end
+    addon.TRACKING.crestUpgradeCostPerStep = 20
+    local snap = {
+        itemUpgradeWatermarks = { [0] = 124 },
+        itemUpgradeWatermarksCaptured = true,
+        bestGearSlots = {
+            [1] = { tierIdx = 3, rank = 3, maxRank = 6, ilvl = 124 },
+        },
+    }
+    Test.equal(addon:CalcTierAchievementCost(snap, 3), 60)
+end)
+
+Test.case("tier achievement fallback ignores overlapping rank two cost", function()
+    local addon = loadFeatureAddon()
+    addon.IsTrackingSnapshotCurrentSeason = function() return true end
+    addon.IsCrestDiscountUnlocked = function() return false end
+    addon.TRACKING.crestUpgradeCostPerStep = 20
+    local snap = {
+        bestGearSlots = {
+            [1] = { tierIdx = 3, rank = 1, maxRank = 6, ilvl = 120 },
+        },
+    }
+    Test.equal(addon:CalcTierAchievementCost(snap, 3), 80)
 end)
 
 Test.case("tier upgrade total rejects stale season snapshots", function()
@@ -143,12 +426,79 @@ end)
 
 Test.case("crest availability combines held and tradeup amounts", function()
     local addon = loadFeatureAddon()
-    local held, tradeup, total = addon:GetCrestAvailabilityForTier({ rightRows = {
-        { type = "crest", id = 102, qty = "15", tradeup = 6 },
+    local held, tradeup, total, earnable = addon:GetCrestAvailabilityForTier({ rightRows = {
+        { type = "crest", id = 102, qty = "15", tradeup = 6, earned = 20, cap = 100 },
     } }, 2)
     Test.equal(held, 15)
     Test.equal(tradeup, 6)
-    Test.equal(total, 21)
+    Test.equal(total, 101)
+    Test.equal(earnable, 80)
+end)
+
+Test.case("crest tradeups use separate unlock achievements from displayed rows", function()
+    local addon = loadFeatureAddon()
+    addon.TRACKING.crestCurrencyIDs = { 101, 102 }
+    addon.TRACKING.crestAchievementIDs = { [2] = 62411 }
+    addon.TRACKING.crestTradeupAchievementIDs = { 62410, 62411 }
+    addon.GetTrackedCurrencyEntries = function()
+        return {
+            { type = addon.SNAP_TYPES.CREST, id = 101, crestIdx = 1 },
+            { type = addon.SNAP_TYPES.CREST, id = 102, crestIdx = 2 },
+        }
+    end
+    _G.GetAchievementInfo = function(id)
+        return nil, nil, nil, false, nil, nil, nil, nil, nil, nil, nil, nil, id == 62410
+    end
+    Harness.currencyInfo[101] = {
+        name = "Adventurer Crest",
+        iconFileID = 1,
+        quantity = 30,
+        maxQuantity = 100,
+        totalEarned = 30,
+        quality = 4,
+    }
+    Harness.currencyInfo[102] = {
+        name = "Veteran Crest",
+        iconFileID = 2,
+        quantity = 0,
+        maxQuantity = 100,
+        totalEarned = 0,
+        quality = 4,
+    }
+
+    local snap = { rightRows = {} }
+    addon:FillCurrencySnapshot(snap)
+
+    Test.equal(snap.rightRows[2].tradeup, 10)
+end)
+
+Test.case("crest achievement cap weeks subtract current and earnable crests", function()
+    local addon = loadFeatureAddon()
+    Test.equal(addon:CalcCrestAchievementCapWeeksNeeded(350, 70, 30, 100), 2)
+    Test.equal(addon:CalcCrestAchievementCapWeeksNeeded(350, 250, 25, 100), 0)
+end)
+
+Test.case("currency snapshots store crest caps for earnable availability", function()
+    local addon = loadFeatureAddon()
+    Harness.currencyInfo[102] = {
+        name = "Weathered Crest",
+        iconFileID = 1,
+        quantity = 15,
+        maxQuantity = 100,
+        totalEarned = 20,
+        quality = 4,
+    }
+    addon.GetTrackedCurrencyEntries = function()
+        return { { type = addon.SNAP_TYPES.CREST, id = 102, crestIdx = 2 } }
+    end
+
+    local snap = { rightRows = {} }
+    addon:FillCurrencySnapshot(snap)
+
+    Test.equal(snap.rightRows[1].cap, 100)
+    local _, _, total, earnable = addon:GetCrestAvailabilityForTier(snap, 2)
+    Test.equal(total, 95)
+    Test.equal(earnable, 80)
 end)
 
 Test.case("currency panel keeps fallback rows for unknown currency ids", function()
@@ -229,7 +579,7 @@ Test.case("currency snapshot keeps unknown currency ids", function()
     Test.equal(snap.rightRows[2].id, 999)
 end)
 
-Test.case("currency snapshots store alt amounts without caps", function()
+Test.case("currency snapshots store alt crest amounts with caps", function()
     local addon = loadFeatureAddon()
     addon.TRACKING.crestCurrencyIDs = { 101 }
     addon.GetTrackedCurrencyConfig = function()
@@ -251,7 +601,7 @@ Test.case("currency snapshots store alt amounts without caps", function()
     Test.equal(#snap.rightRows, 1)
     Test.equal(snap.rightRows[1].qty, 7)
     Test.equal(snap.rightRows[1].earned, 7)
-    Test.equal(snap.rightRows[1].cap, nil)
+    Test.equal(snap.rightRows[1].cap, 90)
 end)
 
 Test.case("alt summary resets all currencies when a saved cap is above current cap", function()
@@ -333,6 +683,30 @@ Test.case("alt summary resets capless currencies from stale season snapshots", f
     Test.equal(sd.crestTradeups[1], 0)
     Test.equal(sd.sprkQty, 0)
     Test.equal(sd.sprkCap, 1)
+end)
+
+Test.case("alt summary does not clamp crest tradeup to current cap", function()
+    local addon = loadAltSummaryAddon()
+    addon.TRACKING.crestCurrencyIDs = { 3445 }
+    Harness.currencyInfo[3445] = {
+        name = "Heroic Crest",
+        iconFileID = 1,
+        quantity = 0,
+        maxQuantity = 0,
+        totalEarned = 0,
+        quality = 4,
+    }
+
+    local sd = addon:_ExtractAltSummarySnapDataForTest({
+        rightRows = {
+            { type = addon.SNAP_TYPES.CREST, id = 3445, qty = 0, earned = 0, tradeup = 10 },
+        },
+    }, { 3445 })
+
+    Test.equal(sd.crestQtys[1], 0)
+    Test.equal(sd.crestEarneds[1], 0)
+    Test.equal(sd.crestCaps[1], 0)
+    Test.equal(sd.crestTradeups[1], 10)
 end)
 
 Test.case("alt summary clamps season misc currencies when current cap is zero", function()
@@ -423,6 +797,214 @@ Test.case("snapshot season validation handles tagged and legacy data", function(
     Test.falsy(addon:IsTrackingSnapshotCurrentSeason({ rightRows = {
         { type = "crest", id = 999 },
     } }))
+end)
+
+Test.case("snapshot captures item upgrade watermarks by redundancy slot", function()
+    local addon = loadFeatureAddon()
+    Harness.load(addon, "features/services/general/LariasWeeklyChecklist_Snapshot.lua")
+    addon.TRACKING.gearSlotIDs = {}
+    addon.GetGVData = function() return nil, {} end
+    addon.FillCurrencySnapshot = function() end
+    addon.TrackingSnapshotAPI.ItemUpgrade = {
+        GetHighWatermarkForSlot = function(slot)
+            return 280 + slot
+        end,
+    }
+
+    local snap = {}
+    addon:BuildTrackingSnapshot(snap, { vault = false, gear = true, currency = false })
+    Test.truthy(snap.itemUpgradeWatermarksCaptured)
+    Test.equal(snap.itemUpgradeWatermarks[0], 280)
+    Test.equal(snap.itemUpgradeWatermarks[16], 296)
+end)
+
+Test.case("snapshot stores item-specific high watermark on gear slots", function()
+    local addon = loadFeatureAddon()
+    Harness.load(addon, "features/services/general/LariasWeeklyChecklist_Snapshot.lua")
+    addon.TRACKING.gearSlotIDs = { 11 }
+    addon.GetGVData = function() return nil, {} end
+    addon.FillCurrencySnapshot = function() end
+    addon.TrackingSnapshotAPI.GetInventoryItemLink = function(_, slotID)
+        return slotID == 11 and "item:ring" or nil
+    end
+    addon.TrackingSnapshotAPI.GetDetailedItemLevelInfo = function() return 318 end
+    addon.TrackingSnapshotAPI.ItemUpgrade = {
+        GetHighWatermarkForSlot = function(slot) return 280 + slot end,
+        GetHighWatermarkForItem = function()
+            return 321, 334
+        end,
+    }
+
+    local snap = {}
+    addon:BuildTrackingSnapshot(snap, { vault = false, gear = true, currency = false })
+    Test.equal(snap.gearSlots[11].itemUpgradeHighWatermark, 334)
+    Test.equal(snap.bestGearSlots[11].itemUpgradeHighWatermark, 334)
+end)
+
+Test.case("snapshot rejects incomplete item upgrade watermark capture", function()
+    local addon = loadFeatureAddon()
+    Harness.load(addon, "features/services/general/LariasWeeklyChecklist_Snapshot.lua")
+    addon.TRACKING.gearSlotIDs = {}
+    addon.GetGVData = function() return nil, {} end
+    addon.FillCurrencySnapshot = function() end
+    addon.TrackingSnapshotAPI.ItemUpgrade = {
+        GetHighWatermarkForSlot = function(slot)
+            if slot == 16 then return nil end
+            return 280 + slot
+        end,
+    }
+
+    local snap = {}
+    addon:BuildTrackingSnapshot(snap, { vault = false, gear = true, currency = false })
+    Test.falsy(snap.itemUpgradeWatermarksCaptured)
+    Test.equal(snap.itemUpgradeWatermarks[16], nil)
+end)
+
+Test.case("snapshot item upgrade track string wins over cost currency tier correction", function()
+    local addon = loadFeatureAddon()
+    Harness.load(addon, "features/services/general/LariasWeeklyChecklist_Snapshot.lua")
+    addon.TRACKING.crestCurrencyIDs = { 101, 102, 103, 104, 105 }
+    addon.TRACKING.gearSlotIDs = { 1 }
+    addon.TRACKING.ilvlBase = 100
+    addon.TRACKING.ilvlTrackStep = 10
+    addon.TRACKING.ilvlRankOffsets = { 0, 3, 6, 10, 13, 16 }
+    addon.GetGVData = function() return nil, {} end
+    addon.FillCurrencySnapshot = function() end
+    addon.TrackingSnapshotAPI.GetInventoryItemLink = function(_, slotID)
+        return slotID == 1 and "item:champion" or nil
+    end
+    addon.TrackingSnapshotAPI.GetDetailedItemLevelInfo = function() return 110 end
+    addon.TrackingSnapshotAPI.Item = {
+        GetItemUpgradeInfo = function()
+            return { currentLevel = 1, maxLevel = 6, trackString = "Champion" }
+        end,
+    }
+    addon.TrackingSnapshotAPI.ItemLocation = {
+        CreateFromEquipmentSlot = function(slotID) return { slotID = slotID } end,
+    }
+    addon.TrackingSnapshotAPI.ItemUpgrade = {
+        SetItemUpgradeFromLocation = function() end,
+        GetItemUpgradeItemInfo = function()
+            return {
+                currUpgrade = 1,
+                maxUpgrade = 6,
+                upgradeLevelInfos = {
+                    { currencyCostsToUpgrade = { { currencyID = 102, cost = 20 } } },
+                },
+            }
+        end,
+        ClearItemUpgrade = function() end,
+    }
+
+    local snap = {}
+    addon:BuildTrackingSnapshot(snap, { vault = false, gear = true, currency = false })
+    Test.equal(snap.gearSlots[1].tierIdx, 3)
+    Test.equal(snap.gearSlots[1].rank, 1)
+    Test.equal(snap.gearSlots[1].maxRank, 6)
+    Test.truthy(snap.gearSlots[1].trackTierConfirmed)
+end)
+
+Test.case("snapshot parses upgrade track and rank from item tooltip", function()
+    local addon = loadFeatureAddon()
+    Harness.load(addon, "features/services/general/LariasWeeklyChecklist_Snapshot.lua")
+    addon.TRACKING.crestCurrencyIDs = { 101, 102, 103, 104, 105 }
+    addon.TRACKING.gearSlotIDs = { 1 }
+    addon.TRACKING.ilvlBase = 100
+    addon.TRACKING.ilvlTrackStep = 10
+    addon.TRACKING.ilvlRankOffsets = { 0, 3, 6, 10, 13, 16 }
+    addon.GetGVData = function() return nil, {} end
+    addon.FillCurrencySnapshot = function() end
+    addon.TrackingSnapshotAPI.GetInventoryItemLink = function(_, slotID)
+        return slotID == 1 and "item:champion-tooltip" or nil
+    end
+    addon.TrackingSnapshotAPI.GetDetailedItemLevelInfo = function() return 110 end
+    addon.TrackingSnapshotAPI.Item = {
+        GetItemUpgradeInfo = function() return nil end,
+    }
+    addon.TrackingSnapshotAPI.TooltipInfo = {
+        GetHyperlink = function()
+            return {
+                lines = {
+                    { leftText = "Soulbound" },
+                    { leftText = "|cffa335eeUpgrade Level: Champion 1/6|r" },
+                },
+            }
+        end,
+    }
+    addon.TrackingSnapshotAPI.ItemLocation = {
+        CreateFromEquipmentSlot = function(slotID) return { slotID = slotID } end,
+    }
+    addon.TrackingSnapshotAPI.ItemUpgrade = {
+        SetItemUpgradeFromLocation = function() end,
+        GetItemUpgradeItemInfo = function()
+            return {
+                currUpgrade = 1,
+                maxUpgrade = 6,
+                upgradeLevelInfos = {
+                    { currencyCostsToUpgrade = { { currencyID = 102, cost = 20 } } },
+                },
+            }
+        end,
+        ClearItemUpgrade = function() end,
+    }
+
+    local snap = {}
+    addon:BuildTrackingSnapshot(snap, { vault = false, gear = true, currency = false })
+    Test.equal(snap.gearSlots[1].tierIdx, 3)
+    Test.equal(snap.gearSlots[1].rank, 1)
+    Test.equal(snap.gearSlots[1].maxRank, 6)
+    Test.truthy(snap.gearSlots[1].trackTierConfirmed)
+end)
+
+Test.case("snapshot treats explicitly non-upgradeable tracked items as capped", function()
+    local addon = loadFeatureAddon()
+    Harness.load(addon, "features/services/general/LariasWeeklyChecklist_Snapshot.lua")
+    addon.TRACKING.crestCurrencyIDs = { 101, 102, 103, 104, 105 }
+    addon.TRACKING.gearSlotIDs = { 1 }
+    addon.TRACKING.ilvlBase = 100
+    addon.TRACKING.ilvlTrackStep = 10
+    addon.TRACKING.ilvlRankOffsets = { 0, 3, 6, 10, 13, 16 }
+    addon.GetGVData = function() return nil, {} end
+    addon.FillCurrencySnapshot = function() end
+    addon.TrackingSnapshotAPI.GetInventoryItemLink = function(_, slotID)
+        return slotID == 1 and "item:veteran-capped" or nil
+    end
+    addon.TrackingSnapshotAPI.GetDetailedItemLevelInfo = function() return 120 end
+    addon.TrackingSnapshotAPI.Item = {
+        GetItemUpgradeInfo = function() return nil end,
+    }
+    addon.TrackingSnapshotAPI.TooltipInfo = {
+        GetHyperlink = function()
+            return {
+                lines = {
+                    { leftText = "Upgrade Level: Veteran 4/6" },
+                },
+            }
+        end,
+    }
+    addon.TrackingSnapshotAPI.ItemLocation = {
+        CreateFromEquipmentSlot = function(slotID) return { slotID = slotID } end,
+    }
+    addon.TrackingSnapshotAPI.ItemUpgrade = {
+        SetItemUpgradeFromLocation = function() end,
+        GetItemUpgradeItemInfo = function()
+            return {
+                itemUpgradeable = false,
+                currUpgrade = 4,
+                maxUpgrade = 6,
+                upgradeLevelInfos = {},
+            }
+        end,
+        ClearItemUpgrade = function() end,
+    }
+
+    local snap = {}
+    addon:BuildTrackingSnapshot(snap, { vault = false, gear = true, currency = false })
+    Test.equal(snap.gearSlots[1].tierIdx, 2)
+    Test.equal(snap.gearSlots[1].rank, 4)
+    Test.equal(snap.gearSlots[1].trueMaxRank, 4)
+    Test.equal(snap.gearSlots[1].upgradeCostRemaining, 0)
+    Test.equal(addon:CalcTierUpgradeCost(snap, 2), 0)
 end)
 
 local function loadFooterAddon()
