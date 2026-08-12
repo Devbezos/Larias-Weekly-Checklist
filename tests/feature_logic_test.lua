@@ -227,7 +227,7 @@ Test.case("tier achievement cost uses watermark gear instead of equipped gear", 
     Test.equal(addon:CalcTierAchievementCost(snap, 3), 80)
 end)
 
-Test.case("tier achievement cost uses redundancy slots and cheapest weapon watermark group", function()
+Test.case("tier achievement cost uses two-hand watermark when it is highest", function()
     local addon = loadFeatureAddon()
     addon.IsTrackingSnapshotCurrentSeason = function() return true end
     addon.IsCrestDiscountUnlocked = function() return false end
@@ -250,7 +250,28 @@ Test.case("tier achievement cost uses redundancy slots and cheapest weapon water
     }, 5), 780)
 end)
 
-Test.case("tier achievement average item level expands redundant watermark slots", function()
+Test.case("tier achievement cost uses two highest weapon watermarks when two-hand is not highest", function()
+    local addon = loadFeatureAddon()
+    addon.IsTrackingSnapshotCurrentSeason = function() return true end
+    addon.IsCrestDiscountUnlocked = function() return false end
+    addon.TRACKING.ilvlBase = 266
+    addon.TRACKING.ilvlTrackStep = 13
+    addon.TRACKING.ilvlRankOffsets = { 0, 3, 6, 10, 13, 16 }
+    addon.TRACKING.crestCurrencyIDs = { 3442, 3443, 3444, 3445, 3446 }
+    addon.TRACKING.crestUpgradeCostPerStep = 20
+
+    local watermarks = {}
+    for slot = 0, 16 do watermarks[slot] = 0 end
+    watermarks[12] = 318
+    watermarks[13] = 321
+
+    Test.equal(addon:CalcTierAchievementCost({
+        itemUpgradeWatermarks = watermarks,
+        itemUpgradeWatermarksCaptured = true,
+    }, 5), 120)
+end)
+
+Test.case("tier achievement average item level uses watermark buckets", function()
     local addon = loadFeatureAddon()
     addon.TRACKING.ilvlBase = 266
     addon.TRACKING.ilvlTrackStep = 13
@@ -272,10 +293,10 @@ Test.case("tier achievement average item level expands redundant watermark slots
         itemUpgradeWatermarksCaptured = true,
     }, 5)
 
-    Test.equal(("%.2f"):format(average), "318.38")
+    Test.equal(("%.2f"):format(average), "319.47")
 end)
 
-Test.case("tier achievement average item level prefers equipped accessory slots", function()
+Test.case("tier achievement average item level ignores equipped physical slots", function()
     local addon = loadFeatureAddon()
     addon.TRACKING.ilvlBase = 266
     addon.TRACKING.ilvlTrackStep = 13
@@ -308,7 +329,7 @@ Test.case("tier achievement average item level prefers equipped accessory slots"
     }
 
     Test.equal(addon:CalcTierAchievementCost(snap, 5), 780)
-    Test.equal(("%.2f"):format(addon:CalcCrestAchievementAverageItemLevel(snap, 5)), "318.81")
+    Test.equal(("%.2f"):format(addon:CalcCrestAchievementAverageItemLevel(snap, 5)), "318.00")
 end)
 
 Test.case("tier achievement cost ignores watermarks below displayed item levels", function()

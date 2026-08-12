@@ -878,28 +878,6 @@ local WATERMARK_ONEHAND_SLOT = 14
 local WATERMARK_ONEHAND_SECOND_SLOT = 15
 local WATERMARK_OFFHAND_SLOT = 16
 
-local WATERMARK_AVERAGE_LABELS = {
-    [0]  = "Head",
-    [1]  = "Neck",
-    [2]  = "Shoulder",
-    [3]  = "Chest",
-    [4]  = "Waist",
-    [5]  = "Legs",
-    [6]  = "Feet",
-    [7]  = "Wrist",
-    [8]  = "Hands",
-    [11] = "Cloak",
-}
-
-local PHYSICAL_SLOT_LABELS = {
-    [11] = "Finger 1",
-    [12] = "Finger 2",
-    [13] = "Trinket 1",
-    [14] = "Trinket 2",
-    [16] = "Main Hand",
-    [17] = "Off Hand",
-}
-
 local function HasCompleteItemUpgradeWatermarks(watermarks)
     if type(watermarks) ~= "table" then return false end
     for slot = 0, 16 do
@@ -921,32 +899,49 @@ local function CalcWatermarkUpgradeCost(watermark, breakpoints, minimumWatermark
     return cost
 end
 
-local function CalcWatermarkWeaponGroupCost(watermarks, slots, breakpoints, minimumWatermark, costPerStep)
-    local cost = 0
-    for _, slot in ipairs(slots) do
-        local slotCost = CalcWatermarkUpgradeCost(watermarks[slot], breakpoints, minimumWatermark, costPerStep)
-        if slotCost == nil then return nil end
-        cost = cost + slotCost
-    end
-    return cost
-end
-
-local WATERMARK_WEAPON_GROUPS = {
-    { WATERMARK_TWOHAND_SLOT },
-    { WATERMARK_MAINHAND_SLOT, WATERMARK_OFFHAND_SLOT },
-    { WATERMARK_ONEHAND_SLOT, WATERMARK_ONEHAND_SECOND_SLOT },
+local WATERMARK_WEAPON_SLOTS = {
+    WATERMARK_TWOHAND_SLOT,
+    WATERMARK_MAINHAND_SLOT,
+    WATERMARK_ONEHAND_SLOT,
+    WATERMARK_ONEHAND_SECOND_SLOT,
+    WATERMARK_OFFHAND_SLOT,
 }
 
-local function GetCheapestWatermarkWeaponGroup(watermarks, breakpoints, minimumWatermark, costPerStep)
-    local weaponCost, weaponSlots
-    for _, slots in ipairs(WATERMARK_WEAPON_GROUPS) do
-        local groupCost = CalcWatermarkWeaponGroupCost(watermarks, slots, breakpoints, minimumWatermark, costPerStep)
-        if groupCost and (not weaponCost or groupCost < weaponCost) then
-            weaponCost = groupCost
-            weaponSlots = slots
+local function GetPreferredWatermarkWeaponSlots(watermarks, minimumWatermark)
+    local minimum = tonumber(minimumWatermark) or 0
+    local twoHandWatermark = tonumber(watermarks[WATERMARK_TWOHAND_SLOT]) or 0
+    local highestWeaponWatermark = twoHandWatermark
+
+    for _, slot in ipairs(WATERMARK_WEAPON_SLOTS) do
+        local watermark = tonumber(watermarks[slot]) or 0
+        if watermark > highestWeaponWatermark then
+            highestWeaponWatermark = watermark
         end
     end
-    return weaponCost, weaponSlots
+
+    if twoHandWatermark >= minimum and twoHandWatermark >= highestWeaponWatermark then
+        return { WATERMARK_TWOHAND_SLOT }
+    end
+
+    local ranked = {}
+    for _, slot in ipairs(WATERMARK_WEAPON_SLOTS) do
+        local watermark = tonumber(watermarks[slot]) or 0
+        if watermark >= minimum then
+            ranked[#ranked + 1] = { slot = slot, watermark = watermark }
+        end
+    end
+    table.sort(ranked, function(a, b)
+        if a.watermark == b.watermark then
+            return a.slot < b.slot
+        end
+        return a.watermark > b.watermark
+    end)
+
+    local weaponSlots = {}
+    for i = 1, math.min(2, #ranked) do
+        weaponSlots[#weaponSlots + 1] = ranked[i].slot
+    end
+    return weaponSlots
 end
 
 local function ForEachAchievementWatermark(watermarks, minimumWatermark, weaponSlots, fn)
@@ -965,94 +960,9 @@ local function ForEachAchievementWatermark(watermarks, minimumWatermark, weaponS
     end
 end
 
-local function PushHighestPhysicalSlotWatermarks(values, gearSlots, slotIDs, limit, minimumWatermark)
-    if type(gearSlots) ~= "table" then return end
-    local found = {}
-    for _, slotID in ipairs(slotIDs or {}) do
-        local slotData = gearSlots[slotID]
-        local watermark = type(slotData) == "table"
-            and (tonumber(slotData.ilvl) or 0)
-            or 0
-        if watermark >= (tonumber(minimumWatermark) or 0) then
-            found[#found + 1] = {
-                label = PHYSICAL_SLOT_LABELS[slotID] or ("Slot " .. tostring(slotID)),
-                ilvl = watermark,
-                source = "equipped",
-            }
-        end
-    end
-    table.sort(found, function(a, b) return (a.ilvl or 0) > (b.ilvl or 0) end)
-    for i = 1, math.min(tonumber(limit) or #found, #found) do
-        values[#values + 1] = found[i]
-    end
-end
-
-local function PushFallbackWatermark(values, watermark, count, label, minimumWatermark)
-    watermark = tonumber(watermark) or 0
-    if watermark < (tonumber(minimumWatermark) or 0) then return end
-    for i = 1, count or 1 do
-        values[#values + 1] = {
-            label = label and (label .. " " .. tostring(i)) or "Fallback",
-            ilvl = watermark,
-            source = "bucket",
-        }
-    end
-end
-
-local function BuildCrestAchievementAverageEntries(snap, watermarks, minimumWatermark, weaponSlots)
-    local entries = {}
-    for slot = 0, 11 do
-        if slot ~= 9 and slot ~= 10 then
-            local watermark = tonumber(watermarks[slot]) or 0
-            if watermark >= minimumWatermark then
-                entries[#entries + 1] = {
-                    label = WATERMARK_AVERAGE_LABELS[slot] or ("Slot " .. tostring(slot)),
-                    ilvl = watermark,
-                    source = "bucket",
-                }
-            end
-        end
-    end
-
-    local gearSlots = type(snap) == "table" and snap.gearSlots or nil
-
-    local before = #entries
-    PushHighestPhysicalSlotWatermarks(entries, gearSlots, { 11, 12 }, 2, minimumWatermark)
-    if #entries - before < 2 then
-        PushFallbackWatermark(entries, watermarks[9], 2 - (#entries - before), "Finger", minimumWatermark)
-    end
-
-    before = #entries
-    PushHighestPhysicalSlotWatermarks(entries, gearSlots, { 13, 14 }, 2, minimumWatermark)
-    if #entries - before < 2 then
-        PushFallbackWatermark(entries, watermarks[10], 2 - (#entries - before), "Trinket", minimumWatermark)
-    end
-
-    before = #entries
-    PushHighestPhysicalSlotWatermarks(entries, gearSlots, { 16, 17 }, 2, minimumWatermark)
-    if #entries - before < 2 then
-        local needed = 2 - (#entries - before)
-        for _, slot in ipairs(weaponSlots or {}) do
-            local watermark = tonumber(watermarks[slot]) or 0
-            if watermark >= minimumWatermark then
-                for i = 1, needed do
-                    entries[#entries + 1] = {
-                        label = (PHYSICAL_SLOT_LABELS[slot] or "Weapon") .. " " .. tostring(i),
-                        ilvl = watermark,
-                        source = "bucket",
-                    }
-                end
-                return entries
-            end
-        end
-    end
-
-    return entries
-end
-
 local function CalcWatermarkAchievementCost(watermarks, breakpoints, minimumWatermark, costPerStep)
     local totalCost = 0
-    local weaponCost, weaponSlots = GetCheapestWatermarkWeaponGroup(watermarks, breakpoints, minimumWatermark, costPerStep)
+    local weaponSlots = GetPreferredWatermarkWeaponSlots(watermarks, minimumWatermark)
     ForEachAchievementWatermark(watermarks, minimumWatermark, weaponSlots, function(watermark)
         totalCost = totalCost + (CalcWatermarkUpgradeCost(watermark, breakpoints, minimumWatermark, costPerStep) or 0)
     end)
@@ -1108,16 +1018,15 @@ function Addon:CalcCrestAchievementAverageItemLevel(snap, tierIdx)
         return nil
     end
 
-    local breakpoints = self:GetCrestAchievementBreakpoints(tierIdx)
-    if type(breakpoints) ~= "table" then return nil end
     local minimumWatermark = self:GetMinimumDisplayedItemLevel()
-    local costPerStep = self:GetCrestAchievementStepCost(tierIdx)
-    local weaponSlots = select(2, GetCheapestWatermarkWeaponGroup(watermarks, breakpoints, minimumWatermark, costPerStep))
-    local entries = BuildCrestAchievementAverageEntries(snap, watermarks, minimumWatermark, weaponSlots)
-    local total, count = 0, #entries
+    local total, count = 0, 0
 
-    for i = 1, #entries do
-        total = total + (tonumber(entries[i].ilvl) or 0)
+    for slot = 0, 16 do
+        local watermark = tonumber(watermarks[slot]) or 0
+        if watermark >= minimumWatermark then
+            total = total + watermark
+            count = count + 1
+        end
     end
 
     if count == 0 then return nil end

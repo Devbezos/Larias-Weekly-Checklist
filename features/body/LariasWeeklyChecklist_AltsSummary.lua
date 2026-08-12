@@ -1791,6 +1791,9 @@ local function RenderUpgradeCostCell(cell, row, snap, noSnap, alpha, th)
             if _avgItemLevelText and targetIlvl then
                 GameTooltip:AddLine((L.ALT_SUMMARY_ACHIEVEMENT_ILVL_FMT or "Item level: %s / %d")
                     :format(_avgItemLevelText, targetIlvl), 0.85, 0.85, 0.85)
+                GameTooltip:AddLine(L.ALT_SUMMARY_ACHIEVEMENT_ILVL_NOTE
+                    or "* This item level is calculated using watermarks. For rings, trinkets, and weapons, your lower item-level piece is used until both matching slots have the same item level. *",
+                    0.6, 0.6, 0.6, true)
             end
             GameTooltip:Show()
         end)

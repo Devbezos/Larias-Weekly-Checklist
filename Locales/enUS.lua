@@ -336,6 +336,7 @@ local STRINGS = {
 	ALT_SUMMARY_AVAILABLE_NEED_FMT = "Available: %d  /  Need: %d",
 	ALT_SUMMARY_HELD_TRADEUP_FMT = "Held: %d  +  Trade-up: %d",
 	ALT_SUMMARY_ACHIEVEMENT_ILVL_FMT = "Item level: %s / %d",
+	ALT_SUMMARY_ACHIEVEMENT_ILVL_NOTE = "* This item level is calculated using watermarks. For rings, trinkets, and weapons, your lower item-level piece is used until both matching slots have the same item level. *",
 	ALT_SUMMARY_ACHIEVEMENT_CAP_WEEKS_FMT = "Number of weeks left: %d",
 	ALT_SUMMARY_NO_SLOTS_NEED_UPGRADING = "No slots need upgrading",
 	ALT_SUMMARY_SIGIL_NEEDED_FMT = "%s / %d needed",
