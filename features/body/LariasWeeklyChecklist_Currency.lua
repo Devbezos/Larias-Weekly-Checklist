@@ -861,6 +861,63 @@ local function ResolveTierCost(value, tierIdx, fallback)
     return fallback
 end
 
+local WATERMARK_FINGER_SLOT = 9
+local WATERMARK_TRINKET_SLOT = 10
+local WATERMARK_TWOHAND_SLOT = 12
+local WATERMARK_MAINHAND_SLOT = 13
+local WATERMARK_ONEHAND_SLOT = 14
+local WATERMARK_ONEHAND_SECOND_SLOT = 15
+local WATERMARK_OFFHAND_SLOT = 16
+
+local function CalcWatermarkUpgradeCost(watermark, breakpoints, minimumWatermark, costPerStep)
+    watermark = tonumber(watermark) or 0
+    if watermark < minimumWatermark then return nil end
+
+    local cost = 0
+    for _, breakpoint in ipairs(breakpoints) do
+        if watermark < breakpoint then
+            cost = cost + costPerStep
+        end
+    end
+    return cost
+end
+
+local function CalcWatermarkWeaponGroupCost(watermarks, slots, breakpoints, minimumWatermark, costPerStep)
+    local cost = 0
+    for _, slot in ipairs(slots) do
+        local slotCost = CalcWatermarkUpgradeCost(watermarks[slot], breakpoints, minimumWatermark, costPerStep)
+        if slotCost == nil then return nil end
+        cost = cost + slotCost
+    end
+    return cost
+end
+
+local function CalcWatermarkAchievementCost(watermarks, breakpoints, minimumWatermark, costPerStep)
+    local totalCost = 0
+    for slot = 0, 11 do
+        local slotCost = CalcWatermarkUpgradeCost(watermarks[slot], breakpoints, minimumWatermark, costPerStep)
+        if slotCost then
+            local weight = (slot == WATERMARK_FINGER_SLOT or slot == WATERMARK_TRINKET_SLOT) and 2 or 1
+            totalCost = totalCost + slotCost * weight
+        end
+    end
+
+    local weaponCost
+    local weaponGroups = {
+        { WATERMARK_TWOHAND_SLOT },
+        { WATERMARK_MAINHAND_SLOT, WATERMARK_OFFHAND_SLOT },
+        { WATERMARK_ONEHAND_SLOT, WATERMARK_ONEHAND_SECOND_SLOT },
+    }
+    for _, slots in ipairs(weaponGroups) do
+        local groupCost = CalcWatermarkWeaponGroupCost(watermarks, slots, breakpoints, minimumWatermark, costPerStep)
+        if groupCost and (not weaponCost or groupCost < weaponCost) then
+            weaponCost = groupCost
+        end
+    end
+
+    return totalCost + (weaponCost or 0)
+end
+
 function Addon:GetCrestAchievementBreakpoints(tierIdx)
     local tracking = self.TRACKING or {}
     tierIdx = tonumber(tierIdx)
@@ -868,7 +925,7 @@ function Addon:GetCrestAchievementBreakpoints(tierIdx)
     local step = tonumber(tracking.ilvlTrackStep)
     local offsets = tracking.ilvlRankOffsets
     local crestIDs = tracking.crestCurrencyIDs
-    if not (tierIdx and tierIdx > 1 and base and step and type(offsets) == "table"
+    if not (tierIdx and tierIdx >= 1 and base and step and type(offsets) == "table"
             and #offsets > 0 and type(crestIDs) == "table") then
         return nil
     end
@@ -891,10 +948,44 @@ function Addon:GetCrestAchievementBreakpoints(tierIdx)
     return (#breakpoints > 0) and breakpoints or nil
 end
 
+function Addon:GetCrestAchievementTargetItemLevel(tierIdx)
+    local breakpoints = self:GetCrestAchievementBreakpoints(tierIdx)
+    return type(breakpoints) == "table" and tonumber(breakpoints[#breakpoints]) or nil
+end
+
 function Addon:GetMinimumDisplayedItemLevel()
     local tracking = self.TRACKING or {}
     local base = tonumber(tracking.ilvlBase)
     return base and base > 0 and base or 0
+end
+
+function Addon:CalcCrestAchievementAverageItemLevel(snap)
+    local watermarks = type(snap) == "table" and snap.itemUpgradeWatermarks or nil
+    if type(watermarks) ~= "table" then return nil end
+
+    local minimumWatermark = self:GetMinimumDisplayedItemLevel()
+    local total, count = 0, 0
+    for _, value in pairs(watermarks) do
+        local watermark = tonumber(value) or 0
+        if watermark >= minimumWatermark then
+            total = total + watermark
+            count = count + 1
+        end
+    end
+
+    if count == 0 then return nil end
+    return total / count
+end
+
+function Addon:GetCrestAchievementStepCost(tierIdx)
+    local tracking = self.TRACKING or {}
+    local normalCost = ResolveTierCost(tracking.crestUpgradeCostPerStep, tierIdx, 20)
+    if not self:IsCrestDiscountUnlocked(tierIdx) then
+        return normalCost
+    end
+
+    return ResolveTierCost(tracking.crestUpgradeCostReduced, tierIdx,
+        math.max(1, math.floor(normalCost / 2)))
 end
 
 function Addon:GetCrestSlotUpgradeCost(_slotID, slotData, snap, tierIdx, effectiveMax)
@@ -998,39 +1089,35 @@ function Addon:CalcTierAchievementCost(snap, tierIdx)
     if self.IsTrackingSnapshotCurrentSeason and not self:IsTrackingSnapshotCurrentSeason(snap) then
         return 0
     end
-    if self:IsCrestDiscountUnlocked(tierIdx) then return 0 end
 
     local watermarks = type(snap) == "table" and snap.itemUpgradeWatermarks or nil
-    if type(watermarks) == "table" then
+    if type(watermarks) == "table" and snap.itemUpgradeWatermarksCaptured then
         local breakpoints = self:GetCrestAchievementBreakpoints(tierIdx)
         if type(breakpoints) ~= "table" then return 0 end
 
-        local costPerStep = ResolveTierCost((self.TRACKING or {}).crestUpgradeCostPerStep, tierIdx, 20)
+        local costPerStep = self:GetCrestAchievementStepCost(tierIdx)
         local minimumWatermark = self:GetMinimumDisplayedItemLevel()
-        local totalCost = 0
-        for _, value in pairs(watermarks) do
-            local watermark = tonumber(value) or 0
-            if watermark >= minimumWatermark then
-                for _, breakpoint in ipairs(breakpoints) do
-                    if watermark < breakpoint then
-                        totalCost = totalCost + costPerStep
-                    end
-                end
-            end
-        end
-        return totalCost
+        return CalcWatermarkAchievementCost(watermarks, breakpoints, minimumWatermark, costPerStep)
     end
 
     local gearSlots = self:GetUpgradeGearSlots(snap)
     if type(gearSlots) ~= "table" then return 0 end
 
+    local breakpoints = self:GetCrestAchievementBreakpoints(tierIdx)
+    if type(breakpoints) ~= "table" then return 0 end
+
+    local costPerStep = self:GetCrestAchievementStepCost(tierIdx)
+    local minimumWatermark = self:GetMinimumDisplayedItemLevel()
     local totalCost = 0
     local function addSlotCost(slotID)
         local slotData = gearSlots[slotID]
-        local effectiveMax = self:GetSlotEffectiveMax(slotData)
-        if type(slotData) == "table" and slotData.tierIdx == tierIdx
-                and self:ShouldCountSlotUpgradeCost(slotID, slotData, snap, tierIdx, effectiveMax) then
-            totalCost = totalCost + self:GetCrestSlotUpgradeCost(slotID, slotData, snap, tierIdx, effectiveMax)
+        local ilvl = type(slotData) == "table" and tonumber(slotData.ilvl) or 0
+        if ilvl >= minimumWatermark then
+            for _, breakpoint in ipairs(breakpoints) do
+                if ilvl < breakpoint then
+                    totalCost = totalCost + costPerStep
+                end
+            end
         end
     end
 
@@ -1045,17 +1132,28 @@ end
 function Addon:GetCrestAvailabilityForTier(snap, tierIdx)
     local tracking = self.TRACKING
     local crestID = tracking and tracking.crestCurrencyIDs and tracking.crestCurrencyIDs[tierIdx]
-    local heldQty, tradeupQty = 0, 0
+    local heldQty, tradeupQty, earnableQty = 0, 0, 0
     if crestID and snap and type(snap.rightRows) == "table" then
         for _, row in ipairs(snap.rightRows) do
             if row.type == SNAP_TYPES.CREST and row.id == crestID then
                 heldQty    = tonumber(row.qty) or 0
                 tradeupQty = tonumber(row.tradeup) or 0
+                local earned = tonumber(row.earned) or 0
+                local cap = tonumber(row.cap) or 0
+                earnableQty = math.max(0, cap - earned)
                 break
             end
         end
     end
-    return heldQty, tradeupQty, heldQty + tradeupQty
+    return heldQty, tradeupQty, heldQty + tradeupQty + earnableQty, earnableQty
+end
+
+function Addon:CalcCrestAchievementCapWeeksNeeded(requiredQty, heldQty, tradeupQty, earnableQty)
+    local required = tonumber(requiredQty) or 0
+    local current = (tonumber(heldQty) or 0) + (tonumber(tradeupQty) or 0)
+    local earnable = tonumber(earnableQty) or 0
+    local remainingAfterThisWeek = math.max(0, required - current - earnable)
+    return math.ceil(remainingAfterThisWeek / 100)
 end
 
 local function ComputeCrestTradeup(cache, crestCount, batchLower, batchHigher)
@@ -1536,6 +1634,7 @@ function Addon:FillCurrencySnapshot(snap)
                 row.id = id
                 row.qty = crestCache.cur[i] or 0
                 row.earned = crestCache.earned[i] or 0
+                row.cap = crestCache.weeklyMax[i] or 0
                 row.tradeup = (tradeup and tradeup > 0) and tradeup or nil
             elseif entry.type == SNAP_TYPES.CATALYST then
                 rowCount = rowCount + 1

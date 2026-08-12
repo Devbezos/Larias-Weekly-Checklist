@@ -81,6 +81,30 @@ Test.case("item hidden state validates numeric IDs", function()
     Test.falsy(addon:IsItemHidden("bad"))
 end)
 
+Test.case("crest achievement hidden state is account-wide", function()
+    local addon = loadDatabase()
+    addon:SetCrestAchievementHidden(1, true)
+    Test.truthy(addon:IsCrestAchievementHidden(1))
+    addon._viewingChar = "Alt - Realm"
+    Test.truthy(addon:IsCrestAchievementHidden(1))
+    addon:SetCrestAchievementHidden(1, false)
+    Test.falsy(addon:IsCrestAchievementHidden(1))
+    Test.equal(addon.db.global.hiddenCrestAchievements["1"], nil)
+end)
+
+Test.case("hidden crest achievement list resolves names and sorts", function()
+    local addon = loadDatabase()
+    addon.GetCrestAchievementName = function(_, tierIdx)
+        return tierIdx == 2 and "Beta" or "Alpha"
+    end
+    addon.db.global.hiddenCrestAchievements = { ["1"] = true, ["2"] = true }
+    local result = addon:GetHiddenCrestAchievementList()
+    Test.equal(result[1].name, "Alpha")
+    Test.equal(result[1].tierIdx, 1)
+    Test.equal(result[2].name, "Beta")
+    Test.equal(result[2].tierIdx, 2)
+end)
+
 Test.case("hidden currency list resolves names and sorts", function()
     local addon = loadDatabase()
     Harness.currencyInfo[101] = { name = "Zulu" }

@@ -227,6 +227,29 @@ Test.case("tier achievement cost uses watermark gear instead of equipped gear", 
     Test.equal(addon:CalcTierAchievementCost(snap, 3), 80)
 end)
 
+Test.case("tier achievement cost weights ring trinket and cheapest weapon watermark group", function()
+    local addon = loadFeatureAddon()
+    addon.IsTrackingSnapshotCurrentSeason = function() return true end
+    addon.IsCrestDiscountUnlocked = function() return false end
+    addon.TRACKING.ilvlBase = 266
+    addon.TRACKING.ilvlTrackStep = 13
+    addon.TRACKING.ilvlRankOffsets = { 0, 3, 6, 10, 13, 16 }
+    addon.TRACKING.crestCurrencyIDs = { 3442, 3443, 3444, 3445, 3446 }
+    addon.TRACKING.crestUpgradeCostPerStep = 20
+
+    local watermarks = {}
+    for slot = 0, 12 do watermarks[slot] = 318 end
+    watermarks[13] = 0
+    watermarks[14] = 0
+    watermarks[15] = 0
+    watermarks[16] = 0
+
+    Test.equal(addon:CalcTierAchievementCost({
+        itemUpgradeWatermarks = watermarks,
+        itemUpgradeWatermarksCaptured = true,
+    }, 5), 900)
+end)
+
 Test.case("tier achievement cost ignores watermarks below displayed item levels", function()
     local addon = loadFeatureAddon()
     addon.IsTrackingSnapshotCurrentSeason = function() return true end
@@ -244,28 +267,49 @@ Test.case("tier achievement cost ignores watermarks below displayed item levels"
     Test.equal(addon:CalcTierAchievementCost(snap, 3), 0)
 end)
 
+Test.case("tier achievement average item level uses valid watermarks", function()
+    local addon = loadFeatureAddon()
+    addon.TRACKING.ilvlBase = 266
+    local snap = {
+        itemUpgradeWatermarks = {
+            [0] = 289,
+            [1] = 292,
+            [2] = 293,
+            [3] = 0,
+            [15] = 40,
+        },
+        itemUpgradeWatermarksCaptured = true,
+    }
+    Test.equal(addon:CalcCrestAchievementAverageItemLevel(snap), (289 + 292 + 293) / 3)
+end)
+
 Test.case("tier achievement breakpoints derive from the item level ladder", function()
     local addon = loadFeatureAddon()
     addon.TRACKING.ilvlBase = 266
     addon.TRACKING.ilvlTrackStep = 13
     addon.TRACKING.ilvlRankOffsets = { 0, 3, 6, 10, 13, 16 }
     addon.TRACKING.crestCurrencyIDs = { 3442, 3443, 3444, 3445, 3446 }
+    Test.same(addon:GetCrestAchievementBreakpoints(1), { 272, 276, 279, 282 })
     Test.same(addon:GetCrestAchievementBreakpoints(2), { 285, 289, 292, 295 })
     Test.same(addon:GetCrestAchievementBreakpoints(3), { 298, 302, 305, 308 })
     Test.same(addon:GetCrestAchievementBreakpoints(4), { 311, 315, 318, 321 })
     Test.same(addon:GetCrestAchievementBreakpoints(5), { 324, 328, 331 })
 end)
 
-Test.case("tier achievement cost is zero after discount achievement is earned", function()
+Test.case("tier achievement cost uses reduced steps after discount achievement is earned", function()
     local addon = loadFeatureAddon()
     addon.IsTrackingSnapshotCurrentSeason = function() return true end
     addon.IsCrestDiscountUnlocked = function() return true end
+    addon.TRACKING.crestUpgradeCostPerStep = 20
+    addon.TRACKING.crestUpgradeCostReduced = 10
     local snap = {
-        bestGearSlots = {
-            [1] = { tierIdx = 3, rank = 3, maxRank = 6 },
+        itemUpgradeWatermarks = {
+            [0] = 124,
+            [1] = 128,
         },
+        itemUpgradeWatermarksCaptured = true,
     }
-    Test.equal(addon:CalcTierAchievementCost(snap, 3), 0)
+    Test.equal(addon:CalcTierAchievementCost(snap, 3), 40)
 end)
 
 Test.case("tier achievement cost falls back to best gear when slot watermarks are missing", function()
@@ -278,11 +322,39 @@ Test.case("tier achievement cost falls back to best gear when slot watermarks ar
             [1] = { tierIdx = 2, rank = 4, maxRank = 6 },
         },
         bestGearSlots = {
-            [1] = { tierIdx = 3, rank = 3, maxRank = 6 },
+            [1] = { tierIdx = 3, rank = 3, maxRank = 6, ilvl = 124 },
         },
     }
     Test.equal(addon:CalcTierAchievementCost(snap, 2), 0)
     Test.equal(addon:CalcTierAchievementCost(snap, 3), 60)
+end)
+
+Test.case("tier achievement cost falls back when watermarks were not captured", function()
+    local addon = loadFeatureAddon()
+    addon.IsTrackingSnapshotCurrentSeason = function() return true end
+    addon.IsCrestDiscountUnlocked = function() return false end
+    addon.TRACKING.crestUpgradeCostPerStep = 20
+    local snap = {
+        itemUpgradeWatermarks = {},
+        itemUpgradeWatermarksCaptured = false,
+        bestGearSlots = {
+            [1] = { tierIdx = 3, rank = 3, maxRank = 6, ilvl = 124 },
+        },
+    }
+    Test.equal(addon:CalcTierAchievementCost(snap, 3), 60)
+end)
+
+Test.case("tier achievement fallback ignores overlapping rank two cost", function()
+    local addon = loadFeatureAddon()
+    addon.IsTrackingSnapshotCurrentSeason = function() return true end
+    addon.IsCrestDiscountUnlocked = function() return false end
+    addon.TRACKING.crestUpgradeCostPerStep = 20
+    local snap = {
+        bestGearSlots = {
+            [1] = { tierIdx = 3, rank = 1, maxRank = 6, ilvl = 120 },
+        },
+    }
+    Test.equal(addon:CalcTierAchievementCost(snap, 3), 80)
 end)
 
 Test.case("tier upgrade total rejects stale season snapshots", function()
@@ -293,12 +365,42 @@ end)
 
 Test.case("crest availability combines held and tradeup amounts", function()
     local addon = loadFeatureAddon()
-    local held, tradeup, total = addon:GetCrestAvailabilityForTier({ rightRows = {
-        { type = "crest", id = 102, qty = "15", tradeup = 6 },
+    local held, tradeup, total, earnable = addon:GetCrestAvailabilityForTier({ rightRows = {
+        { type = "crest", id = 102, qty = "15", tradeup = 6, earned = 20, cap = 100 },
     } }, 2)
     Test.equal(held, 15)
     Test.equal(tradeup, 6)
-    Test.equal(total, 21)
+    Test.equal(total, 101)
+    Test.equal(earnable, 80)
+end)
+
+Test.case("crest achievement cap weeks subtract current and earnable crests", function()
+    local addon = loadFeatureAddon()
+    Test.equal(addon:CalcCrestAchievementCapWeeksNeeded(350, 70, 30, 100), 2)
+    Test.equal(addon:CalcCrestAchievementCapWeeksNeeded(350, 250, 25, 100), 0)
+end)
+
+Test.case("currency snapshots store crest caps for earnable availability", function()
+    local addon = loadFeatureAddon()
+    Harness.currencyInfo[102] = {
+        name = "Weathered Crest",
+        iconFileID = 1,
+        quantity = 15,
+        maxQuantity = 100,
+        totalEarned = 20,
+        quality = 4,
+    }
+    addon.GetTrackedCurrencyEntries = function()
+        return { { type = addon.SNAP_TYPES.CREST, id = 102, crestIdx = 2 } }
+    end
+
+    local snap = { rightRows = {} }
+    addon:FillCurrencySnapshot(snap)
+
+    Test.equal(snap.rightRows[1].cap, 100)
+    local _, _, total, earnable = addon:GetCrestAvailabilityForTier(snap, 2)
+    Test.equal(total, 95)
+    Test.equal(earnable, 80)
 end)
 
 Test.case("currency panel keeps fallback rows for unknown currency ids", function()
@@ -379,7 +481,7 @@ Test.case("currency snapshot keeps unknown currency ids", function()
     Test.equal(snap.rightRows[2].id, 999)
 end)
 
-Test.case("currency snapshots store alt amounts without caps", function()
+Test.case("currency snapshots store alt crest amounts with caps", function()
     local addon = loadFeatureAddon()
     addon.TRACKING.crestCurrencyIDs = { 101 }
     addon.GetTrackedCurrencyConfig = function()
@@ -401,7 +503,7 @@ Test.case("currency snapshots store alt amounts without caps", function()
     Test.equal(#snap.rightRows, 1)
     Test.equal(snap.rightRows[1].qty, 7)
     Test.equal(snap.rightRows[1].earned, 7)
-    Test.equal(snap.rightRows[1].cap, nil)
+    Test.equal(snap.rightRows[1].cap, 90)
 end)
 
 Test.case("alt summary resets all currencies when a saved cap is above current cap", function()
@@ -483,6 +585,30 @@ Test.case("alt summary resets capless currencies from stale season snapshots", f
     Test.equal(sd.crestTradeups[1], 0)
     Test.equal(sd.sprkQty, 0)
     Test.equal(sd.sprkCap, 1)
+end)
+
+Test.case("alt summary does not clamp crest tradeup to current cap", function()
+    local addon = loadAltSummaryAddon()
+    addon.TRACKING.crestCurrencyIDs = { 3445 }
+    Harness.currencyInfo[3445] = {
+        name = "Heroic Crest",
+        iconFileID = 1,
+        quantity = 0,
+        maxQuantity = 0,
+        totalEarned = 0,
+        quality = 4,
+    }
+
+    local sd = addon:_ExtractAltSummarySnapDataForTest({
+        rightRows = {
+            { type = addon.SNAP_TYPES.CREST, id = 3445, qty = 0, earned = 0, tradeup = 10 },
+        },
+    }, { 3445 })
+
+    Test.equal(sd.crestQtys[1], 0)
+    Test.equal(sd.crestEarneds[1], 0)
+    Test.equal(sd.crestCaps[1], 0)
+    Test.equal(sd.crestTradeups[1], 10)
 end)
 
 Test.case("alt summary clamps season misc currencies when current cap is zero", function()
