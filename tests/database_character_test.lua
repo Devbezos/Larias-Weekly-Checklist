@@ -215,6 +215,87 @@ Test.case("database setup prunes stale tracked currencies", function()
     Test.equal(addon.db.global.chars["Tester - Realm"].hiddenCurrencies["9999"], nil)
 end)
 
+Test.case("stale tracked currency pruning resets active built-ins enabled", function()
+    local addon = Harness.newAddon()
+    addon.GetCurrentProfileKey = function() return "Tester - Realm" end
+    addon.TRACKING.crestCurrencyIDs = { 3442, 3443 }
+    addon.TRACKING.sparkCurrencyID = 3509
+    addon.TRACKING.catalystCurrencyID = 3465
+    addon.TRACKING.bonusRollCurrencyID = 3511
+    Harness.load(addon, "features/services/general/LariasWeeklyChecklist_Database.lua")
+
+    _G.LibStub = function(name)
+        if name ~= "AceDB-3.0" then return nil end
+        return {
+            New = function(_, _, defaults)
+                defaults.global.trackedCurrencyConfig = {
+                    { id = 3383, enabled = true },
+                    { id = 3341, enabled = true },
+                    { id = 9999, enabled = true, source = "custom" },
+                }
+                return {
+                    global = defaults.global,
+                    profile = {},
+                    sv = { profileKeys = {} },
+                }
+            end,
+        }
+    end
+
+    addon:SetupAddonDB()
+
+    Test.same(addon:GetTrackedCurrencyConfig(), {
+        { id = 3442, itemID = nil, enabled = true, source = "builtin", kind = nil },
+        { id = 3443, itemID = nil, enabled = true, source = "builtin", kind = nil },
+        { id = 3465, itemID = nil, enabled = true, source = "builtin", kind = nil },
+        { id = 3509, itemID = nil, enabled = true, source = "builtin", kind = nil },
+        { id = 3511, itemID = nil, enabled = true, source = "builtin", kind = nil },
+        { id = 9999, itemID = nil, enabled = true, source = "custom", kind = nil },
+    })
+end)
+
+Test.case("tracked currency migration reenables active built-ins when all are disabled", function()
+    local addon = Harness.newAddon()
+    addon.GetCurrentProfileKey = function() return "Tester - Realm" end
+    addon.TRACKING.crestCurrencyIDs = { 3442, 3443 }
+    addon.TRACKING.sparkCurrencyID = 3509
+    addon.TRACKING.catalystCurrencyID = 3465
+    addon.TRACKING.bonusRollCurrencyID = 3511
+    Harness.load(addon, "features/services/general/LariasWeeklyChecklist_Database.lua")
+
+    _G.LibStub = function(name)
+        if name ~= "AceDB-3.0" then return nil end
+        return {
+            New = function(_, _, defaults)
+                defaults.global.trackedCurrencyConfig = {
+                    { id = 3442, enabled = false },
+                    { id = 3443, enabled = false },
+                    { id = 3465, enabled = false },
+                    { id = 3509, enabled = false },
+                    { id = 3511, enabled = false },
+                    { id = 9999, enabled = true, source = "custom" },
+                }
+                return {
+                    global = defaults.global,
+                    profile = {},
+                    sv = { profileKeys = {} },
+                }
+            end,
+        }
+    end
+
+    addon:SetupAddonDB()
+
+    Test.same(addon:GetTrackedCurrencyConfig(), {
+        { id = 3442, itemID = nil, enabled = true, source = "builtin", kind = nil },
+        { id = 3443, itemID = nil, enabled = true, source = "builtin", kind = nil },
+        { id = 3465, itemID = nil, enabled = true, source = "builtin", kind = nil },
+        { id = 3509, itemID = nil, enabled = true, source = "builtin", kind = nil },
+        { id = 3511, itemID = nil, enabled = true, source = "builtin", kind = nil },
+        { id = 9999, itemID = nil, enabled = true, source = "custom", kind = nil },
+    })
+end)
+
 local function loadCharacterPicker()
     local addon = loadDatabase()
     Harness.load(addon, "features/footer/LariasWeeklyChecklist_CharPicker.lua")
