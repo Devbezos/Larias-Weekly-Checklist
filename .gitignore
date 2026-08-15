@@ -12,3 +12,10 @@ lib/
 data/spreadsheet.csv
 LLM.md
 codex.md
+CLAUDE.md
+
+# Dev-only, not required for deployment (not run by any CI workflow)
+.luacheckrc
+scripts/watch_deploy.ps1
+scripts/_fix_icons.py
+tests/

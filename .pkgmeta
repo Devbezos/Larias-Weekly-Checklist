@@ -51,6 +51,7 @@ ignore:
   - LLM.md
   - codex.md
   - codex_for_agent.md
+  - CLAUDE.md
   - README.md
   - REVIEW_NOTES.md
   - scripts
