@@ -126,6 +126,14 @@ jobs:
             printf '%s\n' "$HUMAN_LINES"
           } > CHANGELOG.md
 
+      - name: Link .git into addon subfolder for packager
+        # release.sh requires topdir to itself contain a .git/.svn/.hg
+        # directory to recognize it as a VCS checkout, but the real .git
+        # lives at the repo root, one level above the addon subfolder.
+        # A symlink satisfies that plain file-existence check; git itself
+        # still resolves the real repository normally from there.
+        run: ln -sf ../.git LariasWeeklyChecklist/.git
+
       - name: Package + Upload (CurseForge & Wago)
         uses: BigWigsMods/packager@v2.4.3
         with:
