@@ -29,7 +29,7 @@ jobs:
       - name: Update .toc Interface versions (latest 3)
         run: |
           set -euo pipefail
-          python scripts/update_toc_interface.py --toc LariasWeeklyChecklist.toc --count 3
+          python scripts/update_toc_interface.py --toc LariasWeeklyChecklist/LariasWeeklyChecklist.toc --count 3
 
       - name: Compute alpha version
         id: ver
@@ -37,7 +37,7 @@ jobs:
           set -euo pipefail
           git fetch --tags --force
 
-          TOC="LariasWeeklyChecklist.toc"
+          TOC="LariasWeeklyChecklist/LariasWeeklyChecklist.toc"
           BRANCH_NAME="${{ inputs.target_branch || github.ref_name }}"
 
           # Read MAJOR.MINOR.PATCH from the toc (strip any pre-release suffix).
@@ -73,7 +73,7 @@ jobs:
           TAG:           ${{ steps.ver.outputs.tag }}
         run: |
           set -euo pipefail
-          TOC="LariasWeeklyChecklist.toc"
+          TOC="LariasWeeklyChecklist/LariasWeeklyChecklist.toc"
 
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

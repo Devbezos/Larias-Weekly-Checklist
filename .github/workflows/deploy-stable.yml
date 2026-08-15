@@ -63,13 +63,13 @@ jobs:
       - name: Update .toc Interface versions (latest 3)
         run: |
           set -euo pipefail
-          python scripts/update_toc_interface.py --toc LariasWeeklyChecklist.toc --count 3
+          python scripts/update_toc_interface.py --toc LariasWeeklyChecklist/LariasWeeklyChecklist.toc --count 3
 
       - name: Detect TOC-only fast path
         id: precheck
         run: |
           set -euo pipefail
-          TOC="LariasWeeklyChecklist.toc"
+          TOC="LariasWeeklyChecklist/LariasWeeklyChecklist.toc"
 
           # Read the current version from the toc, stripping any pre-release suffix
           # so we always tag at a clean MAJOR.MINOR.PATCH.
@@ -109,7 +109,7 @@ jobs:
       - name: Convert CSV to Lua
         if: steps.precheck.outputs.fast_toc_only != 'true'
         run: |
-          python scripts/sheet_to_lua.py data/spreadsheet.csv Locales/enUS_Data.lua
+          python scripts/sheet_to_lua.py data/spreadsheet.csv LariasWeeklyChecklist/locales/enUS_Data.lua
 
       - name: Check for release-worthy changes
         id: check
@@ -117,8 +117,8 @@ jobs:
           FORCE_DEPLOY: ${{ github.event.inputs.force || 'false' }}
         run: |
           set -euo pipefail
-          TOC="LariasWeeklyChecklist.toc"
-          DATA_FILE="Locales/enUS_Data.lua"
+          TOC="LariasWeeklyChecklist/LariasWeeklyChecklist.toc"
+          DATA_FILE="LariasWeeklyChecklist/locales/enUS_Data.lua"
           VERSION="${{ steps.precheck.outputs.version }}"
           TOC_CHANGED="${{ steps.precheck.outputs.toc_changed }}"
           FAST_TOC_ONLY="${{ steps.precheck.outputs.fast_toc_only }}"
@@ -193,13 +193,13 @@ jobs:
           set -euo pipefail
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          IFACE=$(sed -n 's/^## Interface:[[:space:]]*//p' LariasWeeklyChecklist.toc | head -n 1 | cut -d',' -f1 | tr -d '[:space:]')
+          IFACE=$(sed -n 's/^## Interface:[[:space:]]*//p' LariasWeeklyChecklist/LariasWeeklyChecklist.toc | head -n 1 | cut -d',' -f1 | tr -d '[:space:]')
           if [[ "$IFACE" =~ ^[0-9]{6}$ ]]; then
             PATCH_VERSION="$((IFACE / 10000)).$(((IFACE / 100) % 100)).$((IFACE % 100))"
           else
             PATCH_VERSION="unknown"
           fi
-          git add Locales/enUS_Data.lua LariasWeeklyChecklist.toc
+          git add LariasWeeklyChecklist/locales/enUS_Data.lua LariasWeeklyChecklist/LariasWeeklyChecklist.toc
           git diff --cached --quiet || { git commit -m "Automated update addon version for patch ${PATCH_VERSION}"; git push; }
           echo "No release conditions met; done."
 
@@ -210,14 +210,14 @@ jobs:
           VERSION: ${{ steps.check.outputs.version }}
         run: |
           set -euo pipefail
-          TOC="LariasWeeklyChecklist.toc"
+          TOC="LariasWeeklyChecklist/LariasWeeklyChecklist.toc"
           TAG="v$VERSION"
 
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           # Commit data + toc at the stable version and tag it.
-          git add Locales/enUS_Data.lua "$TOC"
+          git add LariasWeeklyChecklist/locales/enUS_Data.lua "$TOC"
           git diff --cached --quiet || git commit -m "Release $TAG"
           git tag -a "$TAG" -m "Release $TAG"
           git push --follow-tags

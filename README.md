@@ -1,3 +1,7 @@
+## Install from GitHub
+
+Copy the `LariasWeeklyChecklist/` folder into your World of Warcraft `Interface/AddOns/` directory. That folder contains the full addon runtime: `.toc`, Lua source, assets, locales, and embedded libraries.
+
 ```mermaid
 flowchart TD
 

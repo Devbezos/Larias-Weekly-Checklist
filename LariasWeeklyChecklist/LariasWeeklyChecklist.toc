@@ -26,8 +26,8 @@ lib\LibDBIcon-1.0\LibDBIcon-1.0\LibDBIcon-1.0.lua
 lib\LibWindow-1.1\LibWindow-1.1\LibWindow-1.1\LibWindow-1.1.lua
 
 # Locale strings and dataset
-Locales\enUS.lua
-Locales\enUS_Data.lua
+locales\enUS.lua
+locales\enUS_Data.lua
 
 # Core
 constants\LariasWeeklyChecklist_Constants.lua

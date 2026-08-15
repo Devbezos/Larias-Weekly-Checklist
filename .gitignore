@@ -1,14 +1,23 @@
 scripts/deploy_to_wow.ps1
+scripts/watch_deploy.ps1
+scripts/_fix_icons.py
 scripts/__pycache__/
 __pycache__/
 *.pyc
 .venv/
 .vscode/
+.agents/
 
-# Libraries are fetched by the packager via .pkgmeta externals.
-# Keep them on disk for local dev but do not commit them.
-lib/
 .gitattributes
 data/spreadsheet.csv
+data/
 LLM.md
 codex.md
+codex_for_agent.md
+CLAUDE.md
+REVIEW_NOTES.md
+SETUP.md
+
+# Dev-only, not required for deployment (not run by any CI workflow)
+.luacheckrc
+tests/

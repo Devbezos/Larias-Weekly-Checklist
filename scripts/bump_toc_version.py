@@ -6,7 +6,7 @@ import re
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Bump ## Version: in a WoW addon .toc")
-    parser.add_argument("--toc", default="LariasWeeklyChecklist.toc")
+    parser.add_argument("--toc", default="LariasWeeklyChecklist/LariasWeeklyChecklist.toc")
     parser.add_argument(
         "--dev",
         action="store_true",
