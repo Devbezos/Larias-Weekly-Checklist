@@ -1919,6 +1919,16 @@ local function OnCheckboxClick(selfBtn)
         if type(database.sectionCompleted) ~= "table" then database.sectionCompleted = {} end
         database.sectionCompleted[sectionId] = true
         SetSectionCollapsed(sectionId, true, database)
+
+        -- Finishing the section you're currently pinned to (e.g. it was
+        -- pinned to itself from an earlier click on its own header) should
+        -- hand control back to natural progression. Otherwise a stale pin
+        -- would exempt it from the hide-when-complete rule below forever --
+        -- it wouldn't hide "as normal" just because it happened to still be
+        -- pinned to itself at the moment it finished.
+        if tostring(database.startAtSectionId or "") == tostring(sectionId) then
+            database.startAtSectionId = ""
+        end
     end
 
     -- Refresh the picker ">" marker whenever a section completes.
