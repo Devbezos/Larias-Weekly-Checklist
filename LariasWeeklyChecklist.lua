@@ -1494,14 +1494,6 @@ local function AcquireSectionFrame()
     sectionFrame._title = title
     ApplySectionHeaderTint(sectionFrame)
 
-    -- Transparent hover zone covering only the title text (left of the expand button).
-    -- Used to scope the "click to change week" tooltip to just the label area.
-    local titleHover = CreateFrame("Frame", nil, sectionFrame)
-    titleHover:SetPoint("TOPLEFT",    header,    "TOPLEFT",    0,  0)
-    titleHover:SetPoint("BOTTOMRIGHT", expandBtn, "BOTTOMLEFT", -4, 0)
-    titleHover:EnableMouse(false)  -- enabled only when this is the picker section
-    sectionFrame._titleHover = titleHover
-
     return sectionFrame
 end
 
@@ -1534,11 +1526,6 @@ local function ReleaseSectionFrame(sectionFrame)
     sectionFrame._header:SetScript("OnClick", nil)
     sectionFrame._header:SetScript("OnEnter", nil)
     sectionFrame._header:SetScript("OnLeave", nil)
-    if sectionFrame._titleHover then
-        sectionFrame._titleHover:EnableMouse(false)
-        sectionFrame._titleHover:SetScript("OnEnter", nil)
-        sectionFrame._titleHover:SetScript("OnLeave", nil)
-    end
     if sectionFrame._expandBtn then
         sectionFrame._expandBtn:SetScript("OnClick", nil)
         sectionFrame._expandBtn:SetScript("OnEnter", nil)
@@ -1941,6 +1928,16 @@ local function OnCheckboxClick(selfBtn)
     if secCompleteNow then
         if Addon._PopulateHeaderPicker then
             Addon._PopulateHeaderPicker()
+        end
+        -- The immediate updates below only touch the section that just
+        -- completed. The now-current (next) section's header still has its
+        -- old click handler (plain collapse toggle) and expand-button glyph
+        -- bound from the last full sync, so it doesn't yet act as the
+        -- top/"change week" section. Queue a full resync so ApplySectionVisuals
+        -- re-derives the current section and rebinds picker-header behaviour
+        -- and auto-expand onto it.
+        if Addon.RequestRefresh then
+            Addon:RequestRefresh()
         end
     end
 
@@ -2411,12 +2408,15 @@ local function ApplySectionVisuals(want, haveBefore, dataChanged, database, chil
         if isCurrentSec then
             -- Current/topmost week: clicking the section title opens the week picker.
             -- Expand/collapse still works via the expand button on the right.
+            -- Bind hover directly to the header button itself (not a separate
+            -- overlay frame): the header sits above everything else in its
+            -- rect except the expand button, so an overlay frame at the same
+            -- level as the section never actually receives OnEnter -- binding
+            -- here is what makes the tooltip track the whole header instead
+            -- of only showing over the button.
             sectionFrame._header:SetScript("OnClick", OnPickerSectionHeaderClick)
-            if sectionFrame._titleHover then
-                sectionFrame._titleHover:EnableMouse(true)
-                sectionFrame._titleHover:SetScript("OnEnter", OnPickerSectionTitleHoverEnter)
-                sectionFrame._titleHover:SetScript("OnLeave", Addon.AddonUtils.HideTooltip)
-            end
+            sectionFrame._header:SetScript("OnEnter", OnPickerSectionTitleHoverEnter)
+            sectionFrame._header:SetScript("OnLeave", Addon.AddonUtils.HideTooltip)
             -- Replace the right-side expand button behaviour with a week-picker
             -- toggle for the current section. Keep the visual glyph in sync
             -- with the picker (up when open, down when closed).
@@ -2458,11 +2458,8 @@ local function ApplySectionVisuals(want, haveBefore, dataChanged, database, chil
             end
         else
             sectionFrame._header:SetScript("OnClick", OnHeaderClick)
-            if sectionFrame._titleHover then
-                sectionFrame._titleHover:EnableMouse(false)
-                sectionFrame._titleHover:SetScript("OnEnter", nil)
-                sectionFrame._titleHover:SetScript("OnLeave", nil)
-            end
+            sectionFrame._header:SetScript("OnEnter", nil)
+            sectionFrame._header:SetScript("OnLeave", nil)
         end
 
         UpdateSectionVisuals(sectionFrame, sectionId, currentSectionId, firstVisibleSectionId)
