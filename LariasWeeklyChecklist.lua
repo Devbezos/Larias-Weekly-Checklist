@@ -1945,6 +1945,10 @@ local function OnCheckboxClick(selfBtn)
     if not sectionFrame then return end
 
     local hideDone = prefs.hideCompletedSections and true or false
+    -- Don't hide the section the user is explicitly viewing (picked via the
+    -- week dropdown), even if finishing it just made it complete -- matches
+    -- the same exemption in UpdateSectionVisuals.
+    local isPinned = tostring(database.startAtSectionId or "") == tostring(sectionId)
 
     SetHeaderText(sectionFrame, sectionId, secCompleteNow)
     ComputeHeaderHeight(sectionFrame, Addon.UI.itemTextWidth + Addon.UI.headerTextExtraW)
@@ -1955,7 +1959,7 @@ local function OnCheckboxClick(selfBtn)
     LayoutItems(sectionFrame, collapsed, prefs.hideCompletedTasks)
     UpdateSectionHeight(sectionFrame, collapsed)
 
-    if hideDone and secCompleteNow then
+    if hideDone and secCompleteNow and not isPinned then
         sectionFrame:Hide()
     else
         sectionFrame:Show()
@@ -2234,8 +2238,12 @@ UpdateSectionVisuals = function(sectionFrame, sectionId, precomputedCurrentId, p
 
     local complete = IsSectionCompleteById(sectionId, database)
 
+    -- A section the user explicitly picked via the week dropdown stays visible
+    -- even if it's complete -- otherwise picking a finished week to review it
+    -- would just make it immediately disappear again.
+    local isPinned = startId ~= "" and tostring(sectionId) == startId
     local hideDone = prefs.hideCompletedSections and true or false
-    if hideDone and complete then
+    if hideDone and complete and not isPinned then
         sectionFrame:Hide()
         return
     end
@@ -2362,9 +2370,19 @@ local function ApplySectionVisuals(want, haveBefore, dataChanged, database, chil
     -- on the first open (when all collapsedSections entries are nil).
     local currentSectionId = GetCurrentSectionId(database)
     local firstVisibleSectionId = GetFirstVisibleSectionId(database, Addon:EnsurePrefs())
-    local pickerSectionId = currentSectionId
+    -- The "change week" header/picker always belongs to the real current
+    -- (first-incomplete/actively-worked) week, not wherever's pinned --
+    -- otherwise picking a finished week to look back at it would steal the
+    -- change-week affordance away from the week actually being worked on.
+    -- GetCurrentSectionId(db, true) ignores the pin entirely, unlike
+    -- currentSectionId above (used elsewhere for first-open collapse state).
+    local pickerSectionId = GetCurrentSectionId(database, true)
     local startId = tostring(database.startAtSectionId or "")
-    if startId ~= "" and Addon._sectionsIndexById and Addon._sectionsIndexById[startId] then
+    -- Only let picking a week take over the header when that week is still
+    -- incomplete. Picking a finished week to review it stays reachable from
+    -- the real current week's header, but doesn't take the header over.
+    if startId ~= "" and Addon._sectionsIndexById and Addon._sectionsIndexById[startId]
+       and not IsSectionCompleteById(startId, database) then
         pickerSectionId = startId
     end
     for i = 1, want do
