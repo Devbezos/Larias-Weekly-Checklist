@@ -1395,6 +1395,27 @@ local function GetAutoExpandSectionId(db)
     return nil
 end
 
+-- Which section's header shows the "change week" affordance (non-collapsible,
+-- opens the picker dropdown). Always the real current week (first-incomplete/
+-- actively-worked), except while the user has explicitly picked a *different,
+-- still-incomplete* week to work ahead on. Picking an already-*finished* week
+-- to look back at it does not take this over from the real current week --
+-- that week stays reachable from the current week's own header.
+-- Single source of truth for both the main list (ApplySectionVisuals) and
+-- the week-picker dropdown's ">" marker (Header.lua's PopulateHeaderPicker),
+-- so they can't disagree about which week "is current".
+local function GetPickerSectionId(db)
+    db = db or Addon:EnsureDB()
+    local pickerId = GetCurrentSectionId(db, true)
+    local startId = tostring(db.startAtSectionId or "")
+    if startId ~= "" and Addon._sectionsById and Addon._sectionsById[startId]
+       and not IsSectionCompleteById(startId, db) then
+        pickerId = startId
+    end
+    return pickerId
+end
+Addon._GetPickerSectionId = GetPickerSectionId
+
 -- UI pooling: we reuse section frames and checkboxes to avoid allocations during refresh.
 -- Must sit above third-party addon overlays (e.g. NaowhQOL UIWidgetPowerBarContainerFrame
 -- sits at ~121) so header buttons can receive mouse clicks.
@@ -2224,9 +2245,9 @@ local function SyncCheckboxesForSection(sectionFrame, sectionId, db)
     end
 end
 
--- precomputedCurrentId/precomputedFirstVisibleId: optional; pass from
--- ApplySectionVisuals to avoid walking _order once per section.
-UpdateSectionVisuals = function(sectionFrame, sectionId, precomputedCurrentId, precomputedFirstVisibleId)
+-- precomputedFirstVisibleId: optional; pass from ApplySectionVisuals to
+-- avoid walking _order once per section.
+UpdateSectionVisuals = function(sectionFrame, sectionId, precomputedFirstVisibleId)
     local database = Addon:EnsureDB()
     local prefs    = Addon:EnsurePrefs()
 
@@ -2272,19 +2293,14 @@ UpdateSectionVisuals = function(sectionFrame, sectionId, precomputedCurrentId, p
     elseif explicitlySet then
         collapsed = database.collapsedSections[sectionId] == true
     else
-        -- First open: collapse everything except the current section.
-        -- Prefer the currently-selected (startAt) week if it makes the
-        -- section the first visible one; fall back to the computed current
-        -- section otherwise.  Use precomputedCurrentId when available to
-        -- avoid re-walking _order once per section.
-        local currentId = precomputedCurrentId or GetCurrentSectionId(database)
-        local startId = tostring(database.startAtSectionId or "")
-        local firstVisibleId = currentId
-        if startId ~= "" and Addon._sectionsIndexById and Addon._sectionsIndexById[startId] then
-            firstVisibleId = startId
-        end
-        collapsed = (tostring(sectionId) ~= tostring(firstVisibleId or ""))
-        SetSectionCollapsed(sectionId, collapsed, database)
+        -- Never-touched, incomplete section that isn't the auto-expand
+        -- target (isFirstVisible above already covers that case) -- default
+        -- it collapsed. Reaching here means neither of the two branches
+        -- above set an explicit collapsed value: not the auto-expand
+        -- target, and complete-but-userExpanded implies explicitlySet
+        -- (they're always written together), so this is genuinely new.
+        collapsed = true
+        SetSectionCollapsed(sectionId, true, database)
     end
 
     local checkedMap = database.checked
@@ -2362,24 +2378,9 @@ end
 local function ApplySectionVisuals(want, haveBefore, dataChanged, database, child)
     local needCheckboxResync = dataChanged
     -- Pre-compute once so UpdateSectionVisuals doesn't re-walk _order N times
-    -- on the first open (when all collapsedSections entries are nil).
-    local currentSectionId = GetCurrentSectionId(database)
+    -- per section.
     local firstVisibleSectionId = GetAutoExpandSectionId(database)
-    -- The "change week" header/picker always belongs to the real current
-    -- (first-incomplete/actively-worked) week, not wherever's pinned --
-    -- otherwise picking a finished week to look back at it would steal the
-    -- change-week affordance away from the week actually being worked on.
-    -- GetCurrentSectionId(db, true) ignores the pin entirely, unlike
-    -- currentSectionId above (used elsewhere for first-open collapse state).
-    local pickerSectionId = GetCurrentSectionId(database, true)
-    local startId = tostring(database.startAtSectionId or "")
-    -- Only let picking a week take over the header when that week is still
-    -- incomplete. Picking a finished week to review it stays reachable from
-    -- the real current week's header, but doesn't take the header over.
-    if startId ~= "" and Addon._sectionsIndexById and Addon._sectionsIndexById[startId]
-       and not IsSectionCompleteById(startId, database) then
-        pickerSectionId = startId
-    end
+    local pickerSectionId = GetPickerSectionId(database)
     for i = 1, want do
         local sectionId    = Addon._order[i]
         local sectionFrame = Addon._activeSections[i]
@@ -2475,7 +2476,7 @@ local function ApplySectionVisuals(want, haveBefore, dataChanged, database, chil
             sectionFrame._header:SetScript("OnLeave", nil)
         end
 
-        UpdateSectionVisuals(sectionFrame, sectionId, currentSectionId, firstVisibleSectionId)
+        UpdateSectionVisuals(sectionFrame, sectionId, firstVisibleSectionId)
     end
 end
 
