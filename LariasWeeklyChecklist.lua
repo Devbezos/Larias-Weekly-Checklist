@@ -1371,9 +1371,11 @@ end
 -- Expose for tests.
 Addon._GetCurrentSectionId = GetCurrentSectionId
 
-local function GetFirstVisibleSectionId(db, prefs)
+-- Finished weeks are never hidden; this is purely "which section should
+-- auto-expand as the active one" -- the first incomplete section from the
+-- pinned start point forward (or from the very start if nothing is pinned).
+local function GetAutoExpandSectionId(db)
     db = db or Addon:EnsureDB()
-    prefs = prefs or Addon:EnsurePrefs()
 
     local startId = tostring(db.startAtSectionId or "")
     local startIndex = 1
@@ -1381,11 +1383,10 @@ local function GetFirstVisibleSectionId(db, prefs)
         startIndex = Addon._sectionsIndexById[startId]
     end
 
-    local hideDone = prefs.hideCompletedSections and true or false
     if Addon._order then
         for i = startIndex, #Addon._order do
             local sid = Addon._order[i]
-            if not (hideDone and IsSectionCompleteById(sid, db)) then
+            if not IsSectionCompleteById(sid, db) then
                 return sid
             end
         end
@@ -1944,8 +1945,6 @@ local function OnCheckboxClick(selfBtn)
     local sectionFrame = Addon._activeSections[Addon._sectionsIndexById[sectionId]]
     if not sectionFrame then return end
 
-    local hideDone = prefs.hideCompletedSections and true or false
-
     SetHeaderText(sectionFrame, sectionId, secCompleteNow)
     ComputeHeaderHeight(sectionFrame, Addon.UI.itemTextWidth + Addon.UI.headerTextExtraW)
 
@@ -1955,11 +1954,9 @@ local function OnCheckboxClick(selfBtn)
     LayoutItems(sectionFrame, collapsed, prefs.hideCompletedTasks)
     UpdateSectionHeight(sectionFrame, collapsed)
 
-    if hideDone and secCompleteNow then
-        sectionFrame:Hide()
-    else
-        sectionFrame:Show()
-    end
+    -- Finished weeks stay visible (just collapsed, above) instead of being
+    -- hidden -- the section the user just clicked in is always shown.
+    sectionFrame:Show()
 
     LayoutFrom(sectionFrame._index or 1)
 
@@ -2234,12 +2231,6 @@ UpdateSectionVisuals = function(sectionFrame, sectionId, precomputedCurrentId, p
 
     local complete = IsSectionCompleteById(sectionId, database)
 
-    local hideDone = prefs.hideCompletedSections and true or false
-    if hideDone and complete then
-        sectionFrame:Hide()
-        return
-    end
-
     sectionFrame:Show()
 
     ApplySectionHeaderTint(sectionFrame)
@@ -2247,7 +2238,7 @@ UpdateSectionVisuals = function(sectionFrame, sectionId, precomputedCurrentId, p
     -- Only auto-collapse a completed section when the user has NOT explicitly
     -- expanded it (tracked via _userExpandedCompleted set in OnHeaderClick).
     local userExpanded = Addon._userExpandedCompleted and Addon._userExpandedCompleted[sectionId]
-    local isFirstVisible = tostring(sectionId) == tostring(precomputedFirstVisibleId or GetFirstVisibleSectionId(database, prefs) or "")
+    local isFirstVisible = tostring(sectionId) == tostring(precomputedFirstVisibleId or GetAutoExpandSectionId(database) or "")
     if complete and not userExpanded and not isFirstVisible then
         SetSectionCollapsed(sectionId, true, database)
     end
@@ -2361,7 +2352,7 @@ local function ApplySectionVisuals(want, haveBefore, dataChanged, database, chil
     -- Pre-compute once so UpdateSectionVisuals doesn't re-walk _order N times
     -- on the first open (when all collapsedSections entries are nil).
     local currentSectionId = GetCurrentSectionId(database)
-    local firstVisibleSectionId = GetFirstVisibleSectionId(database, Addon:EnsurePrefs())
+    local firstVisibleSectionId = GetAutoExpandSectionId(database)
     local pickerSectionId = currentSectionId
     local startId = tostring(database.startAtSectionId or "")
     if startId ~= "" and Addon._sectionsIndexById and Addon._sectionsIndexById[startId] then
