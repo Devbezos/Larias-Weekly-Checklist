@@ -1352,7 +1352,13 @@ local function GetCurrentSectionId(db, ignoreStoredStart)
     if Addon._order then
         for i = 1, #Addon._order do
             local sid = Addon._order[i]
-            if HasAnySectionItemChecked(sid, db) then return sid end
+            -- Skip sections that are already fully complete: once a week is
+            -- finished it no longer counts as "actively being worked on", so
+            -- this must fall through to the first-incomplete-section pass
+            -- below instead of getting stuck re-expanding a finished week.
+            if HasAnySectionItemChecked(sid, db) and not IsSectionCompleteById(sid, db) then
+                return sid
+            end
         end
         for i = 1, #Addon._order do
             local sid = Addon._order[i]
@@ -1362,6 +1368,8 @@ local function GetCurrentSectionId(db, ignoreStoredStart)
     end
     return nil
 end
+-- Expose for tests.
+Addon._GetCurrentSectionId = GetCurrentSectionId
 
 local function GetFirstVisibleSectionId(db, prefs)
     db = db or Addon:EnsureDB()
