@@ -1651,28 +1651,6 @@ local function LayoutFrom(startIndex)
     if UpdateScrollbarVisibility then UpdateScrollbarVisibility() end
 end
 
--- Finished weeks stay in the list (just collapsed) instead of disappearing,
--- so without this the user would have to manually scroll past every
--- already-done week each time. Called right after a section completes and
--- LayoutFrom has already repositioned everything with final heights, so the
--- target's on-screen position is accurate.
-local function ScrollToAutoExpandSection(database)
-    if not (scrollFrame and scrollChild and scrollFrame.SetVerticalScroll) then return end
-    local targetId = GetAutoExpandSectionId(database)
-    if not targetId then return end
-    local targetIndex = Addon._sectionsIndexById and Addon._sectionsIndexById[targetId]
-    local targetFrame = targetIndex and Addon._activeSections[targetIndex]
-    if not (targetFrame and targetFrame:IsShown()) then return end
-
-    local childTop, frameTop = scrollChild:GetTop(), targetFrame:GetTop()
-    if not (childTop and frameTop) then return end
-
-    local offset = childTop - frameTop
-    local maxScroll = tonumber(scrollFrame.GetVerticalScrollRange and scrollFrame:GetVerticalScrollRange()) or 0
-    offset = math.max(0, math.min(offset, maxScroll))
-    scrollFrame:SetVerticalScroll(offset)
-end
-
 -- Hide or show the scrollbar depending on whether content needs scrolling.
 UpdateScrollbarVisibility = function()
     if not scrollFrame or not scrollChild then return end
@@ -1955,21 +1933,21 @@ local function OnCheckboxClick(selfBtn)
     end
 
     -- Refresh the picker ">" marker whenever a section completes.
-    -- We no longer auto-advance startAtSectionId here: the picker fallback
-    -- already tracks the most-recently-active week via HasAnySectionItemChecked,
-    -- so advancing on completion would jump to the following week too soon.
     if secCompleteNow then
         if Addon._PopulateHeaderPicker then
             Addon._PopulateHeaderPicker()
         end
-        -- The immediate updates below only touch the section that just
-        -- completed. The now-current (next) section's header still has its
-        -- old click handler (plain collapse toggle) and expand-button glyph
-        -- bound from the last full sync, so it doesn't yet act as the
-        -- top/"change week" section. Queue a full resync so ApplySectionVisuals
-        -- re-derives the current section and rebinds picker-header behaviour
-        -- and auto-expand onto it.
-        if Addon.RequestRefresh then
+
+        local nextId = GetAutoExpandSectionId(database)
+        if nextId and Addon._HandlePick then
+            -- Literally trigger a change-week to the next incomplete week --
+            -- the same pin/expand/scroll-into-view/refresh that picking it
+            -- from the dropdown does -- instead of separately re-deriving
+            -- "what should the header/expand target be" here.
+            Addon._HandlePick(nextId, Addon._scrollFrame)
+        elseif Addon.RequestRefresh then
+            -- Nothing left incomplete to advance to -- still need a resync
+            -- so ApplySectionVisuals reflects the fresh completion state.
             Addon:RequestRefresh()
         end
     end
@@ -1986,7 +1964,10 @@ local function OnCheckboxClick(selfBtn)
     LayoutItems(sectionFrame, collapsed, prefs.hideCompletedTasks)
     UpdateSectionHeight(sectionFrame, collapsed)
 
-    -- Finished weeks stay visible and collapsible -- never hidden.
+    -- Never hidden here just for being complete. It can still end up hidden
+    -- moments later if this completion triggers a change-week pick below
+    -- (UpdateSectionVisuals hides everything before the pinned section) --
+    -- reachable again any time via change-week.
     sectionFrame:Show()
 
     LayoutFrom(sectionFrame._index or 1)
@@ -1997,10 +1978,6 @@ local function OnCheckboxClick(selfBtn)
     -- For non-completing clicks, a scroll-position refresh is sufficient.
     if secCompleteNow then
         if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
-        -- Scroll the now-collapsed, finished week out of the way so the next
-        -- incomplete week is what the user sees, instead of having to
-        -- manually scroll past every already-done week.
-        ScrollToAutoExpandSection(database)
     elseif Addon._refreshChangeWeekLabel then
         Addon._refreshChangeWeekLabel()
     end

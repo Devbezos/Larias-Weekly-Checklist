@@ -251,6 +251,9 @@ function Addon:CreateHeader(frame)
             Addon:Refresh()
         end
     end
+    -- Expose so completing a section can trigger the same "change week" pick
+    -- programmatically instead of duplicating this logic.
+    Addon._HandlePick = HandlePick
 
     -- ── PopulateHeaderPicker ─────────────────────────────────────────────────
     local function PopulateHeaderPicker()
