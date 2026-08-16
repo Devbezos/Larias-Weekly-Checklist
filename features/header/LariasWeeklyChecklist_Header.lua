@@ -266,9 +266,8 @@ function Addon:CreateHeader(frame)
         local db0 = Addon:EnsureDB()
         -- Same function the main list uses to decide which week's header
         -- shows the change-week affordance -- keeps the ">" marker here in
-        -- agreement with what's actually clickable in the list (a pin only
-        -- counts while that week is still incomplete; picking a finished
-        -- week to look back at it doesn't move the marker onto it).
+        -- agreement with what's actually clickable in the list (whatever
+        -- week is pinned takes the marker, complete or not).
         local currentId = Addon._GetPickerSectionId and Addon._GetPickerSectionId(db0)
         currentId = currentId and tostring(currentId) or nil
 

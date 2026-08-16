@@ -1396,23 +1396,18 @@ local function GetAutoExpandSectionId(db)
 end
 
 -- Which section's header shows the "change week" affordance (non-collapsible,
--- opens the picker dropdown). Always the real current week (first-incomplete/
--- actively-worked), except while the user has explicitly picked a *different,
--- still-incomplete* week to work ahead on. Picking an already-*finished* week
--- to look back at it does not take this over from the real current week --
--- that week stays reachable from the current week's own header.
+-- opens the picker dropdown). Whatever week is explicitly pinned via
+-- startAtSectionId takes this over unconditionally, complete or not --
+-- picking an already-*finished* week to look back at it makes that week's
+-- header the one that opens the picker, same as picking any other week.
+-- Falls back to the real current week (actively-worked / first-incomplete)
+-- only when nothing is pinned. GetCurrentSectionId's own stored-start check
+-- already implements exactly this precedence, so just defer to it.
 -- Single source of truth for both the main list (ApplySectionVisuals) and
 -- the week-picker dropdown's ">" marker (Header.lua's PopulateHeaderPicker),
 -- so they can't disagree about which week "is current".
 local function GetPickerSectionId(db)
-    db = db or Addon:EnsureDB()
-    local pickerId = GetCurrentSectionId(db, true)
-    local startId = tostring(db.startAtSectionId or "")
-    if startId ~= "" and Addon._sectionsById and Addon._sectionsById[startId]
-       and not IsSectionCompleteById(startId, db) then
-        pickerId = startId
-    end
-    return pickerId
+    return GetCurrentSectionId(db or Addon:EnsureDB())
 end
 Addon._GetPickerSectionId = GetPickerSectionId
 
@@ -1966,12 +1961,18 @@ local function OnCheckboxClick(selfBtn)
             Addon._PopulateHeaderPicker()
         end
 
-        local nextId = GetAutoExpandSectionId(database)
-        if nextId and Addon._HandlePick then
-            -- Literally trigger a change-week to the next incomplete week --
-            -- the same pin/expand/scroll-into-view/refresh that picking it
-            -- from the dropdown does -- instead of separately re-deriving
-            -- "what should the header/expand target be" here.
+        -- Use the same "which week gets the change-week affordance" logic as
+        -- the picker's ">" marker (GetPickerSectionId), not the plain
+        -- first-incomplete-in-order logic -- so completing a section lands
+        -- you on whatever week the header would already hand control to
+        -- (e.g. a later week you've actively started), matching what the
+        -- week selector itself considers "current".
+        local nextId = GetPickerSectionId(database)
+        if nextId and not IsSectionCompleteById(nextId, database) and Addon._HandlePick then
+            -- Literally trigger a change-week to that week -- the same
+            -- pin/expand/scroll-into-view/refresh that picking it from the
+            -- dropdown does -- instead of separately re-deriving "what
+            -- should the header/expand target be" here.
             pickedNextWeek = true
             Addon._HandlePick(nextId, Addon._scrollFrame)
         elseif Addon.RequestRefresh then
