@@ -103,7 +103,10 @@ jobs:
           SHEET_ID="1iK2SZUcz_ljnkdTG7KW6pqfzaUDuSgnlh1HupcLrkus"
           GID="53744607"
           mkdir -p data
-          curl -L "https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}" \
+          # -f: treat any non-2xx response (e.g. Google's 429 "heavy traffic"
+          # HTML page) as a failure instead of saving it as if it were the CSV.
+          # set -e above then stops the whole job here -- no commit, no release.
+          curl -fL "https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}" \
             -o data/spreadsheet.csv
 
       - name: Convert CSV to Lua
