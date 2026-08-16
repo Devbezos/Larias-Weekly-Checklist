@@ -1371,9 +1371,11 @@ end
 -- Expose for tests.
 Addon._GetCurrentSectionId = GetCurrentSectionId
 
-local function GetFirstVisibleSectionId(db, prefs)
+-- Finished weeks are never hidden; this is purely "which section should
+-- auto-expand as the active one" -- the first incomplete section from the
+-- pinned start point forward (or from the very start if nothing is pinned).
+local function GetAutoExpandSectionId(db)
     db = db or Addon:EnsureDB()
-    prefs = prefs or Addon:EnsurePrefs()
 
     local startId = tostring(db.startAtSectionId or "")
     local startIndex = 1
@@ -1381,11 +1383,10 @@ local function GetFirstVisibleSectionId(db, prefs)
         startIndex = Addon._sectionsIndexById[startId]
     end
 
-    local hideDone = prefs.hideCompletedSections and true or false
     if Addon._order then
         for i = startIndex, #Addon._order do
             local sid = Addon._order[i]
-            if not (hideDone and IsSectionCompleteById(sid, db)) then
+            if not IsSectionCompleteById(sid, db) then
                 return sid
             end
         end
@@ -1648,6 +1649,28 @@ local function LayoutFrom(startIndex)
     scrollChild:SetHeight(scrollHeight)
     -- Update scrollbar visibility after reflow so it hides when not needed.
     if UpdateScrollbarVisibility then UpdateScrollbarVisibility() end
+end
+
+-- Finished weeks stay in the list (just collapsed) instead of disappearing,
+-- so without this the user would have to manually scroll past every
+-- already-done week each time. Called right after a section completes and
+-- LayoutFrom has already repositioned everything with final heights, so the
+-- target's on-screen position is accurate.
+local function ScrollToAutoExpandSection(database)
+    if not (scrollFrame and scrollChild and scrollFrame.SetVerticalScroll) then return end
+    local targetId = GetAutoExpandSectionId(database)
+    if not targetId then return end
+    local targetIndex = Addon._sectionsIndexById and Addon._sectionsIndexById[targetId]
+    local targetFrame = targetIndex and Addon._activeSections[targetIndex]
+    if not (targetFrame and targetFrame:IsShown()) then return end
+
+    local childTop, frameTop = scrollChild:GetTop(), targetFrame:GetTop()
+    if not (childTop and frameTop) then return end
+
+    local offset = childTop - frameTop
+    local maxScroll = tonumber(scrollFrame.GetVerticalScrollRange and scrollFrame:GetVerticalScrollRange()) or 0
+    offset = math.max(0, math.min(offset, maxScroll))
+    scrollFrame:SetVerticalScroll(offset)
 end
 
 -- Hide or show the scrollbar depending on whether content needs scrolling.
@@ -1923,9 +1946,9 @@ local function OnCheckboxClick(selfBtn)
         -- Finishing the section you're currently pinned to (e.g. it was
         -- pinned to itself from an earlier click on its own header) should
         -- hand control back to natural progression. Otherwise a stale pin
-        -- would exempt it from the hide-when-complete rule below forever --
-        -- it wouldn't hide "as normal" just because it happened to still be
-        -- pinned to itself at the moment it finished.
+        -- would keep UpdateSectionVisuals's "hide everything before the
+        -- pinned section" filter anchored on this now-finished week forever,
+        -- hiding earlier weeks that should be visible again.
         if tostring(database.startAtSectionId or "") == tostring(sectionId) then
             database.startAtSectionId = ""
         end
@@ -1954,12 +1977,6 @@ local function OnCheckboxClick(selfBtn)
     local sectionFrame = Addon._activeSections[Addon._sectionsIndexById[sectionId]]
     if not sectionFrame then return end
 
-    local hideDone = prefs.hideCompletedSections and true or false
-    -- Don't hide the section the user is explicitly viewing (picked via the
-    -- week dropdown), even if finishing it just made it complete -- matches
-    -- the same exemption in UpdateSectionVisuals.
-    local isPinned = tostring(database.startAtSectionId or "") == tostring(sectionId)
-
     SetHeaderText(sectionFrame, sectionId, secCompleteNow)
     ComputeHeaderHeight(sectionFrame, Addon.UI.itemTextWidth + Addon.UI.headerTextExtraW)
 
@@ -1969,11 +1986,8 @@ local function OnCheckboxClick(selfBtn)
     LayoutItems(sectionFrame, collapsed, prefs.hideCompletedTasks)
     UpdateSectionHeight(sectionFrame, collapsed)
 
-    if hideDone and secCompleteNow and not isPinned then
-        sectionFrame:Hide()
-    else
-        sectionFrame:Show()
-    end
+    -- Finished weeks stay visible and collapsible -- never hidden.
+    sectionFrame:Show()
 
     LayoutFrom(sectionFrame._index or 1)
 
@@ -1983,6 +1997,10 @@ local function OnCheckboxClick(selfBtn)
     -- For non-completing clicks, a scroll-position refresh is sufficient.
     if secCompleteNow then
         if Addon.LayoutHeaderButtons then Addon:LayoutHeaderButtons() end
+        -- Scroll the now-collapsed, finished week out of the way so the next
+        -- incomplete week is what the user sees, instead of having to
+        -- manually scroll past every already-done week.
+        ScrollToAutoExpandSection(database)
     elseif Addon._refreshChangeWeekLabel then
         Addon._refreshChangeWeekLabel()
     end
@@ -2248,16 +2266,6 @@ UpdateSectionVisuals = function(sectionFrame, sectionId, precomputedCurrentId, p
 
     local complete = IsSectionCompleteById(sectionId, database)
 
-    -- A section the user explicitly picked via the week dropdown stays visible
-    -- even if it's complete -- otherwise picking a finished week to review it
-    -- would just make it immediately disappear again.
-    local isPinned = startId ~= "" and tostring(sectionId) == startId
-    local hideDone = prefs.hideCompletedSections and true or false
-    if hideDone and complete and not isPinned then
-        sectionFrame:Hide()
-        return
-    end
-
     sectionFrame:Show()
 
     ApplySectionHeaderTint(sectionFrame)
@@ -2265,7 +2273,7 @@ UpdateSectionVisuals = function(sectionFrame, sectionId, precomputedCurrentId, p
     -- Only auto-collapse a completed section when the user has NOT explicitly
     -- expanded it (tracked via _userExpandedCompleted set in OnHeaderClick).
     local userExpanded = Addon._userExpandedCompleted and Addon._userExpandedCompleted[sectionId]
-    local isFirstVisible = tostring(sectionId) == tostring(precomputedFirstVisibleId or GetFirstVisibleSectionId(database, prefs) or "")
+    local isFirstVisible = tostring(sectionId) == tostring(precomputedFirstVisibleId or GetAutoExpandSectionId(database) or "")
     if complete and not userExpanded and not isFirstVisible then
         SetSectionCollapsed(sectionId, true, database)
     end
@@ -2379,7 +2387,7 @@ local function ApplySectionVisuals(want, haveBefore, dataChanged, database, chil
     -- Pre-compute once so UpdateSectionVisuals doesn't re-walk _order N times
     -- on the first open (when all collapsedSections entries are nil).
     local currentSectionId = GetCurrentSectionId(database)
-    local firstVisibleSectionId = GetFirstVisibleSectionId(database, Addon:EnsurePrefs())
+    local firstVisibleSectionId = GetAutoExpandSectionId(database)
     -- The "change week" header/picker always belongs to the real current
     -- (first-incomplete/actively-worked) week, not wherever's pinned --
     -- otherwise picking a finished week to look back at it would steal the
