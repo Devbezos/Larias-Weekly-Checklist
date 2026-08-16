@@ -1,8 +1,8 @@
 # Larias' Weekly Checklist
 
-[![CurseForge](https://img.shields.io/badge/CurseForge-Install-F16436)](https://www.curseforge.com/wow/addons/larias-weekly-midnight-checklist)
+[![CurseForge](https://img.shields.io/badge/CurseForge-Install-F16436?logo=curseforge&logoColor=white)](https://www.curseforge.com/wow/addons/larias-weekly-midnight-checklist)
 [![Wago](https://img.shields.io/badge/Wago-Install-C1272D)](https://addons.wago.io/addons/mKOD5RGx)
-[![GitHub Release](https://img.shields.io/github/v/release/Devbezos/Larias-Weekly-Checklist?label=GitHub&color=181717)](https://github.com/Devbezos/Larias-Weekly-Checklist/releases/latest)
+[![GitHub Release](https://img.shields.io/github/v/release/Devbezos/Larias-Weekly-Checklist?label=GitHub&color=181717&logo=github&logoColor=white)](https://github.com/Devbezos/Larias-Weekly-Checklist/releases/latest)
 
 ## Install
 
