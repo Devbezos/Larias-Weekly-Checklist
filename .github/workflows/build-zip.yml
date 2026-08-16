@@ -1,0 +1,68 @@
+name: Build Zip (no upload)
+
+# On-demand packaging only. Runs the real packager (which has working svn
+# access for the .pkgmeta externals, unlike a plain local checkout) but
+# skips the CurseForge/Wago upload with -d. Useful for grabbing a real,
+# working zip without going through a full alpha/stable version bump and
+# release cycle.
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_branch:
+        description: "Branch to build from (default: current default branch)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  build-zip:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.target_branch || github.ref_name }}
+
+      - name: Build zip (packager, upload skipped)
+        uses: BigWigsMods/packager@v2.4.3
+        with:
+          args: -d
+          pandoc: false
+
+      - name: Locate built zip
+        id: zip
+        run: |
+          set -euo pipefail
+          ZIP=$(find .release -maxdepth 1 -name "*.zip" | head -n 1)
+          if [ -z "$ZIP" ]; then
+            echo "ERROR: no zip found in .release/" >&2
+            exit 1
+          fi
+          echo "path=$ZIP" >> "$GITHUB_OUTPUT"
+
+      - name: Upload as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LariasWeeklyChecklist-zip
+          path: ${{ steps.zip.outputs.path }}
+
+      - name: Publish/replace "manual-build" GitHub Release
+        # Reuses a single fixed tag so re-running this workflow updates the
+        # same release instead of piling up new ones. Not a prerelease, so
+        # it satisfies the README's "latest release" badge/link until a
+        # real alpha/stable deploy supersedes it.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view manual-build >/dev/null 2>&1; then
+            gh release delete manual-build --yes --cleanup-tag
+          fi
+          gh release create manual-build "${{ steps.zip.outputs.path }}" \
+            --title "Manual Zip Build" \
+            --notes "Built on demand from \`${{ inputs.target_branch || github.ref_name }}\` via the Build Zip workflow -- packaged only, not uploaded to CurseForge or Wago. Superseded automatically once a real Alpha/Stable release is published."

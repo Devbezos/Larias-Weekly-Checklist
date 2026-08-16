@@ -290,6 +290,27 @@ jobs:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
           WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
 
+      - name: Publish GitHub Release with packaged zip
+        # The packager only uploads to CurseForge/Wago -- it never touches
+        # GitHub. Attach the zip it just built (release.sh leaves it in
+        # .release/) as a GitHub Release so the README can link straight to
+        # a working direct download.
+        if: steps.check.outputs.should_release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+          VERSION: ${{ steps.check.outputs.version }}
+        run: |
+          set -euo pipefail
+          ZIP=$(find .release -maxdepth 1 -name "*.zip" | head -n 1)
+          if [ -z "$ZIP" ]; then
+            echo "ERROR: no packaged zip found in .release/" >&2
+            exit 1
+          fi
+          gh release create "$TAG" "$ZIP" \
+            --title "Larias' Weekly Checklist $VERSION" \
+            --notes-file CHANGELOG.md
+
       - name: Notify Discord (release posted)
         if: steps.check.outputs.should_release == 'true'
         env:
