@@ -19,3 +19,6 @@ CLAUDE.md
 scripts/watch_deploy.ps1
 scripts/_fix_icons.py
 tests/
+REVIEW_NOTES.md
+SETUP.md
+codex_for_agent.md
