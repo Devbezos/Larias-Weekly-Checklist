@@ -1960,6 +1960,7 @@ local function OnCheckboxClick(selfBtn)
     end
 
     -- Refresh the picker ">" marker whenever a section completes.
+    local pickedNextWeek = false
     if secCompleteNow then
         if Addon._PopulateHeaderPicker then
             Addon._PopulateHeaderPicker()
@@ -1971,6 +1972,7 @@ local function OnCheckboxClick(selfBtn)
             -- the same pin/expand/scroll-into-view/refresh that picking it
             -- from the dropdown does -- instead of separately re-deriving
             -- "what should the header/expand target be" here.
+            pickedNextWeek = true
             Addon._HandlePick(nextId, Addon._scrollFrame)
         elseif Addon.RequestRefresh then
             -- Nothing left incomplete to advance to -- still need a resync
@@ -1979,25 +1981,31 @@ local function OnCheckboxClick(selfBtn)
         end
     end
 
-    local sectionFrame = Addon._activeSections[Addon._sectionsIndexById[sectionId]]
-    if not sectionFrame then return end
+    -- HandlePick above already queued a full resync that will re-derive and
+    -- apply this exact section's visuals (and, since nextId comes after it,
+    -- will hide it again via the pin filter). Doing that work here too would
+    -- be wasted, and would flash this section visible for one frame before
+    -- the deferred resync hides it again a moment later.
+    if not pickedNextWeek then
+        local sectionFrame = Addon._activeSections[Addon._sectionsIndexById[sectionId]]
+        if not sectionFrame then return end
 
-    SetHeaderText(sectionFrame, sectionId, secCompleteNow)
-    ComputeHeaderHeight(sectionFrame, Addon.UI.itemTextWidth + Addon.UI.headerTextExtraW)
+        SetHeaderText(sectionFrame, sectionId, secCompleteNow)
+        ComputeHeaderHeight(sectionFrame, Addon.UI.itemTextWidth + Addon.UI.headerTextExtraW)
 
-    local collapsed = IsSectionCollapsed(sectionId, database) or false
-    if secCompleteNow then collapsed = true end
+        local collapsed = IsSectionCollapsed(sectionId, database) or false
+        if secCompleteNow then collapsed = true end
 
-    LayoutItems(sectionFrame, collapsed, prefs.hideCompletedTasks, secCompleteNow)
-    UpdateSectionHeight(sectionFrame, collapsed)
+        LayoutItems(sectionFrame, collapsed, prefs.hideCompletedTasks, secCompleteNow)
+        UpdateSectionHeight(sectionFrame, collapsed)
 
-    -- Never hidden here just for being complete. It can still end up hidden
-    -- moments later if this completion triggers a change-week pick below
-    -- (UpdateSectionVisuals hides everything before the pinned section) --
-    -- reachable again any time via change-week.
-    sectionFrame:Show()
+        -- Never hidden here just for being complete. It can still end up
+        -- hidden if a *different* prior pin filters it out -- reachable
+        -- again any time via change-week.
+        sectionFrame:Show()
 
-    LayoutFrom(sectionFrame._index or 1)
+        LayoutFrom(sectionFrame._index or 1)
+    end
 
     -- After a section completes, recompute the change-week button label from
     -- scratch (LayoutHeaderButtons re-derives currentId from the DB so it
@@ -2147,18 +2155,28 @@ local function OnPickerSectionHeaderClick(self_)
     ToggleHeaderPickerFromAnchor(sectionFrame._expandBtn or sectionFrame._header)
 end
 
+local function OnPickerSectionTitleHoverEnter(self_)
+    Addon.AddonUtils.SetTooltip(self_, L.PICKER_HEADER_TOOLTIP or "Click to change week", "ANCHOR_BOTTOMLEFT")
+end
+
 local function OnSectionExpandButtonEnter(self_)
     GameTooltip:SetOwner(self_, "ANCHOR_BOTTOMLEFT")
     GameTooltip:SetText(L.CHANGE_WEEK_BUTTON or "Change Week", 1, 1, 1, 1, true)
     GameTooltip:Show()
 end
 
-local function OnSectionExpandButtonLeave()
+local function OnSectionExpandButtonLeave(self_)
     GameTooltip:Hide()
-end
-
-local function OnPickerSectionTitleHoverEnter(self_)
-    Addon.AddonUtils.SetTooltip(self_, L.PICKER_HEADER_TOOLTIP or "Click to change week", "ANCHOR_BOTTOMLEFT")
+    -- This button overlaps the right edge of the section header (both have
+    -- mouse enabled; WoW fires OnEnter/OnLeave per-frame-rect, not "topmost
+    -- only", so leaving this button's smaller rect doesn't mean the cursor
+    -- left the header's larger rect too). Without this, moving off the
+    -- button while still over the header leaves no tooltip shown until the
+    -- user exits the header entirely and re-enters it.
+    local header = self_ and self_._sectionFrame and self_._sectionFrame._header
+    if header and header.IsMouseOver and header:IsMouseOver() then
+        OnPickerSectionTitleHoverEnter(header)
+    end
 end
 
 local function SyncCheckboxesForSection(sectionFrame, sectionId, db)
