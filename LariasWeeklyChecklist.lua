@@ -1601,16 +1601,22 @@ local function ComputeHeaderHeight(sectionFrame, headerTextWidth)
     sectionFrame._headerBlockHeight = headerHeight + Addon.UI.headerBottomPad
 end
 
-local function LayoutItems(sectionFrame, collapsed, hideCompletedTasks)
+local function LayoutItems(sectionFrame, collapsed, hideCompletedTasks, sectionComplete)
     -- Stack item rows under the header; hide when collapsed.
     -- When the "hide completed tasks" pref is active, skip checked items from
     -- the layout entirely so the section shrinks to fit only visible rows.
     -- hideCompletedTasks is passed as a parameter (rather than read from prefs
     -- here) so callers can hoist the single EnsurePrefs() call and avoid
     -- repeating it for every section on each layout pass.
+    -- Once every item in a section is checked, hiding "completed" items would
+    -- hide *all* of them -- an expanded fully-done section would render
+    -- identically to a collapsed one (just the header, nothing underneath),
+    -- making the expand/collapse toggle look broken since there's never
+    -- anything visible either way. A fully-complete section always shows its
+    -- full item list when expanded, regardless of this pref.
     local posY        = -(sectionFrame._headerBlockHeight or (Addon.UI.headerMinH + Addon.UI.headerBottomPad))
     local totalHeight = 0
-    local hideChecked = not collapsed and hideCompletedTasks
+    local hideChecked = not collapsed and hideCompletedTasks and not sectionComplete
     local checkboxes  = sectionFrame._checkboxes
     for i = 1, #checkboxes do
         local checkbox = checkboxes[i]
@@ -1982,7 +1988,7 @@ local function OnCheckboxClick(selfBtn)
     local collapsed = IsSectionCollapsed(sectionId, database) or false
     if secCompleteNow then collapsed = true end
 
-    LayoutItems(sectionFrame, collapsed, prefs.hideCompletedTasks)
+    LayoutItems(sectionFrame, collapsed, prefs.hideCompletedTasks, secCompleteNow)
     UpdateSectionHeight(sectionFrame, collapsed)
 
     -- Never hidden here just for being complete. It can still end up hidden
@@ -2313,7 +2319,7 @@ UpdateSectionVisuals = function(sectionFrame, sectionId, precomputedFirstVisible
         end
     end
 
-    LayoutItems(sectionFrame, collapsed, prefs.hideCompletedTasks)
+    LayoutItems(sectionFrame, collapsed, prefs.hideCompletedTasks, complete)
     UpdateSectionHeight(sectionFrame, collapsed)
 
     -- Sync the expand button's visual state.
