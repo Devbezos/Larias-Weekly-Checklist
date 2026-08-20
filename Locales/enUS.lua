@@ -330,7 +330,7 @@ local STRINGS = {
 	ALT_SUMMARY_SECTION_STATS            = "Stats",
 	ALT_SUMMARY_KEYS_THIS_WEEK           = "Keys This Week",
 	ALT_SUMMARY_KEYS_THIS_WEEK_FMT       = "Keys this week: %d",
-	ALT_SUMMARY_TOTAL_KEYS               = "Total Keys",
+	ALT_SUMMARY_KEYS_THIS_SEASON         = "Keys This Season",
 	ALT_SUMMARY_KEYS_THIS_SEASON_FMT     = "Keys this season: %d",
 	-- Season 2 Mythic+ dungeon shortforms shown in the Alt Summary keystone
 	-- cell. Match the labels Blizzard's own dungeon-select tiles use.

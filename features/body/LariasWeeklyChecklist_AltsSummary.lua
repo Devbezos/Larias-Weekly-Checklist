@@ -567,8 +567,8 @@ local function BuildAltSummaryRowKey(row)
     if row.type == "weeklykeys" then
         return "weeklykeys"
     end
-    if row.type == "totalkeys" then
-        return "totalkeys"
+    if row.type == "seasonkeys" then
+        return "seasonkeys"
     end
     return tostring(row.type or "row") .. ":" .. tostring(row.label or "")
 end
@@ -1153,7 +1153,7 @@ local function BuildRowDefs(tracking, LAYOUT, chars)
 
     addSec("stats", L.ALT_SUMMARY_SECTION_STATS or "Stats", nil)
     addRow("weeklykeys", L.ALT_SUMMARY_KEYS_THIS_WEEK or "Keys This Week", {})
-    addRow("totalkeys", L.ALT_SUMMARY_TOTAL_KEYS or "Total Keys", {})
+    addRow("seasonkeys", L.ALT_SUMMARY_KEYS_THIS_SEASON or "Keys This Season", {})
 
     local sectionOrderMap = BuildSectionOrderMap(Addon.GetAltSummarySectionOrder and Addon:GetAltSummarySectionOrder() or {})
     table.sort(sections, function(a, b)
@@ -1717,9 +1717,9 @@ local function RenderWeeklyKeysCell(cell, row, snap, noSnap, alpha, th)
         "ALT_SUMMARY_KEYS_THIS_WEEK_FMT", "Keys this week: %d")
 end
 
-local function RenderTotalKeysCell(cell, row, snap, noSnap, alpha, th)
+local function RenderSeasonKeysCell(cell, row, snap, noSnap, alpha, th)
     RenderKeystoneRunCountCell(cell, snap, noSnap, alpha, th, "seasonRuns",
-        "ALT_SUMMARY_TOTAL_KEYS", "Total Keys",
+        "ALT_SUMMARY_KEYS_THIS_SEASON", "Keys This Season",
         "ALT_SUMMARY_KEYS_THIS_SEASON_FMT", "Keys this season: %d")
 end
 
@@ -1971,8 +1971,8 @@ local function RenderRowCell(rtype, cell, row, sd, snap, noSnap, alpha, th, char
         RenderGVCell(cell, row, snap, noSnap, alpha)
     elseif rtype == "weeklykeys" then
         RenderWeeklyKeysCell(cell, row, snap, noSnap, alpha, th)
-    elseif rtype == "totalkeys" then
-        RenderTotalKeysCell(cell, row, snap, noSnap, alpha, th)
+    elseif rtype == "seasonkeys" then
+        RenderSeasonKeysCell(cell, row, snap, noSnap, alpha, th)
     elseif rtype == "weapupg" then
         RenderWeapUpgCell(cell, row, sd, noSnap, alpha, th)
     end
