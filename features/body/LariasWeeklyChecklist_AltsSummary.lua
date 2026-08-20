@@ -567,6 +567,9 @@ local function BuildAltSummaryRowKey(row)
     if row.type == "weeklykeys" then
         return "weeklykeys"
     end
+    if row.type == "totalkeys" then
+        return "totalkeys"
+    end
     return tostring(row.type or "row") .. ":" .. tostring(row.label or "")
 end
 
@@ -1148,8 +1151,9 @@ local function BuildRowDefs(tracking, LAYOUT, chars)
         end
     end
 
-    addSec("weeklystats", L.ALT_SUMMARY_SECTION_WEEKLY_STATS or "Weekly Stats", nil)
+    addSec("stats", L.ALT_SUMMARY_SECTION_STATS or "Stats", nil)
     addRow("weeklykeys", L.ALT_SUMMARY_KEYS_THIS_WEEK or "Keys This Week", {})
+    addRow("totalkeys", L.ALT_SUMMARY_TOTAL_KEYS or "Total Keys", {})
 
     local sectionOrderMap = BuildSectionOrderMap(Addon.GetAltSummarySectionOrder and Addon:GetAltSummarySectionOrder() or {})
     table.sort(sections, function(a, b)
@@ -1685,27 +1689,38 @@ local function RenderKeystoneCell(cell, row, snap, noSnap, alpha, th)
     end)
 end
 
--- Weekly Stats: how many Mythic+ dungeons this character has completed since
--- the weekly reset. Lives in its own section below Great Vault (previously
--- shown only in the keystone tooltip).
-local function RenderWeeklyKeysCell(cell, row, snap, noSnap, alpha, th)
+-- Stats: how many Mythic+ dungeons this character has completed, both since
+-- the weekly reset and season-to-date. Lives in its own section below Great
+-- Vault (previously shown only in the keystone tooltip). Both rows share
+-- this renderer -- only the snapshot field and tooltip strings differ.
+local function RenderKeystoneRunCountCell(cell, snap, noSnap, alpha, th, field, titleKey, titleFallback, fmtKey, fmtFallback)
     local ks = snap and snap.keystone
-    local weeklyRuns = ks and tonumber(ks.weeklyRuns)
-    if noSnap or not ks or weeklyRuns == nil then
+    local count = ks and tonumber(ks[field])
+    if noSnap or not ks or count == nil then
         SetPlaceholder(cell, th, alpha * A_DIM)
         return
     end
-    local seasonRuns = tonumber(ks.seasonRuns) or weeklyRuns
-    cell._fs:SetText(tostring(weeklyRuns))
-    cell._fs:SetTextColor(th.r, th.g, th.b, alpha * (weeklyRuns > 0 and A_FULL or A_EMPTY))
-    local _weeklyRuns, _seasonRuns = weeklyRuns, seasonRuns
+    cell._fs:SetText(tostring(count))
+    cell._fs:SetTextColor(th.r, th.g, th.b, alpha * (count > 0 and A_FULL or A_EMPTY))
+    local _count = count
     cell:SetScript("OnEnter", function(s_)
         GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
-        GameTooltip:SetText(L.ALT_SUMMARY_KEYS_THIS_WEEK or "Keys This Week", 1, 0.82, 0)
-        GameTooltip:AddLine((L.ALT_SUMMARY_KEYS_THIS_WEEK_FMT or "Keys this week: %d"):format(_weeklyRuns), 1, 1, 1)
-        GameTooltip:AddLine((L.ALT_SUMMARY_KEYS_THIS_SEASON_FMT or "Keys this season: %d"):format(_seasonRuns), 1, 1, 1)
+        GameTooltip:SetText(L[titleKey] or titleFallback, 1, 0.82, 0)
+        GameTooltip:AddLine((L[fmtKey] or fmtFallback):format(_count), 1, 1, 1)
         GameTooltip:Show()
     end)
+end
+
+local function RenderWeeklyKeysCell(cell, row, snap, noSnap, alpha, th)
+    RenderKeystoneRunCountCell(cell, snap, noSnap, alpha, th, "weeklyRuns",
+        "ALT_SUMMARY_KEYS_THIS_WEEK", "Keys This Week",
+        "ALT_SUMMARY_KEYS_THIS_WEEK_FMT", "Keys this week: %d")
+end
+
+local function RenderTotalKeysCell(cell, row, snap, noSnap, alpha, th)
+    RenderKeystoneRunCountCell(cell, snap, noSnap, alpha, th, "seasonRuns",
+        "ALT_SUMMARY_TOTAL_KEYS", "Total Keys",
+        "ALT_SUMMARY_KEYS_THIS_SEASON_FMT", "Keys this season: %d")
 end
 
 local function FormatAverageItemLevel(ilvl)
@@ -1956,6 +1971,8 @@ local function RenderRowCell(rtype, cell, row, sd, snap, noSnap, alpha, th, char
         RenderGVCell(cell, row, snap, noSnap, alpha)
     elseif rtype == "weeklykeys" then
         RenderWeeklyKeysCell(cell, row, snap, noSnap, alpha, th)
+    elseif rtype == "totalkeys" then
+        RenderTotalKeysCell(cell, row, snap, noSnap, alpha, th)
     elseif rtype == "weapupg" then
         RenderWeapUpgCell(cell, row, sd, noSnap, alpha, th)
     end
