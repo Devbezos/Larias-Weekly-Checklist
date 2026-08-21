@@ -60,6 +60,25 @@ local function IsItemEmbellished(itemLink)
     return false
 end
 
+-- C_ChallengeMode.GetDungeonScoreRarityColor(dungeonScore) returns a
+-- ColorMixin (a table exposing plain .r/.g/.b fields) for the same rarity
+-- color Blizzard's own Mythic+ Rating UI uses for that score value. It's a
+-- pure function of the score number, not of "my own" live state, so it's
+-- safe to call here for any character's score, including a breakdown entry
+-- for a dungeon the snapshotted character hasn't run. Returns nil (render
+-- side falls back to the theme's default text color) if the API is missing
+-- or returns something unexpected.
+local function CaptureDungeonScoreColor(API, score)
+    if not (API.ChallengeMode and type(API.ChallengeMode.GetDungeonScoreRarityColor) == "function") then
+        return nil
+    end
+    local ok, color = pcall(API.ChallengeMode.GetDungeonScoreRarityColor, score)
+    if ok and type(color) == "table" and type(color.r) == "number" then
+        return { color.r, color.g, color.b }
+    end
+    return nil
+end
+
 local function WipeArray(t)
     if type(t) ~= "table" then return {} end
     for i = #t, 1, -1 do
@@ -384,6 +403,46 @@ function Addon:BuildTrackingSnapshot(snap, dirtyDomains)
         end
         snap.keystone.weeklyRuns = weeklyRuns
         snap.keystone.seasonRuns = seasonRuns
+
+        -- Overall Mythic+ Rating ("IO score"), Blizzard's own rarity color for
+        -- that score, and a per-dungeon breakdown (name, best level this
+        -- season, and that dungeon's own score/color) for the Alt Summary
+        -- tooltip. All three come from C_ChallengeMode and were verified
+        -- against warcraft.wiki.gg -- GetMapScoreInfo() takes no arguments
+        -- and already returns every dungeon in the current season's pool.
+        local ioScore = 0
+        if API.ChallengeMode and type(API.ChallengeMode.GetOverallDungeonScore) == "function" then
+            local ok, score = pcall(API.ChallengeMode.GetOverallDungeonScore)
+            if ok and type(score) == "number" then
+                ioScore = score
+            end
+        end
+        snap.keystone.ioScore = ioScore
+        snap.keystone.ioColor = CaptureDungeonScoreColor(API, ioScore)
+
+        local ioBreakdown = {}
+        if API.ChallengeMode and type(API.ChallengeMode.GetMapScoreInfo) == "function" then
+            local ok, scores = pcall(API.ChallengeMode.GetMapScoreInfo)
+            if ok and type(scores) == "table" then
+                for i = 1, #scores do
+                    local entry = scores[i]
+                    if entry and entry.mapChallengeModeID then
+                        local name
+                        if type(API.ChallengeMode.GetMapUIInfo) == "function" then
+                            name = API.ChallengeMode.GetMapUIInfo(entry.mapChallengeModeID)
+                        end
+                        local entryScore = tonumber(entry.dungeonScore) or 0
+                        ioBreakdown[#ioBreakdown + 1] = {
+                            name  = name or "",
+                            level = tonumber(entry.level) or 0,
+                            score = entryScore,
+                            color = CaptureDungeonScoreColor(API, entryScore),
+                        }
+                    end
+                end
+            end
+        end
+        snap.keystone.ioBreakdown = ioBreakdown
     end
     end
 
