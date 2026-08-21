@@ -564,6 +564,9 @@ local function BuildAltSummaryRowKey(row)
     if row.type == "keystone" then
         return "keystone"
     end
+    if row.type == "ioscore" then
+        return "ioscore"
+    end
     if row.type == "weeklykeys" then
         return "weeklykeys"
     end
@@ -1152,6 +1155,7 @@ local function BuildRowDefs(tracking, LAYOUT, chars)
     end
 
     addSec("stats", L.ALT_SUMMARY_SECTION_STATS or "Stats", nil)
+    addRow("ioscore", L.ALT_SUMMARY_IO_SCORE or "IO Score", {})
     addRow("weeklykeys", L.ALT_SUMMARY_KEYS_THIS_WEEK or "Keys This Week", {})
     addRow("seasonkeys", L.ALT_SUMMARY_KEYS_THIS_SEASON or "Keys This Season", {})
 
@@ -1723,6 +1727,50 @@ local function RenderSeasonKeysCell(cell, row, snap, noSnap, alpha, th)
         "ALT_SUMMARY_KEYS_THIS_SEASON_FMT", "Keys this season: %d")
 end
 
+-- IO Score: the character's overall Mythic+ Rating, colored the same way
+-- Blizzard's own Mythic+ UI colors it (snap.keystone.ioColor, captured via
+-- C_ChallengeMode.GetDungeonScoreRarityColor in Snapshot.lua). On hover,
+-- breaks down every dungeon in the season pool with its best level and
+-- score this season, each colored the same way.
+local function RenderIOScoreCell(cell, row, snap, noSnap, alpha, th)
+    local ks = snap and snap.keystone
+    local score = ks and tonumber(ks.ioScore)
+    if noSnap or not ks or score == nil then
+        SetPlaceholder(cell, th, alpha * A_DIM)
+        return
+    end
+    local color = ks.ioColor
+    local cr, cg, cb = th.r, th.g, th.b
+    if color and color[1] then
+        cr, cg, cb = color[1], color[2], color[3]
+    end
+    cell._fs:SetText(tostring(score))
+    cell._fs:SetTextColor(cr, cg, cb, alpha * (score > 0 and A_FULL or A_EMPTY))
+    local _score, _cr, _cg, _cb, _breakdown = score, cr, cg, cb, ks.ioBreakdown
+    cell:SetScript("OnEnter", function(s_)
+        GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
+        GameTooltip:SetText(L.ALT_SUMMARY_IO_SCORE or "IO Score", _cr, _cg, _cb)
+        GameTooltip:AddLine((L.ALT_SUMMARY_IO_SCORE_FMT or "Score: %d"):format(_score), 1, 1, 1)
+        if type(_breakdown) == "table" and #_breakdown > 0 then
+            GameTooltip:AddLine(" ")
+            for i = 1, #_breakdown do
+                local entry = _breakdown[i]
+                if entry and entry.name and entry.name ~= "" then
+                    local levelStr = entry.level > 0
+                        and (L.ALT_SUMMARY_KEYSTONE_LEVEL_SHORT_FMT or "+%d"):format(entry.level)
+                        or (L.ALT_SUMMARY_NONE or "\226\128\148")
+                    local er, eg, eb = 1, 1, 1
+                    if entry.color and entry.color[1] then
+                        er, eg, eb = entry.color[1], entry.color[2], entry.color[3]
+                    end
+                    GameTooltip:AddDoubleLine(entry.name, levelStr, 1, 1, 1, er, eg, eb)
+                end
+            end
+        end
+        GameTooltip:Show()
+    end)
+end
+
 local function FormatAverageItemLevel(ilvl)
     ilvl = tonumber(ilvl) or 0
     if ilvl <= 0 then return nil end
@@ -1969,6 +2017,8 @@ local function RenderRowCell(rtype, cell, row, sd, snap, noSnap, alpha, th, char
         RenderKeystoneCell(cell, row, snap, noSnap, alpha, th)
     elseif rtype == "gv" then
         RenderGVCell(cell, row, snap, noSnap, alpha)
+    elseif rtype == "ioscore" then
+        RenderIOScoreCell(cell, row, snap, noSnap, alpha, th)
     elseif rtype == "weeklykeys" then
         RenderWeeklyKeysCell(cell, row, snap, noSnap, alpha, th)
     elseif rtype == "seasonkeys" then
