@@ -1287,7 +1287,12 @@ local function ExtractSnapData(snap, crestIDs, LAYOUT)
                 if crestIDs[ii] == rid then
                     local cap, hasCurrentCap = GetLiveSnapshotCap(getLiveCap, t, rid)
                     d.crestCaps[ii]     = cap
-                    d.crestQtys[ii]     = resetCurrencies and 0 or ClampSnapshotAmountToCurrentCap(r_.qty, cap, hasCurrentCap)
+                    -- qty (total held) is intentionally NOT clamped to cap: a
+                    -- character can genuinely hold more crests than the season
+                    -- cap via bonus/uncapped catch-up sources, and the cell
+                    -- should show that overflow (e.g. "130/100") rather than
+                    -- hide it. Only zero it out on an actual weekly reset.
+                    d.crestQtys[ii]     = resetCurrencies and 0 or (tonumber(r_.qty) or 0)
                     d.crestEarneds[ii]  = resetCurrencies and 0 or ClampSnapshotAmountToCurrentCap(r_.earned, cap, hasCurrentCap)
                     d.crestTradeups[ii] = r_.tradeup and (resetCurrencies and 0 or (tonumber(r_.tradeup) or 0)) or nil
                     break
@@ -1366,9 +1371,13 @@ local function RenderCrestCell(cell, row, sd, noSnap, alpha, _th, crestIDs, high
         SetPlaceholder(cell, _th, alpha * A_DIM)
         cell._tu:SetText("")
     else
-        -- Show crests acquired this week vs the weekly cap.
-        local baseStr = (cap > 0) and (earned .. "/" .. cap) or tostring(qty)
-        local shownVal = (cap > 0) and earned or qty
+        -- Show crests acquired toward the cap. When held crests exceed what
+        -- was earned toward the cap (bonus/uncapped crests on top of a
+        -- capped amount), show the larger held total on the left instead
+        -- (e.g. "130/100") so the bonus isn't hidden behind the cap value.
+        local numerator = (qty > earned) and qty or earned
+        local baseStr = (cap > 0) and (numerator .. "/" .. cap) or tostring(qty)
+        local shownVal = (cap > 0) and numerator or qty
         cell._fs:SetText(baseStr)
         local pr, pg, pb = CrestProgressColor(earned, cap)
         cell._fs:SetTextColor(pr, pg, pb, alpha * (shownVal > 0 and A_FULL or A_EMPTY))
