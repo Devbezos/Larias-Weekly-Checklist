@@ -13,6 +13,15 @@ local MoveArrayEntry = AU.MoveArrayEntry
 local GetFrameCursorOffset = AU.GetFrameCursorOffset
 local CreateDragReorderController = AU.CreateDragReorderController
 
+-- IO Score row label: prefer Blizzard's own global string DUNGEON_SCORE (the
+-- same one the Challenges/Group Finder frame's DungeonScoreInfo widget uses),
+-- so this row's label always matches the player's client language
+-- automatically with no translation upkeep here. Blizzard's FrameXML globals
+-- load before addon files, so DUNGEON_SCORE is already defined by this point.
+-- Falls back to our own locale entry if Blizzard ever renames or drops that
+-- global string in a future patch.
+local IO_SCORE_LABEL = _G.DUNGEON_SCORE or L.ALT_SUMMARY_IO_SCORE or "Mythic+ Rating"
+
 -- ── Layout constants ──────────────────────────────────────────────────────────
 local PAD        = 8
 local RIGHT_PAD  = 2
@@ -1155,7 +1164,7 @@ local function BuildRowDefs(tracking, LAYOUT, chars)
     end
 
     addSec("stats", L.ALT_SUMMARY_SECTION_STATS or "Stats", nil)
-    addRow("ioscore", L.ALT_SUMMARY_IO_SCORE or "IO Score", {})
+    addRow("ioscore", IO_SCORE_LABEL, {})
     addRow("weeklykeys", L.ALT_SUMMARY_KEYS_THIS_WEEK or "Keys This Week", {})
     addRow("seasonkeys", L.ALT_SUMMARY_KEYS_THIS_SEASON or "Keys This Season", {})
 
@@ -1740,7 +1749,8 @@ end
 -- Blizzard's own Mythic+ UI colors it (snap.keystone.ioColor, captured via
 -- C_ChallengeMode.GetDungeonScoreRarityColor in Snapshot.lua). On hover,
 -- breaks down every dungeon in the season pool with its best level and
--- score this season, each colored the same way.
+-- score this season, each colored the same way. Row/tooltip label text is
+-- IO_SCORE_LABEL, declared near the top of this file.
 local function RenderIOScoreCell(cell, row, snap, noSnap, alpha, th)
     local ks = snap and snap.keystone
     local score = ks and tonumber(ks.ioScore)
@@ -1758,8 +1768,8 @@ local function RenderIOScoreCell(cell, row, snap, noSnap, alpha, th)
     local _score, _cr, _cg, _cb, _breakdown = score, cr, cg, cb, ks.ioBreakdown
     cell:SetScript("OnEnter", function(s_)
         GameTooltip:SetOwner(s_, "ANCHOR_RIGHT")
-        GameTooltip:SetText(L.ALT_SUMMARY_IO_SCORE or "IO Score", _cr, _cg, _cb)
-        GameTooltip:AddLine((L.ALT_SUMMARY_IO_SCORE_FMT or "Score: %d"):format(_score), 1, 1, 1)
+        GameTooltip:SetText(IO_SCORE_LABEL, _cr, _cg, _cb)
+        GameTooltip:AddLine((L.ALT_SUMMARY_IO_SCORE_FMT or "Rating: %d"):format(_score), 1, 1, 1)
         if type(_breakdown) == "table" and #_breakdown > 0 then
             GameTooltip:AddLine(" ")
             for i = 1, #_breakdown do
